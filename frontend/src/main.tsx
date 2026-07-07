@@ -126,7 +126,7 @@ function App() {
   }, [api, token]);
 
   React.useEffect(() => {
-    loadAll().catch((error) => setMessage(error.message));
+    loadAll().catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Не удалось загрузить данные"));
   }, [loadAll]);
 
   if (!token) {
@@ -589,4 +589,3 @@ function formatDate(value: string) {
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(<App />);
-
