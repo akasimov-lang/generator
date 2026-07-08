@@ -36,6 +36,11 @@ class Site(Base, TimestampMixin):
     publication_endpoint: Mapped[str] = mapped_column(Text, nullable=False)
     sections_endpoint: Mapped[str] = mapped_column(Text, nullable=True)
     api_token: Mapped[str] = mapped_column(Text, nullable=True)
+    payload_mode: Mapped[str] = mapped_column(String(40), default="simple_page")
+    editor_version: Mapped[str] = mapped_column(String(40), default="2.31.0")
+    default_menu: Mapped[dict] = mapped_column(JSON, default=lambda: {"header": [], "footer": []})
+    default_banners: Mapped[list] = mapped_column(JSON, default=list)
+    showcase_payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     sections: Mapped[list["Section"]] = relationship(back_populates="site", cascade="all, delete-orphan")
@@ -64,6 +69,7 @@ class GenerationTask(Base, TimestampMixin):
     geo: Mapped[str] = mapped_column(String(20), nullable=False)
     language: Mapped[str] = mapped_column(String(20), nullable=False)
     status: Mapped[str] = mapped_column(String(40), default="created")
+    payload_mode: Mapped[str] = mapped_column(String(40), default="site_default")
     topics_count: Mapped[int] = mapped_column(Integer, default=0)
     target_words: Mapped[int | None] = mapped_column(Integer, nullable=True)
     prompt_template: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -112,4 +118,3 @@ class PublicationLog(Base, TimestampMixin):
     response_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
     response_body: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-

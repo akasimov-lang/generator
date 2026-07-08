@@ -364,6 +364,19 @@ label {
   font-weight: 600;
 }
 
+.checkboxRow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 42px;
+  color: var(--text);
+}
+
+.checkboxRow input {
+  width: 18px;
+  height: 18px;
+}
+
 input,
 select,
 textarea {
@@ -545,4 +558,3 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 }
-

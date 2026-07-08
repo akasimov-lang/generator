@@ -35,6 +35,7 @@ type Task = {
   title: string;
   geo: string;
   language: string;
+  payload_mode: string;
   topics_count: number;
   status: string;
   created_at: string;
@@ -56,6 +57,11 @@ type Site = {
   name: string;
   base_url: string;
   publication_endpoint: string;
+  payload_mode: "simple_page" | "full_site";
+  editor_version: string;
+  default_menu: Record<string, unknown>;
+  default_banners: string[];
+  showcase_payload: Record<string, unknown> | null;
 };
 
 type AiProvider = {
@@ -284,6 +290,10 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
   const [topics, setTopics] = React.useState("");
   const [siteId, setSiteId] = React.useState("");
   const [providerId, setProviderId] = React.useState("");
+  const [payloadMode, setPayloadMode] = React.useState("site_default");
+  const [shortcode, setShortcode] = React.useState("");
+  const [includeToc, setIncludeToc] = React.useState(true);
+  const [includeFaq, setIncludeFaq] = React.useState(true);
 
   async function createTask(event: React.FormEvent) {
     event.preventDefault();
@@ -293,12 +303,17 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
       language,
       site_id: siteId || null,
       ai_provider_id: providerId || null,
-      topics: topics.split("\n").map((line) => line.trim()).filter(Boolean)
+      payload_mode: payloadMode,
+      shortcode: shortcode.trim() || null,
+      include_toc: includeToc,
+      include_faq: includeFaq,
+      topics: topics.split("\n").map((line: string) => line.trim()).filter(Boolean)
     };
     const task = await api<Task>("/tasks", { method: "POST", body: JSON.stringify(payload) });
     await api(`/tasks/${task.id}/generate`, { method: "POST" });
     setTitle("");
     setTopics("");
+    setShortcode("");
     onChanged();
   }
 
@@ -332,6 +347,26 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
               {providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
             </select>
           </label>
+          <label>
+            Формат payload
+            <select value={payloadMode} onChange={(event) => setPayloadMode(event.target.value)}>
+              <option value="site_default">По настройкам сайта</option>
+              <option value="simple_page">Simple: menu + pages</option>
+              <option value="full_site">Full: menu + pages + casinos</option>
+            </select>
+          </label>
+          <label>
+            Shortcode, если нужен
+            <input value={shortcode} onChange={(event) => setShortcode(event.target.value)} placeholder="showcase-redesign" />
+          </label>
+          <label className="checkboxRow">
+            <input type="checkbox" checked={includeToc} onChange={(event) => setIncludeToc(event.target.checked)} />
+            Создавать TOC
+          </label>
+          <label className="checkboxRow">
+            <input type="checkbox" checked={includeFaq} onChange={(event) => setIncludeFaq(event.target.checked)} />
+            Создавать FAQ
+          </label>
           <label className="wide">
             Темы, каждая с новой строки
             <textarea value={topics} onChange={(event) => setTopics(event.target.value)} required rows={8} placeholder="best online casinos in Germany" />
@@ -342,7 +377,7 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
         </form>
       </DataPanel>
       <DataPanel title="Все задачи">
-        <ResponsiveTable columns={["Задача", "Гео", "Язык", "Тем", "Статус"]} rows={tasks.map((task) => [task.title, task.geo, task.language, task.topics_count, <StatusBadge status={task.status} />])} />
+        <ResponsiveTable columns={["Задача", "Гео", "Язык", "Формат", "Тем", "Статус"]} rows={tasks.map((task) => [task.title, task.geo, task.language, humanPayloadMode(task.payload_mode), task.topics_count, <StatusBadge status={task.status} />])} />
       </DataPanel>
     </section>
   );
@@ -477,17 +512,50 @@ function SitesView({ api, sites, onChanged }: ViewProps & { sites: Site[] }) {
   const [baseUrl, setBaseUrl] = React.useState("");
   const [publicationEndpoint, setPublicationEndpoint] = React.useState("");
   const [apiToken, setApiToken] = React.useState("");
+  const [payloadMode, setPayloadMode] = React.useState<"simple_page" | "full_site">("simple_page");
+  const [editorVersion, setEditorVersion] = React.useState("2.31.0");
+  const [defaultMenuJson, setDefaultMenuJson] = React.useState('{\n  "header": [],\n  "footer": []\n}');
+  const [banners, setBanners] = React.useState("");
+  const [showcaseJson, setShowcaseJson] = React.useState("");
+  const [formError, setFormError] = React.useState("");
 
   async function createSite(event: React.FormEvent) {
     event.preventDefault();
+    setFormError("");
+    let defaultMenu: Record<string, unknown>;
+    let showcasePayload: Record<string, unknown> | null = null;
+    try {
+      defaultMenu = JSON.parse(defaultMenuJson);
+      if (showcaseJson.trim()) {
+        showcasePayload = JSON.parse(showcaseJson);
+      }
+    } catch {
+      setFormError("Проверь JSON в меню или showcase/casinos.");
+      return;
+    }
     await api("/sites", {
       method: "POST",
-      body: JSON.stringify({ name, base_url: baseUrl, publication_endpoint: publicationEndpoint, api_token: apiToken || null })
+      body: JSON.stringify({
+        name,
+        base_url: baseUrl,
+        publication_endpoint: publicationEndpoint,
+        api_token: apiToken || null,
+        payload_mode: payloadMode,
+        editor_version: editorVersion,
+        default_menu: defaultMenu,
+        default_banners: banners.split(",").map((item: string) => item.trim()).filter(Boolean),
+        showcase_payload: showcasePayload
+      })
     });
     setName("");
     setBaseUrl("");
     setPublicationEndpoint("");
     setApiToken("");
+    setPayloadMode("simple_page");
+    setEditorVersion("2.31.0");
+    setDefaultMenuJson('{\n  "header": [],\n  "footer": []\n}');
+    setBanners("");
+    setShowcaseJson("");
     onChanged();
   }
 
@@ -511,11 +579,35 @@ function SitesView({ api, sites, onChanged }: ViewProps & { sites: Site[] }) {
             API token
             <input value={apiToken} onChange={(event) => setApiToken(event.target.value)} type="password" />
           </label>
+          <label>
+            Формат публикации
+            <select value={payloadMode} onChange={(event) => setPayloadMode(event.target.value as "simple_page" | "full_site")}>
+              <option value="simple_page">Simple: menu + pages</option>
+              <option value="full_site">Full: menu + pages + casinos</option>
+            </select>
+          </label>
+          <label>
+            Editor.js version
+            <input value={editorVersion} onChange={(event) => setEditorVersion(event.target.value)} />
+          </label>
+          <label className="wide">
+            Menu JSON
+            <textarea value={defaultMenuJson} onChange={(event) => setDefaultMenuJson(event.target.value)} rows={5} />
+          </label>
+          <label>
+            Banners
+            <input value={banners} onChange={(event) => setBanners(event.target.value)} placeholder="banner, top-banner" />
+          </label>
+          <label className="wide">
+            Casinos / showcase JSON для full site
+            <textarea value={showcaseJson} onChange={(event) => setShowcaseJson(event.target.value)} rows={6} placeholder='{"basic": [], "standard": []}' />
+          </label>
+          {formError ? <span className="formError wide">{formError}</span> : null}
           <div className="formActions wide"><button className="button primary" type="submit"><Plus size={18} /> Сохранить сайт</button></div>
         </form>
       </DataPanel>
       <DataPanel title="Сайты">
-        <ResponsiveTable columns={["Название", "Base URL", "Endpoint"]} rows={sites.map((site) => [site.name, site.base_url, site.publication_endpoint])} />
+        <ResponsiveTable columns={["Название", "Формат", "Editor", "Base URL", "Endpoint"]} rows={sites.map((site) => [site.name, humanPayloadMode(site.payload_mode), site.editor_version || "2.31.0", site.base_url, site.publication_endpoint])} />
       </DataPanel>
     </section>
   );
@@ -528,6 +620,8 @@ function SettingsView() {
         <div><strong>Доступ по IP</strong><span>http://91.199.133.86</span></div>
         <div><strong>Frontend</strong><span>React, CSS Modules/global CSS, без Tailwind и CDN</span></div>
         <div><strong>Backend</strong><span>FastAPI, PostgreSQL, Redis, Celery</span></div>
+        <div><strong>Payload</strong><span>Simple: menu + pages; Full: menu + pages + casinos</span></div>
+        <div><strong>Content</strong><span>Editor.js blocks: header, paragraph, list, table, shortcode, image, faq, toc, quote, plusMinus</span></div>
         <div><strong>Deploy</strong><span>Git push через SSH-ключ на production remote</span></div>
       </div>
     </DataPanel>
@@ -586,6 +680,12 @@ function viewTitle(view: string) {
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+}
+
+function humanPayloadMode(value: string) {
+  if (value === "full_site") return "Full site";
+  if (value === "simple_page") return "Simple page";
+  return "Site default";
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(<App />);
