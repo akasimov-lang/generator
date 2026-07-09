@@ -53,6 +53,11 @@ def apply_lightweight_migrations() -> None:
             {"payload_mode": "VARCHAR(40) DEFAULT 'site_default' NOT NULL"},
         )
 
+    if "content_items" in tables:
+        columns = {column["name"] for column in inspector.get_columns("content_items")}
+        _add_missing_columns("content_items", columns, {"site_id": "VARCHAR(36)"})
+        backfill_content_site_ids()
+
 
 def ensure_default_admin() -> None:
     from app import models
@@ -80,6 +85,21 @@ def ensure_default_admin() -> None:
             if not admin.password_hash:
                 admin.password_hash = hash_password(settings.admin_password)
         db.commit()
+
+
+def backfill_content_site_ids() -> None:
+    statement = text(
+        """
+        UPDATE content_items
+        SET site_id = generation_tasks.site_id
+        FROM generation_tasks
+        WHERE content_items.task_id = generation_tasks.id
+          AND content_items.site_id IS NULL
+          AND generation_tasks.site_id IS NOT NULL
+        """
+    )
+    with engine.begin() as connection:
+        connection.execute(statement)
 
 
 def _add_missing_columns(table: str, existing_columns: set[str], columns: dict[str, str]) -> None:

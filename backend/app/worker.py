@@ -35,9 +35,10 @@ def publish_due_items() -> dict:
         ).all()
         for item in items:
             task = db.get(models.GenerationTask, item.task_id)
-            if not task or not task.site_id:
+            site_id = item.site_id or (task.site_id if task else None)
+            if not site_id:
                 continue
-            site = db.get(models.Site, task.site_id)
+            site = db.get(models.Site, site_id)
             if not site:
                 continue
             asyncio.run(publish_item(db, item, site))
@@ -45,4 +46,3 @@ def publish_due_items() -> dict:
         return {"processed": published}
     finally:
         db.close()
-

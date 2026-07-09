@@ -16,6 +16,7 @@ from app.schemas import (
     PublicationCampaignCreate,
     SectionCreate,
     SiteCreate,
+    SitePublicationCampaignCreate,
     TokenResponse,
     UserCreate,
     UserResponse,
@@ -29,6 +30,20 @@ router = APIRouter()
 
 def _active_admin_count(db: Session) -> int:
     return db.scalar(select(func.count()).select_from(models.User).where(models.User.is_admin.is_(True), models.User.is_active.is_(True))) or 0
+
+
+def _get_site_or_404(db: Session, site_id: str) -> models.Site:
+    site = db.get(models.Site, site_id)
+    if not site:
+        raise HTTPException(status_code=404, detail="Site not found")
+    return site
+
+
+def _get_section_for_site(db: Session, site_id: str, section_id: str) -> models.Section:
+    section = db.get(models.Section, section_id)
+    if not section or section.site_id != site_id:
+        raise HTTPException(status_code=400, detail="Menu item does not belong to this site")
+    return section
 
 
 @router.get("/health")
@@ -143,21 +158,132 @@ def create_site(payload: SiteCreate, _: AuthUser, db: Session = Depends(get_db))
     return site
 
 
+@router.get("/sites/{site_id}/overview")
+def get_site_overview(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> dict:
+    site = _get_site_or_404(db, site_id)
+    status_rows = db.execute(
+        select(models.ContentItem.status, func.count(models.ContentItem.id))
+        .where(models.ContentItem.site_id == site_id)
+        .group_by(models.ContentItem.status)
+    ).all()
+    status_counts = {status: count for status, count in status_rows}
+    next_item = db.scalars(
+        select(models.ContentItem)
+        .where(models.ContentItem.site_id == site_id)
+        .where(models.ContentItem.status.in_(["scheduled", "retry_scheduled"]))
+        .order_by(models.ContentItem.scheduled_at.asc())
+        .limit(1)
+    ).first()
+    recent_content = db.scalars(
+        select(models.ContentItem)
+        .where(models.ContentItem.site_id == site_id)
+        .order_by(models.ContentItem.updated_at.desc())
+        .limit(8)
+    ).all()
+    section_count = db.scalar(select(func.count(models.Section.id)).where(models.Section.site_id == site_id)) or 0
+    task_count = db.scalar(select(func.count(models.GenerationTask.id)).where(models.GenerationTask.site_id == site_id)) or 0
+    error_count = db.scalar(
+        select(func.count(models.PublicationLog.id))
+        .join(models.ContentItem, models.ContentItem.id == models.PublicationLog.content_item_id)
+        .where(models.ContentItem.site_id == site_id)
+        .where(models.PublicationLog.error_message.is_not(None))
+    ) or 0
+
+    return {
+        "site": {
+            "id": site.id,
+            "name": site.name,
+            "base_url": site.base_url,
+            "payload_mode": site.payload_mode,
+            "publication_endpoint": site.publication_endpoint,
+        },
+        "stats": {
+            "tasks": task_count,
+            "menu_items": section_count,
+            "generated": status_counts.get("generated", 0),
+            "approved": status_counts.get("approved", 0),
+            "scheduled": status_counts.get("scheduled", 0) + status_counts.get("retry_scheduled", 0),
+            "published": status_counts.get("published", 0),
+            "failed": status_counts.get("publication_failed", 0) + status_counts.get("generation_failed", 0) + error_count,
+            "next_publication_at": next_item.scheduled_at if next_item else None,
+        },
+        "recent_content": recent_content,
+    }
+
+
 @router.get("/sites/{site_id}/sections")
 def list_sections(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    _get_site_or_404(db, site_id)
     return db.scalars(select(models.Section).where(models.Section.site_id == site_id).order_by(models.Section.name.asc())).all()
 
 
 @router.post("/sites/{site_id}/sections")
 def create_section(site_id: str, payload: SectionCreate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
-    site = db.get(models.Site, site_id)
-    if not site:
-        raise HTTPException(status_code=404, detail="Site not found")
+    _get_site_or_404(db, site_id)
     section = models.Section(site_id=site_id, **payload.model_dump())
     db.add(section)
     db.commit()
     db.refresh(section)
     return section
+
+
+@router.get("/sites/{site_id}/tasks")
+def list_site_tasks(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    _get_site_or_404(db, site_id)
+    return db.scalars(select(models.GenerationTask).where(models.GenerationTask.site_id == site_id).order_by(models.GenerationTask.created_at.desc())).all()
+
+
+@router.post("/sites/{site_id}/tasks")
+def create_site_task(site_id: str, payload: GenerationTaskCreate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    _get_site_or_404(db, site_id)
+    if payload.section_id:
+        _get_section_for_site(db, site_id, payload.section_id)
+    data = payload.model_dump()
+    data["site_id"] = site_id
+    return create_generation_task(db, GenerationTaskCreate(**data))
+
+
+@router.get("/sites/{site_id}/content")
+def list_site_content(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    _get_site_or_404(db, site_id)
+    return db.scalars(select(models.ContentItem).where(models.ContentItem.site_id == site_id).order_by(models.ContentItem.updated_at.desc()).limit(300)).all()
+
+
+@router.get("/sites/{site_id}/publication-logs")
+def list_site_logs(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    _get_site_or_404(db, site_id)
+    content_ids = select(models.ContentItem.id).where(models.ContentItem.site_id == site_id)
+    return db.scalars(
+        select(models.PublicationLog)
+        .where(models.PublicationLog.content_item_id.in_(content_ids))
+        .order_by(models.PublicationLog.created_at.desc())
+        .limit(200)
+    ).all()
+
+
+@router.post("/sites/{site_id}/publication-campaigns")
+def create_site_campaign(site_id: str, payload: SitePublicationCampaignCreate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    _get_site_or_404(db, site_id)
+    if not payload.content_item_ids:
+        raise HTTPException(status_code=400, detail="Campaign requires at least one content item")
+    approved_count = db.scalar(
+        select(func.count(models.ContentItem.id))
+        .where(models.ContentItem.site_id == site_id)
+        .where(models.ContentItem.id.in_(payload.content_item_ids))
+        .where(models.ContentItem.status == "approved")
+    ) or 0
+    if approved_count != len(payload.content_item_ids):
+        raise HTTPException(status_code=400, detail="Campaign can include only approved content from the selected site")
+    interval_minutes = max(1, 1440 // payload.items_per_day)
+    campaign_payload = PublicationCampaignCreate(
+        name=payload.name,
+        site_id=site_id,
+        content_item_ids=payload.content_item_ids,
+        start_at=payload.start_at,
+        interval_minutes=interval_minutes,
+        items_per_run=1,
+    )
+    return schedule_campaign(db, campaign_payload)
 
 
 @router.get("/tasks")
@@ -204,9 +330,22 @@ def update_content(content_id: str, payload: ContentUpdate, _: AuthUser, db: Ses
     item = db.get(models.ContentItem, content_id)
     if not item:
         raise HTTPException(status_code=404, detail="Content item not found")
-    item.generated_json = payload.generated_json
-    item.word_count = count_words(payload.generated_json)
-    item.status = "generated"
+
+    if "section_id" in payload.model_fields_set:
+        if payload.section_id:
+            if not item.site_id:
+                raise HTTPException(status_code=400, detail="Content item has no site")
+            _get_section_for_site(db, item.site_id, payload.section_id)
+        item.section_id = payload.section_id
+
+    if "generated_json" in payload.model_fields_set:
+        if payload.generated_json is None:
+            raise HTTPException(status_code=400, detail="generated_json cannot be null")
+        item.generated_json = payload.generated_json
+        item.word_count = count_words(payload.generated_json)
+
+    if item.status in {"draft", "generated", "approved", "rejected", "scheduled", "publication_failed"}:
+        item.status = "generated"
     db.commit()
     db.refresh(item)
     return item
@@ -217,6 +356,8 @@ def approve_content(content_id: str, _: AuthUser, db: Session = Depends(get_db))
     item = db.get(models.ContentItem, content_id)
     if not item:
         raise HTTPException(status_code=404, detail="Content item not found")
+    if item.site_id and not item.section_id:
+        raise HTTPException(status_code=400, detail="Select a menu item before approval")
     item.status = "approved"
     db.commit()
     db.refresh(item)

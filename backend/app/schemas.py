@@ -84,7 +84,8 @@ class GenerationTaskCreate(BaseModel):
 
 
 class ContentUpdate(BaseModel):
-    generated_json: dict[str, Any]
+    generated_json: dict[str, Any] | None = None
+    section_id: str | None = None
 
 
 class PublicationCampaignCreate(BaseModel):
@@ -94,3 +95,10 @@ class PublicationCampaignCreate(BaseModel):
     start_at: datetime
     interval_minutes: int = 1440
     items_per_run: int = 1
+
+
+class SitePublicationCampaignCreate(BaseModel):
+    name: str
+    content_item_ids: list[str]
+    start_at: datetime
+    items_per_day: int = Field(default=1, ge=1, le=24)

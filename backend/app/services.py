@@ -294,6 +294,7 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate) -> models
         page = generated_json["pages"][0]
         item = models.ContentItem(
             task_id=task.id,
+            site_id=task.site_id,
             topic=topic,
             slug=page["slug"],
             generated_json=generated_json,
@@ -332,7 +333,7 @@ def schedule_campaign(db: Session, payload: PublicationCampaignCreate) -> models
     db.add(campaign)
     for index, item_id in enumerate(payload.content_item_ids):
         item = db.get(models.ContentItem, item_id)
-        if item and item.status == "approved":
+        if item and item.status == "approved" and item.site_id == payload.site_id:
             item.status = "scheduled"
             item.scheduled_at = payload.start_at + timedelta(minutes=payload.interval_minutes * index)
     db.commit()
@@ -416,13 +417,14 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site)
         headers["Authorization"] = f"Bearer {site.api_token}"
 
     try:
+        request_payload = build_publication_payload(db, item)
         async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(site.publication_endpoint, json=item.generated_json, headers=headers)
+            response = await client.post(site.publication_endpoint, json=request_payload, headers=headers)
         response_body = response.json() if response.headers.get("content-type", "").startswith("application/json") else {"raw": response.text}
         log = models.PublicationLog(
             content_item_id=item.id,
             endpoint_url=site.publication_endpoint,
-            request_payload=item.generated_json,
+            request_payload=request_payload,
             response_status=response.status_code,
             response_body=response_body,
         )
@@ -442,10 +444,32 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site)
             models.PublicationLog(
                 content_item_id=item.id,
                 endpoint_url=site.publication_endpoint,
-                request_payload=item.generated_json,
+                request_payload=build_publication_payload(db, item),
                 error_message=str(exc),
             )
         )
         item.status = "retry_scheduled"
         item.scheduled_at = datetime.now(timezone.utc) + timedelta(minutes=30)
         db.commit()
+
+
+def build_publication_payload(db: Session, item: models.ContentItem) -> dict:
+    payload = copy.deepcopy(item.generated_json)
+    if not item.section_id:
+        return payload
+
+    section = db.get(models.Section, item.section_id)
+    if not section:
+        return payload
+
+    publication_target = {
+        "section_id": section.external_id,
+        "section_name": section.name,
+        "section_path": section.path,
+    }
+    payload["publication_target"] = publication_target
+    for page in payload.get("pages", []):
+        if isinstance(page, dict):
+            page["sectionId"] = section.external_id
+            page["sectionPath"] = section.path
+    return payload

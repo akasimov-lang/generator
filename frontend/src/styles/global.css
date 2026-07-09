@@ -295,6 +295,54 @@ h2 {
   gap: 18px;
 }
 
+.projectHeader {
+  display: grid;
+  grid-template-columns: minmax(220px, 360px) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 14px;
+}
+
+.projectMeta {
+  display: grid;
+  gap: 4px;
+  padding-bottom: 2px;
+}
+
+.projectMeta strong {
+  overflow-wrap: anywhere;
+}
+
+.projectMeta span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.workspaceTabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.tabButton {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--muted);
+  min-height: 36px;
+  padding: 0 12px;
+  font-weight: 700;
+}
+
+.tabButton.active,
+.tabButton:hover {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
 .dataPanel {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -421,6 +469,13 @@ textarea {
   resize: vertical;
 }
 
+.jsonEditor {
+  min-height: 420px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 input:focus,
 select:focus,
 textarea:focus {
@@ -523,6 +578,13 @@ textarea:focus {
   flex-wrap: wrap;
 }
 
+a {
+  color: var(--blue);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
 .loginPage {
   min-height: 100vh;
   display: grid;
@@ -564,6 +626,11 @@ textarea:focus {
 @media (max-width: 1180px) {
   .kpiGrid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .projectHeader {
+    grid-template-columns: 1fr;
+    align-items: stretch;
   }
 }
 

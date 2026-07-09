@@ -4,9 +4,13 @@ import {
   Activity,
   AlertTriangle,
   Bot,
+  CalendarClock,
   CheckCircle2,
   Database,
+  Edit3,
+  ExternalLink,
   FileText,
+  FolderKanban,
   Globe2,
   KeyRound,
   LayoutDashboard,
@@ -36,6 +40,8 @@ type Stats = {
 type Task = {
   id: string;
   title: string;
+  site_id: string | null;
+  section_id: string | null;
   geo: string;
   language: string;
   payload_mode: string;
@@ -46,13 +52,17 @@ type Task = {
 
 type ContentItem = {
   id: string;
+  site_id: string | null;
+  section_id: string | null;
   topic: string;
   slug: string;
   status: string;
   word_count: number;
   scheduled_at: string | null;
+  published_at: string | null;
   published_url: string | null;
   generated_json: Record<string, unknown>;
+  updated_at: string;
 };
 
 type Site = {
@@ -65,6 +75,14 @@ type Site = {
   default_menu: Record<string, unknown>;
   default_banners: string[];
   showcase_payload: Record<string, unknown> | null;
+};
+
+type Section = {
+  id: string;
+  site_id: string;
+  external_id: string;
+  name: string;
+  path: string;
 };
 
 type AiProvider = {
@@ -88,6 +106,36 @@ type Dashboard = {
   active_tasks: Task[];
   publication_queue: ContentItem[];
   recent_errors: Array<{ id: string; error_message: string; endpoint_url: string; created_at: string }>;
+};
+
+type SiteOverview = {
+  site: {
+    id: string;
+    name: string;
+    base_url: string;
+    payload_mode: string;
+    publication_endpoint: string;
+  };
+  stats: {
+    tasks: number;
+    menu_items: number;
+    generated: number;
+    approved: number;
+    scheduled: number;
+    published: number;
+    failed: number;
+    next_publication_at: string | null;
+  };
+  recent_content: ContentItem[];
+};
+
+type PublicationLog = {
+  id: string;
+  content_item_id: string | null;
+  endpoint_url: string;
+  response_status: number | null;
+  error_message: string | null;
+  created_at: string;
 };
 
 const API_BASE = "/api";
@@ -142,6 +190,9 @@ function App() {
     ]);
     const nextUsers = nextUser.is_admin ? await api<User[]>("/users") : [];
     setCurrentUser(nextUser);
+    if (!nextUser.is_admin) {
+      setActiveView((view) => (["workspace", "settings"].includes(view) ? view : "workspace"));
+    }
     setDashboard(nextDashboard);
     setTasks(nextTasks);
     setContent(nextContent);
@@ -154,9 +205,29 @@ function App() {
     loadAll().catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Не удалось загрузить данные"));
   }, [loadAll]);
 
+  React.useEffect(() => {
+    if (currentUser && !currentUser.is_admin && !["workspace", "settings"].includes(activeView)) {
+      setActiveView("workspace");
+    }
+  }, [activeView, currentUser]);
+
   if (!token) {
     return <LoginScreen onLogin={setToken} />;
   }
+
+  if (!currentUser) {
+    return (
+      <div className="loginPage">
+        <div className="loginPanel">
+          <div className="brandMark large"><ShieldCheck size={28} /></div>
+          <h1>Загрузка панели</h1>
+          <p>{message || "Проверяем сессию и права пользователя."}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const isAdmin = currentUser?.is_admin ?? true;
 
   return (
     <div className="appShell">
@@ -169,12 +240,19 @@ function App() {
           </div>
         </div>
         <nav className="nav">
-          <NavButton icon={<LayoutDashboard />} label="Dashboard" active={activeView === "dashboard"} onClick={() => setActiveView("dashboard")} />
-          <NavButton icon={<ListChecks />} label="Задачи" active={activeView === "tasks"} onClick={() => setActiveView("tasks")} />
-          <NavButton icon={<FileText />} label="Контент" active={activeView === "content"} onClick={() => setActiveView("content")} />
-          <NavButton icon={<Send />} label="Публикации" active={activeView === "publications"} onClick={() => setActiveView("publications")} />
-          <NavButton icon={<Bot />} label="AI Providers" active={activeView === "providers"} onClick={() => setActiveView("providers")} />
-          <NavButton icon={<Globe2 />} label="Сайты" active={activeView === "sites"} onClick={() => setActiveView("sites")} />
+          {isAdmin ? (
+            <>
+              <NavButton icon={<LayoutDashboard />} label="Dashboard" active={activeView === "dashboard"} onClick={() => setActiveView("dashboard")} />
+              <NavButton icon={<FolderKanban />} label="Рабочий экран" active={activeView === "workspace"} onClick={() => setActiveView("workspace")} />
+              <NavButton icon={<ListChecks />} label="Задачи" active={activeView === "tasks"} onClick={() => setActiveView("tasks")} />
+              <NavButton icon={<FileText />} label="Контент" active={activeView === "content"} onClick={() => setActiveView("content")} />
+              <NavButton icon={<Send />} label="Публикации" active={activeView === "publications"} onClick={() => setActiveView("publications")} />
+              <NavButton icon={<Bot />} label="AI Providers" active={activeView === "providers"} onClick={() => setActiveView("providers")} />
+              <NavButton icon={<Globe2 />} label="Сайты" active={activeView === "sites"} onClick={() => setActiveView("sites")} />
+            </>
+          ) : (
+            <NavButton icon={<FolderKanban />} label="Рабочий экран" active={activeView === "workspace"} onClick={() => setActiveView("workspace")} />
+          )}
           <NavButton icon={<Settings />} label="Настройки" active={activeView === "settings"} onClick={() => setActiveView("settings")} />
         </nav>
       </aside>
@@ -213,12 +291,13 @@ function App() {
 
         {message ? <div className="notice">{message}</div> : null}
 
-        {activeView === "dashboard" && dashboard && <DashboardView dashboard={dashboard} tasks={tasks} content={content} />}
-        {activeView === "tasks" && <TasksView api={api} sites={sites} providers={providers} tasks={tasks} onChanged={loadAll} />}
-        {activeView === "content" && <ContentView api={api} content={content} onChanged={loadAll} />}
-        {activeView === "publications" && <PublicationsView api={api} sites={sites} content={content} onChanged={loadAll} />}
-        {activeView === "providers" && <ProvidersView api={api} providers={providers} onChanged={loadAll} />}
-        {activeView === "sites" && <SitesView api={api} sites={sites} onChanged={loadAll} />}
+        {activeView === "workspace" && <ProjectWorkspaceView api={api} sites={sites} providers={providers} onChanged={loadAll} />}
+        {isAdmin && activeView === "dashboard" && dashboard && <DashboardView dashboard={dashboard} tasks={tasks} content={content} />}
+        {isAdmin && activeView === "tasks" && <TasksView api={api} sites={sites} providers={providers} tasks={tasks} onChanged={loadAll} />}
+        {isAdmin && activeView === "content" && <ContentView api={api} content={content} onChanged={loadAll} />}
+        {isAdmin && activeView === "publications" && <PublicationsView api={api} sites={sites} content={content} onChanged={loadAll} />}
+        {isAdmin && activeView === "providers" && <ProvidersView api={api} providers={providers} onChanged={loadAll} />}
+        {isAdmin && activeView === "sites" && <SitesView api={api} sites={sites} onChanged={loadAll} />}
         {activeView === "settings" && <SettingsView api={api} currentUser={currentUser} users={users} onChanged={loadAll} />}
       </main>
     </div>
@@ -305,6 +384,442 @@ function DashboardView({ dashboard, tasks, content }: { dashboard: Dashboard; ta
         ) : (
           <EmptyState text="Ошибок пока нет." />
         )}
+      </DataPanel>
+    </section>
+  );
+}
+
+function ProjectWorkspaceView({ api, sites, providers, onChanged }: ViewProps & { sites: Site[]; providers: AiProvider[] }) {
+  const [selectedSiteId, setSelectedSiteId] = React.useState(() => localStorage.getItem("workspace_site_id") || "");
+  const [activeTab, setActiveTab] = React.useState("overview");
+  const [overview, setOverview] = React.useState<SiteOverview | null>(null);
+  const [siteTasks, setSiteTasks] = React.useState<Task[]>([]);
+  const [siteContent, setSiteContent] = React.useState<ContentItem[]>([]);
+  const [sections, setSections] = React.useState<Section[]>([]);
+  const [logs, setLogs] = React.useState<PublicationLog[]>([]);
+  const [workspaceError, setWorkspaceError] = React.useState("");
+  const selectedSite = sites.find((site) => site.id === selectedSiteId) || null;
+
+  const loadProject = React.useCallback(async () => {
+    if (!selectedSiteId) return;
+    setWorkspaceError("");
+    const [nextOverview, nextTasks, nextContent, nextSections, nextLogs] = await Promise.all([
+      api<SiteOverview>(`/sites/${selectedSiteId}/overview`),
+      api<Task[]>(`/sites/${selectedSiteId}/tasks`),
+      api<ContentItem[]>(`/sites/${selectedSiteId}/content`),
+      api<Section[]>(`/sites/${selectedSiteId}/sections`),
+      api<PublicationLog[]>(`/sites/${selectedSiteId}/publication-logs`)
+    ]);
+    setOverview(nextOverview);
+    setSiteTasks(nextTasks);
+    setSiteContent(nextContent);
+    setSections(nextSections);
+    setLogs(nextLogs);
+  }, [api, selectedSiteId]);
+
+  React.useEffect(() => {
+    if (sites.length && (!selectedSiteId || !sites.some((site) => site.id === selectedSiteId))) {
+      setSelectedSiteId(sites[0].id);
+    }
+  }, [selectedSiteId, sites]);
+
+  React.useEffect(() => {
+    if (selectedSiteId) {
+      localStorage.setItem("workspace_site_id", selectedSiteId);
+      loadProject().catch((error: unknown) => setWorkspaceError(error instanceof Error ? error.message : "Не удалось загрузить проект"));
+    }
+  }, [loadProject, selectedSiteId]);
+
+  async function refreshProject() {
+    await loadProject();
+    await onChanged();
+  }
+
+  if (!sites.length) {
+    return <EmptyState text="Сначала добавьте сайт в админском разделе Сайты." />;
+  }
+
+  return (
+    <section className="viewStack">
+      <DataPanel title="Рабочий проект">
+        <div className="projectHeader">
+          <label>
+            Проект
+            <select value={selectedSiteId} onChange={(event) => setSelectedSiteId(event.target.value)}>
+              {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
+            </select>
+          </label>
+          <div className="projectMeta">
+            <strong>{selectedSite?.base_url || "..."}</strong>
+            <span>{selectedSite ? humanPayloadMode(selectedSite.payload_mode) : ""}</span>
+          </div>
+          <button className="button secondary" type="button" onClick={() => refreshProject()}><RefreshCcw size={18} /> Обновить проект</button>
+        </div>
+        <div className="workspaceTabs">
+          <TabButton label="Обзор" active={activeTab === "overview"} onClick={() => setActiveTab("overview")} />
+          <TabButton label="Темы" active={activeTab === "topics"} onClick={() => setActiveTab("topics")} />
+          <TabButton label="Контент" active={activeTab === "content"} onClick={() => setActiveTab("content")} />
+          <TabButton label="Публикация" active={activeTab === "publication"} onClick={() => setActiveTab("publication")} />
+          <TabButton label="Меню" active={activeTab === "menu"} onClick={() => setActiveTab("menu")} />
+        </div>
+        {workspaceError ? <div className="notice">{workspaceError}</div> : null}
+      </DataPanel>
+
+      {selectedSite && activeTab === "overview" && overview ? (
+        <ProjectOverviewPanel overview={overview} content={siteContent} sections={sections} logs={logs} />
+      ) : null}
+      {selectedSite && activeTab === "topics" ? (
+        <ProjectTopicsPanel api={api} site={selectedSite} providers={providers} sections={sections} tasks={siteTasks} onChanged={refreshProject} />
+      ) : null}
+      {selectedSite && activeTab === "content" ? (
+        <ProjectContentPanel api={api} content={siteContent} sections={sections} onChanged={refreshProject} />
+      ) : null}
+      {selectedSite && activeTab === "publication" ? (
+        <ProjectPublicationPanel api={api} site={selectedSite} content={siteContent} sections={sections} onChanged={refreshProject} />
+      ) : null}
+      {selectedSite && activeTab === "menu" ? (
+        <ProjectMenuPanel api={api} site={selectedSite} sections={sections} onChanged={refreshProject} />
+      ) : null}
+    </section>
+  );
+}
+
+function ProjectOverviewPanel({ overview, content, sections, logs }: { overview: SiteOverview; content: ContentItem[]; sections: Section[]; logs: PublicationLog[] }) {
+  return (
+    <section className="viewStack">
+      <div className="kpiGrid projectKpis">
+        <KpiCard icon={<ListChecks />} label="Задачи" value={overview.stats.tasks} />
+        <KpiCard icon={<FileText />} label="Generated" value={overview.stats.generated} />
+        <KpiCard icon={<CheckCircle2 />} label="Approved" value={overview.stats.approved} />
+        <KpiCard icon={<CalendarClock />} label="Scheduled" value={overview.stats.scheduled} />
+        <KpiCard icon={<Activity />} label="Published" value={overview.stats.published} />
+        <KpiCard icon={<AlertTriangle />} label="Ошибки" value={overview.stats.failed} danger />
+      </div>
+      <div className="gridTwo">
+        <DataPanel title="Последний контент">
+          <ResponsiveTable
+            columns={["Тема", "Меню", "Статус", "Дата"]}
+            rows={content.slice(0, 8).map((item) => [
+              item.topic,
+              sectionLabel(item.section_id, sections),
+              <StatusBadge status={item.status} />,
+              item.published_at ? formatDate(item.published_at) : formatDate(item.updated_at)
+            ])}
+          />
+        </DataPanel>
+        <DataPanel title="Публикационные логи">
+          <ResponsiveTable
+            columns={["Время", "Статус", "Endpoint"]}
+            rows={logs.slice(0, 8).map((log) => [
+              formatDate(log.created_at),
+              log.error_message || log.response_status || "-",
+              log.endpoint_url
+            ])}
+          />
+        </DataPanel>
+      </div>
+    </section>
+  );
+}
+
+function ProjectTopicsPanel({ api, site, providers, sections, tasks, onChanged }: ViewProps & { site: Site; providers: AiProvider[]; sections: Section[]; tasks: Task[] }) {
+  const [title, setTitle] = React.useState("");
+  const [geo, setGeo] = React.useState("DE");
+  const [language, setLanguage] = React.useState("EN");
+  const [topics, setTopics] = React.useState("");
+  const [providerId, setProviderId] = React.useState("");
+  const [sectionId, setSectionId] = React.useState("");
+  const [shortcode, setShortcode] = React.useState("");
+  const [formError, setFormError] = React.useState("");
+
+  async function createTask(event: React.FormEvent) {
+    event.preventDefault();
+    setFormError("");
+    const cleanTopics = topics.split("\n").map((line) => line.trim()).filter(Boolean);
+    if (!cleanTopics.length) {
+      setFormError("Добавьте хотя бы одну тему.");
+      return;
+    }
+    const task = await api<Task>(`/sites/${site.id}/tasks`, {
+      method: "POST",
+      body: JSON.stringify({
+        title: title.trim() || `${site.name}: генерация ${new Date().toLocaleDateString("ru-RU")}`,
+        geo,
+        language,
+        section_id: sectionId || null,
+        ai_provider_id: providerId || null,
+        payload_mode: "site_default",
+        shortcode: shortcode.trim() || null,
+        include_toc: true,
+        include_faq: true,
+        topics: cleanTopics
+      })
+    });
+    await api(`/tasks/${task.id}/generate`, { method: "POST" });
+    setTitle("");
+    setTopics("");
+    setShortcode("");
+    await onChanged();
+  }
+
+  return (
+    <section className="viewStack">
+      <DataPanel title="Загрузить темы и сгенерировать">
+        <form className="formGrid" onSubmit={createTask}>
+          <label>
+            Название задачи
+            <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={`${site.name}: batch`} />
+          </label>
+          <label>
+            Пункт меню
+            <select value={sectionId} onChange={(event) => setSectionId(event.target.value)}>
+              <option value="">Выбрать позже</option>
+              {sections.map((section) => <option key={section.id} value={section.id}>{section.name} · {section.path}</option>)}
+            </select>
+          </label>
+          <label>
+            Гео
+            <input value={geo} onChange={(event) => setGeo(event.target.value)} required />
+          </label>
+          <label>
+            Язык
+            <input value={language} onChange={(event) => setLanguage(event.target.value)} required />
+          </label>
+          <label>
+            AI Provider
+            <select value={providerId} onChange={(event) => setProviderId(event.target.value)}>
+              <option value="">Stub generator</option>
+              {providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
+            </select>
+          </label>
+          <label>
+            Shortcode
+            <input value={shortcode} onChange={(event) => setShortcode(event.target.value)} placeholder="showcase-redesign" />
+          </label>
+          <label className="wide">
+            Темы, каждая с новой строки
+            <textarea value={topics} onChange={(event) => setTopics(event.target.value)} rows={9} required />
+          </label>
+          {formError ? <span className="formError wide">{formError}</span> : null}
+          <div className="formActions wide"><button className="button primary" type="submit"><Plus size={18} /> Создать и сгенерировать</button></div>
+        </form>
+      </DataPanel>
+      <DataPanel title="Задачи проекта">
+        <ResponsiveTable
+          columns={["Задача", "Тем", "Гео", "Язык", "Статус"]}
+          rows={tasks.map((task) => [task.title, task.topics_count, task.geo, task.language, <StatusBadge status={task.status} />])}
+        />
+      </DataPanel>
+    </section>
+  );
+}
+
+function ProjectContentPanel({ api, content, sections, onChanged }: ViewProps & { content: ContentItem[]; sections: Section[] }) {
+  const [selectedItem, setSelectedItem] = React.useState<ContentItem | null>(null);
+  const [jsonDraft, setJsonDraft] = React.useState("");
+  const [sectionId, setSectionId] = React.useState("");
+  const [editorError, setEditorError] = React.useState("");
+
+  function openEditor(item: ContentItem) {
+    setSelectedItem(item);
+    setJsonDraft(JSON.stringify(item.generated_json, null, 2));
+    setSectionId(item.section_id || "");
+    setEditorError("");
+  }
+
+  async function saveContent(event: React.FormEvent) {
+    event.preventDefault();
+    if (!selectedItem) return;
+    setEditorError("");
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(jsonDraft);
+    } catch {
+      setEditorError("JSON невалидный.");
+      return;
+    }
+    await api(`/content/${selectedItem.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ generated_json: parsed, section_id: sectionId || null })
+    });
+    setSelectedItem(null);
+    await onChanged();
+  }
+
+  async function approve(item: ContentItem) {
+    setEditorError("");
+    if (!item.section_id) {
+      setEditorError("Перед approve выберите пункт меню.");
+      openEditor(item);
+      return;
+    }
+    await api(`/content/${item.id}/approve`, { method: "POST" });
+    await onChanged();
+  }
+
+  return (
+    <section className="viewStack">
+      <DataPanel title="Контент проекта">
+        <ResponsiveTable
+          columns={["Тема", "Меню", "Слова", "Статус", "Опубликовано", "Действия"]}
+          rows={content.map((item) => [
+            item.topic,
+            sectionLabel(item.section_id, sections),
+            item.word_count,
+            <StatusBadge status={item.status} />,
+            item.published_url ? <a href={item.published_url} target="_blank" rel="noreferrer"><ExternalLink size={15} /> URL</a> : item.published_at ? formatDate(item.published_at) : "-",
+            <div className="userActions">
+              <button className="button compact" type="button" onClick={() => openEditor(item)}><Edit3 size={15} /> Открыть</button>
+              <button className="button compact" type="button" onClick={() => approve(item)} disabled={["approved", "scheduled", "published"].includes(item.status)}>Approve</button>
+            </div>
+          ])}
+        />
+        {editorError ? <span className="formError">{editorError}</span> : null}
+      </DataPanel>
+
+      {selectedItem ? (
+        <DataPanel title={`Редактирование: ${selectedItem.topic}`}>
+          <form className="formGrid" onSubmit={saveContent}>
+            <label>
+              Пункт меню
+              <select value={sectionId} onChange={(event) => setSectionId(event.target.value)}>
+                <option value="">Не выбран</option>
+                {sections.map((section) => <option key={section.id} value={section.id}>{section.name} · {section.path}</option>)}
+              </select>
+            </label>
+            <label>
+              Slug
+              <input value={selectedItem.slug} disabled />
+            </label>
+            <label className="wide">
+              JSON payload
+              <textarea className="jsonEditor" value={jsonDraft} onChange={(event) => setJsonDraft(event.target.value)} rows={18} />
+            </label>
+            <div className="formActions wide">
+              <button className="button secondary" type="button" onClick={() => setSelectedItem(null)}>Закрыть</button>
+              <button className="button primary" type="submit">Сохранить</button>
+            </div>
+          </form>
+        </DataPanel>
+      ) : null}
+    </section>
+  );
+}
+
+function ProjectPublicationPanel({ api, site, content, sections, onChanged }: ViewProps & { site: Site; content: ContentItem[]; sections: Section[] }) {
+  const [name, setName] = React.useState("Daily publication");
+  const [itemsPerDay, setItemsPerDay] = React.useState(1);
+  const [sectionId, setSectionId] = React.useState("");
+  const [startAt, setStartAt] = React.useState(() => toDateTimeInputValue(new Date()));
+  const [formError, setFormError] = React.useState("");
+  const approved = content.filter((item) => item.status === "approved" && (!sectionId || item.section_id === sectionId));
+
+  async function createCampaign(event: React.FormEvent) {
+    event.preventDefault();
+    setFormError("");
+    if (!approved.length) {
+      setFormError("Нет approved-текстов для выбранного фильтра.");
+      return;
+    }
+    await api(`/sites/${site.id}/publication-campaigns`, {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        content_item_ids: approved.map((item) => item.id),
+        start_at: new Date(startAt).toISOString(),
+        items_per_day: itemsPerDay
+      })
+    });
+    await onChanged();
+  }
+
+  return (
+    <section className="viewStack">
+      <DataPanel title="Запустить публикацию">
+        <form className="formGrid" onSubmit={createCampaign}>
+          <label>
+            Название кампании
+            <input value={name} onChange={(event) => setName(event.target.value)} required />
+          </label>
+          <label>
+            Пункт меню
+            <select value={sectionId} onChange={(event) => setSectionId(event.target.value)}>
+              <option value="">Все approved</option>
+              {sections.map((section) => <option key={section.id} value={section.id}>{section.name} · {section.path}</option>)}
+            </select>
+          </label>
+          <label>
+            Текстов в день
+            <input type="number" value={itemsPerDay} onChange={(event) => setItemsPerDay(Number(event.target.value))} min={1} max={24} />
+          </label>
+          <label>
+            Старт
+            <input type="datetime-local" value={startAt} onChange={(event) => setStartAt(event.target.value)} required />
+          </label>
+          {formError ? <span className="formError wide">{formError}</span> : null}
+          <div className="formActions wide">
+            <button className="button primary" type="submit" disabled={!approved.length}><Play size={18} /> Запланировать ({approved.length})</button>
+          </div>
+        </form>
+      </DataPanel>
+      <DataPanel title="Approved к публикации">
+        <ResponsiveTable
+          columns={["Тема", "Меню", "Slug"]}
+          rows={approved.map((item) => [item.topic, sectionLabel(item.section_id, sections), item.slug])}
+        />
+      </DataPanel>
+    </section>
+  );
+}
+
+function ProjectMenuPanel({ api, site, sections, onChanged }: ViewProps & { site: Site; sections: Section[] }) {
+  const [name, setName] = React.useState("");
+  const [externalId, setExternalId] = React.useState("");
+  const [path, setPath] = React.useState("");
+  const [formError, setFormError] = React.useState("");
+
+  async function createSection(event: React.FormEvent) {
+    event.preventDefault();
+    setFormError("");
+    await api(`/sites/${site.id}/sections`, {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        external_id: externalId || slugFromText(name),
+        path: path || "/"
+      })
+    });
+    setName("");
+    setExternalId("");
+    setPath("");
+    await onChanged();
+  }
+
+  return (
+    <section className="viewStack">
+      <DataPanel title="Добавить пункт меню">
+        <form className="formGrid" onSubmit={createSection}>
+          <label>
+            Название
+            <input value={name} onChange={(event) => setName(event.target.value)} required />
+          </label>
+          <label>
+            External ID
+            <input value={externalId} onChange={(event) => setExternalId(event.target.value)} placeholder="casino-bonuses" />
+          </label>
+          <label className="wide">
+            Path
+            <input value={path} onChange={(event) => setPath(event.target.value)} placeholder="/casino-bonuses/" />
+          </label>
+          {formError ? <span className="formError wide">{formError}</span> : null}
+          <div className="formActions wide"><button className="button primary" type="submit"><Plus size={18} /> Добавить</button></div>
+        </form>
+      </DataPanel>
+      <DataPanel title="Пункты меню проекта">
+        <ResponsiveTable
+          columns={["Название", "External ID", "Path"]}
+          rows={sections.map((section) => [section.name, section.external_id, section.path])}
+        />
       </DataPanel>
     </section>
   );
@@ -436,7 +951,7 @@ function PublicationsView({ api, sites, content, onChanged }: ViewProps & { site
   const [name, setName] = React.useState("Daily publication");
   const [siteId, setSiteId] = React.useState("");
   const [interval, setIntervalValue] = React.useState(1440);
-  const approved = content.filter((item) => item.status === "approved");
+  const approved = content.filter((item) => item.status === "approved" && (!siteId || item.site_id === siteId));
 
   async function createCampaign(event: React.FormEvent) {
     event.preventDefault();
@@ -822,6 +1337,10 @@ function NavButton({ icon, label, active, onClick }: { icon: React.ReactNode; la
   return <button className={`navButton ${active ? "active" : ""}`} onClick={onClick}>{icon}<span>{label}</span></button>;
 }
 
+function TabButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return <button className={`tabButton ${active ? "active" : ""}`} type="button" onClick={onClick}>{label}</button>;
+}
+
 function KpiCard({ icon, label, value, danger }: { icon: React.ReactNode; label: string; value: number; danger?: boolean }) {
   return <div className={`kpiCard ${danger ? "danger" : ""}`}><div className="kpiIcon">{icon}</div><span>{label}</span><strong>{value}</strong></div>;
 }
@@ -854,9 +1373,16 @@ function RoleBadge({ admin }: { admin: boolean }) {
   return <span className={`roleBadge ${admin ? "admin" : ""}`}>{admin ? "Администратор" : "Пользователь"}</span>;
 }
 
+function sectionLabel(sectionId: string | null, sections: Section[]) {
+  if (!sectionId) return "Не выбран";
+  const section = sections.find((item) => item.id === sectionId);
+  return section ? `${section.name} · ${section.path}` : sectionId;
+}
+
 function viewTitle(view: string) {
   const titles: Record<string, string> = {
     dashboard: "Dashboard",
+    workspace: "Рабочий экран",
     tasks: "Задачи генерации",
     content: "Контент",
     publications: "Публикации",
@@ -875,6 +1401,19 @@ function humanPayloadMode(value: string) {
   if (value === "full_site") return "Full site";
   if (value === "simple_page") return "Simple page";
   return "Site default";
+}
+
+function toDateTimeInputValue(date: Date) {
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function slugFromText(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9а-яё]+/gi, "-")
+    .replace(/^-+|-+$/g, "") || "menu-item";
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(<App />);
