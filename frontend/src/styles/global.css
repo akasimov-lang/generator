@@ -167,6 +167,25 @@ h2 {
   gap: 10px;
 }
 
+.userPill {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.userPill span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.userPill strong {
+  font-size: 14px;
+}
+
 .button,
 .iconButton {
   border: 1px solid var(--border);
@@ -194,6 +213,11 @@ h2 {
 
 .button.secondary {
   background: var(--surface);
+}
+
+.button.danger {
+  border-color: #fda29b;
+  color: var(--danger);
 }
 
 .button.compact {
@@ -356,6 +380,10 @@ td {
   gap: 14px;
 }
 
+.compactForm {
+  margin-top: 14px;
+}
+
 label {
   display: grid;
   gap: 7px;
@@ -409,6 +437,10 @@ textarea:focus {
   justify-content: flex-end;
 }
 
+.formActions.alignEnd {
+  align-items: flex-end;
+}
+
 .emptyState {
   border: 1px dashed var(--border);
   color: var(--muted);
@@ -434,6 +466,61 @@ textarea:focus {
 .settingsList span {
   color: var(--muted);
   text-align: right;
+}
+
+.accountHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.accountHeader div {
+  display: grid;
+  gap: 4px;
+}
+
+.accountHeader span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.accountHeader strong {
+  font-size: 18px;
+}
+
+.subPanelTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+
+.roleBadge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.roleBadge.admin {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.userActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .loginPage {
@@ -466,6 +553,12 @@ textarea:focus {
 .formError {
   color: var(--danger);
   font-size: 13px;
+}
+
+.formSuccess {
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 @media (max-width: 1180px) {
@@ -507,6 +600,11 @@ textarea:focus {
   .topbarActions,
   .button {
     width: 100%;
+  }
+
+  .userPill {
+    width: 100%;
+    justify-items: start;
   }
 
   .kpiGrid {

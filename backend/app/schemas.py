@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class LoginRequest(BaseModel):
@@ -9,9 +9,36 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    username: str
+    is_admin: bool
+    is_active: bool
+    created_at: datetime
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    user: UserResponse
+
+
+class UserCreate(BaseModel):
+    username: str = Field(min_length=2, max_length=80)
+    password: str = Field(min_length=8)
+    is_admin: bool = False
+
+
+class UserUpdate(BaseModel):
+    is_admin: bool | None = None
+    is_active: bool | None = None
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8)
 
 
 class AiProviderCreate(BaseModel):

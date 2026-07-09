@@ -8,6 +8,7 @@ import {
   Database,
   FileText,
   Globe2,
+  KeyRound,
   LayoutDashboard,
   ListChecks,
   LogOut,
@@ -16,7 +17,9 @@ import {
   RefreshCcw,
   Send,
   Settings,
-  ShieldCheck
+  ShieldCheck,
+  UserPlus,
+  Users
 } from "lucide-react";
 import "./styles/global.css";
 
@@ -72,6 +75,14 @@ type AiProvider = {
   is_active: boolean;
 };
 
+type User = {
+  id: string;
+  username: string;
+  is_admin: boolean;
+  is_active: boolean;
+  created_at: string;
+};
+
 type Dashboard = {
   stats: Stats;
   active_tasks: Task[];
@@ -89,6 +100,8 @@ function App() {
   const [content, setContent] = React.useState<ContentItem[]>([]);
   const [sites, setSites] = React.useState<Site[]>([]);
   const [providers, setProviders] = React.useState<AiProvider[]>([]);
+  const [currentUser, setCurrentUser] = React.useState<User | null>(null);
+  const [users, setUsers] = React.useState<User[]>([]);
   const [message, setMessage] = React.useState("");
 
   const api = React.useCallback(
@@ -104,6 +117,8 @@ function App() {
       if (response.status === 401) {
         localStorage.removeItem("admin_token");
         setToken("");
+        setCurrentUser(null);
+        setUsers([]);
         throw new Error("Нужно войти заново");
       }
       if (!response.ok) {
@@ -117,6 +132,7 @@ function App() {
 
   const loadAll = React.useCallback(async () => {
     if (!token) return;
+    const nextUser = await api<User>("/auth/me");
     const [nextDashboard, nextTasks, nextContent, nextSites, nextProviders] = await Promise.all([
       api<Dashboard>("/dashboard"),
       api<Task[]>("/tasks"),
@@ -124,11 +140,14 @@ function App() {
       api<Site[]>("/sites"),
       api<AiProvider[]>("/ai-providers")
     ]);
+    const nextUsers = nextUser.is_admin ? await api<User[]>("/users") : [];
+    setCurrentUser(nextUser);
     setDashboard(nextDashboard);
     setTasks(nextTasks);
     setContent(nextContent);
     setSites(nextSites);
     setProviders(nextProviders);
+    setUsers(nextUsers);
   }, [api, token]);
 
   React.useEffect(() => {
@@ -167,6 +186,12 @@ function App() {
             <h1>{viewTitle(activeView)}</h1>
           </div>
           <div className="topbarActions">
+            {currentUser ? (
+              <div className="userPill">
+                <span>{currentUser.is_admin ? "Администратор" : "Пользователь"}</span>
+                <strong>{currentUser.username}</strong>
+              </div>
+            ) : null}
             <button className="button secondary" onClick={() => loadAll()} title="Обновить данные">
               <RefreshCcw size={18} />
               Обновить
@@ -176,6 +201,8 @@ function App() {
               onClick={() => {
                 localStorage.removeItem("admin_token");
                 setToken("");
+                setCurrentUser(null);
+                setUsers([]);
               }}
               title="Выйти"
             >
@@ -192,7 +219,7 @@ function App() {
         {activeView === "publications" && <PublicationsView api={api} sites={sites} content={content} onChanged={loadAll} />}
         {activeView === "providers" && <ProvidersView api={api} providers={providers} onChanged={loadAll} />}
         {activeView === "sites" && <SitesView api={api} sites={sites} onChanged={loadAll} />}
-        {activeView === "settings" && <SettingsView />}
+        {activeView === "settings" && <SettingsView api={api} currentUser={currentUser} users={users} onChanged={loadAll} />}
       </main>
     </div>
   );
@@ -613,17 +640,175 @@ function SitesView({ api, sites, onChanged }: ViewProps & { sites: Site[] }) {
   );
 }
 
-function SettingsView() {
+function SettingsView({ api, currentUser, users, onChanged }: ViewProps & { currentUser: User | null; users: User[] }) {
   return (
-    <DataPanel title="Настройки проекта">
-      <div className="settingsList">
-        <div><strong>Доступ по IP</strong><span>http://91.199.133.86</span></div>
-        <div><strong>Frontend</strong><span>React, CSS Modules/global CSS, без Tailwind и CDN</span></div>
-        <div><strong>Backend</strong><span>FastAPI, PostgreSQL, Redis, Celery</span></div>
-        <div><strong>Payload</strong><span>Simple: menu + pages; Full: menu + pages + casinos</span></div>
-        <div><strong>Content</strong><span>Editor.js blocks: header, paragraph, list, table, shortcode, image, faq, toc, quote, plusMinus</span></div>
-        <div><strong>Deploy</strong><span>Git push через SSH-ключ на production remote</span></div>
+    <section className="viewStack">
+      <DataPanel title="Профиль">
+        <div className="accountHeader">
+          <div>
+            <span>Аккаунт</span>
+            <strong>{currentUser?.username || "..."}</strong>
+          </div>
+          {currentUser ? <RoleBadge admin={currentUser.is_admin} /> : null}
+        </div>
+        <PasswordChangeForm api={api} />
+      </DataPanel>
+
+      {currentUser?.is_admin ? (
+        <UsersAdminPanel api={api} currentUser={currentUser} users={users} onChanged={onChanged} />
+      ) : null}
+
+      <DataPanel title="Настройки проекта">
+        <div className="settingsList">
+          <div><strong>Доступ по IP</strong><span>http://91.199.133.86</span></div>
+          <div><strong>Frontend</strong><span>React, CSS Modules/global CSS, без Tailwind и CDN</span></div>
+          <div><strong>Backend</strong><span>FastAPI, PostgreSQL, Redis, Celery</span></div>
+          <div><strong>Payload</strong><span>Simple: menu + pages; Full: menu + pages + casinos</span></div>
+          <div><strong>Content</strong><span>Editor.js blocks: header, paragraph, list, table, shortcode, image, faq, toc, quote, plusMinus</span></div>
+          <div><strong>Deploy</strong><span>Git push через SSH-ключ на production remote</span></div>
+        </div>
+      </DataPanel>
+    </section>
+  );
+}
+
+function PasswordChangeForm({ api }: Pick<ViewProps, "api">) {
+  const [currentPassword, setCurrentPassword] = React.useState("");
+  const [newPassword, setNewPassword] = React.useState("");
+  const [confirmPassword, setConfirmPassword] = React.useState("");
+  const [formError, setFormError] = React.useState("");
+  const [saved, setSaved] = React.useState(false);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setSaved(false);
+    setFormError("");
+    if (newPassword !== confirmPassword) {
+      setFormError("Новый пароль и подтверждение не совпадают.");
+      return;
+    }
+    try {
+      await api("/me/password", {
+        method: "POST",
+        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
+      });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setSaved(true);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось обновить пароль");
+    }
+  }
+
+  return (
+    <form className="formGrid compactForm" onSubmit={submit}>
+      <label>
+        Текущий пароль
+        <input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required />
+      </label>
+      <label>
+        Новый пароль
+        <input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required minLength={8} />
+      </label>
+      <label>
+        Повтор нового пароля
+        <input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required minLength={8} />
+      </label>
+      <div className="formActions alignEnd">
+        <button className="button primary" type="submit"><KeyRound size={18} /> Обновить пароль</button>
       </div>
+      {formError ? <span className="formError wide">{formError}</span> : null}
+      {saved ? <span className="formSuccess wide">Пароль обновлен.</span> : null}
+    </form>
+  );
+}
+
+function UsersAdminPanel({ api, currentUser, users, onChanged }: ViewProps & { currentUser: User; users: User[] }) {
+  const [username, setUsername] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [isAdmin, setIsAdmin] = React.useState(false);
+  const [formError, setFormError] = React.useState("");
+
+  async function createUser(event: React.FormEvent) {
+    event.preventDefault();
+    setFormError("");
+    try {
+      await api("/users", {
+        method: "POST",
+        body: JSON.stringify({ username, password, is_admin: isAdmin })
+      });
+      setUsername("");
+      setPassword("");
+      setIsAdmin(false);
+      await onChanged();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось создать пользователя");
+    }
+  }
+
+  async function updateUser(user: User, changes: Partial<Pick<User, "is_admin" | "is_active">>) {
+    setFormError("");
+    try {
+      await api<User>(`/users/${user.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(changes)
+      });
+      await onChanged();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось обновить пользователя");
+    }
+  }
+
+  return (
+    <DataPanel title="Пользователи">
+      <div className="subPanelTitle"><Users size={18} /><strong>Доступы</strong></div>
+      <form className="formGrid compactForm" onSubmit={createUser}>
+        <label>
+          Логин
+          <input value={username} onChange={(event) => setUsername(event.target.value)} required minLength={2} />
+        </label>
+        <label>
+          Пароль
+          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} />
+        </label>
+        <label className="checkboxRow">
+          <input type="checkbox" checked={isAdmin} onChange={(event) => setIsAdmin(event.target.checked)} />
+          Администратор
+        </label>
+        <div className="formActions alignEnd">
+          <button className="button primary" type="submit"><UserPlus size={18} /> Создать пользователя</button>
+        </div>
+        {formError ? <span className="formError wide">{formError}</span> : null}
+      </form>
+
+      <ResponsiveTable
+        columns={["Пользователь", "Роль", "Статус", "Создан", "Действия"]}
+        rows={users.map((user) => [
+          user.username,
+          <RoleBadge admin={user.is_admin} />,
+          user.is_active ? "Активен" : "Отключен",
+          formatDate(user.created_at),
+          <div className="userActions">
+            <button
+              className="button compact"
+              type="button"
+              onClick={() => updateUser(user, { is_admin: !user.is_admin })}
+              disabled={user.id === currentUser.id && user.is_admin}
+            >
+              {user.is_admin ? "Снять admin" : "Сделать admin"}
+            </button>
+            <button
+              className={`button compact ${user.is_active ? "danger" : ""}`}
+              type="button"
+              onClick={() => updateUser(user, { is_active: !user.is_active })}
+              disabled={user.id === currentUser.id}
+            >
+              {user.is_active ? "Отключить" : "Включить"}
+            </button>
+          </div>
+        ])}
+      />
     </DataPanel>
   );
 }
@@ -663,6 +848,10 @@ function EmptyState({ text }: { text: string }) {
 
 function StatusBadge({ status }: { status: string }) {
   return <span className={`status status-${status.replaceAll("_", "-")}`}>{status}</span>;
+}
+
+function RoleBadge({ admin }: { admin: boolean }) {
+  return <span className={`roleBadge ${admin ? "admin" : ""}`}>{admin ? "Администратор" : "Пользователь"}</span>;
 }
 
 function viewTitle(view: string) {

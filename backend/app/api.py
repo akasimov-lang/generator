@@ -2,26 +2,33 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import models
-from app.core.config import get_settings
 from app.db import get_db
 from app.schemas import (
     AiProviderCreate,
     ContentUpdate,
     GenerationTaskCreate,
     LoginRequest,
+    PasswordChange,
     PublicationCampaignCreate,
     SectionCreate,
     SiteCreate,
     TokenResponse,
+    UserCreate,
+    UserResponse,
+    UserUpdate,
 )
-from app.security import AuthUser, create_token
+from app.security import AdminUser, AuthUser, create_token, hash_password, verify_password
 from app.services import count_words, create_generation_task, generate_task_items, get_dashboard, schedule_campaign
 
 router = APIRouter()
+
+
+def _active_admin_count(db: Session) -> int:
+    return db.scalar(select(func.count()).select_from(models.User).where(models.User.is_admin.is_(True), models.User.is_active.is_(True))) or 0
 
 
 @router.get("/health")
@@ -30,11 +37,77 @@ def health() -> dict:
 
 
 @router.post("/auth/login", response_model=TokenResponse)
-def login(payload: LoginRequest) -> TokenResponse:
-    settings = get_settings()
-    if payload.username != settings.admin_username or payload.password != settings.admin_password:
+def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
+    user = db.scalar(select(models.User).where(models.User.username == payload.username.strip()))
+    if not user or not user.is_active or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid username or password")
-    return TokenResponse(access_token=create_token(payload.username))
+    return TokenResponse(access_token=create_token(user.id, user.username, user.is_admin), user=user)
+
+
+@router.get("/auth/me", response_model=UserResponse)
+def current_user(user: AuthUser, db: Session = Depends(get_db)) -> Any:
+    db_user = db.get(models.User, user["id"])
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return db_user
+
+
+@router.post("/me/password")
+def change_password(payload: PasswordChange, user: AuthUser, db: Session = Depends(get_db)) -> dict:
+    db_user = db.get(models.User, user["id"])
+    if not db_user or not verify_password(payload.current_password, db_user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    db_user.password_hash = hash_password(payload.new_password)
+    db.commit()
+    return {"status": "ok"}
+
+
+@router.get("/users", response_model=list[UserResponse])
+def list_users(_: AdminUser, db: Session = Depends(get_db)) -> Any:
+    return db.scalars(select(models.User).order_by(models.User.created_at.desc())).all()
+
+
+@router.post("/users", response_model=UserResponse)
+def create_user(payload: UserCreate, _: AdminUser, db: Session = Depends(get_db)) -> Any:
+    username = payload.username.strip()
+    if not username:
+        raise HTTPException(status_code=400, detail="Username is required")
+    existing = db.scalar(select(models.User).where(models.User.username == username))
+    if existing:
+        raise HTTPException(status_code=409, detail="User already exists")
+    user = models.User(
+        username=username,
+        password_hash=hash_password(payload.password),
+        is_admin=payload.is_admin,
+        is_active=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.patch("/users/{user_id}", response_model=UserResponse)
+def update_user(user_id: str, payload: UserUpdate, current_admin: AdminUser, db: Session = Depends(get_db)) -> Any:
+    user = db.get(models.User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if payload.is_admin is not None and payload.is_admin != user.is_admin:
+        if user.is_admin and not payload.is_admin and _active_admin_count(db) <= 1:
+            raise HTTPException(status_code=400, detail="Cannot remove the last active admin")
+        user.is_admin = payload.is_admin
+
+    if payload.is_active is not None and payload.is_active != user.is_active:
+        if user.id == current_admin["id"] and not payload.is_active:
+            raise HTTPException(status_code=400, detail="Cannot disable your own account")
+        if user.is_admin and not payload.is_active and _active_admin_count(db) <= 1:
+            raise HTTPException(status_code=400, detail="Cannot disable the last active admin")
+        user.is_active = payload.is_active
+
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 @router.get("/dashboard")
