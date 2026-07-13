@@ -45,6 +45,17 @@ def apply_lightweight_migrations() -> None:
         }
         _add_missing_columns("sites", columns, site_columns)
 
+    if "ai_providers" in tables:
+        columns = {column["name"] for column in inspector.get_columns("ai_providers")}
+        provider_columns = {
+            "provider_type": "VARCHAR(40) DEFAULT 'custom' NOT NULL",
+            "prompt_tokens_used": "INTEGER DEFAULT 0 NOT NULL",
+            "completion_tokens_used": "INTEGER DEFAULT 0 NOT NULL",
+            "total_tokens_used": "INTEGER DEFAULT 0 NOT NULL",
+            "last_used_at": "TIMESTAMP WITH TIME ZONE",
+        }
+        _add_missing_columns("ai_providers", columns, provider_columns)
+
     if "generation_tasks" in tables:
         columns = {column["name"] for column in inspector.get_columns("generation_tasks")}
         _add_missing_columns(

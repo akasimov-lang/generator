@@ -88,8 +88,14 @@ type Section = {
 type AiProvider = {
   id: string;
   name: string;
+  provider_type: "custom" | "gemini";
   endpoint_url: string;
   model: string;
+  prompt_tokens_used: number;
+  completion_tokens_used: number;
+  total_tokens_used: number;
+  last_used_at: string | null;
+  created_at: string;
   is_active: boolean;
 };
 
@@ -532,6 +538,15 @@ function ProjectTopicsPanel({ api, site, providers, sections, tasks, onChanged }
   const [shortcode, setShortcode] = React.useState("");
   const [formError, setFormError] = React.useState("");
 
+  React.useEffect(() => {
+    if (!providerId) {
+      const geminiProvider = providers.find((provider) => provider.provider_type === "gemini" && provider.is_active);
+      if (geminiProvider) {
+        setProviderId(geminiProvider.id);
+      }
+    }
+  }, [providerId, providers]);
+
   async function createTask(event: React.FormEvent) {
     event.preventDefault();
     setFormError("");
@@ -837,6 +852,15 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
   const [includeToc, setIncludeToc] = React.useState(true);
   const [includeFaq, setIncludeFaq] = React.useState(true);
 
+  React.useEffect(() => {
+    if (!providerId) {
+      const geminiProvider = providers.find((provider) => provider.provider_type === "gemini" && provider.is_active);
+      if (geminiProvider) {
+        setProviderId(geminiProvider.id);
+      }
+    }
+  }, [providerId, providers]);
+
   async function createTask(event: React.FormEvent) {
     event.preventDefault();
     const payload = {
@@ -1001,20 +1025,22 @@ function PublicationsView({ api, sites, content, onChanged }: ViewProps & { site
 }
 
 function ProvidersView({ api, providers, onChanged }: ViewProps & { providers: AiProvider[] }) {
-  const [name, setName] = React.useState("");
-  const [endpointUrl, setEndpointUrl] = React.useState("");
-  const [model, setModel] = React.useState("");
+  const [name, setName] = React.useState("Gemini");
+  const [providerType, setProviderType] = React.useState<"custom" | "gemini">("gemini");
+  const [endpointUrl, setEndpointUrl] = React.useState("https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent");
+  const [model, setModel] = React.useState("gemini-3.5-flash");
   const [apiKey, setApiKey] = React.useState("");
 
   async function createProvider(event: React.FormEvent) {
     event.preventDefault();
     await api("/ai-providers", {
       method: "POST",
-      body: JSON.stringify({ name, endpoint_url: endpointUrl, model, api_key: apiKey || null })
+      body: JSON.stringify({ name, provider_type: providerType, endpoint_url: endpointUrl, model, api_key: apiKey || null })
     });
-    setName("");
-    setEndpointUrl("");
-    setModel("");
+    setName("Gemini");
+    setProviderType("gemini");
+    setEndpointUrl("https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent");
+    setModel("gemini-3.5-flash");
     setApiKey("");
     onChanged();
   }
@@ -1025,7 +1051,25 @@ function ProvidersView({ api, providers, onChanged }: ViewProps & { providers: A
         <form className="formGrid" onSubmit={createProvider}>
           <label>
             Название
-            <input value={name} onChange={(event) => setName(event.target.value)} required placeholder="OpenAI tunnel" />
+            <input value={name} onChange={(event) => setName(event.target.value)} required placeholder="Gemini" />
+          </label>
+          <label>
+            Тип API
+            <select
+              value={providerType}
+              onChange={(event) => {
+                const nextType = event.target.value as "custom" | "gemini";
+                setProviderType(nextType);
+                if (nextType === "gemini") {
+                  setName((value) => value || "Gemini");
+                  setEndpointUrl("https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent");
+                  setModel("gemini-3.5-flash");
+                }
+              }}
+            >
+              <option value="gemini">Gemini</option>
+              <option value="custom">Custom / tunnel</option>
+            </select>
           </label>
           <label>
             Endpoint URL
@@ -1042,8 +1086,22 @@ function ProvidersView({ api, providers, onChanged }: ViewProps & { providers: A
           <div className="formActions wide"><button className="button primary" type="submit"><Plus size={18} /> Сохранить provider</button></div>
         </form>
       </DataPanel>
-      <DataPanel title="AI Providers">
-        <ResponsiveTable columns={["Название", "Endpoint", "Модель", "Активен"]} rows={providers.map((provider) => [provider.name, provider.endpoint_url, provider.model, provider.is_active ? "Да" : "Нет"])} />
+      <DataPanel title="Подключенные API">
+        <ResponsiveTable
+          columns={["Название", "Тип", "Модель", "Endpoint", "Добавлен", "Prompt", "Output", "Всего токенов", "Последнее", "Активен"]}
+          rows={providers.map((provider) => [
+            provider.name,
+            humanProviderType(provider.provider_type),
+            provider.model,
+            provider.endpoint_url,
+            formatDate(provider.created_at),
+            formatNumber(provider.prompt_tokens_used || 0),
+            formatNumber(provider.completion_tokens_used || 0),
+            formatNumber(provider.total_tokens_used || 0),
+            provider.last_used_at ? formatDate(provider.last_used_at) : "-",
+            provider.is_active ? "Да" : "Нет"
+          ])}
+        />
       </DataPanel>
     </section>
   );
@@ -1401,6 +1459,15 @@ function humanPayloadMode(value: string) {
   if (value === "full_site") return "Full site";
   if (value === "simple_page") return "Simple page";
   return "Site default";
+}
+
+function humanProviderType(value: string) {
+  if (value === "gemini") return "Gemini";
+  return "Custom";
+}
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat("ru-RU").format(value);
 }
 
 function toDateTimeInputValue(date: Date) {

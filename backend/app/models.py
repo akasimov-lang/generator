@@ -31,9 +31,14 @@ class AiProvider(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name: Mapped[str] = mapped_column(String(120), nullable=False)
+    provider_type: Mapped[str] = mapped_column(String(40), default="custom")
     endpoint_url: Mapped[str] = mapped_column(Text, nullable=False)
     model: Mapped[str] = mapped_column(String(120), nullable=False, default="default")
     api_key: Mapped[str] = mapped_column(Text, nullable=True)
+    prompt_tokens_used: Mapped[int] = mapped_column(Integer, default=0)
+    completion_tokens_used: Mapped[int] = mapped_column(Integer, default=0)
+    total_tokens_used: Mapped[int] = mapped_column(Integer, default=0)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 

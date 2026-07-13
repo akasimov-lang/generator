@@ -1,3 +1,4 @@
+import asyncio
 import copy
 import html
 import json
@@ -17,6 +18,8 @@ SIMPLE_PAGE = "simple_page"
 FULL_SITE = "full_site"
 SITE_DEFAULT = "site_default"
 DEFAULT_EDITOR_VERSION = "2.31.0"
+GEMINI_DEFAULT_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+GEMINI_DEFAULT_MODEL = "gemini-3.5-flash"
 
 
 def now_payload_time() -> str:
@@ -115,6 +118,229 @@ def build_stub_content(
     if resolved_mode == FULL_SITE and site and site.showcase_payload:
         payload["casinos"] = site.showcase_payload.get("casinos", site.showcase_payload)
     return payload
+
+
+async def build_ai_content(
+    provider: models.AiProvider,
+    topic: str,
+    geo: str,
+    language: str,
+    target_words: int | None = None,
+    site: models.Site | None = None,
+    payload_mode: str = SITE_DEFAULT,
+    shortcode: str | None = None,
+    include_toc: bool = True,
+    include_faq: bool = True,
+) -> dict:
+    if provider.provider_type == "gemini":
+        return await build_gemini_content(
+            provider=provider,
+            topic=topic,
+            geo=geo,
+            language=language,
+            target_words=target_words,
+            site=site,
+            payload_mode=payload_mode,
+            shortcode=shortcode,
+            include_toc=include_toc,
+            include_faq=include_faq,
+        )
+    return build_stub_content(
+        topic=topic,
+        geo=geo,
+        language=language,
+        target_words=target_words,
+        site=site,
+        payload_mode=payload_mode,
+        shortcode=shortcode,
+        include_toc=include_toc,
+        include_faq=include_faq,
+    )
+
+
+async def build_gemini_content(
+    provider: models.AiProvider,
+    topic: str,
+    geo: str,
+    language: str,
+    target_words: int | None,
+    site: models.Site | None,
+    payload_mode: str,
+    shortcode: str | None,
+    include_toc: bool,
+    include_faq: bool,
+) -> dict:
+    if not provider.api_key:
+        raise ValueError("Gemini API key is not configured")
+
+    base_payload = build_stub_content(
+        topic=topic,
+        geo=geo,
+        language=language,
+        target_words=target_words,
+        site=site,
+        payload_mode=payload_mode,
+        shortcode=shortcode,
+        include_toc=include_toc,
+        include_faq=include_faq,
+    )
+    page = base_payload["pages"][0]
+    prompt = build_gemini_prompt(
+        topic=topic,
+        geo=geo,
+        language=language,
+        target_words=target_words,
+        shortcode=shortcode,
+        include_toc=include_toc,
+        include_faq=include_faq,
+    )
+    response = await call_gemini(provider, prompt)
+    usage = response.get("usageMetadata", {}) if isinstance(response, dict) else {}
+    apply_provider_usage(provider, usage)
+    generated_text = extract_gemini_text(response)
+    if not generated_text:
+        raise ValueError("Gemini returned an empty response")
+
+    page["content"]["blocks"] = build_blocks_from_ai_text(
+        generated_text=generated_text,
+        topic=topic,
+        shortcode=shortcode,
+        include_toc=include_toc,
+        include_faq=include_faq,
+    )
+    page["description"] = clean_text(generated_text)[:155] or page["description"]
+    base_payload["generation_meta"]["generator"] = "gemini"
+    base_payload["generation_meta"]["model"] = provider.model
+    base_payload["generation_meta"]["usage"] = usage
+    return base_payload
+
+
+def build_gemini_prompt(
+    topic: str,
+    geo: str,
+    language: str,
+    target_words: int | None,
+    shortcode: str | None,
+    include_toc: bool,
+    include_faq: bool,
+) -> str:
+    options = [
+        f"Topic: {topic}",
+        f"Geo: {geo}",
+        f"Language: {language}",
+        f"Target words: {target_words or 'not specified'}",
+        f"Include TOC: {'yes' if include_toc else 'no'}",
+        f"Include FAQ: {'yes' if include_faq else 'no'}",
+        f"Shortcode block: {shortcode or 'none'}",
+    ]
+    return (
+        "Generate a useful, publication-ready article for a website.\n"
+        "Return plain text only. Use clear section headings, short paragraphs, and practical details.\n"
+        "Do not return Markdown fences or JSON.\n\n"
+        + "\n".join(options)
+    )
+
+
+async def call_gemini(provider: models.AiProvider, prompt: str) -> dict:
+    model = provider.model or GEMINI_DEFAULT_MODEL
+    endpoint_template = provider.endpoint_url or GEMINI_DEFAULT_ENDPOINT
+    endpoint = endpoint_template.format(model=model)
+    body = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": prompt},
+                ]
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.7,
+        },
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": provider.api_key,
+    }
+    async with httpx.AsyncClient(timeout=90) as client:
+        response = await client.post(endpoint, json=body, headers=headers)
+    response.raise_for_status()
+    return response.json()
+
+
+def extract_gemini_text(response: dict) -> str:
+    chunks: list[str] = []
+    for candidate in response.get("candidates", []):
+        content = candidate.get("content", {}) if isinstance(candidate, dict) else {}
+        for part in content.get("parts", []):
+            if isinstance(part, dict) and part.get("text"):
+                chunks.append(str(part["text"]))
+    return clean_text("\n\n".join(chunks))
+
+
+def apply_provider_usage(provider: models.AiProvider, usage: dict) -> None:
+    prompt_tokens = int(usage.get("promptTokenCount") or 0)
+    completion_tokens = int(usage.get("candidatesTokenCount") or 0)
+    total_tokens = int(usage.get("totalTokenCount") or (prompt_tokens + completion_tokens))
+    provider.prompt_tokens_used = (provider.prompt_tokens_used or 0) + prompt_tokens
+    provider.completion_tokens_used = (provider.completion_tokens_used or 0) + completion_tokens
+    provider.total_tokens_used = (provider.total_tokens_used or 0) + total_tokens
+    provider.last_used_at = datetime.now(timezone.utc)
+
+
+def build_blocks_from_ai_text(
+    generated_text: str,
+    topic: str,
+    shortcode: str | None,
+    include_toc: bool,
+    include_faq: bool,
+) -> list[dict]:
+    title = topic.strip().title()
+    lines = [line.strip(" #*\t") for line in generated_text.splitlines() if line.strip()]
+    blocks: list[dict] = [header_block(title, 1)]
+    headings: list[str] = [title]
+    pending_paragraphs: list[str] = []
+
+    def flush_paragraphs() -> None:
+        if pending_paragraphs:
+            blocks.append(paragraph_block(" ".join(pending_paragraphs)))
+            pending_paragraphs.clear()
+
+    for line in lines:
+        if looks_like_heading(line):
+            flush_paragraphs()
+            headings.append(line)
+            blocks.append(header_block(line, 2))
+        else:
+            pending_paragraphs.append(line)
+            if len(" ".join(pending_paragraphs)) > 700:
+                flush_paragraphs()
+    flush_paragraphs()
+
+    if include_toc and len(headings) > 1:
+        blocks.insert(1, toc_block(headings[:8]))
+    if include_faq and not any(block.get("type") == "faq" for block in blocks):
+        blocks.append(
+            faq_block(
+                [
+                    {
+                        "question": f"What is {title} about?",
+                        "answer": f"This page explains {topic} and gives practical context for readers.",
+                    }
+                ]
+            )
+        )
+    if shortcode:
+        blocks.append(shortcode_block(shortcode))
+    return blocks
+
+
+def looks_like_heading(line: str) -> bool:
+    if len(line) > 90:
+        return False
+    if line.endswith("."):
+        return False
+    words = line.split()
+    return 2 <= len(words) <= 10
 
 
 def resolve_payload_mode(site: models.Site | None, requested_mode: str) -> str:
@@ -313,9 +539,36 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate) -> models
 def generate_task_items(db: Session, task: models.GenerationTask) -> models.GenerationTask:
     task.status = "generating"
     db.flush()
-    for item in task.items:
-        item.status = "generated"
-    task.status = "generated"
+    provider = db.get(models.AiProvider, task.ai_provider_id) if task.ai_provider_id else None
+    site = db.get(models.Site, task.site_id) if task.site_id else None
+    try:
+        for item in task.items:
+            if provider and provider.is_active:
+                item.generated_json = asyncio.run(
+                    build_ai_content(
+                        provider=provider,
+                        topic=item.topic,
+                        geo=task.geo,
+                        language=task.language,
+                        target_words=task.target_words,
+                        site=site,
+                        payload_mode=task.payload_mode,
+                        shortcode=None,
+                        include_toc=True,
+                        include_faq=True,
+                    )
+                )
+                item.slug = item.generated_json["pages"][0]["slug"]
+                item.word_count = count_words(item.generated_json)
+            item.status = "generated"
+        task.status = "generated"
+    except Exception:
+        for item in task.items:
+            if item.status not in {"generated", "approved", "scheduled", "published"}:
+                item.status = "generation_failed"
+        task.status = "generation_failed"
+        db.commit()
+        raise
     db.commit()
     db.refresh(task)
     return task

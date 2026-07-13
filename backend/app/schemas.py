@@ -46,6 +46,23 @@ class AiProviderCreate(BaseModel):
     endpoint_url: str
     model: str = "default"
     api_key: str | None = None
+    provider_type: Literal["custom", "gemini"] = "custom"
+
+
+class AiProviderResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    provider_type: str
+    endpoint_url: str
+    model: str
+    prompt_tokens_used: int
+    completion_tokens_used: int
+    total_tokens_used: int
+    last_used_at: datetime | None
+    is_active: bool
+    created_at: datetime
 
 
 class SiteCreate(BaseModel):

@@ -9,6 +9,7 @@ from app import models
 from app.db import get_db
 from app.schemas import (
     AiProviderCreate,
+    AiProviderResponse,
     ContentUpdate,
     GenerationTaskCreate,
     LoginRequest,
@@ -130,12 +131,12 @@ def dashboard(_: AuthUser, db: Session = Depends(get_db)) -> dict:
     return get_dashboard(db)
 
 
-@router.get("/ai-providers")
+@router.get("/ai-providers", response_model=list[AiProviderResponse])
 def list_ai_providers(_: AuthUser, db: Session = Depends(get_db)) -> Any:
     return db.scalars(select(models.AiProvider).order_by(models.AiProvider.created_at.desc())).all()
 
 
-@router.post("/ai-providers")
+@router.post("/ai-providers", response_model=AiProviderResponse)
 def create_ai_provider(payload: AiProviderCreate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     provider = models.AiProvider(**payload.model_dump())
     db.add(provider)
