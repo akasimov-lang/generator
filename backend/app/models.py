@@ -39,6 +39,9 @@ class AiProvider(Base, TimestampMixin):
     completion_tokens_used: Mapped[int] = mapped_column(Integer, default=0)
     total_tokens_used: Mapped[int] = mapped_column(Integer, default=0)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    validation_status: Mapped[str] = mapped_column(String(40), default="unchecked")
+    validation_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 

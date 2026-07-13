@@ -95,6 +95,9 @@ type AiProvider = {
   completion_tokens_used: number;
   total_tokens_used: number;
   last_used_at: string | null;
+  validation_status: "unchecked" | "valid" | "invalid" | string;
+  validation_message: string | null;
+  validated_at: string | null;
   created_at: string;
   is_active: boolean;
 };
@@ -1030,6 +1033,7 @@ function ProvidersView({ api, providers, onChanged }: ViewProps & { providers: A
   const [endpointUrl, setEndpointUrl] = React.useState("https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent");
   const [model, setModel] = React.useState("gemini-3.5-flash");
   const [apiKey, setApiKey] = React.useState("");
+  const [validatingId, setValidatingId] = React.useState<string | null>(null);
 
   async function createProvider(event: React.FormEvent) {
     event.preventDefault();
@@ -1043,6 +1047,16 @@ function ProvidersView({ api, providers, onChanged }: ViewProps & { providers: A
     setModel("gemini-3.5-flash");
     setApiKey("");
     onChanged();
+  }
+
+  async function validateProvider(providerId: string) {
+    setValidatingId(providerId);
+    try {
+      await api(`/ai-providers/${providerId}/validate`, { method: "POST" });
+      onChanged();
+    } finally {
+      setValidatingId(null);
+    }
   }
 
   return (
@@ -1088,18 +1102,24 @@ function ProvidersView({ api, providers, onChanged }: ViewProps & { providers: A
       </DataPanel>
       <DataPanel title="Подключенные API">
         <ResponsiveTable
-          columns={["Название", "Тип", "Модель", "Endpoint", "Добавлен", "Prompt", "Output", "Всего токенов", "Последнее", "Активен"]}
+          columns={["Название", "Тип", "Модель", "Endpoint", "Статус ключа", "Проверен", "Prompt", "Output", "Всего токенов", "Последнее", "Добавлен", "Активен", "Действие"]}
           rows={providers.map((provider) => [
             provider.name,
             humanProviderType(provider.provider_type),
             provider.model,
             provider.endpoint_url,
-            formatDate(provider.created_at),
+            <ProviderValidationCell provider={provider} />,
+            provider.validated_at ? formatDate(provider.validated_at) : "-",
             formatNumber(provider.prompt_tokens_used || 0),
             formatNumber(provider.completion_tokens_used || 0),
             formatNumber(provider.total_tokens_used || 0),
             provider.last_used_at ? formatDate(provider.last_used_at) : "-",
-            provider.is_active ? "Да" : "Нет"
+            formatDate(provider.created_at),
+            provider.is_active ? "Да" : "Нет",
+            <button className="button compact" type="button" onClick={() => validateProvider(provider.id)} disabled={validatingId === provider.id}>
+              <ShieldCheck size={16} />
+              {validatingId === provider.id ? "Проверка" : "Проверить"}
+            </button>
           ])}
         />
       </DataPanel>
@@ -1425,6 +1445,23 @@ function EmptyState({ text }: { text: string }) {
 
 function StatusBadge({ status }: { status: string }) {
   return <span className={`status status-${status.replaceAll("_", "-")}`}>{status}</span>;
+}
+
+function ProviderValidationCell({ provider }: { provider: AiProvider }) {
+  const status = provider.validation_status || "unchecked";
+  const labels: Record<string, string> = {
+    valid: "Валиден",
+    invalid: "Ошибка",
+    unchecked: "Не проверен"
+  };
+  return (
+    <div className="cellStack">
+      <span className={`status status-${status.replaceAll("_", "-")}`} title={provider.validation_message || undefined}>
+        {labels[status] || status}
+      </span>
+      {provider.validation_message ? <span className="cellHint">{provider.validation_message}</span> : null}
+    </div>
+  );
 }
 
 function RoleBadge({ admin }: { admin: boolean }) {

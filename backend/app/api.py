@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
@@ -24,7 +25,7 @@ from app.schemas import (
     UserUpdate,
 )
 from app.security import AdminUser, AuthUser, create_token, hash_password, verify_password
-from app.services import count_words, create_generation_task, generate_task_items, get_dashboard, schedule_campaign
+from app.services import count_words, create_generation_task, generate_task_items, get_dashboard, schedule_campaign, validate_ai_provider_key
 
 router = APIRouter()
 
@@ -140,6 +141,17 @@ def list_ai_providers(_: AuthUser, db: Session = Depends(get_db)) -> Any:
 def create_ai_provider(payload: AiProviderCreate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     provider = models.AiProvider(**payload.model_dump())
     db.add(provider)
+    db.commit()
+    db.refresh(provider)
+    return provider
+
+
+@router.post("/ai-providers/{provider_id}/validate", response_model=AiProviderResponse)
+def validate_ai_provider(provider_id: str, _: AdminUser, db: Session = Depends(get_db)) -> Any:
+    provider = db.get(models.AiProvider, provider_id)
+    if not provider:
+        raise HTTPException(status_code=404, detail="AI provider not found")
+    asyncio.run(validate_ai_provider_key(provider))
     db.commit()
     db.refresh(provider)
     return provider

@@ -194,9 +194,19 @@ async def build_gemini_content(
         include_toc=include_toc,
         include_faq=include_faq,
     )
-    response = await call_gemini(provider, prompt)
+    try:
+        response = await call_gemini(provider, prompt)
+    except Exception as exc:
+        provider.validation_status = "invalid"
+        provider.validation_message = describe_ai_provider_error(exc)
+        provider.validated_at = datetime.now(timezone.utc)
+        raise
+
     usage = response.get("usageMetadata", {}) if isinstance(response, dict) else {}
     apply_provider_usage(provider, usage)
+    provider.validation_status = "valid"
+    provider.validation_message = "Gemini API key is valid"
+    provider.validated_at = datetime.now(timezone.utc)
     generated_text = extract_gemini_text(response)
     if not generated_text:
         raise ValueError("Gemini returned an empty response")
@@ -285,6 +295,65 @@ def apply_provider_usage(provider: models.AiProvider, usage: dict) -> None:
     provider.completion_tokens_used = (provider.completion_tokens_used or 0) + completion_tokens
     provider.total_tokens_used = (provider.total_tokens_used or 0) + total_tokens
     provider.last_used_at = datetime.now(timezone.utc)
+
+
+async def validate_ai_provider_key(provider: models.AiProvider) -> models.AiProvider:
+    provider.validated_at = datetime.now(timezone.utc)
+
+    if provider.provider_type != "gemini":
+        provider.validation_status = "unchecked"
+        provider.validation_message = "Автопроверка сейчас доступна только для Gemini-провайдеров."
+        return provider
+
+    if not provider.api_key:
+        provider.validation_status = "invalid"
+        provider.validation_message = "API key is not configured"
+        return provider
+
+    try:
+        response = await call_gemini(provider, "Reply with exactly: ok")
+        usage = response.get("usageMetadata", {}) if isinstance(response, dict) else {}
+        apply_provider_usage(provider, usage)
+    except Exception as exc:
+        provider.validation_status = "invalid"
+        provider.validation_message = describe_ai_provider_error(exc)
+        return provider
+
+    provider.validation_status = "valid"
+    provider.validation_message = "Gemini API key is valid"
+    return provider
+
+
+def describe_ai_provider_error(error: Exception) -> str:
+    if isinstance(error, httpx.HTTPStatusError):
+        status_code = error.response.status_code
+        status_label = ""
+        reason = ""
+        message = ""
+        try:
+            payload = error.response.json()
+        except ValueError:
+            payload = {}
+
+        if isinstance(payload, dict):
+            error_payload = payload.get("error", payload)
+            if isinstance(error_payload, dict):
+                status_label = str(error_payload.get("status") or "")
+                message = str(error_payload.get("message") or "")
+                details = error_payload.get("details") or []
+                if isinstance(details, list):
+                    for detail in details:
+                        if isinstance(detail, dict) and detail.get("reason"):
+                            reason = str(detail["reason"])
+                            break
+
+        if not message:
+            message = error.response.text[:300]
+
+        parts = [f"HTTP {status_code}", status_label, reason, message]
+        return ": ".join(part for part in parts if part)[:500]
+
+    return str(error)[:500] or error.__class__.__name__
 
 
 def build_blocks_from_ai_text(

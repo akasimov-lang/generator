@@ -53,6 +53,9 @@ def apply_lightweight_migrations() -> None:
             "completion_tokens_used": "INTEGER DEFAULT 0 NOT NULL",
             "total_tokens_used": "INTEGER DEFAULT 0 NOT NULL",
             "last_used_at": "TIMESTAMP WITH TIME ZONE",
+            "validation_status": "VARCHAR(40) DEFAULT 'unchecked' NOT NULL",
+            "validation_message": "TEXT",
+            "validated_at": "TIMESTAMP WITH TIME ZONE",
         }
         _add_missing_columns("ai_providers", columns, provider_columns)
 

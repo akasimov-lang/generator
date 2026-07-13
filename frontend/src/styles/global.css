@@ -402,7 +402,8 @@ td {
 
 .status-generated,
 .status-approved,
-.status-published {
+.status-published,
+.status-valid {
   background: var(--primary-soft);
   color: var(--primary);
 }
@@ -410,16 +411,37 @@ td {
 .status-generating,
 .status-scheduled,
 .status-publishing,
-.status-retry-scheduled {
+.status-retry-scheduled,
+.status-unchecked {
   background: var(--blue-soft);
   color: var(--blue);
 }
 
 .status-publication-failed,
 .status-generation-failed,
-.status-rejected {
+.status-rejected,
+.status-invalid {
   background: var(--danger-soft);
   color: var(--danger);
+}
+
+.cellStack {
+  align-items: flex-start;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 150px;
+}
+
+.cellHint {
+  color: var(--muted);
+  display: -webkit-box;
+  font-size: 12px;
+  line-height: 1.35;
+  max-width: 320px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .formGrid {

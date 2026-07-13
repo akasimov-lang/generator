@@ -61,6 +61,9 @@ class AiProviderResponse(BaseModel):
     completion_tokens_used: int
     total_tokens_used: int
     last_used_at: datetime | None
+    validation_status: str
+    validation_message: str | None
+    validated_at: datetime | None
     is_active: bool
     created_at: datetime
 
