@@ -20,36 +20,144 @@ SITE_DEFAULT = "site_default"
 DEFAULT_EDITOR_VERSION = "2.31.0"
 GEMINI_DEFAULT_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 GEMINI_DEFAULT_MODEL = "gemini-3.5-flash"
-DEFAULT_CONTENT_PROMPT_TEMPLATE = """You are a senior SEO editor for gambling and betting content.
+DEFAULT_CONTENT_PROMPT_TEMPLATE = """Ты — senior SEO-редактор и content strategist для gambling/betting тем.
 
-Generate a publication-ready German article for a casino/betting review website.
+Задача: сгенерировать SEO-страницу на немецком языке для сайта-обзорника онлайн-казино, ставок и casino providers.
 
-Context:
-- Topic: {{topic}}
-- Slug: {{slug}}
-- Country: {{geo}}
-- Language: {{language}}
-- Target words: {{target_words}}
-- Site: {{site_name}}
-- Current year: {{current_year}}
+Важно:
+У тебя нет доступа к Google, браузингу и актуальной выдаче.
+Не утверждай, что ты изучил TOP-10, конкурентов или реальные сайты.
+Content gaps формируй как гипотезу на основе темы, поискового интента и типичных слабых мест страниц в нише gambling/betting.
+Не выдумывай факты.
 
-Important:
-- You do not have browsing access.
-- Do not claim that you checked Google, competitors, licenses, bonuses, operators, payouts, RTP, reviews, or ratings.
-- Do not invent casino names, operators, bonuses, amounts, payout times, licenses, commissions, RTP, ratings, reviews, or current legal facts.
-- If a fact must be verified, write [Muss geprüft werden: ...].
-- For Germany, write carefully about GGL-Lizenz, KYC, Zahlungen, Auszahlungen, Spielerschutz, Limits, and Responsible Gambling.
-- Avoid keyword stuffing, fake expertise, exaggerated claims, and advertising tone.
-- Never promise winnings or risk-free gambling.
+Гео: Германия.
+Язык страницы: немецкий.
+Текущий год: {{CURRENT_YEAR}}.
+Тематика: онлайн-казино, легальные Anbieter, GGL-Lizenz, Spielerschutz, Zahlungen, Auszahlungen, KYC, sichere Online Casinos.
+Аудитория: пользователи из Германии, которые хотят выбрать легальное и безопасное онлайн-казино или Spielothek.
 
-Return plain article text only. Do not return JSON. Do not add Markdown fences.
+Тема страницы:
+{{TOPIC}}
 
-The article should include:
-- A clear H1-like opening title.
-- A short intro.
-- A practical quick answer.
-- Sections about legal status, safety, payment/withdrawal checks, KYC, Spielerschutz, suitability, common mistakes, FAQ, and responsible gambling.
-- Concrete but safe guidance. Use verification markers where data is missing.
+Slug страницы:
+{{SLUG}}
+
+Примеры тем:
+1. Beste Online Casinos in Deutschland 2026: Legale Anbieter im Vergleich
+2. Legale Online Casinos in Deutschland: Anbieter mit GGL-Lizenz
+3. Beste Online Spielotheken in Deutschland: Sichere Slots mit Lizenz
+4. Sichere Online Casinos erkennen: Lizenz, Zahlungen und Spielerschutz
+5. Neue Online Casinos in Deutschland: Neue Anbieter mit Lizenz
+
+Цель страницы:
+Создать полезный, структурированный и юридически аккуратный контент, который максимально полно отвечает на запрос пользователя без копирования конкурентов и без неподтвержденных утверждений.
+
+Работай как редактор, который отвечает за публикацию.
+
+Основные правила:
+- Пиши на немецком языке.
+- Не используй русский или английский в тексте страницы, кроме терминов вроде KYC, RTP, FAQ, GGL.
+- Не выдумывай названия казино, операторов, лицензий, бонусов, сумм, RTP, сроков выплат, комиссий, рейтингов или отзывов.
+- Если данных нет, используй безопасную формулировку или пометку: [Muss geprüft werden: ...].
+- Не обещай выигрыш.
+- Не называй казино “абсолютно безопасными”.
+- Не используй формулировки “garantiert”, “ohne Risiko”, “100% legal”, “sicherer Gewinn”.
+- Не делай рекламный текст.
+- Не делай keyword stuffing.
+- Не повторяй главный ключ слишком часто.
+- Не создавай фейковый опыт автора.
+- Не создавай фейковый рейтинг без данных.
+- Не делай одинаковые FAQ и одинаковые вводки.
+
+SEO-логика:
+Сначала определи:
+1. Главный интент пользователя.
+2. 8–12 подинтентов.
+3. Главный ключ.
+4. Вторичные ключи.
+5. FAQ-запросы.
+6. Legal/Safety/Payment кластеры.
+7. Гипотетические content gaps, которые часто бывают у конкурентов.
+
+Для тем про Германию обязательно раскрыть:
+- Was bedeutet GGL-Lizenz?
+- Warum ist Lizenzprüfung wichtig?
+- Wie erkennt man sichere Anbieter?
+- Welche Rolle spielen KYC und Identitätsprüfung?
+- Was muss man vor Einzahlung prüfen?
+- Unterschied zwischen Einzahlung und Auszahlung.
+- Spielerschutz, Limits und Selbstausschluss.
+- Für wen sind Online Casinos nicht geeignet?
+- Welche Warnsignale sollte man beachten?
+
+Структура страницы:
+Верни готовую страницу в таком формате:
+
+Title:
+Meta Description:
+H1:
+
+Intro:
+1–2 коротких абзаца. Сразу отвечай на основной запрос, без длинного вступления.
+
+Quick Answer:
+Короткий практический ответ пользователю в 3–5 предложениях.
+
+H2: ...
+Текст 2–4 абзаца.
+
+Если нужна таблица, добавь ее в markdown-формате:
+| Kriterium | Worauf achten | Warum wichtig |
+|---|---|---|
+
+После таблицы обязательно добавь 1 короткий поясняющий абзац.
+
+Обязательные блоки для страниц про онлайн-казино в Германии:
+1. Überblick / schneller Vergleich.
+2. Methodik: Wie wir Anbieter bewerten.
+3. GGL-Lizenz und rechtlicher Rahmen.
+4. Sicherheit: Lizenz, Zahlungen, Datenschutz, KYC.
+5. Zahlungen und Auszahlungen.
+6. Spielerschutz und Limits.
+7. Für wen geeignet / nicht geeignet.
+8. Häufige Fehler vor der Registrierung.
+9. FAQ.
+10. Responsible Gambling Hinweis.
+
+Для рейтинговых страниц:
+Если нет проверенного списка брендов, не создавай фейковый TOP-10.
+Вместо этого создай таблицу критериев выбора и пометь места, где нужны реальные Anbieter:
+[Anbieter 1 – muss geprüft werden]
+[Anbieter 2 – muss geprüft werden]
+[Anbieter 3 – muss geprüft werden]
+
+FAQ:
+Сгенерируй 8–10 вопросов.
+Ответы должны быть короткими, конкретными и не рекламными.
+
+Responsible Gambling:
+Добавь аккуратный блок на немецком:
+- Glücksspiel ist mit Risiken verbunden.
+- Nur mit Geld spielen, dessen Verlust verkraftbar ist.
+- Limits nutzen.
+- Bei Kontrollverlust Hilfe suchen.
+- Для организаций помощи используй пометку: [Muss geprüft werden: lokale Hilfsangebote in Deutschland].
+
+Финальная редакторская проверка:
+В конце добавь короткий блок:
+
+Editor Check:
+- Suchintention: OK / Risiko
+- Fakten: OK / Muss geprüft werden
+- Legal-Risiko: OK / Risiko
+- Keyword-Stuffing: OK / Risiko
+- E-E-A-T: OK / Muss gestärkt werden
+- Thin Content: OK / Risiko
+- Nächste Prüfung vor Veröffentlichung: ...
+
+Не добавляй вымышленные ссылки.
+Не добавляй вымышленные даты обновления.
+Не утверждай, что страница лучше конкурентов, если конкуренты не проверены.
 """
 
 
@@ -291,6 +399,7 @@ def build_gemini_prompt(
     prompt = template
     for key, value in values.items():
         prompt = prompt.replace("{{" + key + "}}", value)
+        prompt = prompt.replace("{{" + key.upper() + "}}", value)
     prompt += (
         "\n\nGeneration constraints:\n"
         f"- Topic: {topic}\n"
