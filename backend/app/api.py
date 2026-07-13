@@ -15,6 +15,9 @@ from app.schemas import (
     GenerationTaskCreate,
     LoginRequest,
     PasswordChange,
+    PromptTemplateCreate,
+    PromptTemplateResponse,
+    PromptTemplateUpdate,
     PublicationCampaignCreate,
     SectionCreate,
     SiteCreate,
@@ -25,7 +28,7 @@ from app.schemas import (
     UserUpdate,
 )
 from app.security import AdminUser, AuthUser, create_token, hash_password, verify_password
-from app.services import count_words, create_generation_task, generate_task_items, get_dashboard, schedule_campaign, validate_ai_provider_key
+from app.services import count_words, create_generation_task, ensure_default_prompt_template, generate_task_items, get_dashboard, schedule_campaign, validate_ai_provider_key
 
 router = APIRouter()
 
@@ -46,6 +49,14 @@ def _get_section_for_site(db: Session, site_id: str, section_id: str) -> models.
     if not section or section.site_id != site_id:
         raise HTTPException(status_code=400, detail="Menu item does not belong to this site")
     return section
+
+
+def _validate_task_topics(payload: GenerationTaskCreate) -> None:
+    clean_topics = [topic.strip() for topic in payload.topics if topic.strip()]
+    if not clean_topics:
+        raise HTTPException(status_code=400, detail="Add at least one topic")
+    if len(clean_topics) > 30:
+        raise HTTPException(status_code=400, detail="A generation task can include up to 30 topics")
 
 
 @router.get("/health")
@@ -240,6 +251,45 @@ def create_section(site_id: str, payload: SectionCreate, _: AuthUser, db: Sessio
     return section
 
 
+@router.get("/sites/{site_id}/prompt-templates", response_model=list[PromptTemplateResponse])
+def list_prompt_templates(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    site = _get_site_or_404(db, site_id)
+    ensure_default_prompt_template(db, site)
+    db.commit()
+    return db.scalars(
+        select(models.PromptTemplate)
+        .where(models.PromptTemplate.site_id == site_id)
+        .order_by(models.PromptTemplate.is_default.desc(), models.PromptTemplate.created_at.asc())
+    ).all()
+
+
+@router.post("/sites/{site_id}/prompt-templates", response_model=PromptTemplateResponse)
+def create_prompt_template(site_id: str, payload: PromptTemplateCreate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    _get_site_or_404(db, site_id)
+    if payload.is_default:
+        db.query(models.PromptTemplate).filter(models.PromptTemplate.site_id == site_id).update({"is_default": False})
+    prompt = models.PromptTemplate(site_id=site_id, **payload.model_dump())
+    db.add(prompt)
+    db.commit()
+    db.refresh(prompt)
+    return prompt
+
+
+@router.patch("/prompt-templates/{prompt_id}", response_model=PromptTemplateResponse)
+def update_prompt_template(prompt_id: str, payload: PromptTemplateUpdate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    prompt = db.get(models.PromptTemplate, prompt_id)
+    if not prompt:
+        raise HTTPException(status_code=404, detail="Prompt template not found")
+    data = payload.model_dump(exclude_unset=True)
+    if data.get("is_default") is True:
+        db.query(models.PromptTemplate).filter(models.PromptTemplate.site_id == prompt.site_id, models.PromptTemplate.id != prompt.id).update({"is_default": False})
+    for key, value in data.items():
+        setattr(prompt, key, value)
+    db.commit()
+    db.refresh(prompt)
+    return prompt
+
+
 @router.get("/sites/{site_id}/tasks")
 def list_site_tasks(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     _get_site_or_404(db, site_id)
@@ -249,6 +299,7 @@ def list_site_tasks(site_id: str, _: AuthUser, db: Session = Depends(get_db)) ->
 @router.post("/sites/{site_id}/tasks")
 def create_site_task(site_id: str, payload: GenerationTaskCreate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     _get_site_or_404(db, site_id)
+    _validate_task_topics(payload)
     if payload.section_id:
         _get_section_for_site(db, site_id, payload.section_id)
     data = payload.model_dump()
@@ -306,6 +357,7 @@ def list_tasks(_: AuthUser, db: Session = Depends(get_db)) -> Any:
 
 @router.post("/tasks")
 def create_task(payload: GenerationTaskCreate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    _validate_task_topics(payload)
     return create_generation_task(db, payload)
 
 

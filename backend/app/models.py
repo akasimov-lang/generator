@@ -76,6 +76,16 @@ class Section(Base, TimestampMixin):
     site: Mapped[Site] = relationship(back_populates="sections")
 
 
+class PromptTemplate(Base, TimestampMixin):
+    __tablename__ = "prompt_templates"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class GenerationTask(Base, TimestampMixin):
     __tablename__ = "generation_tasks"
 

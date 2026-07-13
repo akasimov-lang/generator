@@ -295,6 +295,64 @@ h2 {
   gap: 18px;
 }
 
+.promptEditorLayout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.promptList {
+  display: grid;
+  gap: 8px;
+}
+
+.promptListButton {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  text-align: left;
+}
+
+.promptListButton.active,
+.promptListButton:hover {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.promptListButton span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.promptEditorForm {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.promptTextarea {
+  min-height: 520px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.promptHelp,
+.fieldHint {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.fieldHint.danger {
+  color: var(--danger);
+}
+
 .projectHeader {
   display: grid;
   grid-template-columns: minmax(220px, 360px) minmax(0, 1fr) auto;
@@ -473,6 +531,10 @@ label {
 .checkboxRow input {
   width: 18px;
   height: 18px;
+}
+
+.promptDefaultRow {
+  align-self: end;
 }
 
 input,
@@ -675,6 +737,7 @@ a {
   }
 
   .gridTwo,
+  .promptEditorLayout,
   .formGrid {
     grid-template-columns: 1fr;
   }

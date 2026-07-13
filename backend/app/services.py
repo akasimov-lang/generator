@@ -20,6 +20,37 @@ SITE_DEFAULT = "site_default"
 DEFAULT_EDITOR_VERSION = "2.31.0"
 GEMINI_DEFAULT_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 GEMINI_DEFAULT_MODEL = "gemini-3.5-flash"
+DEFAULT_CONTENT_PROMPT_TEMPLATE = """You are a senior SEO editor for gambling and betting content.
+
+Generate a publication-ready German article for a casino/betting review website.
+
+Context:
+- Topic: {{topic}}
+- Slug: {{slug}}
+- Country: {{geo}}
+- Language: {{language}}
+- Target words: {{target_words}}
+- Site: {{site_name}}
+- Current year: {{current_year}}
+
+Important:
+- You do not have browsing access.
+- Do not claim that you checked Google, competitors, licenses, bonuses, operators, payouts, RTP, reviews, or ratings.
+- Do not invent casino names, operators, bonuses, amounts, payout times, licenses, commissions, RTP, ratings, reviews, or current legal facts.
+- If a fact must be verified, write [Muss geprüft werden: ...].
+- For Germany, write carefully about GGL-Lizenz, KYC, Zahlungen, Auszahlungen, Spielerschutz, Limits, and Responsible Gambling.
+- Avoid keyword stuffing, fake expertise, exaggerated claims, and advertising tone.
+- Never promise winnings or risk-free gambling.
+
+Return plain article text only. Do not return JSON. Do not add Markdown fences.
+
+The article should include:
+- A clear H1-like opening title.
+- A short intro.
+- A practical quick answer.
+- Sections about legal status, safety, payment/withdrawal checks, KYC, Spielerschutz, suitability, common mistakes, FAQ, and responsible gambling.
+- Concrete but safe guidance. Use verification markers where data is missing.
+"""
 
 
 def now_payload_time() -> str:
@@ -128,6 +159,7 @@ async def build_ai_content(
     target_words: int | None = None,
     site: models.Site | None = None,
     payload_mode: str = SITE_DEFAULT,
+    prompt_template: str | None = None,
     shortcode: str | None = None,
     include_toc: bool = True,
     include_faq: bool = True,
@@ -141,6 +173,7 @@ async def build_ai_content(
             target_words=target_words,
             site=site,
             payload_mode=payload_mode,
+            prompt_template=prompt_template,
             shortcode=shortcode,
             include_toc=include_toc,
             include_faq=include_faq,
@@ -166,6 +199,7 @@ async def build_gemini_content(
     target_words: int | None,
     site: models.Site | None,
     payload_mode: str,
+    prompt_template: str | None,
     shortcode: str | None,
     include_toc: bool,
     include_faq: bool,
@@ -190,6 +224,8 @@ async def build_gemini_content(
         geo=geo,
         language=language,
         target_words=target_words,
+        site=site,
+        prompt_template=prompt_template,
         shortcode=shortcode,
         include_toc=include_toc,
         include_faq=include_faq,
@@ -230,26 +266,43 @@ def build_gemini_prompt(
     geo: str,
     language: str,
     target_words: int | None,
+    site: models.Site | None,
+    prompt_template: str | None,
     shortcode: str | None,
     include_toc: bool,
     include_faq: bool,
 ) -> str:
-    options = [
-        f"Topic: {topic}",
-        f"Geo: {geo}",
-        f"Language: {language}",
-        f"Target words: {target_words or 'not specified'}",
-        f"Include TOC: {'yes' if include_toc else 'no'}",
-        f"Include FAQ: {'yes' if include_faq else 'no'}",
-        f"Shortcode block: {shortcode or 'none'}",
-    ]
-    return (
-        "Generate a useful, publication-ready article for a website.\n"
-        "Return plain text only. Use clear section headings, short paragraphs, and practical details.\n"
-        "Do not return Markdown fences or JSON.\n\n"
-        + "\n".join(options)
+    template = prompt_template.strip() if prompt_template and prompt_template.strip() else DEFAULT_CONTENT_PROMPT_TEMPLATE
+    slug = normalize_slug(topic)
+    values = {
+        "topic": topic,
+        "geo": geo,
+        "country": geo,
+        "language": language,
+        "target_words": str(target_words or "not specified"),
+        "site_name": site.name if site else "not specified",
+        "site_base_url": site.base_url if site else "",
+        "slug": slug,
+        "current_year": str(datetime.now(timezone.utc).year),
+        "shortcode": shortcode or "none",
+        "include_toc": "yes" if include_toc else "no",
+        "include_faq": "yes" if include_faq else "no",
+    }
+    prompt = template
+    for key, value in values.items():
+        prompt = prompt.replace("{{" + key + "}}", value)
+    prompt += (
+        "\n\nGeneration constraints:\n"
+        f"- Topic: {topic}\n"
+        f"- Country/geo: {geo}\n"
+        f"- Language: {language}\n"
+        f"- Target words: {target_words or 'not specified'}\n"
+        f"- Include TOC-related headings: {'yes' if include_toc else 'no'}\n"
+        f"- Include FAQ: {'yes' if include_faq else 'no'}\n"
+        f"- Shortcode block context: {shortcode or 'none'}\n"
+        "- Return plain article text only. Do not return JSON or Markdown fences.\n"
     )
-
+    return prompt
 
 async def call_gemini(provider: models.AiProvider, prompt: str) -> dict:
     model = provider.model or GEMINI_DEFAULT_MODEL
@@ -295,6 +348,27 @@ def apply_provider_usage(provider: models.AiProvider, usage: dict) -> None:
     provider.completion_tokens_used = (provider.completion_tokens_used or 0) + completion_tokens
     provider.total_tokens_used = (provider.total_tokens_used or 0) + total_tokens
     provider.last_used_at = datetime.now(timezone.utc)
+
+
+def ensure_default_prompt_template(db: Session, site: models.Site) -> models.PromptTemplate:
+    existing = db.scalar(
+        select(models.PromptTemplate)
+        .where(models.PromptTemplate.site_id == site.id)
+        .order_by(models.PromptTemplate.is_default.desc(), models.PromptTemplate.created_at.asc())
+        .limit(1)
+    )
+    if existing:
+        return existing
+
+    prompt = models.PromptTemplate(
+        site_id=site.id,
+        name="Default DE gambling SEO prompt",
+        content=DEFAULT_CONTENT_PROMPT_TEMPLATE,
+        is_default=True,
+    )
+    db.add(prompt)
+    db.flush()
+    return prompt
 
 
 async def validate_ai_provider_key(provider: models.AiProvider) -> models.AiProvider:
@@ -622,6 +696,7 @@ def generate_task_items(db: Session, task: models.GenerationTask) -> models.Gene
                         target_words=task.target_words,
                         site=site,
                         payload_mode=task.payload_mode,
+                        prompt_template=task.prompt_template,
                         shortcode=None,
                         include_toc=True,
                         include_faq=True,

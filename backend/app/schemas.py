@@ -87,16 +87,40 @@ class SectionCreate(BaseModel):
     path: str
 
 
+class PromptTemplateCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=160)
+    content: str = Field(min_length=20)
+    is_default: bool = False
+
+
+class PromptTemplateUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=160)
+    content: str | None = Field(default=None, min_length=20)
+    is_default: bool | None = None
+
+
+class PromptTemplateResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    site_id: str
+    name: str
+    content: str
+    is_default: bool
+    created_at: datetime
+    updated_at: datetime
+
+
 class GenerationTaskCreate(BaseModel):
     title: str
     geo: str
     language: str
-    topics: list[str] = Field(min_length=1)
+    topics: list[str] = Field(min_length=1, max_length=30)
     site_id: str | None = None
     section_id: str | None = None
     ai_provider_id: str | None = None
     payload_mode: Literal["site_default", "simple_page", "full_site"] = "site_default"
-    target_words: int | None = None
+    target_words: int | None = Field(default=None, ge=300, le=8000)
     prompt_template: str | None = None
     shortcode: str | None = None
     include_toc: bool = True

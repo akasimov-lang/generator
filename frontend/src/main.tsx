@@ -46,6 +46,7 @@ type Task = {
   language: string;
   payload_mode: string;
   topics_count: number;
+  target_words: number | null;
   status: string;
   created_at: string;
 };
@@ -102,6 +103,16 @@ type AiProvider = {
   is_active: boolean;
 };
 
+type PromptTemplate = {
+  id: string;
+  site_id: string;
+  name: string;
+  content: string;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
 type User = {
   id: string;
   username: string;
@@ -148,6 +159,44 @@ type PublicationLog = {
 };
 
 const API_BASE = "/api";
+
+const COUNTRY_CODES = [
+  "AF", "AX", "AL", "DZ", "AS", "AD", "AO", "AI", "AQ", "AG", "AR", "AM", "AW", "AU", "AT", "AZ",
+  "BS", "BH", "BD", "BB", "BY", "BE", "BZ", "BJ", "BM", "BT", "BO", "BQ", "BA", "BW", "BV", "BR",
+  "IO", "BN", "BG", "BF", "BI", "CV", "KH", "CM", "CA", "KY", "CF", "TD", "CL", "CN", "CX", "CC",
+  "CO", "KM", "CG", "CD", "CK", "CR", "CI", "HR", "CU", "CW", "CY", "CZ", "DK", "DJ", "DM", "DO",
+  "EC", "EG", "SV", "GQ", "ER", "EE", "SZ", "ET", "FK", "FO", "FJ", "FI", "FR", "GF", "PF", "TF",
+  "GA", "GM", "GE", "DE", "GH", "GI", "GR", "GL", "GD", "GP", "GU", "GT", "GG", "GN", "GW", "GY",
+  "HT", "HM", "VA", "HN", "HK", "HU", "IS", "IN", "ID", "IR", "IQ", "IE", "IM", "IL", "IT", "JM",
+  "JP", "JE", "JO", "KZ", "KE", "KI", "KP", "KR", "KW", "KG", "LA", "LV", "LB", "LS", "LR", "LY",
+  "LI", "LT", "LU", "MO", "MG", "MW", "MY", "MV", "ML", "MT", "MH", "MQ", "MR", "MU", "YT", "MX",
+  "FM", "MD", "MC", "MN", "ME", "MS", "MA", "MZ", "MM", "NA", "NR", "NP", "NL", "NC", "NZ", "NI",
+  "NE", "NG", "NU", "NF", "MK", "MP", "NO", "OM", "PK", "PW", "PS", "PA", "PG", "PY", "PE", "PH",
+  "PN", "PL", "PT", "PR", "QA", "RE", "RO", "RU", "RW", "BL", "SH", "KN", "LC", "MF", "PM", "VC",
+  "WS", "SM", "ST", "SA", "SN", "RS", "SC", "SL", "SG", "SX", "SK", "SI", "SB", "SO", "ZA", "GS",
+  "SS", "ES", "LK", "SD", "SR", "SJ", "SE", "CH", "SY", "TW", "TJ", "TZ", "TH", "TL", "TG", "TK",
+  "TO", "TT", "TN", "TR", "TM", "TC", "TV", "UG", "UA", "AE", "GB", "US", "UM", "UY", "UZ", "VU",
+  "VE", "VN", "VG", "VI", "WF", "EH", "YE", "ZM", "ZW"
+] as const;
+
+const LANGUAGE_OPTIONS = [
+  { code: "de", name: "Deutsch" },
+  { code: "en", name: "English" },
+  { code: "ru", name: "Русский" },
+  { code: "es", name: "Español" },
+  { code: "fr", name: "Français" },
+  { code: "it", name: "Italiano" },
+  { code: "pl", name: "Polski" },
+  { code: "pt", name: "Português" },
+  { code: "nl", name: "Nederlands" }
+];
+
+const regionNames = new Intl.DisplayNames(["ru"], { type: "region" });
+const COUNTRIES = COUNTRY_CODES.map((code) => ({
+  code,
+  name: regionNames.of(code) || code,
+  flag: countryFlag(code)
+})).sort((first, second) => first.name.localeCompare(second.name, "ru"));
 
 function App() {
   const [token, setToken] = React.useState(() => localStorage.getItem("admin_token") || "");
@@ -405,6 +454,7 @@ function ProjectWorkspaceView({ api, sites, providers, onChanged }: ViewProps & 
   const [siteTasks, setSiteTasks] = React.useState<Task[]>([]);
   const [siteContent, setSiteContent] = React.useState<ContentItem[]>([]);
   const [sections, setSections] = React.useState<Section[]>([]);
+  const [promptTemplates, setPromptTemplates] = React.useState<PromptTemplate[]>([]);
   const [logs, setLogs] = React.useState<PublicationLog[]>([]);
   const [workspaceError, setWorkspaceError] = React.useState("");
   const selectedSite = sites.find((site) => site.id === selectedSiteId) || null;
@@ -412,17 +462,19 @@ function ProjectWorkspaceView({ api, sites, providers, onChanged }: ViewProps & 
   const loadProject = React.useCallback(async () => {
     if (!selectedSiteId) return;
     setWorkspaceError("");
-    const [nextOverview, nextTasks, nextContent, nextSections, nextLogs] = await Promise.all([
+    const [nextOverview, nextTasks, nextContent, nextSections, nextPrompts, nextLogs] = await Promise.all([
       api<SiteOverview>(`/sites/${selectedSiteId}/overview`),
       api<Task[]>(`/sites/${selectedSiteId}/tasks`),
       api<ContentItem[]>(`/sites/${selectedSiteId}/content`),
       api<Section[]>(`/sites/${selectedSiteId}/sections`),
+      api<PromptTemplate[]>(`/sites/${selectedSiteId}/prompt-templates`),
       api<PublicationLog[]>(`/sites/${selectedSiteId}/publication-logs`)
     ]);
     setOverview(nextOverview);
     setSiteTasks(nextTasks);
     setSiteContent(nextContent);
     setSections(nextSections);
+    setPromptTemplates(nextPrompts);
     setLogs(nextLogs);
   }, [api, selectedSiteId]);
 
@@ -467,6 +519,7 @@ function ProjectWorkspaceView({ api, sites, providers, onChanged }: ViewProps & 
         <div className="workspaceTabs">
           <TabButton label="Обзор" active={activeTab === "overview"} onClick={() => setActiveTab("overview")} />
           <TabButton label="Темы" active={activeTab === "topics"} onClick={() => setActiveTab("topics")} />
+          <TabButton label="Промпты" active={activeTab === "prompts"} onClick={() => setActiveTab("prompts")} />
           <TabButton label="Контент" active={activeTab === "content"} onClick={() => setActiveTab("content")} />
           <TabButton label="Публикация" active={activeTab === "publication"} onClick={() => setActiveTab("publication")} />
           <TabButton label="Меню" active={activeTab === "menu"} onClick={() => setActiveTab("menu")} />
@@ -478,7 +531,10 @@ function ProjectWorkspaceView({ api, sites, providers, onChanged }: ViewProps & 
         <ProjectOverviewPanel overview={overview} content={siteContent} sections={sections} logs={logs} />
       ) : null}
       {selectedSite && activeTab === "topics" ? (
-        <ProjectTopicsPanel api={api} site={selectedSite} providers={providers} sections={sections} tasks={siteTasks} onChanged={refreshProject} />
+        <ProjectTopicsPanel api={api} site={selectedSite} providers={providers} sections={sections} promptTemplates={promptTemplates} tasks={siteTasks} onChanged={refreshProject} />
+      ) : null}
+      {selectedSite && activeTab === "prompts" ? (
+        <ProjectPromptsPanel api={api} site={selectedSite} promptTemplates={promptTemplates} onChanged={refreshProject} />
       ) : null}
       {selectedSite && activeTab === "content" ? (
         <ProjectContentPanel api={api} content={siteContent} sections={sections} onChanged={refreshProject} />
@@ -531,15 +587,19 @@ function ProjectOverviewPanel({ overview, content, sections, logs }: { overview:
   );
 }
 
-function ProjectTopicsPanel({ api, site, providers, sections, tasks, onChanged }: ViewProps & { site: Site; providers: AiProvider[]; sections: Section[]; tasks: Task[] }) {
+function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, tasks, onChanged }: ViewProps & { site: Site; providers: AiProvider[]; sections: Section[]; promptTemplates: PromptTemplate[]; tasks: Task[] }) {
   const [title, setTitle] = React.useState("");
   const [geo, setGeo] = React.useState("DE");
-  const [language, setLanguage] = React.useState("EN");
+  const [language, setLanguage] = React.useState("de");
+  const [targetWords, setTargetWords] = React.useState(1600);
   const [topics, setTopics] = React.useState("");
   const [providerId, setProviderId] = React.useState("");
+  const [promptTemplateId, setPromptTemplateId] = React.useState("");
   const [sectionId, setSectionId] = React.useState("");
   const [shortcode, setShortcode] = React.useState("");
   const [formError, setFormError] = React.useState("");
+  const topicCount = topics.split("\n").map((line) => line.trim()).filter(Boolean).length;
+  const selectedPrompt = promptTemplates.find((prompt) => prompt.id === promptTemplateId) || promptTemplates.find((prompt) => prompt.is_default) || promptTemplates[0];
 
   React.useEffect(() => {
     if (!providerId) {
@@ -550,6 +610,12 @@ function ProjectTopicsPanel({ api, site, providers, sections, tasks, onChanged }
     }
   }, [providerId, providers]);
 
+  React.useEffect(() => {
+    if (!promptTemplateId && promptTemplates.length) {
+      setPromptTemplateId((promptTemplates.find((prompt) => prompt.is_default) || promptTemplates[0]).id);
+    }
+  }, [promptTemplateId, promptTemplates]);
+
   async function createTask(event: React.FormEvent) {
     event.preventDefault();
     setFormError("");
@@ -558,15 +624,21 @@ function ProjectTopicsPanel({ api, site, providers, sections, tasks, onChanged }
       setFormError("Добавьте хотя бы одну тему.");
       return;
     }
+    if (cleanTopics.length > 30) {
+      setFormError("За одну генерацию можно отправить от 1 до 30 тем.");
+      return;
+    }
     const task = await api<Task>(`/sites/${site.id}/tasks`, {
       method: "POST",
       body: JSON.stringify({
         title: title.trim() || `${site.name}: генерация ${new Date().toLocaleDateString("ru-RU")}`,
         geo,
         language,
+        target_words: targetWords || null,
         section_id: sectionId || null,
         ai_provider_id: providerId || null,
         payload_mode: "site_default",
+        prompt_template: selectedPrompt?.content || null,
         shortcode: shortcode.trim() || null,
         include_toc: true,
         include_faq: true,
@@ -596,12 +668,20 @@ function ProjectTopicsPanel({ api, site, providers, sections, tasks, onChanged }
             </select>
           </label>
           <label>
-            Гео
-            <input value={geo} onChange={(event) => setGeo(event.target.value)} required />
+            Страна
+            <select value={geo} onChange={(event) => setGeo(event.target.value)} required>
+              {COUNTRIES.map((country) => <option key={country.code} value={country.code}>{country.flag} {country.code} · {country.name}</option>)}
+            </select>
           </label>
           <label>
             Язык
-            <input value={language} onChange={(event) => setLanguage(event.target.value)} required />
+            <select value={language} onChange={(event) => setLanguage(event.target.value)} required>
+              {LANGUAGE_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.name} · {option.code}</option>)}
+            </select>
+          </label>
+          <label>
+            Количество слов
+            <input value={targetWords} onChange={(event) => setTargetWords(Number(event.target.value))} type="number" min={300} max={8000} step={100} required />
           </label>
           <label>
             AI Provider
@@ -611,12 +691,25 @@ function ProjectTopicsPanel({ api, site, providers, sections, tasks, onChanged }
             </select>
           </label>
           <label>
+            Промпт генерации
+            <select value={promptTemplateId} onChange={(event) => setPromptTemplateId(event.target.value)}>
+              {promptTemplates.map((prompt) => <option key={prompt.id} value={prompt.id}>{prompt.is_default ? "Default · " : ""}{prompt.name}</option>)}
+            </select>
+          </label>
+          <label>
             Shortcode
             <input value={shortcode} onChange={(event) => setShortcode(event.target.value)} placeholder="showcase-redesign" />
           </label>
           <label className="wide">
             Темы, каждая с новой строки
-            <textarea value={topics} onChange={(event) => setTopics(event.target.value)} rows={9} required />
+            <textarea
+              value={topics}
+              onChange={(event) => setTopics(event.target.value)}
+              rows={10}
+              required
+              placeholder={"Beste Online Casinos in Deutschland 2026: Legale Anbieter im Vergleich\nLegale Online Casinos in Deutschland: Anbieter mit GGL-Lizenz\nBeste Online Spielotheken in Deutschland: Sichere Slots mit Lizenz"}
+            />
+            <span className={topicCount > 30 ? "fieldHint danger" : "fieldHint"}>{topicCount}/30 тем</span>
           </label>
           {formError ? <span className="formError wide">{formError}</span> : null}
           <div className="formActions wide"><button className="button primary" type="submit"><Plus size={18} /> Создать и сгенерировать</button></div>
@@ -624,9 +717,113 @@ function ProjectTopicsPanel({ api, site, providers, sections, tasks, onChanged }
       </DataPanel>
       <DataPanel title="Задачи проекта">
         <ResponsiveTable
-          columns={["Задача", "Тем", "Гео", "Язык", "Статус"]}
-          rows={tasks.map((task) => [task.title, task.topics_count, task.geo, task.language, <StatusBadge status={task.status} />])}
+          columns={["Задача", "Тем", "Страна", "Язык", "Слова", "Статус"]}
+          rows={tasks.map((task) => [task.title, task.topics_count, countryLabel(task.geo), task.language, task.target_words || "-", <StatusBadge status={task.status} />])}
         />
+      </DataPanel>
+    </section>
+  );
+}
+
+function ProjectPromptsPanel({ api, site, promptTemplates, onChanged }: ViewProps & { site: Site; promptTemplates: PromptTemplate[] }) {
+  const [selectedId, setSelectedId] = React.useState("");
+  const selectedPrompt = promptTemplates.find((prompt) => prompt.id === selectedId) || promptTemplates[0] || null;
+  const [name, setName] = React.useState("");
+  const [content, setContent] = React.useState("");
+  const [isDefault, setIsDefault] = React.useState(true);
+  const [editorError, setEditorError] = React.useState("");
+  const [editorSuccess, setEditorSuccess] = React.useState("");
+  const isNewPrompt = selectedId === "__new__";
+
+  React.useEffect(() => {
+    if (!selectedId && promptTemplates.length) {
+      setSelectedId((promptTemplates.find((prompt) => prompt.is_default) || promptTemplates[0]).id);
+    }
+  }, [promptTemplates, selectedId]);
+
+  React.useEffect(() => {
+    if (isNewPrompt) {
+      setName("Новый промпт");
+      setContent("");
+      setIsDefault(false);
+      setEditorError("");
+      setEditorSuccess("");
+      return;
+    }
+    if (selectedPrompt) {
+      setName(selectedPrompt.name);
+      setContent(selectedPrompt.content);
+      setIsDefault(selectedPrompt.is_default);
+      setEditorError("");
+      setEditorSuccess("");
+    }
+  }, [isNewPrompt, selectedPrompt]);
+
+  async function savePrompt(event: React.FormEvent) {
+    event.preventDefault();
+    setEditorError("");
+    setEditorSuccess("");
+    if (content.trim().length < 20) {
+      setEditorError("Промпт слишком короткий.");
+      return;
+    }
+    if (isNewPrompt) {
+      const created = await api<PromptTemplate>(`/sites/${site.id}/prompt-templates`, {
+        method: "POST",
+        body: JSON.stringify({ name: name.trim(), content: content.trim(), is_default: isDefault })
+      });
+      setSelectedId(created.id);
+    } else if (selectedPrompt) {
+      await api<PromptTemplate>(`/prompt-templates/${selectedPrompt.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name: name.trim(), content: content.trim(), is_default: isDefault })
+      });
+    }
+    setEditorSuccess("Промпт сохранен.");
+    await onChanged();
+  }
+
+  return (
+    <section className="viewStack">
+      <DataPanel title="Промпты проекта">
+        <div className="promptEditorLayout">
+          <aside className="promptList">
+            {promptTemplates.map((prompt) => (
+              <button key={prompt.id} className={`promptListButton ${selectedId === prompt.id ? "active" : ""}`} type="button" onClick={() => setSelectedId(prompt.id)}>
+                <strong>{prompt.name}</strong>
+                <span>{prompt.is_default ? "Default" : formatDate(prompt.updated_at)}</span>
+              </button>
+            ))}
+            <button className={`promptListButton ${isNewPrompt ? "active" : ""}`} type="button" onClick={() => setSelectedId("__new__")}>
+              <strong>Создать промпт</strong>
+              <span>Новый шаблон</span>
+            </button>
+          </aside>
+          <form className="promptEditorForm" onSubmit={savePrompt}>
+            <div className="formGrid">
+              <label>
+                Название
+                <input value={name} onChange={(event) => setName(event.target.value)} required />
+              </label>
+              <label className="checkboxRow promptDefaultRow">
+                <input checked={isDefault} onChange={(event) => setIsDefault(event.target.checked)} type="checkbox" />
+                Использовать по умолчанию для проекта
+              </label>
+              <label className="wide">
+                Текст промпта
+                <textarea className="promptTextarea" value={content} onChange={(event) => setContent(event.target.value)} rows={22} placeholder="Опиши правила генерации, плейсхолдеры: {{topic}}, {{geo}}, {{language}}, {{target_words}}, {{site_name}}, {{slug}}, {{current_year}}" />
+              </label>
+            </div>
+            <div className="promptHelp">
+              Доступные плейсхолдеры: <code>{"{{topic}}"}</code>, <code>{"{{geo}}"}</code>, <code>{"{{language}}"}</code>, <code>{"{{target_words}}"}</code>, <code>{"{{site_name}}"}</code>, <code>{"{{slug}}"}</code>, <code>{"{{current_year}}"}</code>.
+            </div>
+            {editorError ? <span className="formError">{editorError}</span> : null}
+            {editorSuccess ? <span className="formSuccess">{editorSuccess}</span> : null}
+            <div className="formActions">
+              <button className="button primary" type="submit"><Edit3 size={18} /> Сохранить промпт</button>
+            </div>
+          </form>
+        </div>
       </DataPanel>
     </section>
   );
@@ -1501,6 +1698,19 @@ function humanPayloadMode(value: string) {
 function humanProviderType(value: string) {
   if (value === "gemini") return "Gemini";
   return "Custom";
+}
+
+function countryFlag(code: string) {
+  if (!/^[A-Z]{2}$/.test(code)) return "";
+  return code
+    .split("")
+    .map((letter) => String.fromCodePoint(127397 + letter.charCodeAt(0)))
+    .join("");
+}
+
+function countryLabel(code: string) {
+  const country = COUNTRIES.find((item) => item.code === code.toUpperCase());
+  return country ? `${country.flag} ${country.code}` : code;
 }
 
 function formatNumber(value: number) {
