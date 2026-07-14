@@ -224,6 +224,92 @@ def extract_block_text(block: dict) -> list[str]:
     return []
 
 
+RISKY_CONTENT_PHRASES = (
+    "garantiert",
+    "ohne Risiko",
+    "100% legal",
+    "sicherer Gewinn",
+    "einzig rechtssicher",
+    "strafbar",
+)
+
+
+def analyze_content_quality(payload: dict) -> dict:
+    issues: list[dict] = []
+    warnings: list[dict] = []
+    pages = payload.get("pages")
+    if not isinstance(pages, list) or not pages:
+        return {
+            "status": "failed",
+            "issues": [{"code": "missing_pages", "message": "Payload has no pages."}],
+            "warnings": [],
+        }
+
+    for page_index, page in enumerate(pages):
+        if not isinstance(page, dict):
+            issues.append({"code": "invalid_page", "page": page_index, "message": "Page must be an object."})
+            continue
+        blocks = page.get("content", {}).get("blocks", [])
+        if not isinstance(blocks, list) or not blocks:
+            issues.append({"code": "missing_blocks", "page": page_index, "message": "Page has no Editor.js blocks."})
+            continue
+
+        heading_levels = [
+            block.get("data", {}).get("level")
+            for block in blocks
+            if isinstance(block, dict) and block.get("type") == "header" and isinstance(block.get("data"), dict)
+        ]
+        if heading_levels.count(1) != 1:
+            issues.append({"code": "invalid_h1_count", "page": page_index, "message": "Page must have exactly one H1 block."})
+        if not any(level == 2 for level in heading_levels):
+            warnings.append({"code": "missing_h2", "page": page_index, "message": "Page has no H2 sections."})
+
+        page_text_parts: list[str] = []
+        for block_index, block in enumerate(blocks):
+            if not isinstance(block, dict):
+                issues.append({"code": "invalid_block", "page": page_index, "block": block_index, "message": "Block must be an object."})
+                continue
+            block_type = block.get("type")
+            data = block.get("data")
+            block_text = clean_text(" ".join(extract_block_text(block)))
+            page_text_parts.append(block_text)
+
+            if block_type == "paragraph" and len(block_text) > 1800:
+                issues.append(
+                    {
+                        "code": "oversized_paragraph",
+                        "page": page_index,
+                        "block": block_index,
+                        "message": "Paragraph is too long for review and publication.",
+                    }
+                )
+            if block_type == "paragraph" and re.search(r"\b(Title|Meta Description|H1):", block_text):
+                issues.append(
+                    {
+                        "code": "metadata_inside_body",
+                        "page": page_index,
+                        "block": block_index,
+                        "message": "Title, meta description or H1 labels leaked into page body.",
+                    }
+                )
+            if block_type == "faq" and (not isinstance(data, list) or len(data) < 3):
+                warnings.append({"code": "thin_faq", "page": page_index, "block": block_index, "message": "FAQ block has too few items."})
+
+        page_text = clean_text(" ".join(page_text_parts))
+        lowered = page_text.lower()
+        for phrase in RISKY_CONTENT_PHRASES:
+            if phrase.lower() in lowered:
+                issues.append({"code": "risky_phrase", "page": page_index, "phrase": phrase, "message": "Risky legal or promotional phrase found."})
+        if "[muss geprüft werden" in lowered:
+            warnings.append({"code": "unverified_marker", "page": page_index, "message": "Text contains facts that must be checked before publication."})
+
+    return {
+        "status": "failed" if issues else ("warning" if warnings else "ok"),
+        "issues": issues,
+        "warnings": warnings,
+    }
+
+
 def build_stub_content(
     topic: str,
     geo: str,

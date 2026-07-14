@@ -46,3 +46,20 @@ ssh -F .ssh/config generator-server
 ```bash
 git push production main
 ```
+
+## Миграции и проверки
+
+Схема БД ведется через Alembic. Применить миграции:
+
+```bash
+make migrate
+```
+
+Базовые backend-тесты:
+
+```bash
+make test
+```
+
+На production deploy hook запускает `alembic upgrade head` перед перезапуском
+сервисов.

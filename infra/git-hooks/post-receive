@@ -44,6 +44,10 @@ EOF
     echo "Admin password saved to $APP_DIR/ADMIN_PASSWORD.txt"
   fi
 
+  docker-compose build backend
+  docker-compose up -d postgres redis
+  docker-compose run --rm backend alembic upgrade head
   docker-compose up -d --build
+  docker-compose restart nginx
   docker-compose ps
 done

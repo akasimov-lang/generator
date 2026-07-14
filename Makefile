@@ -1,4 +1,4 @@
-.PHONY: up down logs ps deploy
+.PHONY: up down logs ps migrate test deploy
 
 up:
 	docker-compose up -d --build
@@ -11,6 +11,12 @@ logs:
 
 ps:
 	docker-compose ps
+
+migrate:
+	docker-compose run --rm backend alembic upgrade head
+
+test:
+	docker-compose run --rm backend pytest
 
 deploy:
 	git push production main
