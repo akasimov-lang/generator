@@ -87,3 +87,16 @@ Editor Check:
     assert "table" in block_types
     assert "list" in block_types
     assert sum(1 for block in blocks if block["type"] == "header") >= 3
+
+
+def test_plain_short_lines_do_not_become_headings() -> None:
+    text = """Kurzer Einstieg
+Das ist ein normaler Absatz.
+
+H2: Echter Abschnitt
+Ein weiterer Absatz."""
+
+    blocks = build_blocks_from_ai_text(text, "Test H1", shortcode=None, include_toc=True, include_faq=False)
+    headings = [block["data"]["text"] for block in blocks if block["type"] == "header"]
+
+    assert headings == ["Test H1", "Echter Abschnitt"]

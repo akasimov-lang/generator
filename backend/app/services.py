@@ -90,7 +90,9 @@ DEFAULT_CONTENT_PROMPT_TEMPLATE = """Ты — senior SEO-редактор, conte
 - Начинай строго с Title.
 - Title, Meta Description и H1 должны быть только в начале ответа.
 - Не повторяй Title, Meta Description и H1 в теле статьи.
-- Каждый раздел начинай отдельной строкой формата H2: Название раздела.
+- Каждый публичный раздел начинай отдельной строкой формата H2: Название раздела.
+- Не используй отдельные строки Intro:, Quick Answer:, FAQ: или Responsible Gambling: без префикса H2.
+- Не пиши короткие standalone-строки как подзаголовки. Если это заголовок, он обязан начинаться с H2:.
 - Таблицы можно давать в markdown-формате.
 - Списки делай через дефис.
 - Editor Check выводи в конце; система сохранит его как служебные метаданные.
@@ -100,10 +102,10 @@ Title:
 Meta Description:
 H1:
 
-Intro:
+H2: Intro
 1-2 коротких абзаца. Сразу отвечай на основной запрос, без длинного вступления.
 
-Quick Answer:
+H2: Quick Answer
 3-5 предложений с практическим ответом.
 
 H2: Überblick / schneller Vergleich
@@ -741,7 +743,7 @@ def build_blocks_from_ai_text(
         explicit_heading = re.match(r"^(H[2-4]|#{2,4})\s*:?\s*(.+)$", line, flags=re.IGNORECASE)
         section_label = re.match(r"^([A-ZÄÖÜ][^:]{2,80})\s*:\s*$", line)
 
-        if explicit_heading or section_label or looks_like_heading(line):
+        if explicit_heading or section_label:
             flush_paragraphs()
             heading = explicit_heading.group(2).strip() if explicit_heading else line.rstrip(":").strip()
             if heading and heading.lower() != title.lower():
