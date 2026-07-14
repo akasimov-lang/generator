@@ -714,17 +714,6 @@ def build_blocks_from_ai_text(
     index = 0
     while index < len(lines):
         line = lines[index]
-        explicit_heading = re.match(r"^(H[2-4]|#{2,4})\s*:?\s*(.+)$", line, flags=re.IGNORECASE)
-        section_label = re.match(r"^([A-ZÄÖÜ][^:]{2,80})\s*:\s*$", line)
-
-        if explicit_heading or section_label or looks_like_heading(line):
-            flush_paragraphs()
-            heading = explicit_heading.group(2).strip() if explicit_heading else line.rstrip(":").strip()
-            if heading and heading.lower() != title.lower():
-                headings.append(heading)
-                blocks.append(header_block(heading, 2))
-            index += 1
-            continue
 
         if line.startswith("|") and line.endswith("|"):
             flush_paragraphs()
@@ -747,6 +736,18 @@ def build_blocks_from_ai_text(
                 index += 1
             if items:
                 blocks.append(list_block("unordered", items))
+            continue
+
+        explicit_heading = re.match(r"^(H[2-4]|#{2,4})\s*:?\s*(.+)$", line, flags=re.IGNORECASE)
+        section_label = re.match(r"^([A-ZÄÖÜ][^:]{2,80})\s*:\s*$", line)
+
+        if explicit_heading or section_label or looks_like_heading(line):
+            flush_paragraphs()
+            heading = explicit_heading.group(2).strip() if explicit_heading else line.rstrip(":").strip()
+            if heading and heading.lower() != title.lower():
+                headings.append(heading)
+                blocks.append(header_block(heading, 2))
+            index += 1
             continue
 
         pending_paragraphs.append(line)
