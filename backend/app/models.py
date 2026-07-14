@@ -59,6 +59,7 @@ class Site(Base, TimestampMixin):
     default_menu: Mapped[dict] = mapped_column(JSON, default=lambda: {"header": [], "footer": []})
     default_banners: Mapped[list] = mapped_column(JSON, default=list)
     showcase_payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    default_prompt_template_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     sections: Mapped[list["Section"]] = relationship(back_populates="site", cascade="all, delete-orphan")
@@ -80,7 +81,7 @@ class PromptTemplate(Base, TimestampMixin):
     __tablename__ = "prompt_templates"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id"), nullable=False)
+    site_id: Mapped[str | None] = mapped_column(ForeignKey("sites.id"), nullable=True)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -100,6 +101,7 @@ class GenerationTask(Base, TimestampMixin):
     payload_mode: Mapped[str] = mapped_column(String(40), default="site_default")
     topics_count: Mapped[int] = mapped_column(Integer, default=0)
     target_words: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    prompt_template_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
     prompt_template: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     items: Mapped[list["ContentItem"]] = relationship(back_populates="task", cascade="all, delete-orphan")
@@ -117,6 +119,8 @@ class ContentItem(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(40), default="draft")
     word_count: Mapped[int] = mapped_column(Integer, default=0)
     section_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    generation_prompt_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     idempotency_key: Mapped[str] = mapped_column(String(240), unique=True, nullable=False)
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

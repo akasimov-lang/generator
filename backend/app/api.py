@@ -59,6 +59,31 @@ def _validate_task_topics(payload: GenerationTaskCreate) -> None:
         raise HTTPException(status_code=400, detail="A generation task can include up to 30 topics")
 
 
+def _prompt_template_response(prompt: models.PromptTemplate, site: models.Site | None, used_by_projects: int) -> dict:
+    return {
+        "id": prompt.id,
+        "site_id": prompt.site_id,
+        "name": prompt.name,
+        "content": prompt.content,
+        "is_default": bool(site and site.default_prompt_template_id == prompt.id),
+        "used_by_projects": used_by_projects,
+        "created_at": prompt.created_at,
+        "updated_at": prompt.updated_at,
+    }
+
+
+def _list_global_prompt_templates(db: Session, site: models.Site | None = None) -> list[dict]:
+    prompts = db.scalars(select(models.PromptTemplate).order_by(models.PromptTemplate.created_at.asc())).all()
+    used_rows = db.execute(
+        select(models.Site.default_prompt_template_id, func.count(models.Site.id))
+        .where(models.Site.default_prompt_template_id.is_not(None))
+        .group_by(models.Site.default_prompt_template_id)
+    ).all()
+    used_counts = {prompt_id: count for prompt_id, count in used_rows}
+    rows = [_prompt_template_response(prompt, site, used_counts.get(prompt.id, 0)) for prompt in prompts]
+    return sorted(rows, key=lambda row: (not row["is_default"], row["name"].lower()))
+
+
 @router.get("/health")
 def health() -> dict:
     return {"status": "ok"}
@@ -256,23 +281,24 @@ def list_prompt_templates(site_id: str, _: AuthUser, db: Session = Depends(get_d
     site = _get_site_or_404(db, site_id)
     ensure_default_prompt_template(db, site)
     db.commit()
-    return db.scalars(
-        select(models.PromptTemplate)
-        .where(models.PromptTemplate.site_id == site_id)
-        .order_by(models.PromptTemplate.is_default.desc(), models.PromptTemplate.created_at.asc())
-    ).all()
+    return _list_global_prompt_templates(db, site)
 
 
 @router.post("/sites/{site_id}/prompt-templates", response_model=PromptTemplateResponse)
 def create_prompt_template(site_id: str, payload: PromptTemplateCreate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
-    _get_site_or_404(db, site_id)
-    if payload.is_default:
-        db.query(models.PromptTemplate).filter(models.PromptTemplate.site_id == site_id).update({"is_default": False})
-    prompt = models.PromptTemplate(site_id=site_id, **payload.model_dump())
+    site = _get_site_or_404(db, site_id)
+    data = payload.model_dump()
+    make_default = data.pop("is_default")
+    prompt = models.PromptTemplate(site_id=site_id, is_default=False, **data)
     db.add(prompt)
+    db.flush()
+    if make_default:
+        site.default_prompt_template_id = prompt.id
     db.commit()
     db.refresh(prompt)
-    return prompt
+    db.refresh(site)
+    used_count = db.scalar(select(func.count(models.Site.id)).where(models.Site.default_prompt_template_id == prompt.id)) or 0
+    return _prompt_template_response(prompt, site, used_count)
 
 
 @router.patch("/prompt-templates/{prompt_id}", response_model=PromptTemplateResponse)
@@ -281,13 +307,37 @@ def update_prompt_template(prompt_id: str, payload: PromptTemplateUpdate, _: Aut
     if not prompt:
         raise HTTPException(status_code=404, detail="Prompt template not found")
     data = payload.model_dump(exclude_unset=True)
-    if data.get("is_default") is True:
-        db.query(models.PromptTemplate).filter(models.PromptTemplate.site_id == prompt.site_id, models.PromptTemplate.id != prompt.id).update({"is_default": False})
+    site_id = data.pop("site_id", None)
+    make_default = data.pop("is_default", None)
+    site = _get_site_or_404(db, site_id) if site_id else None
     for key, value in data.items():
         setattr(prompt, key, value)
+    if site and make_default is True:
+        site.default_prompt_template_id = prompt.id
+    elif site and make_default is False and site.default_prompt_template_id == prompt.id:
+        site.default_prompt_template_id = None
     db.commit()
     db.refresh(prompt)
-    return prompt
+    if site:
+        db.refresh(site)
+    used_count = db.scalar(select(func.count(models.Site.id)).where(models.Site.default_prompt_template_id == prompt.id)) or 0
+    return _prompt_template_response(prompt, site, used_count)
+
+
+@router.delete("/prompt-templates/{prompt_id}")
+def delete_prompt_template(prompt_id: str, _: AdminUser, db: Session = Depends(get_db)) -> dict:
+    prompt = db.get(models.PromptTemplate, prompt_id)
+    if not prompt:
+        raise HTTPException(status_code=404, detail="Prompt template not found")
+    used_by_projects = db.scalar(select(func.count(models.Site.id)).where(models.Site.default_prompt_template_id == prompt.id)) or 0
+    if used_by_projects:
+        raise HTTPException(status_code=400, detail="Cannot delete a prompt that is used by one or more projects")
+    prompts_count = db.scalar(select(func.count(models.PromptTemplate.id))) or 0
+    if prompts_count <= 1:
+        raise HTTPException(status_code=400, detail="Cannot delete the last prompt template")
+    db.delete(prompt)
+    db.commit()
+    return {"status": "ok"}
 
 
 @router.get("/sites/{site_id}/tasks")

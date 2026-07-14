@@ -42,6 +42,7 @@ def apply_lightweight_migrations() -> None:
             "default_menu": "JSON DEFAULT '{\"header\":[],\"footer\":[]}'",
             "default_banners": "JSON DEFAULT '[]'",
             "showcase_payload": "JSON",
+            "default_prompt_template_id": "VARCHAR(36)",
         }
         _add_missing_columns("sites", columns, site_columns)
 
@@ -64,12 +65,25 @@ def apply_lightweight_migrations() -> None:
         _add_missing_columns(
             "generation_tasks",
             columns,
-            {"payload_mode": "VARCHAR(40) DEFAULT 'site_default' NOT NULL"},
+            {
+                "payload_mode": "VARCHAR(40) DEFAULT 'site_default' NOT NULL",
+                "target_words": "INTEGER",
+                "prompt_template_name": "VARCHAR(160)",
+                "prompt_template": "TEXT",
+            },
         )
 
     if "content_items" in tables:
         columns = {column["name"] for column in inspector.get_columns("content_items")}
-        _add_missing_columns("content_items", columns, {"site_id": "VARCHAR(36)"})
+        _add_missing_columns(
+            "content_items",
+            columns,
+            {
+                "site_id": "VARCHAR(36)",
+                "generation_prompt_name": "VARCHAR(160)",
+                "generated_at": "TIMESTAMP WITH TIME ZONE",
+            },
+        )
         backfill_content_site_ids()
 
 

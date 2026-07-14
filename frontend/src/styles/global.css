@@ -342,6 +342,72 @@ h2 {
   line-height: 1.5;
 }
 
+.promptSnapshot {
+  min-height: 360px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.taskDetailGrid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.taskDetailGrid div {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px;
+}
+
+.taskDetailGrid span,
+.contentPreviewHeader span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.subPanel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  min-width: 0;
+}
+
+.contentPreviewHeader {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+}
+
+.contentPreviewHeader div {
+  display: grid;
+  gap: 4px;
+}
+
+.contentPreviewText {
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.65;
+  margin: 0;
+  max-height: 680px;
+  overflow: auto;
+  padding: 16px;
+  white-space: pre-wrap;
+}
+
 .promptHelp,
 .fieldHint {
   color: var(--muted);
@@ -502,6 +568,45 @@ td {
   -webkit-line-clamp: 2;
 }
 
+.topicMetaCell {
+  display: grid;
+  gap: 4px;
+  min-width: min(360px, 100%);
+}
+
+.topicMetaCell strong {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.topicMetaCell span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.promptBadge {
+  align-items: center;
+  background: #f1f5f9;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  max-width: 100%;
+  padding: 4px 8px;
+  width: fit-content;
+}
+
+.promptBadge.improved {
+  background: #ecfdf5;
+  border-color: #86efac;
+  color: #166534;
+}
+
 .formGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -573,7 +678,9 @@ textarea:focus {
 
 .formActions {
   display: flex;
+  gap: 8px;
   justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .formActions.alignEnd {
@@ -738,6 +845,7 @@ a {
 
   .gridTwo,
   .promptEditorLayout,
+  .taskDetailGrid,
   .formGrid {
     grid-template-columns: 1fr;
   }

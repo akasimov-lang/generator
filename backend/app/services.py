@@ -22,7 +22,7 @@ GEMINI_DEFAULT_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/mode
 GEMINI_DEFAULT_MODEL = "gemini-3.5-flash"
 DEFAULT_CONTENT_PROMPT_TEMPLATE = """Ты — senior SEO-редактор и content strategist для gambling/betting тем.
 
-Задача: сгенерировать SEO-страницу на немецком языке для сайта-обзорника онлайн-казино, ставок и casino providers.
+Задача: сгенерировать SEO-страницу на языке {{LANGUAGE}} для сайта-обзорника онлайн-казино, ставок и casino providers.
 
 Важно:
 У тебя нет доступа к Google, браузингу и актуальной выдаче.
@@ -30,11 +30,12 @@ DEFAULT_CONTENT_PROMPT_TEMPLATE = """Ты — senior SEO-редактор и con
 Content gaps формируй как гипотезу на основе темы, поискового интента и типичных слабых мест страниц в нише gambling/betting.
 Не выдумывай факты.
 
-Гео: Германия.
-Язык страницы: немецкий.
+Гео/страна: {{GEO}}.
+Язык страницы: {{LANGUAGE}}.
 Текущий год: {{CURRENT_YEAR}}.
+Желаемый объем: около {{TARGET_WORDS}} слов.
 Тематика: онлайн-казино, легальные Anbieter, GGL-Lizenz, Spielerschutz, Zahlungen, Auszahlungen, KYC, sichere Online Casinos.
-Аудитория: пользователи из Германии, которые хотят выбрать легальное и безопасное онлайн-казино или Spielothek.
+Аудитория: пользователи из выбранной страны, которые хотят выбрать легальное и безопасное онлайн-казино или Spielothek.
 
 Тема страницы:
 {{TOPIC}}
@@ -55,13 +56,14 @@ Slug страницы:
 Работай как редактор, который отвечает за публикацию.
 
 Основные правила:
-- Пиши на немецком языке.
-- Не используй русский или английский в тексте страницы, кроме терминов вроде KYC, RTP, FAQ, GGL.
+- Пиши строго на языке {{LANGUAGE}}.
+- Не смешивай языки в тексте страницы, кроме общепринятых терминов вроде KYC, RTP, FAQ, GGL.
 - Не выдумывай названия казино, операторов, лицензий, бонусов, сумм, RTP, сроков выплат, комиссий, рейтингов или отзывов.
 - Если данных нет, используй безопасную формулировку или пометку: [Muss geprüft werden: ...].
 - Не обещай выигрыш.
 - Не называй казино “абсолютно безопасными”.
 - Не используй формулировки “garantiert”, “ohne Risiko”, “100% legal”, “sicherer Gewinn”.
+- Не используй слишком сильные юридические утверждения вроде “einzig rechtssicher”, “immer legal”, “strafbar”, если нет проверенного источника.
 - Не делай рекламный текст.
 - Не делай keyword stuffing.
 - Не повторяй главный ключ слишком часто.
@@ -70,7 +72,7 @@ Slug страницы:
 - Не делай одинаковые FAQ и одинаковые вводки.
 
 SEO-логика:
-Сначала определи:
+Сначала определи это внутренне, но не выводи SEO-анализ, интенты, кластеры, content gaps, протокол работы или служебные заметки в готовом тексте:
 1. Главный интент пользователя.
 2. 8–12 подинтентов.
 3. Главный ключ.
@@ -92,6 +94,8 @@ SEO-логика:
 
 Структура страницы:
 Верни готовую страницу в таком формате:
+Начинай ответ строго с Title. Не добавляй перед Title служебный анализ, план, протокол, комментарии редактора или объяснение процесса.
+Title, Meta Description и H1 должны быть отдельными полями в начале ответа, а не частью Intro.
 
 Title:
 Meta Description:
@@ -462,21 +466,23 @@ def apply_provider_usage(provider: models.AiProvider, usage: dict) -> None:
 def ensure_default_prompt_template(db: Session, site: models.Site) -> models.PromptTemplate:
     existing = db.scalar(
         select(models.PromptTemplate)
-        .where(models.PromptTemplate.site_id == site.id)
         .order_by(models.PromptTemplate.is_default.desc(), models.PromptTemplate.created_at.asc())
         .limit(1)
     )
     if existing:
+        if not site.default_prompt_template_id:
+            site.default_prompt_template_id = existing.id
         return existing
 
     prompt = models.PromptTemplate(
         site_id=site.id,
-        name="Default DE gambling SEO prompt",
+        name="Промпт тест 1",
         content=DEFAULT_CONTENT_PROMPT_TEMPLATE,
         is_default=True,
     )
     db.add(prompt)
     db.flush()
+    site.default_prompt_template_id = prompt.id
     return prompt
 
 
@@ -570,7 +576,8 @@ def build_blocks_from_ai_text(
 
     if include_toc and len(headings) > 1:
         blocks.insert(1, toc_block(headings[:8]))
-    if include_faq and not any(block.get("type") == "faq" for block in blocks):
+    has_inline_faq = bool(re.search(r"\bFAQ\b|Häufig gestellte Fragen|häufige Fragen", generated_text, flags=re.IGNORECASE))
+    if include_faq and not any(block.get("type") == "faq" for block in blocks) and not has_inline_faq:
         blocks.append(
             faq_block(
                 [
@@ -750,6 +757,7 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate) -> models
         payload_mode=payload.payload_mode,
         topics_count=len(clean_topics),
         target_words=payload.target_words,
+        prompt_template_name=payload.prompt_template_name,
         prompt_template=payload.prompt_template,
         status="created",
     )
@@ -779,6 +787,7 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate) -> models
             status="draft",
             word_count=count_words(generated_json),
             section_id=payload.section_id,
+            generation_prompt_name=payload.prompt_template_name,
             idempotency_key=f"{payload.geo.lower()}-{payload.language.lower()}-{slugify(topic)}-{index}-{uuid.uuid4().hex[:8]}",
         )
         db.add(item)
@@ -813,6 +822,8 @@ def generate_task_items(db: Session, task: models.GenerationTask) -> models.Gene
                 )
                 item.slug = item.generated_json["pages"][0]["slug"]
                 item.word_count = count_words(item.generated_json)
+            item.generation_prompt_name = task.prompt_template_name
+            item.generated_at = datetime.now(timezone.utc)
             item.status = "generated"
         task.status = "generated"
     except Exception:

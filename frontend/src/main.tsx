@@ -49,6 +49,8 @@ type Task = {
   target_words: number | null;
   status: string;
   created_at: string;
+  prompt_template_name: string | null;
+  prompt_template: string | null;
 };
 
 type ContentItem = {
@@ -63,6 +65,8 @@ type ContentItem = {
   published_at: string | null;
   published_url: string | null;
   generated_json: Record<string, unknown>;
+  generation_prompt_name: string | null;
+  generated_at: string | null;
   updated_at: string;
 };
 
@@ -105,12 +109,18 @@ type AiProvider = {
 
 type PromptTemplate = {
   id: string;
-  site_id: string;
+  site_id: string | null;
   name: string;
   content: string;
   is_default: boolean;
+  used_by_projects: number;
   created_at: string;
   updated_at: string;
+};
+
+type TaskDetails = {
+  task: Task;
+  items: ContentItem[];
 };
 
 type User = {
@@ -159,6 +169,103 @@ type PublicationLog = {
 };
 
 const API_BASE = "/api";
+
+const DEFAULT_PROMPT_DRAFT = `Ты — senior SEO-редактор и content strategist для gambling/betting тем.
+
+Задача: сгенерировать SEO-страницу на языке {{LANGUAGE}} для сайта {{SITE_NAME}}.
+
+Входные данные из формы генерации:
+- Тема страницы: {{TOPIC}}
+- Slug страницы: {{SLUG}}
+- Гео/страна: {{GEO}}
+- Язык страницы: {{LANGUAGE}}
+- Желаемый объем: около {{TARGET_WORDS}} слов
+- Текущий год: {{CURRENT_YEAR}}
+
+Важно:
+- У тебя нет доступа к Google, браузингу и актуальной выдаче.
+- Не утверждай, что ты изучил TOP-10, конкурентов или реальные сайты.
+- Content gaps формируй только как гипотезу на основе темы, интента и типичных слабых мест страниц в нише.
+- Не выдумывай факты, бренды, лицензии, суммы, рейтинги, сроки выплат, комиссии или отзывы.
+
+Основные правила:
+- Пиши строго на языке {{LANGUAGE}}.
+- Не смешивай языки, кроме общепринятых терминов вроде KYC, RTP, FAQ, GGL.
+- Не обещай выигрыш.
+- Не называй казино абсолютно безопасными.
+- Не используй формулировки garantiert, ohne Risiko, 100% legal, sicherer Gewinn.
+- Не используй сильные юридические утверждения без проверенного источника.
+- Не делай рекламный текст и keyword stuffing.
+- Не создавай фейковый опыт автора или фейковый рейтинг.
+- Если данных нет, используй пометку: [Muss geprüft werden: ...].
+
+SEO-логика:
+Сначала внутренне определи главный интент, подинтенты, главный ключ, вторичные ключи, FAQ-запросы, legal/safety/payment кластеры и гипотетические content gaps. Не выводи этот анализ, протокол работы или служебные заметки в готовом тексте.
+
+Обязательно раскрой:
+- Что значит лицензия или локальный правовой статус для выбранного гео.
+- Почему важно проверять лицензию.
+- Как распознать безопасного Anbieter.
+- Роль KYC и проверки личности.
+- Что проверить перед депозитом.
+- Отличие Einzahlung и Auszahlung.
+- Spielerschutz, лимиты и самоисключение.
+- Для кого онлайн-казино не подходят.
+- Какие warning signs нужно учитывать.
+
+Формат ответа:
+Начинай строго с Title. Не добавляй перед Title анализ, план или комментарии.
+
+Title:
+Meta Description:
+H1:
+
+Intro:
+1-2 коротких абзаца. Сразу отвечай на основной запрос.
+
+Quick Answer:
+3-5 предложений с практическим ответом.
+
+H2: ...
+Текст 2-4 абзаца.
+
+Если нужна таблица, используй markdown:
+| Kriterium | Worauf achten | Warum wichtig |
+|---|---|---|
+
+Обязательные блоки:
+1. Überblick / schneller Vergleich.
+2. Methodik: Wie wir Anbieter bewerten.
+3. Lizenz und rechtlicher Rahmen.
+4. Sicherheit: Lizenz, Zahlungen, Datenschutz, KYC.
+5. Zahlungen und Auszahlungen.
+6. Spielerschutz und Limits.
+7. Für wen geeignet / nicht geeignet.
+8. Häufige Fehler vor der Registrierung.
+9. FAQ.
+10. Responsible Gambling Hinweis.
+
+FAQ:
+Сгенерируй 8-10 вопросов. Ответы короткие, конкретные и не рекламные.
+
+Responsible Gambling:
+Добавь аккуратный блок на языке {{LANGUAGE}}:
+- Glücksspiel ist mit Risiken verbunden.
+- Nur mit Geld spielen, dessen Verlust verkraftbar ist.
+- Limits nutzen.
+- Bei Kontrollverlust Hilfe suchen.
+- [Muss geprüft werden: lokale Hilfsangebote in {{GEO}}].
+
+Editor Check:
+- Suchintention: OK / Risiko
+- Fakten: OK / Muss geprüft werden
+- Legal-Risiko: OK / Risiko
+- Keyword-Stuffing: OK / Risiko
+- E-E-A-T: OK / Muss gestärkt werden
+- Thin Content: OK / Risiko
+- Nächste Prüfung vor Veröffentlichung: ...
+
+Не добавляй вымышленные ссылки и вымышленные даты обновления.`;
 
 const COUNTRY_CODES = [
   "AF", "AX", "AL", "DZ", "AS", "AD", "AO", "AI", "AQ", "AG", "AR", "AM", "AW", "AU", "AT", "AZ",
@@ -349,7 +456,7 @@ function App() {
 
         {message ? <div className="notice">{message}</div> : null}
 
-        {activeView === "workspace" && <ProjectWorkspaceView api={api} sites={sites} providers={providers} onChanged={loadAll} />}
+        {activeView === "workspace" && <ProjectWorkspaceView api={api} sites={sites} providers={providers} isAdmin={isAdmin} onChanged={loadAll} />}
         {isAdmin && activeView === "dashboard" && dashboard && <DashboardView dashboard={dashboard} tasks={tasks} content={content} />}
         {isAdmin && activeView === "tasks" && <TasksView api={api} sites={sites} providers={providers} tasks={tasks} onChanged={loadAll} />}
         {isAdmin && activeView === "content" && <ContentView api={api} content={content} onChanged={loadAll} />}
@@ -447,7 +554,7 @@ function DashboardView({ dashboard, tasks, content }: { dashboard: Dashboard; ta
   );
 }
 
-function ProjectWorkspaceView({ api, sites, providers, onChanged }: ViewProps & { sites: Site[]; providers: AiProvider[] }) {
+function ProjectWorkspaceView({ api, sites, providers, isAdmin, onChanged }: ViewProps & { sites: Site[]; providers: AiProvider[]; isAdmin: boolean }) {
   const [selectedSiteId, setSelectedSiteId] = React.useState(() => localStorage.getItem("workspace_site_id") || "");
   const [activeTab, setActiveTab] = React.useState("overview");
   const [overview, setOverview] = React.useState<SiteOverview | null>(null);
@@ -534,7 +641,7 @@ function ProjectWorkspaceView({ api, sites, providers, onChanged }: ViewProps & 
         <ProjectTopicsPanel api={api} site={selectedSite} providers={providers} sections={sections} promptTemplates={promptTemplates} tasks={siteTasks} onChanged={refreshProject} />
       ) : null}
       {selectedSite && activeTab === "prompts" ? (
-        <ProjectPromptsPanel api={api} site={selectedSite} promptTemplates={promptTemplates} onChanged={refreshProject} />
+        <ProjectPromptsPanel api={api} site={selectedSite} promptTemplates={promptTemplates} isAdmin={isAdmin} onChanged={refreshProject} />
       ) : null}
       {selectedSite && activeTab === "content" ? (
         <ProjectContentPanel api={api} content={siteContent} sections={sections} onChanged={refreshProject} />
@@ -565,7 +672,7 @@ function ProjectOverviewPanel({ overview, content, sections, logs }: { overview:
           <ResponsiveTable
             columns={["Тема", "Меню", "Статус", "Дата"]}
             rows={content.slice(0, 8).map((item) => [
-              item.topic,
+              <TopicMetaCell item={item} />,
               sectionLabel(item.section_id, sections),
               <StatusBadge status={item.status} />,
               item.published_at ? formatDate(item.published_at) : formatDate(item.updated_at)
@@ -598,6 +705,10 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
   const [sectionId, setSectionId] = React.useState("");
   const [shortcode, setShortcode] = React.useState("");
   const [formError, setFormError] = React.useState("");
+  const [taskDetails, setTaskDetails] = React.useState<TaskDetails | null>(null);
+  const [selectedPreview, setSelectedPreview] = React.useState<ContentItem | null>(null);
+  const [detailsError, setDetailsError] = React.useState("");
+  const [detailsLoadingId, setDetailsLoadingId] = React.useState("");
   const topicCount = topics.split("\n").map((line) => line.trim()).filter(Boolean).length;
   const selectedPrompt = promptTemplates.find((prompt) => prompt.id === promptTemplateId) || promptTemplates.find((prompt) => prompt.is_default) || promptTemplates[0];
 
@@ -638,6 +749,7 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
         section_id: sectionId || null,
         ai_provider_id: providerId || null,
         payload_mode: "site_default",
+        prompt_template_name: selectedPrompt?.name || null,
         prompt_template: selectedPrompt?.content || null,
         shortcode: shortcode.trim() || null,
         include_toc: true,
@@ -646,10 +758,25 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
       })
     });
     await api(`/tasks/${task.id}/generate`, { method: "POST" });
+    await openTaskDetails(task.id);
     setTitle("");
     setTopics("");
     setShortcode("");
     await onChanged();
+  }
+
+  async function openTaskDetails(taskId: string) {
+    setDetailsError("");
+    setDetailsLoadingId(taskId);
+    try {
+      const details = await api<TaskDetails>(`/tasks/${taskId}`);
+      setTaskDetails(details);
+      setSelectedPreview(details.items[0] || null);
+    } catch (error) {
+      setDetailsError(error instanceof Error ? error.message : "Не удалось открыть задачу.");
+    } finally {
+      setDetailsLoadingId("");
+    }
   }
 
   return (
@@ -717,15 +844,73 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
       </DataPanel>
       <DataPanel title="Задачи проекта">
         <ResponsiveTable
-          columns={["Задача", "Тем", "Страна", "Язык", "Слова", "Статус"]}
-          rows={tasks.map((task) => [task.title, task.topics_count, countryLabel(task.geo), task.language, task.target_words || "-", <StatusBadge status={task.status} />])}
+          columns={["Задача", "Тем", "Страна", "Язык", "Слова", "Промпт", "Статус", "Действие"]}
+          rows={tasks.map((task) => [
+            task.title,
+            task.topics_count,
+            countryLabel(task.geo),
+            task.language,
+            task.target_words || "-",
+            <PromptBadge name={task.prompt_template_name} />,
+            <StatusBadge status={task.status} />,
+            <button className="button compact" type="button" onClick={() => openTaskDetails(task.id)} disabled={detailsLoadingId === task.id}>
+              <FileText size={15} />
+              {detailsLoadingId === task.id ? "Открываю" : "Открыть"}
+            </button>
+          ])}
         />
+        {detailsError ? <span className="formError">{detailsError}</span> : null}
       </DataPanel>
+      {taskDetails ? (
+        <DataPanel title={`Заявка на генерацию: ${taskDetails.task.title}`}>
+          <div className="taskDetailGrid">
+            <div><span>Статус</span><StatusBadge status={taskDetails.task.status} /></div>
+            <div><span>Страна</span><strong>{countryLabel(taskDetails.task.geo)}</strong></div>
+            <div><span>Язык</span><strong>{taskDetails.task.language}</strong></div>
+            <div><span>Слов</span><strong>{taskDetails.task.target_words || "-"}</strong></div>
+            <div><span>Тем</span><strong>{taskDetails.task.topics_count}</strong></div>
+            <div><span>Промпт</span><PromptBadge name={taskDetails.task.prompt_template_name} /></div>
+          </div>
+          <div className="gridTwo">
+            <div className="subPanel">
+              <h3 className="subPanelTitle"><ListChecks size={18} /> Темы и результаты</h3>
+              <ResponsiveTable
+                columns={["Тема", "Slug", "Слова", "Статус", "Просмотр"]}
+                rows={taskDetails.items.map((item) => [
+                  <TopicMetaCell item={item} promptName={taskDetails.task.prompt_template_name} />,
+                  item.slug,
+                  item.word_count,
+                  <StatusBadge status={item.status} />,
+                  <button className="button compact" type="button" onClick={() => setSelectedPreview(item)}><FileText size={15} /> Текст</button>
+                ])}
+              />
+            </div>
+            <div className="subPanel">
+              <h3 className="subPanelTitle"><Edit3 size={18} /> Промпт задачи</h3>
+              <textarea className="promptSnapshot" value={taskDetails.task.prompt_template || ""} readOnly rows={16} />
+            </div>
+          </div>
+        </DataPanel>
+      ) : null}
+      {selectedPreview ? (
+        <DataPanel title={`Просмотр текста: ${selectedPreview.topic}`}>
+          <div className="contentPreviewHeader">
+            <div>
+              <span>{selectedPreview.slug}</span>
+              <strong>{contentItemTitle(selectedPreview)}</strong>
+              <PromptBadge name={selectedPreview.generation_prompt_name || taskDetails?.task.prompt_template_name} />
+              <span>Дата генерации: {selectedPreview.generated_at ? formatDate(selectedPreview.generated_at) : "-"}</span>
+            </div>
+            <StatusBadge status={selectedPreview.status} />
+          </div>
+          <pre className="contentPreviewText">{contentItemPreviewText(selectedPreview)}</pre>
+        </DataPanel>
+      ) : null}
     </section>
   );
 }
 
-function ProjectPromptsPanel({ api, site, promptTemplates, onChanged }: ViewProps & { site: Site; promptTemplates: PromptTemplate[] }) {
+function ProjectPromptsPanel({ api, site, promptTemplates, isAdmin, onChanged }: ViewProps & { site: Site; promptTemplates: PromptTemplate[]; isAdmin: boolean }) {
   const [selectedId, setSelectedId] = React.useState("");
   const selectedPrompt = promptTemplates.find((prompt) => prompt.id === selectedId) || promptTemplates[0] || null;
   const [name, setName] = React.useState("");
@@ -743,8 +928,8 @@ function ProjectPromptsPanel({ api, site, promptTemplates, onChanged }: ViewProp
 
   React.useEffect(() => {
     if (isNewPrompt) {
-      setName("Новый промпт");
-      setContent("");
+      setName("Новый SEO-промпт");
+      setContent(DEFAULT_PROMPT_DRAFT);
       setIsDefault(false);
       setEditorError("");
       setEditorSuccess("");
@@ -776,22 +961,39 @@ function ProjectPromptsPanel({ api, site, promptTemplates, onChanged }: ViewProp
     } else if (selectedPrompt) {
       await api<PromptTemplate>(`/prompt-templates/${selectedPrompt.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ name: name.trim(), content: content.trim(), is_default: isDefault })
+        body: JSON.stringify({ name: name.trim(), content: content.trim(), is_default: isDefault, site_id: site.id })
       });
     }
     setEditorSuccess("Промпт сохранен.");
     await onChanged();
   }
 
+  async function deletePrompt() {
+    if (!selectedPrompt || isNewPrompt) return;
+    if (selectedPrompt.used_by_projects > 0) {
+      setEditorError(`Промпт используется в проектах: ${selectedPrompt.used_by_projects}. Сначала выберите другой промпт в этих проектах.`);
+      return;
+    }
+    const confirmed = window.confirm(`Удалить промпт "${selectedPrompt.name}"? Это действие доступно только администратору.`);
+    if (!confirmed) return;
+    setEditorError("");
+    setEditorSuccess("");
+    await api(`/prompt-templates/${selectedPrompt.id}`, { method: "DELETE" });
+    setSelectedId("");
+    setEditorSuccess("Промпт удален.");
+    await onChanged();
+  }
+
   return (
     <section className="viewStack">
-      <DataPanel title="Промпты проекта">
+      <DataPanel title="Глобальные промпты">
         <div className="promptEditorLayout">
           <aside className="promptList">
             {promptTemplates.map((prompt) => (
               <button key={prompt.id} className={`promptListButton ${selectedId === prompt.id ? "active" : ""}`} type="button" onClick={() => setSelectedId(prompt.id)}>
                 <strong>{prompt.name}</strong>
-                <span>{prompt.is_default ? "Default" : formatDate(prompt.updated_at)}</span>
+                <span>{prompt.is_default ? "Default для проекта" : formatDate(prompt.updated_at)}</span>
+                <span>Используется: {prompt.used_by_projects}</span>
               </button>
             ))}
             <button className={`promptListButton ${isNewPrompt ? "active" : ""}`} type="button" onClick={() => setSelectedId("__new__")}>
@@ -811,15 +1013,20 @@ function ProjectPromptsPanel({ api, site, promptTemplates, onChanged }: ViewProp
               </label>
               <label className="wide">
                 Текст промпта
-                <textarea className="promptTextarea" value={content} onChange={(event) => setContent(event.target.value)} rows={22} placeholder="Опиши правила генерации, плейсхолдеры: {{topic}}, {{geo}}, {{language}}, {{target_words}}, {{site_name}}, {{slug}}, {{current_year}}" />
+                <textarea className="promptTextarea" value={content} onChange={(event) => setContent(event.target.value)} rows={22} placeholder="Опиши правила генерации. Доступны плейсхолдеры из формы: {{TOPIC}}, {{GEO}}, {{LANGUAGE}}, {{TARGET_WORDS}}, {{SITE_NAME}}, {{SLUG}}, {{CURRENT_YEAR}}" />
               </label>
             </div>
             <div className="promptHelp">
-              Доступные плейсхолдеры: <code>{"{{topic}}"}</code>, <code>{"{{geo}}"}</code>, <code>{"{{language}}"}</code>, <code>{"{{target_words}}"}</code>, <code>{"{{site_name}}"}</code>, <code>{"{{slug}}"}</code>, <code>{"{{current_year}}"}</code>.
+              Это общий список промптов для всех проектов. При генерации система автоматически подставляет значения из формы: <code>{"{{TOPIC}}"}</code>, <code>{"{{GEO}}"}</code>, <code>{"{{LANGUAGE}}"}</code>, <code>{"{{TARGET_WORDS}}"}</code>, <code>{"{{SITE_NAME}}"}</code>, <code>{"{{SLUG}}"}</code>, <code>{"{{CURRENT_YEAR}}"}</code>.
             </div>
             {editorError ? <span className="formError">{editorError}</span> : null}
             {editorSuccess ? <span className="formSuccess">{editorSuccess}</span> : null}
             <div className="formActions">
+              {isAdmin && selectedPrompt && !isNewPrompt ? (
+                <button className="button danger" type="button" onClick={() => deletePrompt()} disabled={selectedPrompt.used_by_projects > 0}>
+                  Удалить промпт
+                </button>
+              ) : null}
               <button className="button primary" type="submit"><Edit3 size={18} /> Сохранить промпт</button>
             </div>
           </form>
@@ -878,7 +1085,7 @@ function ProjectContentPanel({ api, content, sections, onChanged }: ViewProps & 
         <ResponsiveTable
           columns={["Тема", "Меню", "Слова", "Статус", "Опубликовано", "Действия"]}
           rows={content.map((item) => [
-            item.topic,
+            <TopicMetaCell item={item} />,
             sectionLabel(item.section_id, sections),
             item.word_count,
             <StatusBadge status={item.status} />,
@@ -980,7 +1187,7 @@ function ProjectPublicationPanel({ api, site, content, sections, onChanged }: Vi
       <DataPanel title="Approved к публикации">
         <ResponsiveTable
           columns={["Тема", "Меню", "Slug"]}
-          rows={approved.map((item) => [item.topic, sectionLabel(item.section_id, sections), item.slug])}
+          rows={approved.map((item) => [<TopicMetaCell item={item} />, sectionLabel(item.section_id, sections), item.slug])}
         />
       </DataPanel>
     </section>
@@ -1160,7 +1367,7 @@ function ContentView({ api, content, onChanged }: ViewProps & { content: Content
       <ResponsiveTable
         columns={["Тема", "Slug", "Слова", "Статус", "Действие"]}
         rows={content.map((item) => [
-          item.topic,
+          <TopicMetaCell item={item} />,
           item.slug,
           item.word_count,
           <StatusBadge status={item.status} />,
@@ -1218,7 +1425,7 @@ function PublicationsView({ api, sites, content, onChanged }: ViewProps & { site
         </form>
       </DataPanel>
       <DataPanel title="Готово к публикации">
-        <ResponsiveTable columns={["Тема", "Статус", "Slug"]} rows={approved.map((item) => [item.topic, <StatusBadge status={item.status} />, item.slug])} />
+        <ResponsiveTable columns={["Тема", "Статус", "Slug"]} rows={approved.map((item) => [<TopicMetaCell item={item} />, <StatusBadge status={item.status} />, item.slug])} />
       </DataPanel>
     </section>
   );
@@ -1640,6 +1847,24 @@ function EmptyState({ text }: { text: string }) {
   return <div className="emptyState">{text}</div>;
 }
 
+function PromptBadge({ name }: { name?: string | null }) {
+  const label = name || "Промпт не указан";
+  const isImproved = /v\s*2|улучш|доработ/i.test(label);
+  return <span className={`promptBadge ${isImproved ? "improved" : ""}`}>Промпт: {label}</span>;
+}
+
+function TopicMetaCell({ item, promptName }: { item: ContentItem; promptName?: string | null }) {
+  const generationPrompt = item.generation_prompt_name || promptName || "Промпт не указан";
+  const generationDate = item.generated_at || item.updated_at;
+  return (
+    <div className="topicMetaCell">
+      <strong>{item.topic}</strong>
+      <PromptBadge name={generationPrompt} />
+      <span>Генерация: {generationDate ? formatDate(generationDate) : "-"}</span>
+    </div>
+  );
+}
+
 function StatusBadge({ status }: { status: string }) {
   return <span className={`status status-${status.replaceAll("_", "-")}`}>{status}</span>;
 }
@@ -1711,6 +1936,42 @@ function countryFlag(code: string) {
 function countryLabel(code: string) {
   const country = COUNTRIES.find((item) => item.code === code.toUpperCase());
   return country ? `${country.flag} ${country.code}` : code;
+}
+
+function contentItemTitle(item: ContentItem) {
+  const pages = item.generated_json.pages;
+  if (Array.isArray(pages) && pages[0] && typeof pages[0] === "object" && "title" in pages[0]) {
+    return String((pages[0] as { title?: unknown }).title || item.topic);
+  }
+  return item.topic;
+}
+
+function contentItemPreviewText(item: ContentItem) {
+  const pages = item.generated_json.pages;
+  if (!Array.isArray(pages) || !pages[0] || typeof pages[0] !== "object") {
+    return JSON.stringify(item.generated_json, null, 2);
+  }
+  const page = pages[0] as { description?: unknown; content?: { blocks?: Array<Record<string, unknown>> } };
+  const lines: string[] = [];
+  if (page.description) lines.push(String(page.description));
+  for (const block of page.content?.blocks || []) {
+    const data = block.data as Record<string, unknown> | undefined;
+    if (block.type === "header" && data?.text) lines.push(`\n${String(data.text)}`);
+    if (block.type === "paragraph" && data?.text) lines.push(String(data.text));
+    if (block.type === "list" && Array.isArray(data?.items)) {
+      lines.push((data.items as unknown[]).map((itemText) => `- ${String(itemText)}`).join("\n"));
+    }
+    if (block.type === "table" && Array.isArray(data?.content)) {
+      lines.push((data.content as unknown[]).map((row) => Array.isArray(row) ? row.map(String).join(" | ") : String(row)).join("\n"));
+    }
+    if (block.type === "faq" && Array.isArray(data)) {
+      lines.push(data.map((entry) => {
+        const faq = entry as { question?: unknown; answer?: unknown };
+        return `Q: ${String(faq.question || "")}\nA: ${String(faq.answer || "")}`;
+      }).join("\n\n"));
+    }
+  }
+  return lines.join("\n\n").replace(/<[^>]+>/g, "").trim() || JSON.stringify(item.generated_json, null, 2);
 }
 
 function formatNumber(value: number) {

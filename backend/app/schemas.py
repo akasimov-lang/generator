@@ -97,16 +97,18 @@ class PromptTemplateUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=160)
     content: str | None = Field(default=None, min_length=20)
     is_default: bool | None = None
+    site_id: str | None = None
 
 
 class PromptTemplateResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    site_id: str
+    site_id: str | None
     name: str
     content: str
     is_default: bool
+    used_by_projects: int = 0
     created_at: datetime
     updated_at: datetime
 
@@ -121,6 +123,7 @@ class GenerationTaskCreate(BaseModel):
     ai_provider_id: str | None = None
     payload_mode: Literal["site_default", "simple_page", "full_site"] = "site_default"
     target_words: int | None = Field(default=None, ge=300, le=8000)
+    prompt_template_name: str | None = Field(default=None, max_length=160)
     prompt_template: str | None = None
     shortcode: str | None = None
     include_toc: bool = True
