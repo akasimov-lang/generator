@@ -20,11 +20,18 @@ SITE_DEFAULT = "site_default"
 DEFAULT_EDITOR_VERSION = "2.31.0"
 GEMINI_DEFAULT_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 GEMINI_DEFAULT_MODEL = "gemini-3.5-flash"
-DEFAULT_CONTENT_PROMPT_TEMPLATE = """Ты — senior SEO-редактор, content strategist и fact-checking editor для gambling/betting тем.
+DEFAULT_CONTENT_PROMPT_TEMPLATE = """Рабочий промпт для конкретной задачи.
 
-Задача: сгенерировать готовую SEO-страницу для сайта {{SITE_NAME}}.
+Базовые требования качества, юридической осторожности и формата ответа применяются отдельно через "Базовый промпт".
+Здесь описывай только нишу, интент, структуру и специальные требования к странице.
 
-Входные переменные:
+Роль:
+Ты — senior SEO-редактор и content strategist для gambling/betting тем.
+
+Задача:
+Сгенерировать готовую SEO-страницу для сайта {{SITE_NAME}}.
+
+Переменные:
 - Тема страницы: {{TOPIC}}
 - Slug страницы: {{SLUG}}
 - Гео/страна: {{GEO}}
@@ -36,25 +43,8 @@ DEFAULT_CONTENT_PROMPT_TEMPLATE = """Ты — senior SEO-редактор, conte
 Контекст ниши:
 Онлайн-казино, ставки, casino providers, легальные Anbieter, лицензии, Spielerschutz, Zahlungen, Auszahlungen, KYC, Datenschutz, Limits, sichere Online Casinos.
 
-Важно про данные:
-- У тебя нет доступа к Google, браузингу и актуальной выдаче.
-- Не утверждай, что ты изучил TOP-10, конкурентов или реальные сайты.
-- Content gaps формируй только внутренне как гипотезу на основе темы, интента и типичных слабых мест страниц в gambling/betting.
-- Не выдумывай факты, бренды, лицензии, бонусы, суммы, RTP, сроки выплат, комиссии, рейтинги, отзывы, даты обновления или ссылки.
-- Если факт требует проверки, используй пометку: [Muss geprüft werden: ...].
-
 Главная цель:
 Создать полезную, структурированную, юридически аккуратную страницу, которая полно отвечает на поисковый интент пользователя и пригодна для редакторской проверки перед публикацией.
-
-Стиль:
-- Пиши строго на языке {{LANGUAGE}}.
-- Не смешивай языки, кроме устоявшихся терминов вроде KYC, RTP, FAQ, GGL, OASIS, LUGAS.
-- Тон: экспертный, спокойный, редакционный, не рекламный.
-- Не обещай выигрыш и не создавай ощущения гарантированной безопасности.
-- Не используй формулировки: garantiert, ohne Risiko, 100% legal, sicherer Gewinn, absolut sicher, einzig rechtssicher, immer legal, strafbar.
-- Не делай keyword stuffing.
-- Не повторяй одинаковые вводки и FAQ.
-- Не создавай фейковый опыт автора.
 
 Внутренняя SEO-логика, НЕ выводить в текст:
 1. Главный интент.
@@ -78,24 +68,11 @@ DEFAULT_CONTENT_PROMPT_TEMPLATE = """Ты — senior SEO-редактор, conte
 - Welche Warnsignale sollte man beachten?
 
 Если тема рейтинговая:
-- Не создавай фейковый TOP-10.
 - Если нет проверенного списка брендов, делай таблицу критериев выбора.
 - Для мест под реальные бренды используй только placeholder:
   [Anbieter 1 - muss geprüft werden]
   [Anbieter 2 - muss geprüft werden]
   [Anbieter 3 - muss geprüft werden]
-
-Строгий формат ответа:
-- Не используй Markdown code fences.
-- Начинай строго с Title.
-- Title, Meta Description и H1 должны быть только в начале ответа.
-- Не повторяй Title, Meta Description и H1 в теле статьи.
-- Каждый публичный раздел начинай отдельной строкой формата H2: Название раздела.
-- Не используй отдельные строки Intro:, Quick Answer:, FAQ: или Responsible Gambling: без префикса H2.
-- Не пиши короткие standalone-строки как подзаголовки. Если это заголовок, он обязан начинаться с H2:.
-- Таблицы можно давать в markdown-формате.
-- Списки делай через дефис.
-- Editor Check выводи в конце; система сохранит его как служебные метаданные.
 
 Шаблон ответа:
 Title:
@@ -156,6 +133,62 @@ Editor Check:
 - Thin Content: OK / Risiko
 - Struktur: OK / Risiko
 - Nächste Prüfung vor Veröffentlichung: ...
+"""
+
+PROMPT_FORMAT_CONTRACT_MARKER = "SYSTEM FORMAT CONTRACT FOR PARSER"
+PROMPT_FORMAT_CONTRACT = f"""{PROMPT_FORMAT_CONTRACT_MARKER}
+Этот блок обязателен для любого промпта генерации в сервисе.
+
+Формат ответа должен быть пригоден для автоматического парсинга в Editor.js:
+- Не используй Markdown code fences.
+- Начинай ответ строго с Title.
+- В начале ответа должны быть ровно эти поля отдельными строками:
+  Title:
+  Meta Description:
+  H1:
+- Не повторяй Title, Meta Description и H1 в теле статьи.
+- Каждый публичный раздел начинай отдельной строкой формата H2: Название раздела.
+- Не используй отдельные строки Intro:, Quick Answer:, FAQ: или Responsible Gambling: без префикса H2.
+- Не пиши короткие standalone-строки как подзаголовки. Если это заголовок, он обязан начинаться с H2:.
+- Таблицы можно давать в markdown-формате.
+- Списки делай через дефис.
+- FAQ пиши внутри раздела H2: FAQ, вопросы через Q:, ответы через A:.
+- Editor Check выводи в конце отдельным блоком; система сохранит его как служебные метаданные.
+"""
+
+BASE_PROMPT_TEMPLATE_NAME = "Базовый промпт"
+DEFAULT_BASE_PROMPT_TEMPLATE = f"""Базовые требования для всех генераций контента.
+
+Эти правила применяются к любому рабочему промпту в сервисе.
+
+Переменные, которые подставляет система:
+- Тема страницы: {{{{TOPIC}}}}
+- Slug страницы: {{{{SLUG}}}}
+- Гео/страна: {{{{GEO}}}}
+- Язык страницы: {{{{LANGUAGE}}}}
+- Желаемый объем: {{{{TARGET_WORDS}}}}
+- Текущий год: {{{{CURRENT_YEAR}}}}
+- Сайт/проект: {{{{SITE_NAME}}}}
+- Shortcode context: {{{{SHORTCODE}}}}
+
+Общие правила качества:
+- Пиши строго на языке {{{{LANGUAGE}}}}.
+- Не смешивай языки, кроме устоявшихся терминов вроде KYC, RTP, FAQ, GGL, OASIS, LUGAS.
+- Тон: экспертный, спокойный, редакционный, не рекламный.
+- Не утверждай, что ты изучил Google, TOP-10, конкурентов или реальные сайты, если браузинг недоступен.
+- Не выдумывай факты, бренды, лицензии, бонусы, суммы, RTP, сроки выплат, комиссии, рейтинги, отзывы, даты обновления или ссылки.
+- Если факт требует проверки, используй пометку: [Muss geprüft werden: ...].
+- Не обещай выигрыш и не создавай ощущение гарантированной безопасности.
+- Не используй формулировки: garantiert, ohne Risiko, 100% legal, sicherer Gewinn, absolut sicher, einzig rechtssicher, immer legal, strafbar.
+- Не делай рекламный текст и keyword stuffing.
+- Не повторяй главный ключ слишком часто.
+- Не повторяй одинаковые вводки и FAQ.
+- Не создавай фейковый опыт автора.
+- Не создавай фейковый TOP-10, рейтинг, оценку или список брендов без проверенных данных.
+- Если рабочий промпт требует рейтинг, но проверенных брендов нет, используй placeholders вида [Anbieter 1 - muss geprüft werden].
+- Внутренний SEO-анализ, intent mapping и content gaps не выводи в публичный текст.
+
+{PROMPT_FORMAT_CONTRACT}
 """
 
 
@@ -554,6 +587,8 @@ def build_gemini_prompt(
     for key, value in values.items():
         prompt = prompt.replace("{{" + key + "}}", value)
         prompt = prompt.replace("{{" + key.upper() + "}}", value)
+    if PROMPT_FORMAT_CONTRACT_MARKER not in prompt:
+        prompt = f"{prompt.rstrip()}\n\n{PROMPT_FORMAT_CONTRACT}"
     prompt += (
         "\n\nGeneration constraints:\n"
         f"- Topic: {topic}\n"
@@ -616,6 +651,7 @@ def apply_provider_usage(provider: models.AiProvider, usage: dict) -> None:
 def ensure_default_prompt_template(db: Session, site: models.Site) -> models.PromptTemplate:
     existing = db.scalar(
         select(models.PromptTemplate)
+        .where(models.PromptTemplate.name != BASE_PROMPT_TEMPLATE_NAME)
         .order_by(models.PromptTemplate.is_default.desc(), models.PromptTemplate.created_at.asc())
         .limit(1)
     )
@@ -634,6 +670,38 @@ def ensure_default_prompt_template(db: Session, site: models.Site) -> models.Pro
     db.flush()
     site.default_prompt_template_id = prompt.id
     return prompt
+
+
+def ensure_base_prompt_template(db: Session) -> models.PromptTemplate:
+    existing = db.scalar(
+        select(models.PromptTemplate)
+        .where(models.PromptTemplate.name == BASE_PROMPT_TEMPLATE_NAME)
+        .limit(1)
+    )
+    if existing:
+        return existing
+
+    prompt = models.PromptTemplate(
+        site_id=None,
+        name=BASE_PROMPT_TEMPLATE_NAME,
+        content=DEFAULT_BASE_PROMPT_TEMPLATE,
+        is_default=False,
+    )
+    db.add(prompt)
+    db.flush()
+    return prompt
+
+
+def compose_prompt_with_base(db: Session, prompt_template: str | None) -> str:
+    base_prompt = ensure_base_prompt_template(db)
+    specific_prompt = prompt_template.strip() if prompt_template and prompt_template.strip() else DEFAULT_CONTENT_PROMPT_TEMPLATE
+    if BASE_PROMPT_TEMPLATE_NAME in specific_prompt and PROMPT_FORMAT_CONTRACT_MARKER in specific_prompt:
+        return specific_prompt
+    return (
+        f"{base_prompt.content.strip()}\n\n"
+        "РАБОЧИЙ ПРОМПТ ДЛЯ КОНКРЕТНОЙ ЗАДАЧИ:\n"
+        f"{specific_prompt}"
+    )
 
 
 async def validate_ai_provider_key(provider: models.AiProvider) -> models.AiProvider:
@@ -931,6 +999,7 @@ def breadcrumb_schema_block(slug: str, title: str) -> dict:
 
 def create_generation_task(db: Session, payload: GenerationTaskCreate) -> models.GenerationTask:
     clean_topics = [topic.strip() for topic in payload.topics if topic.strip()]
+    prompt_template = compose_prompt_with_base(db, payload.prompt_template)
     task = models.GenerationTask(
         title=payload.title,
         site_id=payload.site_id,
@@ -942,7 +1011,7 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate) -> models
         topics_count=len(clean_topics),
         target_words=payload.target_words,
         prompt_template_name=payload.prompt_template_name,
-        prompt_template=payload.prompt_template,
+        prompt_template=prompt_template,
         status="created",
     )
     db.add(task)

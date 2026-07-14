@@ -28,7 +28,17 @@ from app.schemas import (
     UserUpdate,
 )
 from app.security import AdminUser, AuthUser, create_token, hash_password, verify_password
-from app.services import count_words, create_generation_task, ensure_default_prompt_template, generate_task_items, get_dashboard, schedule_campaign, validate_ai_provider_key
+from app.services import (
+    BASE_PROMPT_TEMPLATE_NAME,
+    count_words,
+    create_generation_task,
+    ensure_base_prompt_template,
+    ensure_default_prompt_template,
+    generate_task_items,
+    get_dashboard,
+    schedule_campaign,
+    validate_ai_provider_key,
+)
 
 router = APIRouter()
 
@@ -73,7 +83,11 @@ def _prompt_template_response(prompt: models.PromptTemplate, site: models.Site |
 
 
 def _list_global_prompt_templates(db: Session, site: models.Site | None = None) -> list[dict]:
-    prompts = db.scalars(select(models.PromptTemplate).order_by(models.PromptTemplate.created_at.asc())).all()
+    prompts = db.scalars(
+        select(models.PromptTemplate)
+        .where(models.PromptTemplate.name != BASE_PROMPT_TEMPLATE_NAME)
+        .order_by(models.PromptTemplate.created_at.asc())
+    ).all()
     used_rows = db.execute(
         select(models.Site.default_prompt_template_id, func.count(models.Site.id))
         .where(models.Site.default_prompt_template_id.is_not(None))
@@ -279,6 +293,7 @@ def create_section(site_id: str, payload: SectionCreate, _: AuthUser, db: Sessio
 @router.get("/sites/{site_id}/prompt-templates", response_model=list[PromptTemplateResponse])
 def list_prompt_templates(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     site = _get_site_or_404(db, site_id)
+    ensure_base_prompt_template(db)
     ensure_default_prompt_template(db, site)
     db.commit()
     return _list_global_prompt_templates(db, site)
@@ -288,6 +303,9 @@ def list_prompt_templates(site_id: str, _: AuthUser, db: Session = Depends(get_d
 def create_prompt_template(site_id: str, payload: PromptTemplateCreate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     site = _get_site_or_404(db, site_id)
     data = payload.model_dump()
+    data["name"] = data["name"].strip()
+    if data["name"] == BASE_PROMPT_TEMPLATE_NAME:
+        raise HTTPException(status_code=400, detail="Base prompt is managed separately")
     make_default = data.pop("is_default")
     prompt = models.PromptTemplate(site_id=site_id, is_default=False, **data)
     db.add(prompt)
@@ -301,12 +319,42 @@ def create_prompt_template(site_id: str, payload: PromptTemplateCreate, _: AuthU
     return _prompt_template_response(prompt, site, used_count)
 
 
+@router.get("/prompt-templates/base", response_model=PromptTemplateResponse)
+def get_base_prompt_template(_: AuthUser, db: Session = Depends(get_db)) -> Any:
+    prompt = ensure_base_prompt_template(db)
+    db.commit()
+    db.refresh(prompt)
+    return _prompt_template_response(prompt, None, 0)
+
+
+@router.patch("/prompt-templates/base", response_model=PromptTemplateResponse)
+def update_base_prompt_template(payload: PromptTemplateUpdate, _: AdminUser, db: Session = Depends(get_db)) -> Any:
+    prompt = ensure_base_prompt_template(db)
+    data = payload.model_dump(exclude_unset=True)
+    if data.get("name") and data["name"].strip() != BASE_PROMPT_TEMPLATE_NAME:
+        raise HTTPException(status_code=400, detail="Base prompt name cannot be changed")
+    if data.get("content") is not None:
+        prompt.content = data["content"].strip()
+    prompt.name = BASE_PROMPT_TEMPLATE_NAME
+    prompt.site_id = None
+    prompt.is_default = False
+    db.commit()
+    db.refresh(prompt)
+    return _prompt_template_response(prompt, None, 0)
+
+
 @router.patch("/prompt-templates/{prompt_id}", response_model=PromptTemplateResponse)
 def update_prompt_template(prompt_id: str, payload: PromptTemplateUpdate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     prompt = db.get(models.PromptTemplate, prompt_id)
     if not prompt:
         raise HTTPException(status_code=404, detail="Prompt template not found")
+    if prompt.name == BASE_PROMPT_TEMPLATE_NAME:
+        raise HTTPException(status_code=400, detail="Base prompt is managed separately")
     data = payload.model_dump(exclude_unset=True)
+    if data.get("name"):
+        data["name"] = data["name"].strip()
+    if data.get("name") == BASE_PROMPT_TEMPLATE_NAME:
+        raise HTTPException(status_code=400, detail="Base prompt is managed separately")
     site_id = data.pop("site_id", None)
     make_default = data.pop("is_default", None)
     site = _get_site_or_404(db, site_id) if site_id else None
@@ -329,10 +377,14 @@ def delete_prompt_template(prompt_id: str, _: AdminUser, db: Session = Depends(g
     prompt = db.get(models.PromptTemplate, prompt_id)
     if not prompt:
         raise HTTPException(status_code=404, detail="Prompt template not found")
+    if prompt.name == BASE_PROMPT_TEMPLATE_NAME:
+        raise HTTPException(status_code=400, detail="Base prompt cannot be deleted")
     used_by_projects = db.scalar(select(func.count(models.Site.id)).where(models.Site.default_prompt_template_id == prompt.id)) or 0
     if used_by_projects:
         raise HTTPException(status_code=400, detail="Cannot delete a prompt that is used by one or more projects")
-    prompts_count = db.scalar(select(func.count(models.PromptTemplate.id))) or 0
+    prompts_count = db.scalar(
+        select(func.count(models.PromptTemplate.id)).where(models.PromptTemplate.name != BASE_PROMPT_TEMPLATE_NAME)
+    ) or 0
     if prompts_count <= 1:
         raise HTTPException(status_code=400, detail="Cannot delete the last prompt template")
     db.delete(prompt)

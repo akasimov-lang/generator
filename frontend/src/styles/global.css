@@ -381,6 +381,14 @@ h2 {
   line-height: 1.5;
 }
 
+.basePromptTextarea {
+  min-height: 360px;
+}
+
+.promptTextarea:read-only {
+  opacity: 0.86;
+}
+
 .promptSnapshot {
   min-height: 360px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;

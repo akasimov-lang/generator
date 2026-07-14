@@ -174,11 +174,18 @@ type ThemeMode = "light" | "dark";
 
 const API_BASE = "/api";
 
-const DEFAULT_PROMPT_DRAFT = `Ты — senior SEO-редактор, content strategist и fact-checking editor для gambling/betting тем.
+const DEFAULT_PROMPT_DRAFT = `Рабочий промпт для конкретной задачи.
 
-Задача: сгенерировать готовую SEO-страницу для сайта {{SITE_NAME}}.
+Базовые требования качества, юридической осторожности и формата ответа применяются отдельно через "Базовый промпт".
+Здесь описывай только нишу, интент, структуру и специальные требования к странице.
 
-Входные переменные:
+Роль:
+Ты — senior SEO-редактор и content strategist для gambling/betting тем.
+
+Задача:
+Сгенерировать готовую SEO-страницу для сайта {{SITE_NAME}}.
+
+Переменные:
 - Тема страницы: {{TOPIC}}
 - Slug страницы: {{SLUG}}
 - Гео/страна: {{GEO}}
@@ -190,25 +197,8 @@ const DEFAULT_PROMPT_DRAFT = `Ты — senior SEO-редактор, content stra
 Контекст ниши:
 Онлайн-казино, ставки, casino providers, легальные Anbieter, лицензии, Spielerschutz, Zahlungen, Auszahlungen, KYC, Datenschutz, Limits, sichere Online Casinos.
 
-Важно про данные:
-- У тебя нет доступа к Google, браузингу и актуальной выдаче.
-- Не утверждай, что ты изучил TOP-10, конкурентов или реальные сайты.
-- Content gaps формируй только внутренне как гипотезу на основе темы, интента и типичных слабых мест страниц в gambling/betting.
-- Не выдумывай факты, бренды, лицензии, бонусы, суммы, RTP, сроки выплат, комиссии, рейтинги, отзывы, даты обновления или ссылки.
-- Если факт требует проверки, используй пометку: [Muss geprüft werden: ...].
-
 Главная цель:
 Создать полезную, структурированную, юридически аккуратную страницу, которая полно отвечает на поисковый интент пользователя и пригодна для редакторской проверки перед публикацией.
-
-Стиль:
-- Пиши строго на языке {{LANGUAGE}}.
-- Не смешивай языки, кроме устоявшихся терминов вроде KYC, RTP, FAQ, GGL, OASIS, LUGAS.
-- Тон: экспертный, спокойный, редакционный, не рекламный.
-- Не обещай выигрыш и не создавай ощущения гарантированной безопасности.
-- Не используй формулировки: garantiert, ohne Risiko, 100% legal, sicherer Gewinn, absolut sicher, einzig rechtssicher, immer legal, strafbar.
-- Не делай keyword stuffing.
-- Не повторяй одинаковые вводки и FAQ.
-- Не создавай фейковый опыт автора.
 
 Внутренняя SEO-логика, НЕ выводить в текст:
 1. Главный интент.
@@ -232,24 +222,11 @@ const DEFAULT_PROMPT_DRAFT = `Ты — senior SEO-редактор, content stra
 - Welche Warnsignale sollte man beachten?
 
 Если тема рейтинговая:
-- Не создавай фейковый TOP-10.
 - Если нет проверенного списка брендов, делай таблицу критериев выбора.
 - Для мест под реальные бренды используй только placeholder:
   [Anbieter 1 - muss geprüft werden]
   [Anbieter 2 - muss geprüft werden]
   [Anbieter 3 - muss geprüft werden]
-
-Строгий формат ответа:
-- Не используй Markdown code fences.
-- Начинай строго с Title.
-- Title, Meta Description и H1 должны быть только в начале ответа.
-- Не повторяй Title, Meta Description и H1 в теле статьи.
-- Каждый публичный раздел начинай отдельной строкой формата H2: Название раздела.
-- Не используй отдельные строки Intro:, Quick Answer:, FAQ: или Responsible Gambling: без префикса H2.
-- Не пиши короткие standalone-строки как подзаголовки. Если это заголовок, он обязан начинаться с H2:.
-- Таблицы можно давать в markdown-формате.
-- Списки делай через дефис.
-- Editor Check выводи в конце; система сохранит его как служебные метаданные.
 
 Шаблон ответа:
 Title:
@@ -623,6 +600,7 @@ function ProjectWorkspaceView({ api, sites, providers, isAdmin, onChanged }: Vie
   const [siteContent, setSiteContent] = React.useState<ContentItem[]>([]);
   const [sections, setSections] = React.useState<Section[]>([]);
   const [promptTemplates, setPromptTemplates] = React.useState<PromptTemplate[]>([]);
+  const [basePrompt, setBasePrompt] = React.useState<PromptTemplate | null>(null);
   const [logs, setLogs] = React.useState<PublicationLog[]>([]);
   const [workspaceError, setWorkspaceError] = React.useState("");
   const selectedSite = sites.find((site) => site.id === selectedSiteId) || null;
@@ -630,12 +608,13 @@ function ProjectWorkspaceView({ api, sites, providers, isAdmin, onChanged }: Vie
   const loadProject = React.useCallback(async () => {
     if (!selectedSiteId) return;
     setWorkspaceError("");
-    const [nextOverview, nextTasks, nextContent, nextSections, nextPrompts, nextLogs] = await Promise.all([
+    const [nextOverview, nextTasks, nextContent, nextSections, nextPrompts, nextBasePrompt, nextLogs] = await Promise.all([
       api<SiteOverview>(`/sites/${selectedSiteId}/overview`),
       api<Task[]>(`/sites/${selectedSiteId}/tasks`),
       api<ContentItem[]>(`/sites/${selectedSiteId}/content`),
       api<Section[]>(`/sites/${selectedSiteId}/sections`),
       api<PromptTemplate[]>(`/sites/${selectedSiteId}/prompt-templates`),
+      api<PromptTemplate>("/prompt-templates/base"),
       api<PublicationLog[]>(`/sites/${selectedSiteId}/publication-logs`)
     ]);
     setOverview(nextOverview);
@@ -643,6 +622,7 @@ function ProjectWorkspaceView({ api, sites, providers, isAdmin, onChanged }: Vie
     setSiteContent(nextContent);
     setSections(nextSections);
     setPromptTemplates(nextPrompts);
+    setBasePrompt(nextBasePrompt);
     setLogs(nextLogs);
   }, [api, selectedSiteId]);
 
@@ -660,6 +640,7 @@ function ProjectWorkspaceView({ api, sites, providers, isAdmin, onChanged }: Vie
       setSiteContent([]);
       setSections([]);
       setPromptTemplates([]);
+      setBasePrompt(null);
       setLogs([]);
       setWorkspaceError("");
       loadProject().catch((error: unknown) => setWorkspaceError(error instanceof Error ? error.message : "Не удалось загрузить проект"));
@@ -709,7 +690,7 @@ function ProjectWorkspaceView({ api, sites, providers, isAdmin, onChanged }: Vie
         <ProjectTopicsPanel key={selectedSite.id} api={api} site={selectedSite} providers={providers} sections={sections} promptTemplates={promptTemplates} tasks={siteTasks} onChanged={refreshProject} />
       ) : null}
       {selectedSite && activeTab === "prompts" ? (
-        <ProjectPromptsPanel key={selectedSite.id} api={api} site={selectedSite} promptTemplates={promptTemplates} isAdmin={isAdmin} onChanged={refreshProject} />
+        <ProjectPromptsPanel key={selectedSite.id} api={api} site={selectedSite} promptTemplates={promptTemplates} basePrompt={basePrompt} isAdmin={isAdmin} onChanged={refreshProject} />
       ) : null}
       {selectedSite && activeTab === "content" ? (
         <ProjectContentPanel key={selectedSite.id} api={api} content={siteContent} sections={sections} onChanged={refreshProject} />
@@ -978,7 +959,7 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
   );
 }
 
-function ProjectPromptsPanel({ api, site, promptTemplates, isAdmin, onChanged }: ViewProps & { site: Site; promptTemplates: PromptTemplate[]; isAdmin: boolean }) {
+function ProjectPromptsPanel({ api, site, promptTemplates, basePrompt, isAdmin, onChanged }: ViewProps & { site: Site; promptTemplates: PromptTemplate[]; basePrompt: PromptTemplate | null; isAdmin: boolean }) {
   const [selectedId, setSelectedId] = React.useState("");
   const selectedPrompt = promptTemplates.find((prompt) => prompt.id === selectedId) || promptTemplates[0] || null;
   const [name, setName] = React.useState("");
@@ -986,8 +967,17 @@ function ProjectPromptsPanel({ api, site, promptTemplates, isAdmin, onChanged }:
   const [isDefault, setIsDefault] = React.useState(true);
   const [editorError, setEditorError] = React.useState("");
   const [editorSuccess, setEditorSuccess] = React.useState("");
+  const [baseContent, setBaseContent] = React.useState("");
+  const [baseError, setBaseError] = React.useState("");
+  const [baseSuccess, setBaseSuccess] = React.useState("");
   const [newPromptSeed, setNewPromptSeed] = React.useState<{ name: string; content: string } | null>(null);
   const isNewPrompt = selectedId === "__new__";
+
+  React.useEffect(() => {
+    setBaseContent(basePrompt?.content || "");
+    setBaseError("");
+    setBaseSuccess("");
+  }, [basePrompt]);
 
   React.useEffect(() => {
     if (!selectedId && promptTemplates.length) {
@@ -1037,6 +1027,26 @@ function ProjectPromptsPanel({ api, site, promptTemplates, isAdmin, onChanged }:
     await onChanged();
   }
 
+  async function saveBasePrompt(event: React.FormEvent) {
+    event.preventDefault();
+    setBaseError("");
+    setBaseSuccess("");
+    if (!isAdmin) {
+      setBaseError("Редактировать базовый промпт может только администратор.");
+      return;
+    }
+    if (baseContent.trim().length < 20) {
+      setBaseError("Базовый промпт слишком короткий.");
+      return;
+    }
+    await api<PromptTemplate>("/prompt-templates/base", {
+      method: "PATCH",
+      body: JSON.stringify({ content: baseContent.trim() })
+    });
+    setBaseSuccess("Базовый промпт сохранен.");
+    await onChanged();
+  }
+
   function createEmptyPrompt() {
     setNewPromptSeed(null);
     setSelectedId("__new__");
@@ -1066,6 +1076,36 @@ function ProjectPromptsPanel({ api, site, promptTemplates, isAdmin, onChanged }:
 
   return (
     <section className="viewStack">
+      <DataPanel title="Базовый промпт">
+        <form className="promptEditorForm" onSubmit={saveBasePrompt}>
+          <div className="promptHelp">
+            Эти требования автоматически добавляются к любому выбранному рабочему промпту при генерации. Здесь держим общие правила качества, фактов, юридической осторожности и формата для парсера.
+          </div>
+          <label className="wide">
+            Общие требования для всех генераций
+            <textarea
+              className="promptTextarea basePromptTextarea"
+              value={baseContent}
+              onChange={(event) => setBaseContent(event.target.value)}
+              rows={18}
+              readOnly={!isAdmin}
+              placeholder="Базовые правила будут созданы системой автоматически."
+            />
+          </label>
+          {basePrompt ? (
+            <div className="promptHelp">
+              Обновлен: {formatDate(basePrompt.updated_at)}. Обычные пользователи видят базовый промпт, но не могут менять его.
+            </div>
+          ) : null}
+          {baseError ? <span className="formError">{baseError}</span> : null}
+          {baseSuccess ? <span className="formSuccess">{baseSuccess}</span> : null}
+          <div className="formActions">
+            <button className="button primary" type="submit" disabled={!isAdmin}>
+              <Edit3 size={18} /> Сохранить базовый промпт
+            </button>
+          </div>
+        </form>
+      </DataPanel>
       <DataPanel title="Глобальные промпты">
         <div className="promptEditorLayout">
           <aside className="promptList">
