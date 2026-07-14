@@ -973,6 +973,7 @@ function ProjectPromptsPanel({ api, site, promptTemplates, isAdmin, onChanged }:
   const [isDefault, setIsDefault] = React.useState(true);
   const [editorError, setEditorError] = React.useState("");
   const [editorSuccess, setEditorSuccess] = React.useState("");
+  const [newPromptSeed, setNewPromptSeed] = React.useState<{ name: string; content: string } | null>(null);
   const isNewPrompt = selectedId === "__new__";
 
   React.useEffect(() => {
@@ -983,8 +984,8 @@ function ProjectPromptsPanel({ api, site, promptTemplates, isAdmin, onChanged }:
 
   React.useEffect(() => {
     if (isNewPrompt) {
-      setName("");
-      setContent("");
+      setName(newPromptSeed?.name || "");
+      setContent(newPromptSeed?.content || "");
       setIsDefault(false);
       setEditorError("");
       setEditorSuccess("");
@@ -997,7 +998,7 @@ function ProjectPromptsPanel({ api, site, promptTemplates, isAdmin, onChanged }:
       setEditorError("");
       setEditorSuccess("");
     }
-  }, [isNewPrompt, selectedPrompt]);
+  }, [isNewPrompt, newPromptSeed, selectedPrompt]);
 
   async function savePrompt(event: React.FormEvent) {
     event.preventDefault();
@@ -1021,6 +1022,17 @@ function ProjectPromptsPanel({ api, site, promptTemplates, isAdmin, onChanged }:
     }
     setEditorSuccess("Промпт сохранен.");
     await onChanged();
+  }
+
+  function createEmptyPrompt() {
+    setNewPromptSeed(null);
+    setSelectedId("__new__");
+  }
+
+  function createPromptFromSelected() {
+    if (!selectedPrompt || isNewPrompt) return;
+    setNewPromptSeed({ name: `${selectedPrompt.name} копия`, content: selectedPrompt.content });
+    setSelectedId("__new__");
   }
 
   async function deletePrompt() {
@@ -1051,7 +1063,7 @@ function ProjectPromptsPanel({ api, site, promptTemplates, isAdmin, onChanged }:
                 <span>Используется: {prompt.used_by_projects}</span>
               </button>
             ))}
-            <button className={`promptListButton ${isNewPrompt ? "active" : ""}`} type="button" onClick={() => setSelectedId("__new__")}>
+            <button className={`promptListButton ${isNewPrompt ? "active" : ""}`} type="button" onClick={createEmptyPrompt}>
               <strong>Создать новый промпт</strong>
               <span>Поля будут пустыми</span>
             </button>
@@ -1077,6 +1089,11 @@ function ProjectPromptsPanel({ api, site, promptTemplates, isAdmin, onChanged }:
             {editorError ? <span className="formError">{editorError}</span> : null}
             {editorSuccess ? <span className="formSuccess">{editorSuccess}</span> : null}
             <div className="formActions">
+              {selectedPrompt && !isNewPrompt ? (
+                <button className="button secondary" type="button" onClick={createPromptFromSelected}>
+                  <Plus size={18} /> Создать на основе
+                </button>
+              ) : null}
               {isAdmin && selectedPrompt && !isNewPrompt ? (
                 <button className="button danger" type="button" onClick={() => deletePrompt()} disabled={selectedPrompt.used_by_projects > 0}>
                   Удалить промпт
