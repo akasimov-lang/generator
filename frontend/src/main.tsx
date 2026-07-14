@@ -171,8 +171,64 @@ type PublicationLog = {
 };
 
 type ThemeMode = "light" | "dark";
+type AppView = "dashboard" | "workspace" | "tasks" | "content" | "publications" | "providers" | "sites" | "settings";
+type WorkspaceTab = "overview" | "topics" | "prompts" | "content" | "publication" | "menu";
+
+type AppRoute = {
+  view: AppView;
+  workspaceTab: WorkspaceTab;
+};
 
 const API_BASE = "/api";
+const DEFAULT_WORKSPACE_TAB: WorkspaceTab = "overview";
+const DEFAULT_ROUTE: AppRoute = { view: "dashboard", workspaceTab: DEFAULT_WORKSPACE_TAB };
+
+const MAIN_VIEW_PATHS: Record<Exclude<AppView, "workspace">, string> = {
+  dashboard: "/dashboard",
+  tasks: "/tasks",
+  content: "/content",
+  publications: "/publications",
+  providers: "/ai-providers",
+  sites: "/sites",
+  settings: "/settings"
+};
+
+const WORKSPACE_TAB_PATHS: Record<WorkspaceTab, string> = {
+  overview: "/project-overview",
+  topics: "/project-topics",
+  prompts: "/project-prompts",
+  content: "/project-content",
+  publication: "/project-publication",
+  menu: "/project-menu"
+};
+
+function routeFromPath(pathname: string): AppRoute {
+  const path = pathname.replace(/\/+$/, "") || "/";
+  const workspaceEntry = Object.entries(WORKSPACE_TAB_PATHS).find(([, routePath]) => routePath === path);
+  if (workspaceEntry) {
+    return { view: "workspace", workspaceTab: workspaceEntry[0] as WorkspaceTab };
+  }
+
+  const mainEntry = Object.entries(MAIN_VIEW_PATHS).find(([, routePath]) => routePath === path);
+  if (mainEntry) {
+    return { view: mainEntry[0] as Exclude<AppView, "workspace">, workspaceTab: DEFAULT_WORKSPACE_TAB };
+  }
+
+  if (path === "/workspace" || path === "/project") {
+    return { view: "workspace", workspaceTab: DEFAULT_WORKSPACE_TAB };
+  }
+
+  return DEFAULT_ROUTE;
+}
+
+function pathForRoute(view: AppView, workspaceTab: WorkspaceTab = DEFAULT_WORKSPACE_TAB) {
+  if (view === "workspace") return WORKSPACE_TAB_PATHS[workspaceTab];
+  return MAIN_VIEW_PATHS[view];
+}
+
+function isAdminOnlyView(view: AppView) {
+  return !["workspace", "settings"].includes(view);
+}
 
 const DEFAULT_PROMPT_DRAFT = `Рабочий промпт для конкретной задачи.
 
@@ -327,9 +383,11 @@ const COUNTRIES = COUNTRY_CODES.map((code) => ({
 })).sort((first, second) => first.name.localeCompare(second.name, "ru"));
 
 function App() {
+  const initialRoute = React.useMemo(() => routeFromPath(window.location.pathname), []);
   const [token, setToken] = React.useState(() => localStorage.getItem("admin_token") || "");
   const [theme, setTheme] = React.useState<ThemeMode>(() => (localStorage.getItem("theme_mode") === "dark" ? "dark" : "light"));
-  const [activeView, setActiveView] = React.useState("dashboard");
+  const [activeView, setActiveView] = React.useState<AppView>(initialRoute.view);
+  const [workspaceTab, setWorkspaceTab] = React.useState<WorkspaceTab>(initialRoute.workspaceTab);
   const [dashboard, setDashboard] = React.useState<Dashboard | null>(null);
   const [tasks, setTasks] = React.useState<Task[]>([]);
   const [content, setContent] = React.useState<ContentItem[]>([]);
@@ -338,6 +396,19 @@ function App() {
   const [currentUser, setCurrentUser] = React.useState<User | null>(null);
   const [users, setUsers] = React.useState<User[]>([]);
   const [message, setMessage] = React.useState("");
+
+  const navigateTo = React.useCallback((view: AppView, nextWorkspaceTab: WorkspaceTab = workspaceTab, replace = false) => {
+    const normalizedWorkspaceTab = view === "workspace" ? nextWorkspaceTab : workspaceTab;
+    const nextPath = pathForRoute(view, normalizedWorkspaceTab);
+    setActiveView(view);
+    if (view === "workspace") {
+      setWorkspaceTab(normalizedWorkspaceTab);
+    }
+    if (window.location.pathname !== nextPath) {
+      const method = replace ? "replaceState" : "pushState";
+      window.history[method](null, "", nextPath);
+    }
+  }, [workspaceTab]);
 
   const api = React.useCallback(
     async <T,>(path: string, options: RequestInit = {}): Promise<T> => {
@@ -381,9 +452,6 @@ function App() {
       : [null, [], []] as [Dashboard | null, Task[], ContentItem[]];
     const nextUsers = nextUser.is_admin ? await api<User[]>("/users") : [];
     setCurrentUser(nextUser);
-    if (!nextUser.is_admin) {
-      setActiveView((view) => (["workspace", "settings"].includes(view) ? view : "workspace"));
-    }
     setDashboard(nextDashboard);
     setTasks(nextTasks);
     setContent(nextContent);
@@ -397,15 +465,31 @@ function App() {
   }, [loadAll]);
 
   React.useEffect(() => {
+    const handlePopState = () => {
+      const nextRoute = routeFromPath(window.location.pathname);
+      setActiveView(nextRoute.view);
+      setWorkspaceTab(nextRoute.workspaceTab);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  React.useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem("theme_mode", theme);
   }, [theme]);
 
   React.useEffect(() => {
-    if (currentUser && !currentUser.is_admin && !["workspace", "settings"].includes(activeView)) {
-      setActiveView("workspace");
+    if (!currentUser) return;
+    if (!currentUser.is_admin && isAdminOnlyView(activeView)) {
+      navigateTo("workspace", DEFAULT_WORKSPACE_TAB, true);
+      return;
     }
-  }, [activeView, currentUser]);
+    const nextPath = pathForRoute(activeView, activeView === "workspace" ? workspaceTab : DEFAULT_WORKSPACE_TAB);
+    if (window.location.pathname !== nextPath) {
+      window.history.replaceState(null, "", nextPath);
+    }
+  }, [activeView, currentUser, navigateTo, workspaceTab]);
 
   if (!token) {
     return <LoginScreen onLogin={setToken} />;
@@ -438,18 +522,18 @@ function App() {
         <nav className="nav">
           {isAdmin ? (
             <>
-              <NavButton icon={<LayoutDashboard />} label="Dashboard" active={activeView === "dashboard"} onClick={() => setActiveView("dashboard")} />
-              <NavButton icon={<FolderKanban />} label="Рабочий экран" active={activeView === "workspace"} onClick={() => setActiveView("workspace")} />
-              <NavButton icon={<ListChecks />} label="Задачи" active={activeView === "tasks"} onClick={() => setActiveView("tasks")} />
-              <NavButton icon={<FileText />} label="Контент" active={activeView === "content"} onClick={() => setActiveView("content")} />
-              <NavButton icon={<Send />} label="Публикации" active={activeView === "publications"} onClick={() => setActiveView("publications")} />
-              <NavButton icon={<Bot />} label="AI Providers" active={activeView === "providers"} onClick={() => setActiveView("providers")} />
-              <NavButton icon={<Globe2 />} label="Сайты" active={activeView === "sites"} onClick={() => setActiveView("sites")} />
+              <NavButton href={pathForRoute("dashboard")} icon={<LayoutDashboard />} label="Dashboard" active={activeView === "dashboard"} onClick={() => navigateTo("dashboard")} />
+              <NavButton href={pathForRoute("workspace", DEFAULT_WORKSPACE_TAB)} icon={<FolderKanban />} label="Рабочий экран" active={activeView === "workspace"} onClick={() => navigateTo("workspace", DEFAULT_WORKSPACE_TAB)} />
+              <NavButton href={pathForRoute("tasks")} icon={<ListChecks />} label="Задачи" active={activeView === "tasks"} onClick={() => navigateTo("tasks")} />
+              <NavButton href={pathForRoute("content")} icon={<FileText />} label="Контент" active={activeView === "content"} onClick={() => navigateTo("content")} />
+              <NavButton href={pathForRoute("publications")} icon={<Send />} label="Публикации" active={activeView === "publications"} onClick={() => navigateTo("publications")} />
+              <NavButton href={pathForRoute("providers")} icon={<Bot />} label="AI Providers" active={activeView === "providers"} onClick={() => navigateTo("providers")} />
+              <NavButton href={pathForRoute("sites")} icon={<Globe2 />} label="Сайты" active={activeView === "sites"} onClick={() => navigateTo("sites")} />
             </>
           ) : (
-            <NavButton icon={<FolderKanban />} label="Рабочий экран" active={activeView === "workspace"} onClick={() => setActiveView("workspace")} />
+            <NavButton href={pathForRoute("workspace", DEFAULT_WORKSPACE_TAB)} icon={<FolderKanban />} label="Рабочий экран" active={activeView === "workspace"} onClick={() => navigateTo("workspace", DEFAULT_WORKSPACE_TAB)} />
           )}
-          <NavButton icon={<Settings />} label="Настройки" active={activeView === "settings"} onClick={() => setActiveView("settings")} />
+          <NavButton href={pathForRoute("settings")} icon={<Settings />} label="Настройки" active={activeView === "settings"} onClick={() => navigateTo("settings")} />
         </nav>
       </aside>
 
@@ -457,7 +541,7 @@ function App() {
         <header className="topbar">
           <div>
             <p className="eyebrow">Рабочая панель</p>
-            <h1>{viewTitle(activeView)}</h1>
+            <h1>{viewTitle(activeView, workspaceTab)}</h1>
           </div>
           <div className="topbarActions">
             {currentUser ? (
@@ -494,7 +578,7 @@ function App() {
 
         {message ? <div className="notice">{message}</div> : null}
 
-        {activeView === "workspace" && <ProjectWorkspaceView api={api} sites={sites} providers={providers} isAdmin={isAdmin} onChanged={loadAll} />}
+        {activeView === "workspace" && <ProjectWorkspaceView api={api} sites={sites} providers={providers} isAdmin={isAdmin} activeTab={workspaceTab} onTabChange={(tab) => navigateTo("workspace", tab)} onChanged={loadAll} />}
         {isAdmin && activeView === "dashboard" && dashboard && <DashboardView dashboard={dashboard} tasks={tasks} content={content} />}
         {isAdmin && activeView === "tasks" && <TasksView api={api} sites={sites} providers={providers} tasks={tasks} onChanged={loadAll} />}
         {isAdmin && activeView === "content" && <ContentView api={api} content={content} onChanged={loadAll} />}
@@ -592,9 +676,22 @@ function DashboardView({ dashboard, tasks, content }: { dashboard: Dashboard; ta
   );
 }
 
-function ProjectWorkspaceView({ api, sites, providers, isAdmin, onChanged }: ViewProps & { sites: Site[]; providers: AiProvider[]; isAdmin: boolean }) {
+function ProjectWorkspaceView({
+  api,
+  sites,
+  providers,
+  isAdmin,
+  activeTab,
+  onTabChange,
+  onChanged
+}: ViewProps & {
+  sites: Site[];
+  providers: AiProvider[];
+  isAdmin: boolean;
+  activeTab: WorkspaceTab;
+  onTabChange: (tab: WorkspaceTab) => void;
+}) {
   const [selectedSiteId, setSelectedSiteId] = React.useState(() => localStorage.getItem("workspace_site_id") || "");
-  const [activeTab, setActiveTab] = React.useState("overview");
   const [overview, setOverview] = React.useState<SiteOverview | null>(null);
   const [siteTasks, setSiteTasks] = React.useState<Task[]>([]);
   const [siteContent, setSiteContent] = React.useState<ContentItem[]>([]);
@@ -673,12 +770,12 @@ function ProjectWorkspaceView({ api, sites, providers, isAdmin, onChanged }: Vie
           <button className="button secondary" type="button" onClick={() => refreshProject()}><RefreshCcw size={18} /> Обновить проект</button>
         </div>
         <div className="workspaceTabs">
-          <TabButton label="Обзор" active={activeTab === "overview"} onClick={() => setActiveTab("overview")} />
-          <TabButton label="Темы" active={activeTab === "topics"} onClick={() => setActiveTab("topics")} />
-          <TabButton label="Промпты" active={activeTab === "prompts"} onClick={() => setActiveTab("prompts")} />
-          <TabButton label="Контент" active={activeTab === "content"} onClick={() => setActiveTab("content")} />
-          <TabButton label="Публикация" active={activeTab === "publication"} onClick={() => setActiveTab("publication")} />
-          <TabButton label="Меню" active={activeTab === "menu"} onClick={() => setActiveTab("menu")} />
+          <TabButton href={pathForRoute("workspace", "overview")} label="Обзор" active={activeTab === "overview"} onClick={() => onTabChange("overview")} />
+          <TabButton href={pathForRoute("workspace", "topics")} label="Темы" active={activeTab === "topics"} onClick={() => onTabChange("topics")} />
+          <TabButton href={pathForRoute("workspace", "prompts")} label="Промпты" active={activeTab === "prompts"} onClick={() => onTabChange("prompts")} />
+          <TabButton href={pathForRoute("workspace", "content")} label="Контент" active={activeTab === "content"} onClick={() => onTabChange("content")} />
+          <TabButton href={pathForRoute("workspace", "publication")} label="Публикация" active={activeTab === "publication"} onClick={() => onTabChange("publication")} />
+          <TabButton href={pathForRoute("workspace", "menu")} label="Меню" active={activeTab === "menu"} onClick={() => onTabChange("menu")} />
         </div>
         {workspaceError ? <div className="notice">{workspaceError}</div> : null}
       </DataPanel>
@@ -1940,12 +2037,37 @@ type ViewProps = {
   onChanged: () => void;
 };
 
-function NavButton({ icon, label, active, onClick }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void }) {
-  return <button className={`navButton ${active ? "active" : ""}`} onClick={onClick}>{icon}<span>{label}</span></button>;
+function NavButton({ href, icon, label, active, onClick }: { href: string; icon: React.ReactNode; label: string; active: boolean; onClick: () => void }) {
+  return (
+    <a
+      className={`navButton ${active ? "active" : ""}`}
+      href={href}
+      onClick={(event) => {
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        onClick();
+      }}
+    >
+      {icon}
+      <span>{label}</span>
+    </a>
+  );
 }
 
-function TabButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return <button className={`tabButton ${active ? "active" : ""}`} type="button" onClick={onClick}>{label}</button>;
+function TabButton({ href, label, active, onClick }: { href: string; label: string; active: boolean; onClick: () => void }) {
+  return (
+    <a
+      className={`tabButton ${active ? "active" : ""}`}
+      href={href}
+      onClick={(event) => {
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        onClick();
+      }}
+    >
+      {label}
+    </a>
+  );
 }
 
 function KpiCard({ icon, label, value, danger }: { icon: React.ReactNode; label: string; value: number; danger?: boolean }) {
@@ -2021,10 +2143,21 @@ function sectionLabel(sectionId: string | null, sections: Section[]) {
   return section ? `${section.name} · ${section.path}` : sectionId;
 }
 
-function viewTitle(view: string) {
-  const titles: Record<string, string> = {
+function viewTitle(view: AppView, workspaceTab: WorkspaceTab) {
+  if (view === "workspace") {
+    const tabTitles: Record<WorkspaceTab, string> = {
+      overview: "Рабочий экран: обзор",
+      topics: "Рабочий экран: темы",
+      prompts: "Рабочий экран: промпты",
+      content: "Рабочий экран: контент",
+      publication: "Рабочий экран: публикация",
+      menu: "Рабочий экран: меню"
+    };
+    return tabTitles[workspaceTab];
+  }
+
+  const titles: Record<Exclude<AppView, "workspace">, string> = {
     dashboard: "Dashboard",
-    workspace: "Рабочий экран",
     tasks: "Задачи генерации",
     content: "Контент",
     publications: "Публикации",
@@ -2032,7 +2165,7 @@ function viewTitle(view: string) {
     sites: "Сайты",
     settings: "Настройки"
   };
-  return titles[view] || "Dashboard";
+  return titles[view];
 }
 
 function formatDate(value: string) {
