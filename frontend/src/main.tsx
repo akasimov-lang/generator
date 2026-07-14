@@ -16,12 +16,14 @@ import {
   LayoutDashboard,
   ListChecks,
   LogOut,
+  Moon,
   Play,
   Plus,
   RefreshCcw,
   Send,
   Settings,
   ShieldCheck,
+  Sun,
   UserPlus,
   Users
 } from "lucide-react";
@@ -168,87 +170,128 @@ type PublicationLog = {
   created_at: string;
 };
 
+type ThemeMode = "light" | "dark";
+
 const API_BASE = "/api";
 
-const DEFAULT_PROMPT_DRAFT = `Ты — senior SEO-редактор и content strategist для gambling/betting тем.
+const DEFAULT_PROMPT_DRAFT = `Ты — senior SEO-редактор, content strategist и fact-checking editor для gambling/betting тем.
 
-Задача: сгенерировать SEO-страницу на языке {{LANGUAGE}} для сайта {{SITE_NAME}}.
+Задача: сгенерировать готовую SEO-страницу для сайта {{SITE_NAME}}.
 
-Входные данные из формы генерации:
+Входные переменные:
 - Тема страницы: {{TOPIC}}
 - Slug страницы: {{SLUG}}
 - Гео/страна: {{GEO}}
 - Язык страницы: {{LANGUAGE}}
 - Желаемый объем: около {{TARGET_WORDS}} слов
 - Текущий год: {{CURRENT_YEAR}}
+- Shortcode context: {{SHORTCODE}}
 
-Важно:
+Контекст ниши:
+Онлайн-казино, ставки, casino providers, легальные Anbieter, лицензии, Spielerschutz, Zahlungen, Auszahlungen, KYC, Datenschutz, Limits, sichere Online Casinos.
+
+Важно про данные:
 - У тебя нет доступа к Google, браузингу и актуальной выдаче.
 - Не утверждай, что ты изучил TOP-10, конкурентов или реальные сайты.
-- Content gaps формируй только как гипотезу на основе темы, интента и типичных слабых мест страниц в нише.
-- Не выдумывай факты, бренды, лицензии, суммы, рейтинги, сроки выплат, комиссии или отзывы.
+- Content gaps формируй только внутренне как гипотезу на основе темы, интента и типичных слабых мест страниц в gambling/betting.
+- Не выдумывай факты, бренды, лицензии, бонусы, суммы, RTP, сроки выплат, комиссии, рейтинги, отзывы, даты обновления или ссылки.
+- Если факт требует проверки, используй пометку: [Muss geprüft werden: ...].
 
-Основные правила:
+Главная цель:
+Создать полезную, структурированную, юридически аккуратную страницу, которая полно отвечает на поисковый интент пользователя и пригодна для редакторской проверки перед публикацией.
+
+Стиль:
 - Пиши строго на языке {{LANGUAGE}}.
-- Не смешивай языки, кроме общепринятых терминов вроде KYC, RTP, FAQ, GGL.
-- Не обещай выигрыш.
-- Не называй казино абсолютно безопасными.
-- Не используй формулировки garantiert, ohne Risiko, 100% legal, sicherer Gewinn.
-- Не используй сильные юридические утверждения без проверенного источника.
-- Не делай рекламный текст и keyword stuffing.
-- Не создавай фейковый опыт автора или фейковый рейтинг.
-- Если данных нет, используй пометку: [Muss geprüft werden: ...].
+- Не смешивай языки, кроме устоявшихся терминов вроде KYC, RTP, FAQ, GGL, OASIS, LUGAS.
+- Тон: экспертный, спокойный, редакционный, не рекламный.
+- Не обещай выигрыш и не создавай ощущения гарантированной безопасности.
+- Не используй формулировки: garantiert, ohne Risiko, 100% legal, sicherer Gewinn, absolut sicher, einzig rechtssicher, immer legal, strafbar.
+- Не делай keyword stuffing.
+- Не повторяй одинаковые вводки и FAQ.
+- Не создавай фейковый опыт автора.
 
-SEO-логика:
-Сначала внутренне определи главный интент, подинтенты, главный ключ, вторичные ключи, FAQ-запросы, legal/safety/payment кластеры и гипотетические content gaps. Не выводи этот анализ, протокол работы или служебные заметки в готовом тексте.
+Внутренняя SEO-логика, НЕ выводить в текст:
+1. Главный интент.
+2. 8-12 подинтентов.
+3. Главный ключ.
+4. Вторичные ключи.
+5. FAQ-запросы.
+6. Legal/Safety/Payment кластеры.
+7. Гипотетические content gaps.
+8. Риски фактов, которые нужно проверить редактору.
 
-Обязательно раскрой:
-- Что значит лицензия или локальный правовой статус для выбранного гео.
-- Почему важно проверять лицензию.
-- Как распознать безопасного Anbieter.
-- Роль KYC и проверки личности.
-- Что проверить перед депозитом.
-- Отличие Einzahlung и Auszahlung.
-- Spielerschutz, лимиты и самоисключение.
-- Для кого онлайн-казино не подходят.
-- Какие warning signs нужно учитывать.
+Для страниц по Германии обязательно раскрыть:
+- Was bedeutet GGL-Lizenz?
+- Warum ist Lizenzprüfung wichtig?
+- Wie erkennt man sichere Anbieter?
+- Welche Rolle spielen KYC und Identitätsprüfung?
+- Was muss man vor Einzahlung prüfen?
+- Unterschied zwischen Einzahlung und Auszahlung.
+- Spielerschutz, Limits und Selbstausschluss.
+- Für wen sind Online Casinos nicht geeignet?
+- Welche Warnsignale sollte man beachten?
 
-Формат ответа:
-Начинай строго с Title. Не добавляй перед Title анализ, план или комментарии.
+Если тема рейтинговая:
+- Не создавай фейковый TOP-10.
+- Если нет проверенного списка брендов, делай таблицу критериев выбора.
+- Для мест под реальные бренды используй только placeholder:
+  [Anbieter 1 - muss geprüft werden]
+  [Anbieter 2 - muss geprüft werden]
+  [Anbieter 3 - muss geprüft werden]
 
+Строгий формат ответа:
+- Не используй Markdown code fences.
+- Начинай строго с Title.
+- Title, Meta Description и H1 должны быть только в начале ответа.
+- Не повторяй Title, Meta Description и H1 в теле статьи.
+- Каждый раздел начинай отдельной строкой формата H2: Название раздела.
+- Таблицы можно давать в markdown-формате.
+- Списки делай через дефис.
+- Editor Check выводи в конце; система сохранит его как служебные метаданные.
+
+Шаблон ответа:
 Title:
 Meta Description:
 H1:
 
 Intro:
-1-2 коротких абзаца. Сразу отвечай на основной запрос.
+1-2 коротких абзаца. Сразу отвечай на основной запрос, без длинного вступления.
 
 Quick Answer:
 3-5 предложений с практическим ответом.
 
-H2: ...
-Текст 2-4 абзаца.
-
-Если нужна таблица, используй markdown:
+H2: Überblick / schneller Vergleich
+2-4 абзаца. Если уместно, добавь таблицу:
 | Kriterium | Worauf achten | Warum wichtig |
 |---|---|---|
 
-Обязательные блоки:
-1. Überblick / schneller Vergleich.
-2. Methodik: Wie wir Anbieter bewerten.
-3. Lizenz und rechtlicher Rahmen.
-4. Sicherheit: Lizenz, Zahlungen, Datenschutz, KYC.
-5. Zahlungen und Auszahlungen.
-6. Spielerschutz und Limits.
-7. Für wen geeignet / nicht geeignet.
-8. Häufige Fehler vor der Registrierung.
-9. FAQ.
-10. Responsible Gambling Hinweis.
+H2: Methodik: Wie wir Anbieter bewerten
+Объясни критерии оценки без фейковых баллов и без неподтвержденного рейтинга.
 
-FAQ:
-Сгенерируй 8-10 вопросов. Ответы короткие, конкретные и не рекламные.
+H2: Lizenz und rechtlicher Rahmen
+Объясни лицензии, локальные ограничения, что должен проверить пользователь и что должен проверить редактор.
 
-Responsible Gambling:
+H2: Sicherheit: Lizenz, Zahlungen, Datenschutz und KYC
+Раскрой безопасность без обещаний абсолютной защиты.
+
+H2: Zahlungen und Auszahlungen
+Объясни различие между Einzahlung и Auszahlung, KYC, возможные задержки и что проверить до депозита.
+
+H2: Spielerschutz und Limits
+Раскрой лимиты, самоисключение, признаки проблемной игры.
+
+H2: Für wen geeignet / nicht geeignet
+Дай честное разделение аудиторий, без рекламного давления.
+
+H2: Häufige Fehler vor der Registrierung
+Дай практический список ошибок.
+
+H2: FAQ
+Сгенерируй 8-10 вопросов. Каждый вопрос и ответ пиши отдельными строками:
+Q: ...
+A: ...
+
+H2: Responsible Gambling Hinweis
 Добавь аккуратный блок на языке {{LANGUAGE}}:
 - Glücksspiel ist mit Risiken verbunden.
 - Nur mit Geld spielen, dessen Verlust verkraftbar ist.
@@ -263,9 +306,8 @@ Editor Check:
 - Keyword-Stuffing: OK / Risiko
 - E-E-A-T: OK / Muss gestärkt werden
 - Thin Content: OK / Risiko
-- Nächste Prüfung vor Veröffentlichung: ...
-
-Не добавляй вымышленные ссылки и вымышленные даты обновления.`;
+- Struktur: OK / Risiko
+- Nächste Prüfung vor Veröffentlichung: ...`;
 
 const COUNTRY_CODES = [
   "AF", "AX", "AL", "DZ", "AS", "AD", "AO", "AI", "AQ", "AG", "AR", "AM", "AW", "AU", "AT", "AZ",
@@ -307,6 +349,7 @@ const COUNTRIES = COUNTRY_CODES.map((code) => ({
 
 function App() {
   const [token, setToken] = React.useState(() => localStorage.getItem("admin_token") || "");
+  const [theme, setTheme] = React.useState<ThemeMode>(() => (localStorage.getItem("theme_mode") === "dark" ? "dark" : "light"));
   const [activeView, setActiveView] = React.useState("dashboard");
   const [dashboard, setDashboard] = React.useState<Dashboard | null>(null);
   const [tasks, setTasks] = React.useState<Task[]>([]);
@@ -369,6 +412,11 @@ function App() {
   React.useEffect(() => {
     loadAll().catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Не удалось загрузить данные"));
   }, [loadAll]);
+
+  React.useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("theme_mode", theme);
+  }, [theme]);
 
   React.useEffect(() => {
     if (currentUser && !currentUser.is_admin && !["workspace", "settings"].includes(activeView)) {
@@ -438,6 +486,13 @@ function App() {
             <button className="button secondary" onClick={() => loadAll()} title="Обновить данные">
               <RefreshCcw size={18} />
               Обновить
+            </button>
+            <button
+              className="iconButton"
+              onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+              title={theme === "dark" ? "Включить светлую тему" : "Включить темную тему"}
+            >
+              {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
             </button>
             <button
               className="iconButton"
@@ -928,8 +983,8 @@ function ProjectPromptsPanel({ api, site, promptTemplates, isAdmin, onChanged }:
 
   React.useEffect(() => {
     if (isNewPrompt) {
-      setName("Новый SEO-промпт");
-      setContent(DEFAULT_PROMPT_DRAFT);
+      setName("");
+      setContent("");
       setIsDefault(false);
       setEditorError("");
       setEditorSuccess("");
@@ -997,15 +1052,15 @@ function ProjectPromptsPanel({ api, site, promptTemplates, isAdmin, onChanged }:
               </button>
             ))}
             <button className={`promptListButton ${isNewPrompt ? "active" : ""}`} type="button" onClick={() => setSelectedId("__new__")}>
-              <strong>Создать промпт</strong>
-              <span>Новый шаблон</span>
+              <strong>Создать новый промпт</strong>
+              <span>Поля будут пустыми</span>
             </button>
           </aside>
           <form className="promptEditorForm" onSubmit={savePrompt}>
             <div className="formGrid">
               <label>
                 Название
-                <input value={name} onChange={(event) => setName(event.target.value)} required />
+                <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Например: Промпт тест 1 v3" required />
               </label>
               <label className="checkboxRow promptDefaultRow">
                 <input checked={isDefault} onChange={(event) => setIsDefault(event.target.checked)} type="checkbox" />
@@ -1013,11 +1068,11 @@ function ProjectPromptsPanel({ api, site, promptTemplates, isAdmin, onChanged }:
               </label>
               <label className="wide">
                 Текст промпта
-                <textarea className="promptTextarea" value={content} onChange={(event) => setContent(event.target.value)} rows={22} placeholder="Опиши правила генерации. Доступны плейсхолдеры из формы: {{TOPIC}}, {{GEO}}, {{LANGUAGE}}, {{TARGET_WORDS}}, {{SITE_NAME}}, {{SLUG}}, {{CURRENT_YEAR}}" />
+                <textarea className="promptTextarea" value={content} onChange={(event) => setContent(event.target.value)} rows={22} placeholder={DEFAULT_PROMPT_DRAFT} />
               </label>
             </div>
             <div className="promptHelp">
-              Это общий список промптов для всех проектов. При генерации система автоматически подставляет значения из формы: <code>{"{{TOPIC}}"}</code>, <code>{"{{GEO}}"}</code>, <code>{"{{LANGUAGE}}"}</code>, <code>{"{{TARGET_WORDS}}"}</code>, <code>{"{{SITE_NAME}}"}</code>, <code>{"{{SLUG}}"}</code>, <code>{"{{CURRENT_YEAR}}"}</code>.
+              Это общий список промптов для всех проектов. При генерации система автоматически подставляет значения из формы: <code>{"{{TOPIC}}"}</code>, <code>{"{{GEO}}"}</code>, <code>{"{{LANGUAGE}}"}</code>, <code>{"{{TARGET_WORDS}}"}</code>, <code>{"{{SITE_NAME}}"}</code>, <code>{"{{SLUG}}"}</code>, <code>{"{{CURRENT_YEAR}}"}</code>, <code>{"{{SHORTCODE}}"}</code>.
             </div>
             {editorError ? <span className="formError">{editorError}</span> : null}
             {editorSuccess ? <span className="formSuccess">{editorSuccess}</span> : null}

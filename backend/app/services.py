@@ -20,68 +20,53 @@ SITE_DEFAULT = "site_default"
 DEFAULT_EDITOR_VERSION = "2.31.0"
 GEMINI_DEFAULT_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 GEMINI_DEFAULT_MODEL = "gemini-3.5-flash"
-DEFAULT_CONTENT_PROMPT_TEMPLATE = """Ты — senior SEO-редактор и content strategist для gambling/betting тем.
+DEFAULT_CONTENT_PROMPT_TEMPLATE = """Ты — senior SEO-редактор, content strategist и fact-checking editor для gambling/betting тем.
 
-Задача: сгенерировать SEO-страницу на языке {{LANGUAGE}} для сайта-обзорника онлайн-казино, ставок и casino providers.
+Задача: сгенерировать готовую SEO-страницу для сайта {{SITE_NAME}}.
 
-Важно:
-У тебя нет доступа к Google, браузингу и актуальной выдаче.
-Не утверждай, что ты изучил TOP-10, конкурентов или реальные сайты.
-Content gaps формируй как гипотезу на основе темы, поискового интента и типичных слабых мест страниц в нише gambling/betting.
-Не выдумывай факты.
+Входные переменные:
+- Тема страницы: {{TOPIC}}
+- Slug страницы: {{SLUG}}
+- Гео/страна: {{GEO}}
+- Язык страницы: {{LANGUAGE}}
+- Желаемый объем: около {{TARGET_WORDS}} слов
+- Текущий год: {{CURRENT_YEAR}}
+- Shortcode context: {{SHORTCODE}}
 
-Гео/страна: {{GEO}}.
-Язык страницы: {{LANGUAGE}}.
-Текущий год: {{CURRENT_YEAR}}.
-Желаемый объем: около {{TARGET_WORDS}} слов.
-Тематика: онлайн-казино, легальные Anbieter, GGL-Lizenz, Spielerschutz, Zahlungen, Auszahlungen, KYC, sichere Online Casinos.
-Аудитория: пользователи из выбранной страны, которые хотят выбрать легальное и безопасное онлайн-казино или Spielothek.
+Контекст ниши:
+Онлайн-казино, ставки, casino providers, легальные Anbieter, лицензии, Spielerschutz, Zahlungen, Auszahlungen, KYC, Datenschutz, Limits, sichere Online Casinos.
 
-Тема страницы:
-{{TOPIC}}
+Важно про данные:
+- У тебя нет доступа к Google, браузингу и актуальной выдаче.
+- Не утверждай, что ты изучил TOP-10, конкурентов или реальные сайты.
+- Content gaps формируй только внутренне как гипотезу на основе темы, интента и типичных слабых мест страниц в gambling/betting.
+- Не выдумывай факты, бренды, лицензии, бонусы, суммы, RTP, сроки выплат, комиссии, рейтинги, отзывы, даты обновления или ссылки.
+- Если факт требует проверки, используй пометку: [Muss geprüft werden: ...].
 
-Slug страницы:
-{{SLUG}}
+Главная цель:
+Создать полезную, структурированную, юридически аккуратную страницу, которая полно отвечает на поисковый интент пользователя и пригодна для редакторской проверки перед публикацией.
 
-Примеры тем:
-1. Beste Online Casinos in Deutschland 2026: Legale Anbieter im Vergleich
-2. Legale Online Casinos in Deutschland: Anbieter mit GGL-Lizenz
-3. Beste Online Spielotheken in Deutschland: Sichere Slots mit Lizenz
-4. Sichere Online Casinos erkennen: Lizenz, Zahlungen und Spielerschutz
-5. Neue Online Casinos in Deutschland: Neue Anbieter mit Lizenz
-
-Цель страницы:
-Создать полезный, структурированный и юридически аккуратный контент, который максимально полно отвечает на запрос пользователя без копирования конкурентов и без неподтвержденных утверждений.
-
-Работай как редактор, который отвечает за публикацию.
-
-Основные правила:
+Стиль:
 - Пиши строго на языке {{LANGUAGE}}.
-- Не смешивай языки в тексте страницы, кроме общепринятых терминов вроде KYC, RTP, FAQ, GGL.
-- Не выдумывай названия казино, операторов, лицензий, бонусов, сумм, RTP, сроков выплат, комиссий, рейтингов или отзывов.
-- Если данных нет, используй безопасную формулировку или пометку: [Muss geprüft werden: ...].
-- Не обещай выигрыш.
-- Не называй казино “абсолютно безопасными”.
-- Не используй формулировки “garantiert”, “ohne Risiko”, “100% legal”, “sicherer Gewinn”.
-- Не используй слишком сильные юридические утверждения вроде “einzig rechtssicher”, “immer legal”, “strafbar”, если нет проверенного источника.
-- Не делай рекламный текст.
+- Не смешивай языки, кроме устоявшихся терминов вроде KYC, RTP, FAQ, GGL, OASIS, LUGAS.
+- Тон: экспертный, спокойный, редакционный, не рекламный.
+- Не обещай выигрыш и не создавай ощущения гарантированной безопасности.
+- Не используй формулировки: garantiert, ohne Risiko, 100% legal, sicherer Gewinn, absolut sicher, einzig rechtssicher, immer legal, strafbar.
 - Не делай keyword stuffing.
-- Не повторяй главный ключ слишком часто.
+- Не повторяй одинаковые вводки и FAQ.
 - Не создавай фейковый опыт автора.
-- Не создавай фейковый рейтинг без данных.
-- Не делай одинаковые FAQ и одинаковые вводки.
 
-SEO-логика:
-Сначала определи это внутренне, но не выводи SEO-анализ, интенты, кластеры, content gaps, протокол работы или служебные заметки в готовом тексте:
-1. Главный интент пользователя.
-2. 8–12 подинтентов.
+Внутренняя SEO-логика, НЕ выводить в текст:
+1. Главный интент.
+2. 8-12 подинтентов.
 3. Главный ключ.
 4. Вторичные ключи.
 5. FAQ-запросы.
 6. Legal/Safety/Payment кластеры.
-7. Гипотетические content gaps, которые часто бывают у конкурентов.
+7. Гипотетические content gaps.
+8. Риски фактов, которые нужно проверить редактору.
 
-Для тем про Германию обязательно раскрыть:
+Для страниц по Германии обязательно раскрыть:
 - Was bedeutet GGL-Lizenz?
 - Warum ist Lizenzprüfung wichtig?
 - Wie erkennt man sichere Anbieter?
@@ -92,63 +77,73 @@ SEO-логика:
 - Für wen sind Online Casinos nicht geeignet?
 - Welche Warnsignale sollte man beachten?
 
-Структура страницы:
-Верни готовую страницу в таком формате:
-Начинай ответ строго с Title. Не добавляй перед Title служебный анализ, план, протокол, комментарии редактора или объяснение процесса.
-Title, Meta Description и H1 должны быть отдельными полями в начале ответа, а не частью Intro.
+Если тема рейтинговая:
+- Не создавай фейковый TOP-10.
+- Если нет проверенного списка брендов, делай таблицу критериев выбора.
+- Для мест под реальные бренды используй только placeholder:
+  [Anbieter 1 - muss geprüft werden]
+  [Anbieter 2 - muss geprüft werden]
+  [Anbieter 3 - muss geprüft werden]
 
+Строгий формат ответа:
+- Не используй Markdown code fences.
+- Начинай строго с Title.
+- Title, Meta Description и H1 должны быть только в начале ответа.
+- Не повторяй Title, Meta Description и H1 в теле статьи.
+- Каждый раздел начинай отдельной строкой формата H2: Название раздела.
+- Таблицы можно давать в markdown-формате.
+- Списки делай через дефис.
+- Editor Check выводи в конце; система сохранит его как служебные метаданные.
+
+Шаблон ответа:
 Title:
 Meta Description:
 H1:
 
 Intro:
-1–2 коротких абзаца. Сразу отвечай на основной запрос, без длинного вступления.
+1-2 коротких абзаца. Сразу отвечай на основной запрос, без длинного вступления.
 
 Quick Answer:
-Короткий практический ответ пользователю в 3–5 предложениях.
+3-5 предложений с практическим ответом.
 
-H2: ...
-Текст 2–4 абзаца.
-
-Если нужна таблица, добавь ее в markdown-формате:
+H2: Überblick / schneller Vergleich
+2-4 абзаца. Если уместно, добавь таблицу:
 | Kriterium | Worauf achten | Warum wichtig |
 |---|---|---|
 
-После таблицы обязательно добавь 1 короткий поясняющий абзац.
+H2: Methodik: Wie wir Anbieter bewerten
+Объясни критерии оценки без фейковых баллов и без неподтвержденного рейтинга.
 
-Обязательные блоки для страниц про онлайн-казино в Германии:
-1. Überblick / schneller Vergleich.
-2. Methodik: Wie wir Anbieter bewerten.
-3. GGL-Lizenz und rechtlicher Rahmen.
-4. Sicherheit: Lizenz, Zahlungen, Datenschutz, KYC.
-5. Zahlungen und Auszahlungen.
-6. Spielerschutz und Limits.
-7. Für wen geeignet / nicht geeignet.
-8. Häufige Fehler vor der Registrierung.
-9. FAQ.
-10. Responsible Gambling Hinweis.
+H2: Lizenz und rechtlicher Rahmen
+Объясни лицензии, локальные ограничения, что должен проверить пользователь и что должен проверить редактор.
 
-Для рейтинговых страниц:
-Если нет проверенного списка брендов, не создавай фейковый TOP-10.
-Вместо этого создай таблицу критериев выбора и пометь места, где нужны реальные Anbieter:
-[Anbieter 1 – muss geprüft werden]
-[Anbieter 2 – muss geprüft werden]
-[Anbieter 3 – muss geprüft werden]
+H2: Sicherheit: Lizenz, Zahlungen, Datenschutz und KYC
+Раскрой безопасность без обещаний абсолютной защиты.
 
-FAQ:
-Сгенерируй 8–10 вопросов.
-Ответы должны быть короткими, конкретными и не рекламными.
+H2: Zahlungen und Auszahlungen
+Объясни различие между Einzahlung и Auszahlung, KYC, возможные задержки и что проверить до депозита.
 
-Responsible Gambling:
-Добавь аккуратный блок на немецком:
+H2: Spielerschutz und Limits
+Раскрой лимиты, самоисключение, признаки проблемной игры.
+
+H2: Für wen geeignet / nicht geeignet
+Дай честное разделение аудиторий, без рекламного давления.
+
+H2: Häufige Fehler vor der Registrierung
+Дай практический список ошибок.
+
+H2: FAQ
+Сгенерируй 8-10 вопросов. Каждый вопрос и ответ пиши отдельными строками:
+Q: ...
+A: ...
+
+H2: Responsible Gambling Hinweis
+Добавь аккуратный блок на языке {{LANGUAGE}}:
 - Glücksspiel ist mit Risiken verbunden.
 - Nur mit Geld spielen, dessen Verlust verkraftbar ist.
 - Limits nutzen.
 - Bei Kontrollverlust Hilfe suchen.
-- Для организаций помощи используй пометку: [Muss geprüft werden: lokale Hilfsangebote in Deutschland].
-
-Финальная редакторская проверка:
-В конце добавь короткий блок:
+- [Muss geprüft werden: lokale Hilfsangebote in {{GEO}}].
 
 Editor Check:
 - Suchintention: OK / Risiko
@@ -157,11 +152,8 @@ Editor Check:
 - Keyword-Stuffing: OK / Risiko
 - E-E-A-T: OK / Muss gestärkt werden
 - Thin Content: OK / Risiko
+- Struktur: OK / Risiko
 - Nächste Prüfung vor Veröffentlichung: ...
-
-Не добавляй вымышленные ссылки.
-Не добавляй вымышленные даты обновления.
-Не утверждай, что страница лучше конкурентов, если конкуренты не проверены.
 """
 
 
@@ -182,6 +174,71 @@ def clean_text(value: object) -> str:
     text = html.unescape(str(value or ""))
     text = re.sub(r"<[^>]+>", " ", text)
     return re.sub(r"\s+", " ", text).strip()
+
+
+def clean_multiline_text(value: object) -> str:
+    text = html.unescape(str(value or ""))
+    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"</p\s*>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", " ", text)
+    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in text.splitlines()]
+    compact_lines: list[str] = []
+    previous_blank = False
+    for line in lines:
+        if not line:
+            if not previous_blank:
+                compact_lines.append("")
+            previous_blank = True
+            continue
+        compact_lines.append(line)
+        previous_blank = False
+    return "\n".join(compact_lines).strip()
+
+
+def extract_ai_article_parts(generated_text: str, fallback_topic: str) -> dict:
+    title = ""
+    meta_description = ""
+    h1 = ""
+    body_lines: list[str] = []
+    editor_check_lines: list[str] = []
+    in_editor_check = False
+
+    for raw_line in generated_text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        label_match = re.match(r"^(Title|Meta Description|H1)\s*:\s*(.*)$", line, flags=re.IGNORECASE)
+        if label_match:
+            label = label_match.group(1).lower()
+            value = label_match.group(2).strip()
+            if label == "title":
+                title = value
+            elif label == "meta description":
+                meta_description = value
+            elif label == "h1":
+                h1 = value
+            continue
+
+        editor_match = re.match(r"^Editor Check\s*:?\s*(.*)$", line, flags=re.IGNORECASE)
+        if editor_match:
+            in_editor_check = True
+            if editor_match.group(1):
+                editor_check_lines.append(editor_match.group(1).strip())
+            continue
+
+        if in_editor_check:
+            editor_check_lines.append(line)
+        else:
+            body_lines.append(line)
+
+    return {
+        "title": title or fallback_topic.strip(),
+        "meta_description": meta_description,
+        "h1": h1 or title or fallback_topic.strip(),
+        "body": "\n".join(body_lines).strip(),
+        "editor_check": "\n".join(editor_check_lines).strip(),
+    }
 
 
 def count_words(payload: dict) -> int:
@@ -445,17 +502,22 @@ async def build_gemini_content(
     if not generated_text:
         raise ValueError("Gemini returned an empty response")
 
+    article_parts = extract_ai_article_parts(generated_text, topic)
+    page["title"] = article_parts["title"]
+    page["breadcrumb"] = article_parts["h1"]
+    page["description"] = article_parts["meta_description"] or clean_text(article_parts["body"])[:155] or page["description"]
     page["content"]["blocks"] = build_blocks_from_ai_text(
-        generated_text=generated_text,
-        topic=topic,
+        generated_text=article_parts["body"] or generated_text,
+        topic=article_parts["h1"],
         shortcode=shortcode,
         include_toc=include_toc,
         include_faq=include_faq,
     )
-    page["description"] = clean_text(generated_text)[:155] or page["description"]
     base_payload["generation_meta"]["generator"] = "gemini"
     base_payload["generation_meta"]["model"] = provider.model
     base_payload["generation_meta"]["usage"] = usage
+    if article_parts["editor_check"]:
+        base_payload["generation_meta"]["editor_check"] = article_parts["editor_check"]
     return base_payload
 
 
@@ -536,7 +598,7 @@ def extract_gemini_text(response: dict) -> str:
         for part in content.get("parts", []):
             if isinstance(part, dict) and part.get("text"):
                 chunks.append(str(part["text"]))
-    return clean_text("\n\n".join(chunks))
+    return clean_multiline_text("\n\n".join(chunks))
 
 
 def apply_provider_usage(provider: models.AiProvider, usage: dict) -> None:
@@ -638,7 +700,7 @@ def build_blocks_from_ai_text(
     include_toc: bool,
     include_faq: bool,
 ) -> list[dict]:
-    title = topic.strip().title()
+    title = topic.strip()
     lines = [line.strip(" #*\t") for line in generated_text.splitlines() if line.strip()]
     blocks: list[dict] = [header_block(title, 1)]
     headings: list[str] = [title]
@@ -649,15 +711,48 @@ def build_blocks_from_ai_text(
             blocks.append(paragraph_block(" ".join(pending_paragraphs)))
             pending_paragraphs.clear()
 
-    for line in lines:
-        if looks_like_heading(line):
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        explicit_heading = re.match(r"^(H[2-4]|#{2,4})\s*:?\s*(.+)$", line, flags=re.IGNORECASE)
+        section_label = re.match(r"^([A-ZÄÖÜ][^:]{2,80})\s*:\s*$", line)
+
+        if explicit_heading or section_label or looks_like_heading(line):
             flush_paragraphs()
-            headings.append(line)
-            blocks.append(header_block(line, 2))
-        else:
-            pending_paragraphs.append(line)
-            if len(" ".join(pending_paragraphs)) > 700:
-                flush_paragraphs()
+            heading = explicit_heading.group(2).strip() if explicit_heading else line.rstrip(":").strip()
+            if heading and heading.lower() != title.lower():
+                headings.append(heading)
+                blocks.append(header_block(heading, 2))
+            index += 1
+            continue
+
+        if line.startswith("|") and line.endswith("|"):
+            flush_paragraphs()
+            rows: list[list[str]] = []
+            while index < len(lines) and lines[index].startswith("|") and lines[index].endswith("|"):
+                cells = [cell.strip() for cell in lines[index].strip("|").split("|")]
+                is_separator = all(re.fullmatch(r":?-{3,}:?", cell or "") for cell in cells)
+                if not is_separator and any(cells):
+                    rows.append(cells)
+                index += 1
+            if rows:
+                blocks.append(table_block(rows))
+            continue
+
+        if re.match(r"^[-*]\s+", line):
+            flush_paragraphs()
+            items: list[str] = []
+            while index < len(lines) and re.match(r"^[-*]\s+", lines[index]):
+                items.append(re.sub(r"^[-*]\s+", "", lines[index]).strip())
+                index += 1
+            if items:
+                blocks.append(list_block("unordered", items))
+            continue
+
+        pending_paragraphs.append(line)
+        if len(" ".join(pending_paragraphs)) > 700:
+            flush_paragraphs()
+        index += 1
     flush_paragraphs()
 
     if include_toc and len(headings) > 1:

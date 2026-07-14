@@ -1,4 +1,4 @@
-from app.services import analyze_content_quality, faq_block, header_block, paragraph_block
+from app.services import analyze_content_quality, build_blocks_from_ai_text, extract_ai_article_parts, faq_block, header_block, paragraph_block
 
 
 def test_quality_check_flags_metadata_and_risky_phrases() -> None:
@@ -53,3 +53,37 @@ def test_quality_check_accepts_structured_payload() -> None:
 
     assert result["status"] == "ok"
     assert result["issues"] == []
+
+
+def test_ai_article_parts_and_blocks_keep_structure() -> None:
+    text = """Title: Sichere Online Casinos erkennen
+Meta Description: Kurzer sicherer Überblick.
+H1: Sichere Online Casinos erkennen
+
+Intro:
+Ein kurzer Einstieg.
+
+H2: Überblick / schneller Vergleich
+| Kriterium | Worauf achten | Warum wichtig |
+|---|---|---|
+| Lizenz | GGL prüfen | Rechtlicher Rahmen |
+
+H2: Häufige Fehler
+- Lizenz nicht prüfen
+- Limits ignorieren
+
+Editor Check:
+- Struktur: OK
+"""
+
+    parts = extract_ai_article_parts(text, "Fallback")
+    blocks = build_blocks_from_ai_text(parts["body"], parts["h1"], shortcode=None, include_toc=True, include_faq=False)
+    block_types = [block["type"] for block in blocks]
+
+    assert parts["title"] == "Sichere Online Casinos erkennen"
+    assert parts["meta_description"] == "Kurzer sicherer Überblick."
+    assert "Editor Check" not in parts["body"]
+    assert parts["editor_check"] == "- Struktur: OK"
+    assert "table" in block_types
+    assert "list" in block_types
+    assert sum(1 for block in blocks if block["type"] == "header") >= 3

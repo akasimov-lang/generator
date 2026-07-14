@@ -2,6 +2,7 @@
   --bg: #f4f6f8;
   --surface: #ffffff;
   --surface-2: #eef2f6;
+  --surface-3: #f8fafc;
   --text: #17202a;
   --muted: #617080;
   --border: #d8e0e8;
@@ -14,10 +15,48 @@
   --warning-soft: #fff4d6;
   --blue: #175cd3;
   --blue-soft: #e8f1ff;
+  --sidebar-bg: #101820;
+  --sidebar-text: #ffffff;
+  --sidebar-muted: #aab6c3;
+  --sidebar-active: rgba(255, 255, 255, 0.1);
+  --brand-bg: #25a55f;
+  --input-bg: #ffffff;
+  --notice-bg: #fffbeb;
+  --danger-border: #fda29b;
+  --focus-ring: rgba(22, 101, 52, 0.12);
   --radius: 8px;
   --shadow: 0 10px 30px rgba(22, 32, 42, 0.08);
   --sidebar: 264px;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+[data-theme="dark"] {
+  --bg: #0f1419;
+  --surface: #151c23;
+  --surface-2: #202a34;
+  --surface-3: #111820;
+  --text: #e6edf3;
+  --muted: #9aa8b5;
+  --border: #2b3743;
+  --primary: #4ade80;
+  --primary-strong: #22c55e;
+  --primary-soft: #12351f;
+  --danger: #f87171;
+  --danger-soft: #3a1717;
+  --warning: #fbbf24;
+  --warning-soft: #3a2a10;
+  --blue: #60a5fa;
+  --blue-soft: #112a45;
+  --sidebar-bg: #0b1117;
+  --sidebar-text: #f8fafc;
+  --sidebar-muted: #8da0b3;
+  --sidebar-active: rgba(148, 163, 184, 0.16);
+  --brand-bg: #15803d;
+  --input-bg: #0f1720;
+  --notice-bg: #2b2413;
+  --danger-border: #7f1d1d;
+  --focus-ring: rgba(74, 222, 128, 0.16);
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.32);
 }
 
 * {
@@ -57,8 +96,8 @@ button {
   position: sticky;
   top: 0;
   height: 100vh;
-  background: #101820;
-  color: #ffffff;
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text);
   padding: 20px 14px;
 }
 
@@ -75,7 +114,7 @@ button {
 }
 
 .brand span {
-  color: #aab6c3;
+  color: var(--sidebar-muted);
   font-size: 13px;
   margin-top: 2px;
 }
@@ -87,8 +126,8 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #25a55f;
-  color: #ffffff;
+  background: var(--brand-bg);
+  color: var(--sidebar-text);
 }
 
 .brandMark.large {
@@ -105,7 +144,7 @@ button {
   width: 100%;
   border: 0;
   border-radius: var(--radius);
-  color: #cbd5e1;
+  color: var(--sidebar-muted);
   background: transparent;
   display: flex;
   align-items: center;
@@ -121,8 +160,8 @@ button {
 
 .navButton.active,
 .navButton:hover {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.1);
+  color: var(--sidebar-text);
+  background: var(--sidebar-active);
 }
 
 .main {
@@ -204,7 +243,7 @@ h2 {
 .button.primary {
   border-color: var(--primary);
   background: var(--primary);
-  color: #ffffff;
+  color: var(--sidebar-text);
 }
 
 .button.primary:hover {
@@ -216,7 +255,7 @@ h2 {
 }
 
 .button.danger {
-  border-color: #fda29b;
+  border-color: var(--danger-border);
   color: var(--danger);
 }
 
@@ -238,7 +277,7 @@ h2 {
 .notice {
   padding: 12px 14px;
   border: 1px solid var(--warning-soft);
-  background: #fffbeb;
+  background: var(--notice-bg);
   color: var(--warning);
   border-radius: var(--radius);
   margin-bottom: 18px;
@@ -278,7 +317,7 @@ h2 {
 }
 
 .kpiCard.danger {
-  border-color: #fda29b;
+  border-color: var(--danger-border);
 }
 
 .kpiIcon {
@@ -394,7 +433,7 @@ h2 {
 }
 
 .contentPreviewText {
-  background: #f8fafc;
+  background: var(--surface-3);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
@@ -588,7 +627,7 @@ td {
 
 .promptBadge {
   align-items: center;
-  background: #f1f5f9;
+  background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 999px;
   color: var(--muted);
@@ -602,9 +641,9 @@ td {
 }
 
 .promptBadge.improved {
-  background: #ecfdf5;
-  border-color: #86efac;
-  color: #166534;
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 .formGrid {
@@ -648,10 +687,16 @@ textarea {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: #ffffff;
+  background: var(--input-bg);
   color: var(--text);
   padding: 10px 12px;
   outline: none;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+  opacity: 0.58;
 }
 
 textarea {
@@ -669,7 +714,7 @@ input:focus,
 select:focus,
 textarea:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.12);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .wide {
@@ -690,7 +735,7 @@ textarea:focus {
 .emptyState {
   border: 1px dashed var(--border);
   color: var(--muted);
-  background: #f8fafc;
+  background: var(--surface-3);
   border-radius: var(--radius);
   padding: 28px;
   text-align: center;
