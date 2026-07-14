@@ -284,6 +284,62 @@ h2 {
   margin-bottom: 18px;
 }
 
+.permissionOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 22px;
+  pointer-events: none;
+}
+
+.permissionDialog {
+  width: min(440px, 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  padding: 16px;
+  pointer-events: auto;
+}
+
+.permissionIcon {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius);
+  background: var(--primary-soft);
+  color: var(--primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.permissionDialog h2 {
+  font-size: 16px;
+  margin: 0 0 6px;
+}
+
+.permissionDialog p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.permissionActions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 2px;
+}
+
 .viewStack {
   display: grid;
   gap: 18px;
@@ -930,6 +986,18 @@ a {
 
   .nav {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .permissionOverlay {
+    padding: 12px;
+  }
+
+  .permissionDialog {
+    grid-template-columns: 1fr;
+  }
+
+  .permissionActions {
+    flex-direction: column-reverse;
   }
 
   table,

@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import {
   Activity,
   AlertTriangle,
+  BellRing,
   Bot,
   CalendarClock,
   CheckCircle2,
@@ -396,6 +397,7 @@ function App() {
   const [currentUser, setCurrentUser] = React.useState<User | null>(null);
   const [users, setUsers] = React.useState<User[]>([]);
   const [message, setMessage] = React.useState("");
+  const [notificationPromptVisible, setNotificationPromptVisible] = React.useState(false);
 
   const navigateTo = React.useCallback((view: AppView, nextWorkspaceTab: WorkspaceTab = workspaceTab, replace = false) => {
     const normalizedWorkspaceTab = view === "workspace" ? nextWorkspaceTab : workspaceTab;
@@ -460,6 +462,37 @@ function App() {
     setUsers(nextUsers);
   }, [api, token]);
 
+  async function requestPopupPermission() {
+    if (!window.isSecureContext) {
+      setNotificationPromptVisible(false);
+      setMessage("Браузерное разрешение на всплывающие уведомления доступно только по HTTPS или localhost.");
+      sessionStorage.setItem("popup_permission_prompt_closed", "true");
+      return;
+    }
+
+    if (!("Notification" in window)) {
+      setNotificationPromptVisible(false);
+      setMessage("Браузер не поддерживает всплывающие уведомления.");
+      sessionStorage.setItem("popup_permission_prompt_closed", "true");
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+    setNotificationPromptVisible(false);
+    sessionStorage.setItem("popup_permission_prompt_closed", "true");
+
+    if (permission === "granted") {
+      setMessage("Разрешение на всплывающие уведомления включено.");
+    } else if (permission === "denied") {
+      setMessage("Всплывающие уведомления заблокированы в настройках браузера.");
+    }
+  }
+
+  function closePopupPermissionPrompt() {
+    sessionStorage.setItem("popup_permission_prompt_closed", "true");
+    setNotificationPromptVisible(false);
+  }
+
   React.useEffect(() => {
     loadAll().catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Не удалось загрузить данные"));
   }, [loadAll]);
@@ -478,6 +511,18 @@ function App() {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem("theme_mode", theme);
   }, [theme]);
+
+  React.useEffect(() => {
+    if (!currentUser) {
+      setNotificationPromptVisible(false);
+      return;
+    }
+    const promptWasClosed = sessionStorage.getItem("popup_permission_prompt_closed") === "true";
+    const canAskBrowserPermission = "Notification" in window && Notification.permission === "default";
+    if (!promptWasClosed && (!window.isSecureContext || canAskBrowserPermission)) {
+      setNotificationPromptVisible(true);
+    }
+  }, [currentUser]);
 
   React.useEffect(() => {
     if (!currentUser) return;
@@ -587,6 +632,21 @@ function App() {
         {isAdmin && activeView === "sites" && <SitesView api={api} sites={sites} onChanged={loadAll} />}
         {activeView === "settings" && <SettingsView api={api} currentUser={currentUser} users={users} onChanged={loadAll} />}
       </main>
+      {notificationPromptVisible ? (
+        <div className="permissionOverlay" role="dialog" aria-modal="true" aria-labelledby="popup-permission-title">
+          <div className="permissionDialog">
+            <div className="permissionIcon"><BellRing size={22} /></div>
+            <div>
+              <h2 id="popup-permission-title">Разрешить всплывающие уведомления?</h2>
+              <p>Сервис сможет показывать уведомления о генерации, публикациях и ошибках, даже если вкладка открыта в фоне.</p>
+            </div>
+            <div className="permissionActions">
+              <button className="button secondary" type="button" onClick={closePopupPermissionPrompt}>Не сейчас</button>
+              <button className="button primary" type="button" onClick={requestPopupPermission}>Разрешить</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
