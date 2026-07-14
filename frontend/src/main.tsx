@@ -389,13 +389,17 @@ function App() {
   const loadAll = React.useCallback(async () => {
     if (!token) return;
     const nextUser = await api<User>("/auth/me");
-    const [nextDashboard, nextTasks, nextContent, nextSites, nextProviders] = await Promise.all([
-      api<Dashboard>("/dashboard"),
-      api<Task[]>("/tasks"),
-      api<ContentItem[]>("/content"),
+    const [nextSites, nextProviders] = await Promise.all([
       api<Site[]>("/sites"),
       api<AiProvider[]>("/ai-providers")
     ]);
+    const [nextDashboard, nextTasks, nextContent] = nextUser.is_admin
+      ? await Promise.all([
+        api<Dashboard>("/dashboard"),
+        api<Task[]>("/tasks"),
+        api<ContentItem[]>("/content")
+      ])
+      : [null, [], []] as [Dashboard | null, Task[], ContentItem[]];
     const nextUsers = nextUser.is_admin ? await api<User[]>("/users") : [];
     setCurrentUser(nextUser);
     if (!nextUser.is_admin) {
@@ -649,6 +653,13 @@ function ProjectWorkspaceView({ api, sites, providers, isAdmin, onChanged }: Vie
   React.useEffect(() => {
     if (selectedSiteId) {
       localStorage.setItem("workspace_site_id", selectedSiteId);
+      setOverview(null);
+      setSiteTasks([]);
+      setSiteContent([]);
+      setSections([]);
+      setPromptTemplates([]);
+      setLogs([]);
+      setWorkspaceError("");
       loadProject().catch((error: unknown) => setWorkspaceError(error instanceof Error ? error.message : "Не удалось загрузить проект"));
     }
   }, [loadProject, selectedSiteId]);
@@ -690,19 +701,19 @@ function ProjectWorkspaceView({ api, sites, providers, isAdmin, onChanged }: Vie
       </DataPanel>
 
       {selectedSite && activeTab === "overview" && overview ? (
-        <ProjectOverviewPanel overview={overview} content={siteContent} sections={sections} logs={logs} />
+        <ProjectOverviewPanel key={selectedSite.id} overview={overview} content={siteContent} sections={sections} logs={logs} />
       ) : null}
       {selectedSite && activeTab === "topics" ? (
-        <ProjectTopicsPanel api={api} site={selectedSite} providers={providers} sections={sections} promptTemplates={promptTemplates} tasks={siteTasks} onChanged={refreshProject} />
+        <ProjectTopicsPanel key={selectedSite.id} api={api} site={selectedSite} providers={providers} sections={sections} promptTemplates={promptTemplates} tasks={siteTasks} onChanged={refreshProject} />
       ) : null}
       {selectedSite && activeTab === "prompts" ? (
-        <ProjectPromptsPanel api={api} site={selectedSite} promptTemplates={promptTemplates} isAdmin={isAdmin} onChanged={refreshProject} />
+        <ProjectPromptsPanel key={selectedSite.id} api={api} site={selectedSite} promptTemplates={promptTemplates} isAdmin={isAdmin} onChanged={refreshProject} />
       ) : null}
       {selectedSite && activeTab === "content" ? (
-        <ProjectContentPanel api={api} content={siteContent} sections={sections} onChanged={refreshProject} />
+        <ProjectContentPanel key={selectedSite.id} api={api} content={siteContent} sections={sections} onChanged={refreshProject} />
       ) : null}
       {selectedSite && activeTab === "publication" ? (
-        <ProjectPublicationPanel api={api} site={selectedSite} content={siteContent} sections={sections} onChanged={refreshProject} />
+        <ProjectPublicationPanel key={selectedSite.id} api={api} site={selectedSite} content={siteContent} sections={sections} onChanged={refreshProject} />
       ) : null}
       {selectedSite && activeTab === "menu" ? (
         <ProjectMenuPanel api={api} site={selectedSite} sections={sections} onChanged={refreshProject} />

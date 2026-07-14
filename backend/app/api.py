@@ -164,7 +164,7 @@ def update_user(user_id: str, payload: UserUpdate, current_admin: AdminUser, db:
 
 
 @router.get("/dashboard")
-def dashboard(_: AuthUser, db: Session = Depends(get_db)) -> dict:
+def dashboard(_: AdminUser, db: Session = Depends(get_db)) -> dict:
     return get_dashboard(db)
 
 
@@ -174,7 +174,7 @@ def list_ai_providers(_: AuthUser, db: Session = Depends(get_db)) -> Any:
 
 
 @router.post("/ai-providers", response_model=AiProviderResponse)
-def create_ai_provider(payload: AiProviderCreate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+def create_ai_provider(payload: AiProviderCreate, _: AdminUser, db: Session = Depends(get_db)) -> Any:
     provider = models.AiProvider(**payload.model_dump())
     db.add(provider)
     db.commit()
@@ -199,7 +199,7 @@ def list_sites(_: AuthUser, db: Session = Depends(get_db)) -> Any:
 
 
 @router.post("/sites")
-def create_site(payload: SiteCreate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+def create_site(payload: SiteCreate, _: AdminUser, db: Session = Depends(get_db)) -> Any:
     site = models.Site(**payload.model_dump())
     db.add(site)
     db.commit()
@@ -401,12 +401,12 @@ def create_site_campaign(site_id: str, payload: SitePublicationCampaignCreate, _
 
 
 @router.get("/tasks")
-def list_tasks(_: AuthUser, db: Session = Depends(get_db)) -> Any:
+def list_tasks(_: AdminUser, db: Session = Depends(get_db)) -> Any:
     return db.scalars(select(models.GenerationTask).order_by(models.GenerationTask.created_at.desc())).all()
 
 
 @router.post("/tasks")
-def create_task(payload: GenerationTaskCreate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+def create_task(payload: GenerationTaskCreate, _: AdminUser, db: Session = Depends(get_db)) -> Any:
     _validate_task_topics(payload)
     return create_generation_task(db, payload)
 
@@ -428,7 +428,7 @@ def generate_task(task_id: str, _: AuthUser, db: Session = Depends(get_db)) -> A
 
 
 @router.get("/content")
-def list_content(_: AuthUser, db: Session = Depends(get_db)) -> Any:
+def list_content(_: AdminUser, db: Session = Depends(get_db)) -> Any:
     return db.scalars(select(models.ContentItem).order_by(models.ContentItem.created_at.desc()).limit(200)).all()
 
 
@@ -491,22 +491,22 @@ def reject_content(content_id: str, _: AuthUser, db: Session = Depends(get_db)) 
 
 
 @router.post("/publication-campaigns")
-def create_campaign(payload: PublicationCampaignCreate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+def create_campaign(payload: PublicationCampaignCreate, _: AdminUser, db: Session = Depends(get_db)) -> Any:
     return schedule_campaign(db, payload)
 
 
 @router.get("/publication-campaigns")
-def list_campaigns(_: AuthUser, db: Session = Depends(get_db)) -> Any:
+def list_campaigns(_: AdminUser, db: Session = Depends(get_db)) -> Any:
     return db.scalars(select(models.PublicationCampaign).order_by(models.PublicationCampaign.created_at.desc())).all()
 
 
 @router.get("/publication-logs")
-def list_logs(_: AuthUser, db: Session = Depends(get_db)) -> Any:
+def list_logs(_: AdminUser, db: Session = Depends(get_db)) -> Any:
     return db.scalars(select(models.PublicationLog).order_by(models.PublicationLog.created_at.desc()).limit(200)).all()
 
 
 @router.post("/publication/run-due")
-def run_due_publication(_: AuthUser) -> dict:
+def run_due_publication(_: AdminUser) -> dict:
     from app.worker import publish_due_items
 
     result = publish_due_items.delay()
