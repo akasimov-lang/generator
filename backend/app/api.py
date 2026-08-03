@@ -11,17 +11,25 @@ from app.db import get_db
 from app.schemas import (
     AiProviderCreate,
     AiProviderResponse,
+    ContentItemResponse,
     ContentUpdate,
     GenerationTaskCreate,
+    GenerationTaskResponse,
     LoginRequest,
     PasswordChange,
+    PublicationCampaignResponse,
+    PublicationLogResponse,
     PromptTemplateCreate,
     PromptTemplateResponse,
     PromptTemplateUpdate,
     PublicationCampaignCreate,
     SectionCreate,
+    SectionResponse,
     SiteCreate,
+    SiteOverviewResponse,
     SitePublicationCampaignCreate,
+    SiteResponse,
+    TaskDetailsResponse,
     TokenResponse,
     UserCreate,
     UserResponse,
@@ -207,12 +215,12 @@ def validate_ai_provider(provider_id: str, _: AdminUser, db: Session = Depends(g
     return provider
 
 
-@router.get("/sites")
+@router.get("/sites", response_model=list[SiteResponse])
 def list_sites(_: AuthUser, db: Session = Depends(get_db)) -> Any:
     return db.scalars(select(models.Site).order_by(models.Site.created_at.desc())).all()
 
 
-@router.post("/sites")
+@router.post("/sites", response_model=SiteResponse)
 def create_site(payload: SiteCreate, _: AdminUser, db: Session = Depends(get_db)) -> Any:
     site = models.Site(**payload.model_dump())
     db.add(site)
@@ -221,7 +229,7 @@ def create_site(payload: SiteCreate, _: AdminUser, db: Session = Depends(get_db)
     return site
 
 
-@router.get("/sites/{site_id}/overview")
+@router.get("/sites/{site_id}/overview", response_model=SiteOverviewResponse)
 def get_site_overview(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> dict:
     site = _get_site_or_404(db, site_id)
     status_rows = db.execute(
@@ -274,13 +282,13 @@ def get_site_overview(site_id: str, _: AuthUser, db: Session = Depends(get_db)) 
     }
 
 
-@router.get("/sites/{site_id}/sections")
+@router.get("/sites/{site_id}/sections", response_model=list[SectionResponse])
 def list_sections(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     _get_site_or_404(db, site_id)
     return db.scalars(select(models.Section).where(models.Section.site_id == site_id).order_by(models.Section.name.asc())).all()
 
 
-@router.post("/sites/{site_id}/sections")
+@router.post("/sites/{site_id}/sections", response_model=SectionResponse)
 def create_section(site_id: str, payload: SectionCreate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     _get_site_or_404(db, site_id)
     section = models.Section(site_id=site_id, **payload.model_dump())
@@ -392,13 +400,13 @@ def delete_prompt_template(prompt_id: str, _: AdminUser, db: Session = Depends(g
     return {"status": "ok"}
 
 
-@router.get("/sites/{site_id}/tasks")
+@router.get("/sites/{site_id}/tasks", response_model=list[GenerationTaskResponse])
 def list_site_tasks(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     _get_site_or_404(db, site_id)
     return db.scalars(select(models.GenerationTask).where(models.GenerationTask.site_id == site_id).order_by(models.GenerationTask.created_at.desc())).all()
 
 
-@router.post("/sites/{site_id}/tasks")
+@router.post("/sites/{site_id}/tasks", response_model=GenerationTaskResponse)
 def create_site_task(site_id: str, payload: GenerationTaskCreate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     _get_site_or_404(db, site_id)
     _validate_task_topics(payload)
@@ -409,13 +417,13 @@ def create_site_task(site_id: str, payload: GenerationTaskCreate, _: AuthUser, d
     return create_generation_task(db, GenerationTaskCreate(**data))
 
 
-@router.get("/sites/{site_id}/content")
+@router.get("/sites/{site_id}/content", response_model=list[ContentItemResponse])
 def list_site_content(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     _get_site_or_404(db, site_id)
     return db.scalars(select(models.ContentItem).where(models.ContentItem.site_id == site_id).order_by(models.ContentItem.updated_at.desc()).limit(300)).all()
 
 
-@router.get("/sites/{site_id}/publication-logs")
+@router.get("/sites/{site_id}/publication-logs", response_model=list[PublicationLogResponse])
 def list_site_logs(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     _get_site_or_404(db, site_id)
     content_ids = select(models.ContentItem.id).where(models.ContentItem.site_id == site_id)
@@ -427,7 +435,7 @@ def list_site_logs(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> 
     ).all()
 
 
-@router.post("/sites/{site_id}/publication-campaigns")
+@router.post("/sites/{site_id}/publication-campaigns", response_model=PublicationCampaignResponse)
 def create_site_campaign(site_id: str, payload: SitePublicationCampaignCreate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     _get_site_or_404(db, site_id)
     if not payload.content_item_ids:
@@ -452,18 +460,18 @@ def create_site_campaign(site_id: str, payload: SitePublicationCampaignCreate, _
     return schedule_campaign(db, campaign_payload)
 
 
-@router.get("/tasks")
+@router.get("/tasks", response_model=list[GenerationTaskResponse])
 def list_tasks(_: AdminUser, db: Session = Depends(get_db)) -> Any:
     return db.scalars(select(models.GenerationTask).order_by(models.GenerationTask.created_at.desc())).all()
 
 
-@router.post("/tasks")
+@router.post("/tasks", response_model=GenerationTaskResponse)
 def create_task(payload: GenerationTaskCreate, _: AdminUser, db: Session = Depends(get_db)) -> Any:
     _validate_task_topics(payload)
     return create_generation_task(db, payload)
 
 
-@router.get("/tasks/{task_id}")
+@router.get("/tasks/{task_id}", response_model=TaskDetailsResponse)
 def get_task(task_id: str, _: AuthUser, db: Session = Depends(get_db)) -> dict:
     task = db.get(models.GenerationTask, task_id)
     if not task:
@@ -471,7 +479,7 @@ def get_task(task_id: str, _: AuthUser, db: Session = Depends(get_db)) -> dict:
     return {"task": task, "items": task.items}
 
 
-@router.post("/tasks/{task_id}/generate")
+@router.post("/tasks/{task_id}/generate", response_model=GenerationTaskResponse)
 def generate_task(task_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     task = db.get(models.GenerationTask, task_id)
     if not task:
@@ -479,12 +487,12 @@ def generate_task(task_id: str, _: AuthUser, db: Session = Depends(get_db)) -> A
     return generate_task_items(db, task)
 
 
-@router.get("/content")
+@router.get("/content", response_model=list[ContentItemResponse])
 def list_content(_: AdminUser, db: Session = Depends(get_db)) -> Any:
     return db.scalars(select(models.ContentItem).order_by(models.ContentItem.created_at.desc()).limit(200)).all()
 
 
-@router.get("/content/{content_id}")
+@router.get("/content/{content_id}", response_model=ContentItemResponse)
 def get_content(content_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     item = db.get(models.ContentItem, content_id)
     if not item:
@@ -492,7 +500,7 @@ def get_content(content_id: str, _: AuthUser, db: Session = Depends(get_db)) -> 
     return item
 
 
-@router.patch("/content/{content_id}")
+@router.patch("/content/{content_id}", response_model=ContentItemResponse)
 def update_content(content_id: str, payload: ContentUpdate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     item = db.get(models.ContentItem, content_id)
     if not item:
@@ -518,7 +526,7 @@ def update_content(content_id: str, payload: ContentUpdate, _: AuthUser, db: Ses
     return item
 
 
-@router.post("/content/{content_id}/approve")
+@router.post("/content/{content_id}/approve", response_model=ContentItemResponse)
 def approve_content(content_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     item = db.get(models.ContentItem, content_id)
     if not item:
@@ -531,7 +539,7 @@ def approve_content(content_id: str, _: AuthUser, db: Session = Depends(get_db))
     return item
 
 
-@router.post("/content/{content_id}/reject")
+@router.post("/content/{content_id}/reject", response_model=ContentItemResponse)
 def reject_content(content_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     item = db.get(models.ContentItem, content_id)
     if not item:
@@ -542,17 +550,17 @@ def reject_content(content_id: str, _: AuthUser, db: Session = Depends(get_db)) 
     return item
 
 
-@router.post("/publication-campaigns")
+@router.post("/publication-campaigns", response_model=PublicationCampaignResponse)
 def create_campaign(payload: PublicationCampaignCreate, _: AdminUser, db: Session = Depends(get_db)) -> Any:
     return schedule_campaign(db, payload)
 
 
-@router.get("/publication-campaigns")
+@router.get("/publication-campaigns", response_model=list[PublicationCampaignResponse])
 def list_campaigns(_: AdminUser, db: Session = Depends(get_db)) -> Any:
     return db.scalars(select(models.PublicationCampaign).order_by(models.PublicationCampaign.created_at.desc())).all()
 
 
-@router.get("/publication-logs")
+@router.get("/publication-logs", response_model=list[PublicationLogResponse])
 def list_logs(_: AdminUser, db: Session = Depends(get_db)) -> Any:
     return db.scalars(select(models.PublicationLog).order_by(models.PublicationLog.created_at.desc()).limit(200)).all()
 

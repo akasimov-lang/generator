@@ -81,10 +81,40 @@ class SiteCreate(BaseModel):
     showcase_payload: dict[str, Any] | None = None
 
 
+class SiteResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    base_url: str
+    publication_endpoint: str
+    payload_mode: str
+    editor_version: str
+    default_menu: dict[str, Any]
+    default_banners: list[str]
+    showcase_payload: dict[str, Any] | None
+    default_prompt_template_id: str | None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
 class SectionCreate(BaseModel):
     external_id: str
     name: str
     path: str
+
+
+class SectionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    site_id: str
+    external_id: str
+    name: str
+    path: str
+    created_at: datetime
+    updated_at: datetime
 
 
 class PromptTemplateCreate(BaseModel):
@@ -130,6 +160,78 @@ class GenerationTaskCreate(BaseModel):
     include_faq: bool = True
 
 
+class GenerationTaskResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    title: str
+    site_id: str | None
+    section_id: str | None
+    ai_provider_id: str | None
+    geo: str
+    language: str
+    status: str
+    payload_mode: str
+    topics_count: int
+    target_words: int | None
+    prompt_template_name: str | None
+    prompt_template: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ContentItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    task_id: str
+    site_id: str | None
+    section_id: str | None
+    topic: str
+    slug: str
+    generated_json: dict[str, Any]
+    status: str
+    word_count: int
+    generation_prompt_name: str | None
+    generated_at: datetime | None
+    idempotency_key: str
+    scheduled_at: datetime | None
+    published_at: datetime | None
+    published_url: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class SiteOverviewSiteResponse(BaseModel):
+    id: str
+    name: str
+    base_url: str
+    payload_mode: str
+    publication_endpoint: str
+
+
+class SiteOverviewStatsResponse(BaseModel):
+    tasks: int
+    menu_items: int
+    generated: int
+    approved: int
+    scheduled: int
+    published: int
+    failed: int
+    next_publication_at: datetime | None
+
+
+class SiteOverviewResponse(BaseModel):
+    site: SiteOverviewSiteResponse
+    stats: SiteOverviewStatsResponse
+    recent_content: list[ContentItemResponse]
+
+
+class TaskDetailsResponse(BaseModel):
+    task: GenerationTaskResponse
+    items: list[ContentItemResponse]
+
+
 class ContentUpdate(BaseModel):
     generated_json: dict[str, Any] | None = None
     section_id: str | None = None
@@ -144,8 +246,36 @@ class PublicationCampaignCreate(BaseModel):
     items_per_run: int = 1
 
 
+class PublicationCampaignResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    site_id: str
+    status: str
+    interval_minutes: int
+    items_per_run: int
+    start_at: datetime
+    created_at: datetime
+    updated_at: datetime
+
+
 class SitePublicationCampaignCreate(BaseModel):
     name: str
     content_item_ids: list[str]
     start_at: datetime
     items_per_day: int = Field(default=1, ge=1, le=24)
+
+
+class PublicationLogResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    content_item_id: str | None
+    endpoint_url: str
+    request_payload: dict[str, Any] | None
+    response_status: int | None
+    response_body: dict[str, Any] | None
+    error_message: str | None
+    created_at: datetime
+    updated_at: datetime
