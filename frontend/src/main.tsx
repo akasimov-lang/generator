@@ -1616,7 +1616,7 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
           </label>
           <label className="checkboxRow">
             <input type="checkbox" checked={includeToc} onChange={(event) => setIncludeToc(event.target.checked)} />
-            Создавать TOC
+            Добавить содержание
           </label>
           <label className="checkboxRow">
             <input type="checkbox" checked={includeFaq} onChange={(event) => setIncludeFaq(event.target.checked)} />
