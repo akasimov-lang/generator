@@ -365,15 +365,15 @@ const COUNTRY_CODES = [
 ] as const;
 
 const LANGUAGE_OPTIONS = [
-  { code: "de", name: "Deutsch" },
-  { code: "en", name: "English" },
-  { code: "ru", name: "Русский" },
-  { code: "es", name: "Español" },
-  { code: "fr", name: "Français" },
-  { code: "it", name: "Italiano" },
-  { code: "pl", name: "Polski" },
-  { code: "pt", name: "Português" },
-  { code: "nl", name: "Nederlands" }
+  { code: "de", name: "Deutsch", flag: "🇩🇪" },
+  { code: "en", name: "English", flag: "🇬🇧" },
+  { code: "ru", name: "Русский", flag: "🇷🇺" },
+  { code: "es", name: "Español", flag: "🇪🇸" },
+  { code: "fr", name: "Français", flag: "🇫🇷" },
+  { code: "it", name: "Italiano", flag: "🇮🇹" },
+  { code: "pl", name: "Polski", flag: "🇵🇱" },
+  { code: "pt", name: "Português", flag: "🇵🇹" },
+  { code: "nl", name: "Nederlands", flag: "🇳🇱" }
 ];
 
 const regionNames = new Intl.DisplayNames(["ru"], { type: "region" });
@@ -709,7 +709,7 @@ function DashboardView({ dashboard, tasks, content }: { dashboard: Dashboard; ta
         <DataPanel title="Активные задачи">
           <ResponsiveTable
             columns={["Задача", "Гео", "Язык", "Тем", "Статус"]}
-            rows={tasks.slice(0, 8).map((task) => [task.title, task.geo, task.language, task.topics_count, <StatusBadge status={task.status} />])}
+            rows={tasks.slice(0, 8).map((task) => [task.title, countryLabel(task.geo), languageLabel(task.language), task.topics_count, <StatusBadge status={task.status} />])}
           />
         </DataPanel>
         <DataPanel title="Очередь публикаций">
@@ -1009,7 +1009,7 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
           <label>
             Язык
             <select value={language} onChange={(event) => setLanguage(event.target.value)} required>
-              {LANGUAGE_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.name} · {option.code}</option>)}
+              {LANGUAGE_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.flag} {option.name} · {option.code.toUpperCase()}</option>)}
             </select>
           </label>
           <label>
@@ -1055,7 +1055,7 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
             task.title,
             task.topics_count,
             countryLabel(task.geo),
-            task.language,
+            languageLabel(task.language),
             task.target_words || "-",
             <PromptBadge name={task.prompt_template_name} />,
             <StatusBadge status={task.status} />,
@@ -1072,7 +1072,7 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
           <div className="taskDetailGrid">
             <div><span>Статус</span><StatusBadge status={taskDetails.task.status} /></div>
             <div><span>Страна</span><strong>{countryLabel(taskDetails.task.geo)}</strong></div>
-            <div><span>Язык</span><strong>{taskDetails.task.language}</strong></div>
+            <div><span>Язык</span><strong>{languageLabel(taskDetails.task.language)}</strong></div>
             <div><span>Слов</span><strong>{taskDetails.task.target_words || "-"}</strong></div>
             <div><span>Тем</span><strong>{taskDetails.task.topics_count}</strong></div>
             <div><span>Промпт</span><PromptBadge name={taskDetails.task.prompt_template_name} /></div>
@@ -1532,7 +1532,7 @@ function ProjectMenuPanel({ api, site, sections, onChanged }: ViewProps & { site
 function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { sites: Site[]; providers: AiProvider[]; tasks: Task[] }) {
   const [title, setTitle] = React.useState("");
   const [geo, setGeo] = React.useState("DE");
-  const [language, setLanguage] = React.useState("EN");
+  const [language, setLanguage] = React.useState("en");
   const [topics, setTopics] = React.useState("");
   const [siteId, setSiteId] = React.useState("");
   const [providerId, setProviderId] = React.useState("");
@@ -1582,11 +1582,15 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
           </label>
           <label>
             Гео
-            <input value={geo} onChange={(event) => setGeo(event.target.value)} required />
+            <select value={geo} onChange={(event) => setGeo(event.target.value)} required>
+              {COUNTRIES.map((country) => <option key={country.code} value={country.code}>{country.flag} {country.code} · {country.name}</option>)}
+            </select>
           </label>
           <label>
             Язык
-            <input value={language} onChange={(event) => setLanguage(event.target.value)} required />
+            <select value={language} onChange={(event) => setLanguage(event.target.value)} required>
+              {LANGUAGE_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.flag} {option.name} · {option.code.toUpperCase()}</option>)}
+            </select>
           </label>
           <label>
             Сайт
@@ -1632,31 +1636,58 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
         </form>
       </DataPanel>
       <DataPanel title="Все задачи">
-        <ResponsiveTable columns={["Задача", "Гео", "Язык", "Формат", "Тем", "Статус"]} rows={tasks.map((task) => [task.title, task.geo, task.language, humanPayloadMode(task.payload_mode), task.topics_count, <StatusBadge status={task.status} />])} />
+        <ResponsiveTable columns={["Задача", "Гео", "Язык", "Формат", "Тем", "Статус"]} rows={tasks.map((task) => [task.title, countryLabel(task.geo), languageLabel(task.language), humanPayloadMode(task.payload_mode), task.topics_count, <StatusBadge status={task.status} />])} />
       </DataPanel>
     </section>
   );
 }
 
 function ContentView({ api, content, onChanged }: ViewProps & { content: ContentItem[] }) {
+  const [selectedPreview, setSelectedPreview] = React.useState<ContentItem | null>(null);
+
   async function approve(id: string) {
     await api(`/content/${id}/approve`, { method: "POST" });
+    setSelectedPreview((current) => current && current.id === id ? { ...current, status: "approved" } : current);
     onChanged();
   }
 
   return (
-    <DataPanel title="Контент">
-      <ResponsiveTable
-        columns={["Тема", "Slug", "Слова", "Статус", "Действие"]}
-        rows={content.map((item) => [
-          <TopicMetaCell item={item} />,
-          item.slug,
-          item.word_count,
-          <StatusBadge status={item.status} />,
-          <button className="button compact" onClick={() => approve(item.id)} disabled={item.status === "approved" || item.status === "scheduled" || item.status === "published"}>Approve</button>
-        ])}
-      />
-    </DataPanel>
+    <section className="viewStack">
+      <DataPanel title="Контент">
+        <ResponsiveTable
+          columns={["Тема", "Slug", "Слова", "Статус", "Действие"]}
+          rows={content.map((item) => [
+            <TopicMetaCell item={item} />,
+            item.slug,
+            item.word_count,
+            <StatusBadge status={item.status} />,
+            <div className="userActions">
+              <button className="button compact" type="button" onClick={() => setSelectedPreview(item)}><FileText size={15} /> Просмотр</button>
+              <button className="button compact" type="button" onClick={() => approve(item.id)} disabled={item.status === "approved" || item.status === "scheduled" || item.status === "published"}>Approve</button>
+            </div>
+          ])}
+        />
+      </DataPanel>
+
+      {selectedPreview ? (
+        <DataPanel title={`Просмотр текста: ${selectedPreview.topic}`}>
+          <div className="contentPreviewHeader">
+            <div>
+              <span>{selectedPreview.slug}</span>
+              <strong>{contentItemTitle(selectedPreview)}</strong>
+              <PromptBadge name={selectedPreview.generation_prompt_name} />
+              <span>Дата генерации: {selectedPreview.generated_at ? formatDate(selectedPreview.generated_at) : "-"}</span>
+            </div>
+            <div className="userActions">
+              <StatusBadge status={selectedPreview.status} />
+              <button className="button compact" type="button" onClick={() => setSelectedPreview(null)}>Закрыть</button>
+              <button className="button compact" type="button" onClick={() => approve(selectedPreview.id)} disabled={selectedPreview.status === "approved" || selectedPreview.status === "scheduled" || selectedPreview.status === "published"}>Approve</button>
+            </div>
+          </div>
+          <pre className="contentPreviewText">{contentItemPreviewText(selectedPreview)}</pre>
+        </DataPanel>
+      ) : null}
+    </section>
   );
 }
 
@@ -2254,6 +2285,11 @@ function countryFlag(code: string) {
 function countryLabel(code: string) {
   const country = COUNTRIES.find((item) => item.code === code.toUpperCase());
   return country ? `${country.flag} ${country.code}` : code;
+}
+
+function languageLabel(code: string) {
+  const language = LANGUAGE_OPTIONS.find((item) => item.code === code.toLowerCase());
+  return language ? `${language.flag} ${language.code.toUpperCase()}` : code;
 }
 
 function contentItemTitle(item: ContentItem) {
