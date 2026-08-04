@@ -23,6 +23,7 @@
   --input-bg: #ffffff;
   --notice-bg: #fffbeb;
   --danger-border: #fda29b;
+  --button-border: #9fb0c1;
   --focus-ring: rgba(22, 101, 52, 0.12);
   --radius: 8px;
   --shadow: 0 10px 30px rgba(22, 32, 42, 0.08);
@@ -55,6 +56,7 @@
   --input-bg: #0f1720;
   --notice-bg: #2b2413;
   --danger-border: #7f1d1d;
+  --button-border: #4e6276;
   --focus-ring: rgba(74, 222, 128, 0.16);
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.32);
 }
@@ -228,7 +230,7 @@ h2 {
 
 .button,
 .iconButton {
-  border: 1px solid var(--border);
+  border: 1px solid var(--button-border);
   border-radius: var(--radius);
   display: inline-flex;
   align-items: center;
@@ -258,6 +260,18 @@ h2 {
 .button.danger {
   border-color: var(--danger-border);
   color: var(--danger);
+}
+
+.button.approve {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-weight: 800;
+}
+
+.button.approve:hover {
+  border-color: var(--primary-strong);
+  color: var(--primary-strong);
 }
 
 .button.compact {
@@ -751,6 +765,35 @@ td {
   font-size: 14px;
 }
 
+.contentRow td {
+  border-bottom-color: var(--button-border);
+}
+
+.contentRow-generated td {
+  background: var(--surface-2);
+}
+
+.contentRow-generated .topicMetaCell strong::before {
+  color: var(--muted);
+  content: "Сгенерировано · ";
+  font-weight: 800;
+}
+
+.contentRow-published td {
+  background: var(--primary-soft);
+}
+
+.contentRow-published .topicMetaCell strong,
+.contentRow-published .topicMetaCell span {
+  color: var(--primary);
+}
+
+.contentRow-published .topicMetaCell strong::before {
+  color: var(--primary);
+  content: "Опубликовано · ";
+  font-weight: 900;
+}
+
 .expandableTable .clickableRow {
   cursor: pointer;
 }
@@ -869,6 +912,28 @@ td {
 
 .modalContentText {
   max-height: calc(100vh - 240px);
+}
+
+.bulkToolbar {
+  align-items: center;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 10px;
+}
+
+.bulkSelectAll {
+  min-height: 32px;
+  width: auto;
+}
+
+.rowCheckbox {
+  height: 18px;
+  width: 18px;
 }
 
 .status {

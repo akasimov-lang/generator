@@ -249,7 +249,9 @@ def make_block_id() -> str:
 
 
 def normalize_slug(topic: str) -> str:
-    slug = slugify(topic) or uuid.uuid4().hex[:8]
+    title_words = re.findall(r"[\w]+", topic, flags=re.UNICODE)
+    short_title = " ".join(title_words[:5]) if title_words else topic
+    slug = slugify(short_title) or uuid.uuid4().hex[:8]
     return f"/{slug}/"
 
 
@@ -812,6 +814,7 @@ async def build_ai_content(
         shortcode=shortcode,
         include_toc=include_toc,
         include_faq=include_faq,
+        competitor_brief=competitor_brief,
     )
 
 
@@ -855,6 +858,7 @@ async def build_gemini_content(
         shortcode=shortcode,
         include_toc=include_toc,
         include_faq=include_faq,
+        competitor_brief=competitor_brief,
     )
     try:
         response = await call_gemini(provider, prompt)

@@ -1,4 +1,7 @@
-from app.services import PROMPT_FORMAT_CONTRACT_MARKER, build_gemini_prompt
+import asyncio
+
+from app import models
+from app.services import PROMPT_FORMAT_CONTRACT_MARKER, build_gemini_content, build_gemini_prompt
 
 
 def test_prompt_placeholders_are_rendered() -> None:
@@ -84,3 +87,62 @@ def test_competitor_research_placeholders_are_rendered() -> None:
     assert "https://example.com/casinos" in prompt
     assert "KYC und Identitätsprüfung" in prompt
     assert "{{SEARCH_QUERIES}}" not in prompt
+
+
+def test_gemini_content_generation_passes_competitor_brief_to_prompt(monkeypatch) -> None:
+    captured = {}
+
+    async def fake_call_gemini(provider, prompt):
+        captured["prompt"] = prompt
+        return {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "text": (
+                                    "Title: Beste Online Casinos\n"
+                                    "Meta Description: Test description.\n"
+                                    "H1: Beste Online Casinos\n"
+                                    "Intro:\n"
+                                    "Test content about safe providers."
+                                )
+                            }
+                        ]
+                    }
+                }
+            ],
+            "usageMetadata": {"promptTokenCount": 1, "candidatesTokenCount": 1, "totalTokenCount": 2},
+        }
+
+    monkeypatch.setattr("app.services.call_gemini", fake_call_gemini)
+    provider = models.AiProvider(
+        name="Gemini",
+        provider_type="gemini",
+        endpoint_url="https://example.com/{model}",
+        model="gemini-test",
+        api_key="key",
+    )
+
+    asyncio.run(
+        build_gemini_content(
+            provider=provider,
+            topic="Beste Online Casinos",
+            geo="DE",
+            language="de",
+            target_words=1600,
+            site=None,
+            payload_mode="simple_page",
+            prompt_template="Research:\n{{COMPETITOR_SUMMARY}}\n{{CONTENT_GAPS}}",
+            shortcode=None,
+            include_toc=True,
+            include_faq=True,
+            competitor_brief={
+                "competitor_summary": [{"url": "https://example.com", "title": "Example Casino Page"}],
+                "content_gaps": ["Mehr Details zu KYC und Limits"],
+            },
+        )
+    )
+
+    assert "Example Casino Page" in captured["prompt"]
+    assert "Mehr Details zu KYC und Limits" in captured["prompt"]

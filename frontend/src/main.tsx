@@ -1683,7 +1683,7 @@ function ProjectContentPanel({ api, content, sections, onChanged }: ViewProps & 
             item.published_url ? <a href={item.published_url} target="_blank" rel="noreferrer"><ExternalLink size={15} /> URL</a> : item.published_at ? formatDate(item.published_at) : "-",
             <div className="userActions">
               <button className="button compact" type="button" onClick={() => openEditor(item)}><Edit3 size={15} /> Открыть</button>
-              <button className="button compact" type="button" onClick={() => approve(item)} disabled={["approved", "scheduled", "published"].includes(item.status)}>Approve</button>
+              <button className="button compact approve" type="button" onClick={() => approve(item)} disabled={["approved", "scheduled", "published"].includes(item.status)}>Approve</button>
             </div>
           ])}
         />
@@ -2265,15 +2265,85 @@ function competitorStatusLabel(item: ContentItem, research?: CompetitorResearch)
   return "Нет";
 }
 
+function contentRowClassName(item: ContentItem) {
+  if (item.status === "published") return "contentRow contentRow-published";
+  if (item.status === "generated") return "contentRow contentRow-generated";
+  return "";
+}
+
 function ContentView({ api, content, onChanged }: ViewProps & { content: ContentItem[] }) {
   const [selectedPreview, setSelectedPreview] = React.useState<ContentItem | null>(null);
   const [contentActionId, setContentActionId] = React.useState("");
   const [contentError, setContentError] = React.useState("");
+  const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
+  const selectableIds = React.useMemo(() => content.map((item) => item.id), [content]);
+  const selectedItems = content.filter((item) => selectedIds.includes(item.id));
+  const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.includes(id));
+  const bulkApproveItems = selectedItems.filter((item) => !["approved", "scheduled", "published"].includes(item.status));
+  const bulkDeleteItems = selectedItems.filter((item) => !["scheduled", "publishing", "published"].includes(item.status));
+
+  React.useEffect(() => {
+    setSelectedIds((current) => current.filter((id) => selectableIds.includes(id)));
+  }, [content]);
 
   async function approve(id: string) {
-    await api(`/content/${id}/approve`, { method: "POST" });
-    setSelectedPreview((current) => current && current.id === id ? { ...current, status: "approved" } : current);
-    onChanged();
+    setContentError("");
+    try {
+      await api(`/content/${id}/approve`, { method: "POST" });
+      setSelectedPreview((current) => current && current.id === id ? { ...current, status: "approved" } : current);
+      await onChanged();
+    } catch (error) {
+      setContentError(error instanceof Error ? error.message : "Не удалось согласовать текст.");
+    }
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((current) => current.includes(id) ? current.filter((itemId) => itemId !== id) : [...current, id]);
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds(allSelected ? [] : selectableIds);
+  }
+
+  async function bulkApprove() {
+    if (!bulkApproveItems.length) return;
+    setContentError("");
+    setContentActionId("bulk:approve");
+    try {
+      const results = await Promise.allSettled(bulkApproveItems.map((item) => api(`/content/${item.id}/approve`, { method: "POST" })));
+      const failed = results.filter((result) => result.status === "rejected").length;
+      setSelectedIds([]);
+      await onChanged();
+      if (failed) {
+        setContentError(`Не удалось согласовать часть текстов: ${failed}. Проверьте, выбран ли пункт меню.`);
+      }
+    } catch (error) {
+      setContentError(error instanceof Error ? error.message : "Не удалось согласовать выбранные тексты.");
+    } finally {
+      setContentActionId("");
+    }
+  }
+
+  async function bulkDelete() {
+    if (!bulkDeleteItems.length) return;
+    const confirmed = window.confirm(`Удалить выбранные тексты: ${bulkDeleteItems.length}?`);
+    if (!confirmed) return;
+    setContentError("");
+    setContentActionId("bulk:delete");
+    try {
+      const results = await Promise.allSettled(bulkDeleteItems.map((item) => api(`/content/${item.id}`, { method: "DELETE" })));
+      const failed = results.filter((result) => result.status === "rejected").length;
+      setSelectedIds([]);
+      setSelectedPreview((current) => current && bulkDeleteItems.some((item) => item.id === current.id) ? null : current);
+      await onChanged();
+      if (failed) {
+        setContentError(`Не удалось удалить часть текстов: ${failed}. Scheduled/published контент не удаляется.`);
+      }
+    } catch (error) {
+      setContentError(error instanceof Error ? error.message : "Не удалось удалить выбранные тексты.");
+    } finally {
+      setContentActionId("");
+    }
   }
 
   async function regenerate(item: ContentItem) {
@@ -2309,9 +2379,23 @@ function ContentView({ api, content, onChanged }: ViewProps & { content: Content
   return (
     <section className="viewStack">
       <DataPanel title="Контент">
+        <div className="bulkToolbar">
+          <label className="checkboxRow bulkSelectAll">
+            <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} />
+            Выбрать все
+          </label>
+          <span className="fieldHint">Выбрано: {selectedIds.length}</span>
+          <button className="button compact approve" type="button" onClick={bulkApprove} disabled={!bulkApproveItems.length || contentActionId === "bulk:approve"}>
+            <CheckCircle2 size={15} /> {contentActionId === "bulk:approve" ? "Согласовываю" : `Approve выбранные (${bulkApproveItems.length})`}
+          </button>
+          <button className="button compact danger" type="button" onClick={bulkDelete} disabled={!bulkDeleteItems.length || contentActionId === "bulk:delete"}>
+            <Trash2 size={15} /> {contentActionId === "bulk:delete" ? "Удаляю" : `Удалить выбранные (${bulkDeleteItems.length})`}
+          </button>
+        </div>
         <ResponsiveTable
-          columns={["Тема", "Slug", "Слова", "Статус", "Действие"]}
+          columns={["Выбор", "Тема", "Slug", "Слова", "Статус", "Действие"]}
           rows={content.map((item) => [
+            <input className="rowCheckbox" type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelected(item.id)} aria-label={`Выбрать ${item.topic}`} />,
             <TopicMetaCell item={item} />,
             item.slug,
             item.word_count,
@@ -2324,9 +2408,10 @@ function ContentView({ api, content, onChanged }: ViewProps & { content: Content
               <button className="button compact danger" type="button" onClick={() => deleteItem(item)} disabled={contentActionId.startsWith(item.id) || ["scheduled", "publishing", "published"].includes(item.status)} title={["scheduled", "publishing", "published"].includes(item.status) ? "Нельзя удалить scheduled/published контент" : undefined}>
                 <Trash2 size={15} /> {contentActionId === `${item.id}:delete` ? "Удаляю" : "Удалить"}
               </button>
-              <button className="button compact" type="button" onClick={() => approve(item.id)} disabled={item.status === "approved" || item.status === "scheduled" || item.status === "published"}>Approve</button>
+              <button className="button compact approve" type="button" onClick={() => approve(item.id)} disabled={item.status === "approved" || item.status === "scheduled" || item.status === "published"}>Approve</button>
             </div>
           ])}
+          rowClassNames={content.map(contentRowClassName)}
         />
         {contentError ? <span className="formError">{contentError}</span> : null}
       </DataPanel>
@@ -2340,7 +2425,7 @@ function ContentView({ api, content, onChanged }: ViewProps & { content: Content
               <button className="button compact" type="button" onClick={() => regenerate(selectedPreview)} disabled={contentActionId.startsWith(selectedPreview.id)}>
                 <Play size={15} /> Сгенерировать заново
               </button>
-              <button className="button compact" type="button" onClick={() => approve(selectedPreview.id)} disabled={selectedPreview.status === "approved" || selectedPreview.status === "scheduled" || selectedPreview.status === "published"}>Approve</button>
+              <button className="button compact approve" type="button" onClick={() => approve(selectedPreview.id)} disabled={selectedPreview.status === "approved" || selectedPreview.status === "scheduled" || selectedPreview.status === "published"}>Approve</button>
             </>
           }
         />
@@ -2852,13 +2937,13 @@ function DataPanel({ title, children }: { title: string; children: React.ReactNo
   return <section className="dataPanel"><div className="panelHeader"><h2>{title}</h2></div>{children}</section>;
 }
 
-function ResponsiveTable({ columns, rows }: { columns: string[]; rows: React.ReactNode[][] }) {
+function ResponsiveTable({ columns, rows, rowClassNames }: { columns: string[]; rows: React.ReactNode[][]; rowClassNames?: string[] }) {
   if (!rows.length) return <EmptyState text="Данных пока нет." />;
   return (
     <div className="tableWrap">
       <table>
         <thead><tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr></thead>
-        <tbody>{rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td data-label={columns[cellIndex]} key={cellIndex}>{cell}</td>)}</tr>)}</tbody>
+        <tbody>{rows.map((row, rowIndex) => <tr className={rowClassNames?.[rowIndex] || undefined} key={rowIndex}>{row.map((cell, cellIndex) => <td data-label={columns[cellIndex]} key={cellIndex}>{cell}</td>)}</tr>)}</tbody>
       </table>
     </div>
   );
