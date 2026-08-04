@@ -50,3 +50,37 @@ def test_prompt_format_contract_is_appended_once() -> None:
 
     assert prompt.count(PROMPT_FORMAT_CONTRACT_MARKER) == 1
     assert prompt_with_contract.count(PROMPT_FORMAT_CONTRACT_MARKER) == 1
+
+
+def test_competitor_research_placeholders_are_rendered() -> None:
+    prompt = build_gemini_prompt(
+        topic="Beste Online Casinos",
+        geo="DE",
+        language="de",
+        target_words=1600,
+        site=None,
+        prompt_template=(
+            "Queries:\n{{SEARCH_QUERIES}}\n"
+            "URLs:\n{{COMPETITOR_URLS}}\n"
+            "Gaps:\n{{CONTENT_GAPS}}\n"
+            "Headings:\n{{COMMON_HEADINGS}}\n"
+            "Missing:\n{{MISSING_BLOCKS_TO_COVER}}"
+        ),
+        shortcode=None,
+        include_toc=True,
+        include_faq=True,
+        competitor_brief={
+            "generated_at": "2026-08-04T00:00:00+00:00",
+            "search_queries": ["beste online casinos deutschland"],
+            "competitor_urls": ["https://example.com/casinos"],
+            "competitor_summary": [{"url": "https://example.com/casinos", "title": "Example", "headings": ["GGL Lizenz"]}],
+            "content_gaps": ["Раскрыть сильнее: KYC."],
+            "common_headings": ["GGL Lizenz"],
+            "missing_blocks_to_cover": ["KYC und Identitätsprüfung"],
+        },
+    )
+
+    assert "beste online casinos deutschland" in prompt
+    assert "https://example.com/casinos" in prompt
+    assert "KYC und Identitätsprüfung" in prompt
+    assert "{{SEARCH_QUERIES}}" not in prompt

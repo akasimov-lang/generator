@@ -160,6 +160,7 @@ class GenerationTaskCreate(BaseModel):
     shortcode: str | None = None
     include_toc: bool = True
     include_faq: bool = True
+    collect_competitors: bool = False
 
 
 class GenerationTaskResponse(BaseModel):
@@ -178,6 +179,7 @@ class GenerationTaskResponse(BaseModel):
     target_words: int | None
     prompt_template_name: str | None
     prompt_template: str | None
+    collect_competitors: bool
     created_at: datetime
     updated_at: datetime
 
@@ -196,6 +198,8 @@ class ContentItemResponse(BaseModel):
     word_count: int
     generation_prompt_name: str | None
     generated_at: datetime | None
+    competitor_research_status: str
+    competitor_brief: dict[str, Any] | None
     idempotency_key: str
     scheduled_at: datetime | None
     published_at: datetime | None
@@ -232,6 +236,73 @@ class SiteOverviewResponse(BaseModel):
 class TaskDetailsResponse(BaseModel):
     task: GenerationTaskResponse
     items: list[ContentItemResponse]
+
+
+class CompetitorQueriesUpdate(BaseModel):
+    queries: list[str] = Field(min_length=1, max_length=5)
+
+
+class CompetitorQueryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    content_item_id: str
+    query: str
+    position: int
+    status: str
+    result_count: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class CompetitorResultResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    content_item_id: str
+    query_id: str | None
+    query_text: str
+    position: int
+    url: str
+    normalized_url: str
+    title: str | None
+    snippet: str | None
+    source_provider: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class CompetitorPageResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    content_item_id: str
+    competitor_result_id: str
+    url: str
+    http_status: int | None
+    title: str | None
+    h1: str | None
+    meta_description: str | None
+    headings: list[Any]
+    text_content: str | None
+    tables: list[Any]
+    lists: list[Any]
+    faq: list[Any]
+    word_count: int
+    error_message: str | None
+    fetched_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CompetitorResearchResponse(BaseModel):
+    content_item_id: str
+    status: str
+    brief: dict[str, Any] | None
+    queries: list[CompetitorQueryResponse]
+    results: list[CompetitorResultResponse]
+    pages: list[CompetitorPageResponse]
 
 
 class ContentUpdate(BaseModel):

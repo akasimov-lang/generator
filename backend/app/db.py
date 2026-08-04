@@ -70,6 +70,7 @@ def apply_lightweight_migrations() -> None:
                 "target_words": "INTEGER",
                 "prompt_template_name": "VARCHAR(160)",
                 "prompt_template": "TEXT",
+                "collect_competitors": "BOOLEAN DEFAULT FALSE NOT NULL",
             },
         )
 
@@ -82,6 +83,9 @@ def apply_lightweight_migrations() -> None:
                 "site_id": "VARCHAR(36)",
                 "generation_prompt_name": "VARCHAR(160)",
                 "generated_at": "TIMESTAMP WITH TIME ZONE",
+                "competitor_research_status": "VARCHAR(40) DEFAULT 'not_requested' NOT NULL",
+                "competitor_brief": "JSON",
+                "competitor_brief_text": "TEXT",
             },
         )
         backfill_content_site_ids()

@@ -4,7 +4,10 @@ import html
 import json
 import re
 import uuid
+from collections import Counter
 from datetime import datetime, timedelta, timezone
+from html.parser import HTMLParser
+from urllib.parse import urlparse, urlunparse
 
 import httpx
 from slugify import slugify
@@ -22,6 +25,26 @@ GEMINI_DEFAULT_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/mode
 GEMINI_DEFAULT_MODEL = "gemini-3.5-flash"
 DATAFORSEO_DEFAULT_ENDPOINT = "https://api.dataforseo.com/v3"
 DATAFORSEO_USER_DATA_PATH = "/appendix/user_data"
+DATAFORSEO_SERP_PATH = "/serp/google/organic/live/advanced"
+COMPETITOR_QUERY_LIMIT = 3
+COMPETITOR_RESULTS_PER_QUERY = 5
+MAX_COMPETITOR_PAGE_CHARS = 1_200_000
+MAX_COMPETITOR_TEXT_CHARS = 60_000
+DATAFORSEO_LOCATION_NAMES = {
+    "DE": "Germany",
+    "PL": "Poland",
+    "AT": "Austria",
+    "CH": "Switzerland",
+    "GB": "United Kingdom",
+    "UK": "United Kingdom",
+    "US": "United States",
+    "CA": "Canada",
+    "AU": "Australia",
+    "FR": "France",
+    "ES": "Spain",
+    "IT": "Italy",
+    "NL": "Netherlands",
+}
 DEFAULT_CONTENT_PROMPT_TEMPLATE = """Рабочий промпт для конкретной задачи.
 
 Базовые требования качества, юридической осторожности и формата ответа применяются отдельно через "Базовый промпт".
@@ -41,12 +64,25 @@ DEFAULT_CONTENT_PROMPT_TEMPLATE = """Рабочий промпт для конк
 - Желаемый объем: около {{TARGET_WORDS}} слов
 - Текущий год: {{CURRENT_YEAR}}
 - Shortcode context: {{SHORTCODE}}
+- Поисковые запросы по теме: {{SEARCH_QUERIES}}
+- URL конкурентов из выдачи: {{COMPETITOR_URLS}}
+- Краткий анализ конкурентов: {{COMPETITOR_SUMMARY}}
+- Content gaps: {{CONTENT_GAPS}}
+- Частые заголовки конкурентов: {{COMMON_HEADINGS}}
+- Блоки, которые нужно закрыть лучше: {{MISSING_BLOCKS_TO_COVER}}
 
 Контекст ниши:
 Онлайн-казино, ставки, casino providers, легальные Anbieter, лицензии, Spielerschutz, Zahlungen, Auszahlungen, KYC, Datenschutz, Limits, sichere Online Casinos.
 
 Главная цель:
 Создать полезную, структурированную, юридически аккуратную страницу, которая полно отвечает на поисковый интент пользователя и пригодна для редакторской проверки перед публикацией.
+
+Если передан анализ конкурентов:
+- Используй его только как исследовательский контекст.
+- Не копируй конкурентов и не делай близкий перефраз.
+- Не повторяй структуру конкурентов один в один.
+- Делай оригинальную структуру, закрывай интент полнее и аккуратно отмечай факты, которые нужно проверить.
+- Не утверждай в публичном тексте, что ты изучил Google или конкретных конкурентов.
 
 Внутренняя SEO-логика, НЕ выводить в текст:
 1. Главный интент.
@@ -172,6 +208,12 @@ DEFAULT_BASE_PROMPT_TEMPLATE = f"""Базовые требования для в
 - Текущий год: {{{{CURRENT_YEAR}}}}
 - Сайт/проект: {{{{SITE_NAME}}}}
 - Shortcode context: {{{{SHORTCODE}}}}
+- Поисковые запросы: {{{{SEARCH_QUERIES}}}}
+- URL конкурентов: {{{{COMPETITOR_URLS}}}}
+- Анализ конкурентов: {{{{COMPETITOR_SUMMARY}}}}
+- Content gaps: {{{{CONTENT_GAPS}}}}
+- Частые заголовки конкурентов: {{{{COMMON_HEADINGS}}}}
+- Недостающие блоки: {{{{MISSING_BLOCKS_TO_COVER}}}}
 
 Общие правила качества:
 - Пиши строго на языке {{{{LANGUAGE}}}}.
@@ -189,6 +231,10 @@ DEFAULT_BASE_PROMPT_TEMPLATE = f"""Базовые требования для в
 - Не создавай фейковый TOP-10, рейтинг, оценку или список брендов без проверенных данных.
 - Если рабочий промпт требует рейтинг, но проверенных брендов нет, используй placeholders вида [Anbieter 1 - muss geprüft werden].
 - Внутренний SEO-анализ, intent mapping и content gaps не выводи в публичный текст.
+- Если передан competitor brief, используй его только как исследовательский контекст.
+- Не копируй конкурентов, не делай близкий перефраз и не повторяй их структуру один в один.
+- Не утверждай в публичном тексте, что ты изучил Google, TOP выдачи или конкретные сайты.
+- Закрывай intent полнее конкурентов, но без вымышленных фактов.
 
 {PROMPT_FORMAT_CONTRACT}
 """
@@ -230,6 +276,290 @@ def clean_multiline_text(value: object) -> str:
         compact_lines.append(line)
         previous_blank = False
     return "\n".join(compact_lines).strip()
+
+
+def compact_lines(values: list[object], limit: int | None = None) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        text = clean_text(value)
+        if not text:
+            continue
+        key = text.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(text)
+        if limit and len(result) >= limit:
+            break
+    return result
+
+
+def normalize_competitor_url(url: str) -> str:
+    parsed = urlparse(url.strip())
+    scheme = parsed.scheme or "https"
+    netloc = parsed.netloc.lower()
+    path = re.sub(r"/+", "/", parsed.path or "/")
+    if path != "/":
+        path = path.rstrip("/")
+    query = parsed.query
+    return urlunparse((scheme.lower(), netloc, path, "", query, ""))
+
+
+def hostname_from_url(url: str | None) -> str:
+    if not url:
+        return ""
+    parsed = urlparse(url if "://" in url else f"https://{url}")
+    return parsed.netloc.lower().removeprefix("www.")
+
+
+def is_own_domain(url: str, site: models.Site | None) -> bool:
+    site_host = hostname_from_url(site.base_url if site else None)
+    url_host = hostname_from_url(url)
+    if not site_host or not url_host:
+        return False
+    return url_host == site_host or url_host.endswith(f".{site_host}")
+
+
+def generate_competitor_search_queries(topic: str, geo: str, language: str) -> list[str]:
+    text = re.sub(r"\b20\d{2}\b", " ", topic.lower())
+    text = re.sub(r"[/|:()\\[\\],.!?]+", " ", text)
+    tokens = re.findall(r"[\wäöüßáàâçéèêíìîñóòôúùû-]+", text, flags=re.IGNORECASE)
+    stopwords = {
+        "und",
+        "oder",
+        "mit",
+        "für",
+        "der",
+        "die",
+        "das",
+        "ein",
+        "eine",
+        "einer",
+        "im",
+        "in",
+        "am",
+        "an",
+        "auf",
+        "von",
+        "the",
+        "and",
+        "for",
+        "with",
+        "best",
+        "beste",
+        "new",
+        "neue",
+    }
+    meaningful = [token for token in tokens if len(token) > 2 and token not in stopwords]
+    country = DATAFORSEO_LOCATION_NAMES.get(geo.upper(), geo).lower()
+    queries: list[str] = []
+    if meaningful:
+        queries.append(" ".join(meaningful[:5]))
+
+    lower_topic = topic.lower()
+    if "casino" in lower_topic:
+        if geo.upper() == "DE":
+            queries.extend(["legale online casinos ggl", "online casino vergleich deutschland"])
+        else:
+            queries.append(f"online casino vergleich {country}".strip())
+    if "spielothek" in lower_topic or "slots" in lower_topic:
+        queries.append(f"online spielotheken {country}".strip())
+    if "sicher" in lower_topic or "safe" in lower_topic:
+        queries.append(f"sichere online casinos {country}".strip())
+    if "neu" in lower_topic or "new" in lower_topic:
+        queries.append(f"neue online casinos {country}".strip())
+    if len(queries) < COMPETITOR_QUERY_LIMIT and meaningful:
+        queries.append(" ".join((meaningful[:3] + ["vergleich"])[:5]))
+    if len(queries) < COMPETITOR_QUERY_LIMIT:
+        queries.append(" ".join(tokens[:5]) or topic.strip())
+
+    normalized_queries = []
+    for query in queries:
+        clean_query = clean_text(query.lower())
+        words = clean_query.split()
+        if len(words) > 5:
+            clean_query = " ".join(words[:5])
+        if len(words) < 3 and country:
+            clean_query = clean_text(f"{clean_query} {country}")
+        normalized_queries.append(clean_query)
+    return compact_lines(normalized_queries, COMPETITOR_QUERY_LIMIT)
+
+
+def ensure_competitor_queries(db: Session, item: models.ContentItem, geo: str, language: str) -> list[models.CompetitorQuery]:
+    existing = db.scalars(
+        select(models.CompetitorQuery)
+        .where(models.CompetitorQuery.content_item_id == item.id)
+        .order_by(models.CompetitorQuery.position.asc())
+    ).all()
+    if existing:
+        return existing
+
+    queries = generate_competitor_search_queries(item.topic, geo, language)
+    for index, query in enumerate(queries, start=1):
+        db.add(
+            models.CompetitorQuery(
+                content_item_id=item.id,
+                query=query,
+                position=index,
+                status="draft",
+            )
+        )
+    item.competitor_research_status = "queries_ready"
+    db.flush()
+    return db.scalars(
+        select(models.CompetitorQuery)
+        .where(models.CompetitorQuery.content_item_id == item.id)
+        .order_by(models.CompetitorQuery.position.asc())
+    ).all()
+
+
+def replace_competitor_queries(db: Session, item: models.ContentItem, queries: list[str]) -> None:
+    clean_queries = compact_lines(queries, 5)
+    if not clean_queries:
+        raise ValueError("At least one search query is required")
+    clear_competitor_research(db, item)
+    for index, query in enumerate(clean_queries, start=1):
+        db.add(
+            models.CompetitorQuery(
+                content_item_id=item.id,
+                query=query,
+                position=index,
+                status="draft",
+            )
+        )
+    item.competitor_research_status = "queries_ready"
+    db.flush()
+
+
+def clear_competitor_research(db: Session, item: models.ContentItem) -> None:
+    page_ids = select(models.CompetitorPage.id).where(models.CompetitorPage.content_item_id == item.id)
+    result_ids = select(models.CompetitorResult.id).where(models.CompetitorResult.content_item_id == item.id)
+    query_ids = select(models.CompetitorQuery.id).where(models.CompetitorQuery.content_item_id == item.id)
+    for page in db.scalars(select(models.CompetitorPage).where(models.CompetitorPage.id.in_(page_ids))).all():
+        db.delete(page)
+    for result in db.scalars(select(models.CompetitorResult).where(models.CompetitorResult.id.in_(result_ids))).all():
+        db.delete(result)
+    for query in db.scalars(select(models.CompetitorQuery).where(models.CompetitorQuery.id.in_(query_ids))).all():
+        db.delete(query)
+    item.competitor_brief = None
+    item.competitor_brief_text = None
+    db.flush()
+
+
+class CompetitorHTMLExtractor(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.title = ""
+        self.meta_description = ""
+        self.h1 = ""
+        self.headings: list[dict] = []
+        self.paragraphs: list[str] = []
+        self.list_items: list[str] = []
+        self.tables: list[list[list[str]]] = []
+        self._ignore_depth = 0
+        self._collectors: list[dict] = []
+        self._current_row: list[str] | None = None
+        self._current_cell: list[str] | None = None
+        self._current_table: list[list[str]] | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        tag = tag.lower()
+        attrs_dict = {key.lower(): value or "" for key, value in attrs}
+        if tag in {"script", "style", "noscript", "svg", "canvas", "iframe", "form", "button", "nav", "footer"}:
+            self._ignore_depth += 1
+            return
+        if self._ignore_depth:
+            return
+        if tag == "meta":
+            meta_name = (attrs_dict.get("name") or attrs_dict.get("property") or "").lower()
+            if meta_name in {"description", "og:description", "twitter:description"} and attrs_dict.get("content"):
+                if not self.meta_description:
+                    self.meta_description = clean_text(attrs_dict["content"])
+            return
+        if tag == "table":
+            self._current_table = []
+            return
+        if tag == "tr" and self._current_table is not None:
+            self._current_row = []
+            return
+        if tag in {"td", "th"} and self._current_row is not None:
+            self._current_cell = []
+            self._collectors.append({"tag": tag, "text": []})
+            return
+        if tag in {"title", "h1", "h2", "h3", "p", "li"}:
+            self._collectors.append({"tag": tag, "text": []})
+
+    def handle_data(self, data: str) -> None:
+        if self._ignore_depth:
+            return
+        for collector in self._collectors:
+            collector["text"].append(data)
+        if self._current_cell is not None:
+            self._current_cell.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.lower()
+        if self._ignore_depth and tag in {"script", "style", "noscript", "svg", "canvas", "iframe", "form", "button", "nav", "footer"}:
+            self._ignore_depth -= 1
+            return
+        if self._ignore_depth:
+            return
+        if tag in {"td", "th"} and self._current_row is not None and self._current_cell is not None:
+            cell = clean_text(" ".join(self._current_cell))
+            if cell:
+                self._current_row.append(cell)
+            self._current_cell = None
+        if tag == "tr" and self._current_table is not None and self._current_row is not None:
+            if self._current_row:
+                self._current_table.append(self._current_row)
+            self._current_row = None
+            return
+        if tag == "table" and self._current_table is not None:
+            if self._current_table:
+                self.tables.append(self._current_table[:20])
+            self._current_table = None
+            return
+
+        for index in range(len(self._collectors) - 1, -1, -1):
+            collector = self._collectors[index]
+            if collector["tag"] != tag:
+                continue
+            self._collectors.pop(index)
+            text = clean_text(" ".join(collector["text"]))
+            if not text:
+                return
+            if tag == "title" and not self.title:
+                self.title = text
+            elif tag == "h1" and not self.h1:
+                self.h1 = text
+            elif tag in {"h2", "h3"}:
+                self.headings.append({"level": int(tag[1]), "text": text})
+            elif tag == "p" and len(text) >= 40:
+                self.paragraphs.append(text)
+            elif tag == "li" and len(text) >= 8:
+                self.list_items.append(text)
+            return
+
+    def payload(self) -> dict:
+        text_blocks = compact_lines([self.h1, *[item["text"] for item in self.headings], *self.paragraphs, *self.list_items])
+        text_content = clean_multiline_text("\n\n".join(text_blocks))[:MAX_COMPETITOR_TEXT_CHARS]
+        faq = [
+            {"question": item, "answer": ""}
+            for item in self.list_items
+            if item.endswith("?") or item.lower().startswith(("was ", "wie ", "warum ", "wann ", "where ", "what ", "how "))
+        ][:12]
+        return {
+            "title": self.title,
+            "h1": self.h1,
+            "meta_description": self.meta_description,
+            "headings": self.headings[:80],
+            "text_content": text_content,
+            "tables": self.tables[:8],
+            "lists": compact_lines(self.list_items, 80),
+            "faq": faq,
+            "word_count": len(re.findall(r"\b[\w'-]+\b", text_content, flags=re.UNICODE)),
+        }
 
 
 def extract_ai_article_parts(generated_text: str, fallback_topic: str) -> dict:
@@ -455,6 +785,7 @@ async def build_ai_content(
     shortcode: str | None = None,
     include_toc: bool = True,
     include_faq: bool = True,
+    competitor_brief: dict | None = None,
 ) -> dict:
     if provider.provider_type == "gemini":
         return await build_gemini_content(
@@ -469,6 +800,7 @@ async def build_ai_content(
             shortcode=shortcode,
             include_toc=include_toc,
             include_faq=include_faq,
+            competitor_brief=competitor_brief,
         )
     return build_stub_content(
         topic=topic,
@@ -495,6 +827,7 @@ async def build_gemini_content(
     shortcode: str | None,
     include_toc: bool,
     include_faq: bool,
+    competitor_brief: dict | None = None,
 ) -> dict:
     if not provider.api_key:
         raise ValueError("Gemini API key is not configured")
@@ -509,6 +842,7 @@ async def build_gemini_content(
         shortcode=shortcode,
         include_toc=include_toc,
         include_faq=include_faq,
+        competitor_brief=competitor_brief,
     )
     page = base_payload["pages"][0]
     prompt = build_gemini_prompt(
@@ -553,6 +887,14 @@ async def build_gemini_content(
     base_payload["generation_meta"]["generator"] = "gemini"
     base_payload["generation_meta"]["model"] = provider.model
     base_payload["generation_meta"]["usage"] = usage
+    if competitor_brief:
+        base_payload["generation_meta"]["competitor_research"] = {
+            "status": "used",
+            "generated_at": competitor_brief.get("generated_at"),
+            "search_queries": competitor_brief.get("search_queries", []),
+            "competitor_urls": competitor_brief.get("competitor_urls", []),
+            "content_gaps": competitor_brief.get("content_gaps", []),
+        }
     if article_parts["editor_check"]:
         base_payload["generation_meta"]["editor_check"] = article_parts["editor_check"]
     return base_payload
@@ -568,9 +910,11 @@ def build_gemini_prompt(
     shortcode: str | None,
     include_toc: bool,
     include_faq: bool,
+    competitor_brief: dict | None = None,
 ) -> str:
     template = prompt_template.strip() if prompt_template and prompt_template.strip() else DEFAULT_CONTENT_PROMPT_TEMPLATE
     slug = normalize_slug(topic)
+    competitor_values = prompt_context_from_brief(competitor_brief)
     values = {
         "topic": topic,
         "geo": geo,
@@ -584,6 +928,7 @@ def build_gemini_prompt(
         "shortcode": shortcode or "none",
         "include_toc": "yes" if include_toc else "no",
         "include_faq": "yes" if include_faq else "no",
+        **competitor_values,
     }
     prompt = template
     for key, value in values.items():
@@ -602,6 +947,11 @@ def build_gemini_prompt(
         f"- Shortcode block context: {shortcode or 'none'}\n"
         "- Return plain article text only. Do not return JSON or Markdown fences.\n"
     )
+    if competitor_brief:
+        prompt += (
+            "\n\nCompetitor research context:\n"
+            f"{render_competitor_brief_for_prompt(competitor_brief)}\n"
+        )
     return prompt
 
 async def call_gemini(provider: models.AiProvider, prompt: str) -> dict:
@@ -835,6 +1185,377 @@ def describe_dataforseo_error(error: Exception) -> str:
             "Use API password from DataForSEO API Access, not the dashboard password."
         )
     return describe_ai_provider_error(error)
+
+
+def get_dataforseo_provider(db: Session) -> models.AiProvider:
+    provider = db.scalar(
+        select(models.AiProvider)
+        .where(models.AiProvider.provider_type == "dataforseo")
+        .where(models.AiProvider.is_active.is_(True))
+        .order_by(models.AiProvider.validation_status.desc(), models.AiProvider.created_at.desc())
+        .limit(1)
+    )
+    if not provider:
+        raise ValueError("DataForSEO provider is not configured")
+    return provider
+
+
+async def call_dataforseo_google_serp(provider: models.AiProvider, keyword: str, geo: str, language: str) -> dict:
+    login, password = parse_dataforseo_credentials(provider)
+    endpoint = f"{(provider.endpoint_url or DATAFORSEO_DEFAULT_ENDPOINT).rstrip('/')}{DATAFORSEO_SERP_PATH}"
+    body = [
+        {
+            "keyword": keyword,
+            "location_name": DATAFORSEO_LOCATION_NAMES.get(geo.upper(), geo),
+            "language_code": language.lower(),
+            "device": "desktop",
+            "os": "windows",
+        }
+    ]
+    async with httpx.AsyncClient(timeout=45) as client:
+        response = await client.post(endpoint, json=body, auth=(login, password), headers={"Content-Type": "application/json"})
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        provider.validation_status = "invalid"
+        provider.validation_message = describe_dataforseo_error(exc)
+        provider.validated_at = datetime.now(timezone.utc)
+        raise ValueError(provider.validation_message) from exc
+    payload = response.json()
+    status_code = int(payload.get("status_code") or 0) if isinstance(payload, dict) else 0
+    task = first_dataforseo_task(payload)
+    task_status = int(task.get("status_code") or status_code) if task else status_code
+    if status_code != 20000 or task_status != 20000:
+        raise ValueError(describe_dataforseo_payload_error(payload))
+    provider.validation_status = "valid"
+    provider.validation_message = "DataForSEO SERP API connected"
+    provider.validated_at = datetime.now(timezone.utc)
+    provider.last_used_at = datetime.now(timezone.utc)
+    return payload
+
+
+def extract_organic_serp_items(payload: dict) -> list[dict]:
+    task = first_dataforseo_task(payload)
+    if not task:
+        return []
+    result = task.get("result")
+    if not isinstance(result, list) or not result:
+        return []
+    result_item = result[0] if isinstance(result[0], dict) else {}
+    items = result_item.get("items")
+    if not isinstance(items, list):
+        return []
+    organic_items: list[dict] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") not in {"organic", "featured_snippet"}:
+            continue
+        url = str(item.get("url") or "").strip()
+        if not url:
+            continue
+        organic_items.append(
+            {
+                "position": int(item.get("rank_group") or item.get("rank_absolute") or len(organic_items) + 1),
+                "url": url,
+                "title": clean_text(item.get("title")),
+                "snippet": clean_text(item.get("description") or item.get("snippet")),
+            }
+        )
+    return organic_items
+
+
+async def collect_competitor_serp_for_item(db: Session, item: models.ContentItem) -> models.ContentItem:
+    task = db.get(models.GenerationTask, item.task_id)
+    site = db.get(models.Site, item.site_id) if item.site_id else None
+    if not task:
+        raise ValueError("Generation task not found")
+    queries = ensure_competitor_queries(db, item, task.geo, task.language)
+    provider = get_dataforseo_provider(db)
+
+    for page in db.scalars(select(models.CompetitorPage).where(models.CompetitorPage.content_item_id == item.id)).all():
+        db.delete(page)
+    for result in db.scalars(select(models.CompetitorResult).where(models.CompetitorResult.content_item_id == item.id)).all():
+        db.delete(result)
+    item.competitor_brief = None
+    item.competitor_brief_text = None
+    db.flush()
+
+    seen_urls: set[str] = set()
+    total_results = 0
+    for query in queries:
+        query.status = "collecting"
+        db.flush()
+        payload = await call_dataforseo_google_serp(provider, query.query, task.geo, task.language)
+        added_for_query = 0
+        for serp_item in extract_organic_serp_items(payload):
+            if added_for_query >= COMPETITOR_RESULTS_PER_QUERY:
+                break
+            url = serp_item["url"]
+            if is_own_domain(url, site):
+                continue
+            normalized_url = normalize_competitor_url(url)
+            if normalized_url in seen_urls:
+                continue
+            seen_urls.add(normalized_url)
+            db.add(
+                models.CompetitorResult(
+                    content_item_id=item.id,
+                    query_id=query.id,
+                    query_text=query.query,
+                    position=serp_item["position"],
+                    url=url,
+                    normalized_url=normalized_url,
+                    title=serp_item["title"],
+                    snippet=serp_item["snippet"],
+                    source_provider="dataforseo",
+                    status="discovered",
+                )
+            )
+            added_for_query += 1
+            total_results += 1
+        query.result_count = added_for_query
+        query.status = "serp_collected"
+
+    item.competitor_research_status = "serp_collected" if total_results else "serp_empty"
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+async def fetch_competitor_pages_for_item(db: Session, item: models.ContentItem) -> models.ContentItem:
+    results = db.scalars(
+        select(models.CompetitorResult)
+        .where(models.CompetitorResult.content_item_id == item.id)
+        .order_by(models.CompetitorResult.query_text.asc(), models.CompetitorResult.position.asc())
+    ).all()
+    if not results:
+        raise ValueError("No competitor URLs collected")
+
+    for page in db.scalars(select(models.CompetitorPage).where(models.CompetitorPage.content_item_id == item.id)).all():
+        db.delete(page)
+    db.flush()
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; ContentGeneratorBot/1.0; +http://91.199.133.86)",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+    async with httpx.AsyncClient(timeout=25, follow_redirects=True, headers=headers) as client:
+        for result in results:
+            page_data = {
+                "title": None,
+                "h1": None,
+                "meta_description": None,
+                "headings": [],
+                "text_content": None,
+                "tables": [],
+                "lists": [],
+                "faq": [],
+                "word_count": 0,
+            }
+            http_status = None
+            error_message = None
+            try:
+                response = await client.get(result.url)
+                http_status = response.status_code
+                result.status = "fetched" if response.status_code < 400 else "fetch_failed"
+                if response.status_code < 400:
+                    extractor = CompetitorHTMLExtractor()
+                    extractor.feed(response.text[:MAX_COMPETITOR_PAGE_CHARS])
+                    page_data = extractor.payload()
+                else:
+                    error_message = f"HTTP {response.status_code}"
+            except Exception as exc:
+                result.status = "fetch_failed"
+                error_message = str(exc)[:500]
+
+            db.add(
+                models.CompetitorPage(
+                    content_item_id=item.id,
+                    competitor_result_id=result.id,
+                    url=result.url,
+                    http_status=http_status,
+                    title=page_data["title"],
+                    h1=page_data["h1"],
+                    meta_description=page_data["meta_description"],
+                    headings=page_data["headings"],
+                    text_content=page_data["text_content"],
+                    tables=page_data["tables"],
+                    lists=page_data["lists"],
+                    faq=page_data["faq"],
+                    word_count=page_data["word_count"],
+                    error_message=error_message,
+                    fetched_at=datetime.now(timezone.utc),
+                )
+            )
+
+    item.competitor_research_status = "pages_fetched"
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+def build_competitor_brief_for_item(db: Session, item: models.ContentItem) -> models.ContentItem:
+    queries = db.scalars(
+        select(models.CompetitorQuery)
+        .where(models.CompetitorQuery.content_item_id == item.id)
+        .order_by(models.CompetitorQuery.position.asc())
+    ).all()
+    results = db.scalars(
+        select(models.CompetitorResult)
+        .where(models.CompetitorResult.content_item_id == item.id)
+        .order_by(models.CompetitorResult.query_text.asc(), models.CompetitorResult.position.asc())
+    ).all()
+    pages = db.scalars(
+        select(models.CompetitorPage)
+        .where(models.CompetitorPage.content_item_id == item.id)
+        .order_by(models.CompetitorPage.word_count.desc())
+    ).all()
+    if not pages:
+        raise ValueError("No parsed competitor pages found")
+
+    heading_counter: Counter[str] = Counter()
+    heading_examples: dict[str, str] = {}
+    for page in pages:
+        for heading in page.headings or []:
+            if not isinstance(heading, dict):
+                continue
+            text = clean_text(heading.get("text"))
+            if not text:
+                continue
+            key = text.casefold()
+            heading_counter[key] += 1
+            heading_examples.setdefault(key, text)
+
+    common_headings = [heading_examples[key] for key, _ in heading_counter.most_common(14)]
+    all_text = " ".join(
+        clean_text(value)
+        for page in pages
+        for value in [page.title, page.h1, page.meta_description, page.text_content]
+        if value
+    ).lower()
+    required_blocks = [
+        ("GGL-Lizenz / legaler Rahmen", ["ggl", "lizenz", "legal"]),
+        ("KYC und Identitätsprüfung", ["kyc", "identität", "verifizierung"]),
+        ("Zahlungen und Auszahlungen", ["zahlung", "einzahlung", "auszahlung"]),
+        ("Spielerschutz, Limits und Selbstausschluss", ["spielerschutz", "limit", "selbstausschluss"]),
+        ("Warnsignale unseriöser Anbieter", ["warnsignal", "unseriös", "risiko"]),
+        ("Responsible Gambling Hinweis", ["responsible", "glücksspiel", "hilfe"]),
+        ("Für wen nicht geeignet", ["nicht geeignet", "kontrollverlust"]),
+        ("Häufige Fehler vor Registrierung", ["fehler", "registrierung"]),
+    ]
+    missing_blocks = [
+        label
+        for label, keywords in required_blocks
+        if not any(keyword in all_text for keyword in keywords)
+    ]
+    if not missing_blocks:
+        missing_blocks = [
+            "Практический чеклист перед регистрацией",
+            "Редакторская пометка по фактам, которые нужно проверить",
+            "Короткое объяснение рисков без рекламного тона",
+        ]
+    content_gaps = [
+        f"Раскрыть сильнее: {block}."
+        for block in missing_blocks[:8]
+    ]
+    if len(common_headings) < 5:
+        content_gaps.append("У конкурентов мало явной структуры H2/H3; сделать страницу более сканируемой.")
+    if any((page.word_count or 0) < 800 for page in pages):
+        content_gaps.append("Часть страниц конкурентов выглядит thin-content; дать более полное объяснение интента.")
+
+    competitor_summaries = []
+    for page in pages[:12]:
+        page_headings = [
+            clean_text(heading.get("text"))
+            for heading in (page.headings or [])
+            if isinstance(heading, dict)
+        ][:8]
+        competitor_summaries.append(
+            {
+                "url": page.url,
+                "title": page.title,
+                "h1": page.h1,
+                "word_count": page.word_count,
+                "http_status": page.http_status,
+                "headings": page_headings,
+                "tables_found": len(page.tables or []),
+                "lists_found": len(page.lists or []),
+                "faq_items_found": len(page.faq or []),
+            }
+        )
+
+    brief = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "topic": item.topic,
+        "search_queries": [query.query for query in queries],
+        "competitor_urls": [result.url for result in results],
+        "competitor_summary": competitor_summaries,
+        "common_headings": common_headings,
+        "content_gaps": content_gaps,
+        "missing_blocks_to_cover": missing_blocks,
+        "notes": [
+            "Использовать конкурентов только как исследовательский контекст.",
+            "Не копировать и не делать близкий перефраз.",
+            "Факты, бренды, лицензии и юридические утверждения проверять перед публикацией.",
+        ],
+    }
+    item.competitor_brief = brief
+    item.competitor_brief_text = render_competitor_brief_for_prompt(brief)
+    item.competitor_research_status = "brief_ready"
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+def render_competitor_brief_for_prompt(brief: dict | None) -> str:
+    if not brief:
+        return "No competitor research was collected."
+    competitor_lines = []
+    for competitor in brief.get("competitor_summary", [])[:12]:
+        if not isinstance(competitor, dict):
+            continue
+        headings = competitor.get("headings") or []
+        competitor_lines.append(
+            "\n".join(
+                [
+                    f"- URL: {competitor.get('url')}",
+                    f"  Title/H1: {competitor.get('title') or competitor.get('h1') or 'not extracted'}",
+                    f"  Words: {competitor.get('word_count') or 0}; tables: {competitor.get('tables_found') or 0}; lists: {competitor.get('lists_found') or 0}; FAQ-like items: {competitor.get('faq_items_found') or 0}",
+                    f"  Headings: {', '.join(str(item) for item in headings[:8]) or 'not extracted'}",
+                ]
+            )
+        )
+    sections = [
+        "Search queries:\n" + "\n".join(f"- {item}" for item in brief.get("search_queries", [])),
+        "Competitor URLs:\n" + "\n".join(f"- {item}" for item in brief.get("competitor_urls", [])[:20]),
+        "Competitor summary:\n" + "\n".join(competitor_lines),
+        "Common competitor headings:\n" + "\n".join(f"- {item}" for item in brief.get("common_headings", [])),
+        "Content gaps to close:\n" + "\n".join(f"- {item}" for item in brief.get("content_gaps", [])),
+        "Missing blocks to cover:\n" + "\n".join(f"- {item}" for item in brief.get("missing_blocks_to_cover", [])),
+        "Rules:\n- Do not copy competitors.\n- Do not closely paraphrase competitors.\n- Use this only as research context.\n- Build an original structure and mark facts that need editorial verification.",
+    ]
+    return "\n\n".join(section for section in sections if section.strip())[:20_000]
+
+
+def prompt_context_from_brief(brief: dict | None) -> dict[str, str]:
+    if not brief:
+        return {
+            "search_queries": "No competitor research collected.",
+            "competitor_urls": "No competitor research collected.",
+            "competitor_summary": "No competitor research collected.",
+            "content_gaps": "No competitor research collected.",
+            "common_headings": "No competitor research collected.",
+            "missing_blocks_to_cover": "No competitor research collected.",
+        }
+    return {
+        "search_queries": "\n".join(f"- {item}" for item in brief.get("search_queries", [])) or "No search queries collected.",
+        "competitor_urls": "\n".join(f"- {item}" for item in brief.get("competitor_urls", [])[:20]) or "No competitor URLs collected.",
+        "competitor_summary": render_competitor_brief_for_prompt(brief),
+        "content_gaps": "\n".join(f"- {item}" for item in brief.get("content_gaps", [])) or "No content gaps detected.",
+        "common_headings": "\n".join(f"- {item}" for item in brief.get("common_headings", [])) or "No common headings detected.",
+        "missing_blocks_to_cover": "\n".join(f"- {item}" for item in brief.get("missing_blocks_to_cover", [])) or "No missing blocks detected.",
+    }
 
 
 def describe_ai_provider_error(error: Exception) -> str:
@@ -1118,7 +1839,8 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate) -> models
         target_words=payload.target_words,
         prompt_template_name=payload.prompt_template_name,
         prompt_template=prompt_template,
-        status="created",
+        collect_competitors=payload.collect_competitors,
+        status="research_queries_ready" if payload.collect_competitors else "created",
     )
     db.add(task)
     db.flush()
@@ -1147,9 +1869,13 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate) -> models
             word_count=count_words(generated_json),
             section_id=payload.section_id,
             generation_prompt_name=payload.prompt_template_name,
+            competitor_research_status="queries_ready" if payload.collect_competitors else "not_requested",
             idempotency_key=f"{payload.geo.lower()}-{payload.language.lower()}-{slugify(topic)}-{index}-{uuid.uuid4().hex[:8]}",
         )
         db.add(item)
+        db.flush()
+        if payload.collect_competitors:
+            ensure_competitor_queries(db, item, payload.geo, payload.language)
 
     db.commit()
     db.refresh(task)
@@ -1177,6 +1903,7 @@ def generate_task_items(db: Session, task: models.GenerationTask) -> models.Gene
                         shortcode=None,
                         include_toc=True,
                         include_faq=True,
+                        competitor_brief=item.competitor_brief,
                     )
                 )
                 item.slug = item.generated_json["pages"][0]["slug"]
@@ -1195,6 +1922,41 @@ def generate_task_items(db: Session, task: models.GenerationTask) -> models.Gene
     db.commit()
     db.refresh(task)
     return task
+
+
+def generate_content_item(db: Session, item: models.ContentItem) -> models.ContentItem:
+    task = db.get(models.GenerationTask, item.task_id)
+    if not task:
+        raise ValueError("Generation task not found")
+    provider = db.get(models.AiProvider, task.ai_provider_id) if task.ai_provider_id else None
+    site = db.get(models.Site, task.site_id) if task.site_id else None
+    item.status = "generating"
+    db.flush()
+    if provider and provider.is_active:
+        item.generated_json = asyncio.run(
+            build_ai_content(
+                provider=provider,
+                topic=item.topic,
+                geo=task.geo,
+                language=task.language,
+                target_words=task.target_words,
+                site=site,
+                payload_mode=task.payload_mode,
+                prompt_template=task.prompt_template,
+                shortcode=None,
+                include_toc=True,
+                include_faq=True,
+                competitor_brief=item.competitor_brief,
+            )
+        )
+        item.slug = item.generated_json["pages"][0]["slug"]
+        item.word_count = count_words(item.generated_json)
+    item.generation_prompt_name = task.prompt_template_name
+    item.generated_at = datetime.now(timezone.utc)
+    item.status = "generated"
+    db.commit()
+    db.refresh(item)
+    return item
 
 
 def schedule_campaign(db: Session, payload: PublicationCampaignCreate) -> models.PublicationCampaign:

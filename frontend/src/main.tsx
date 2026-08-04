@@ -45,12 +45,14 @@ type Task = {
   title: string;
   site_id: string | null;
   section_id: string | null;
+  ai_provider_id: string | null;
   geo: string;
   language: string;
   payload_mode: string;
   topics_count: number;
   target_words: number | null;
   status: string;
+  collect_competitors: boolean;
   created_at: string;
   prompt_template_name: string | null;
   prompt_template: string | null;
@@ -70,7 +72,71 @@ type ContentItem = {
   generated_json: Record<string, unknown>;
   generation_prompt_name: string | null;
   generated_at: string | null;
+  competitor_research_status: string;
+  competitor_brief: CompetitorBrief | null;
   updated_at: string;
+};
+
+type CompetitorBrief = {
+  generated_at?: string;
+  search_queries?: string[];
+  competitor_urls?: string[];
+  competitor_summary?: Array<Record<string, unknown>>;
+  common_headings?: string[];
+  content_gaps?: string[];
+  missing_blocks_to_cover?: string[];
+  notes?: string[];
+};
+
+type CompetitorQuery = {
+  id: string;
+  content_item_id: string;
+  query: string;
+  position: number;
+  status: string;
+  result_count: number;
+};
+
+type CompetitorResult = {
+  id: string;
+  content_item_id: string;
+  query_id: string | null;
+  query_text: string;
+  position: number;
+  url: string;
+  normalized_url: string;
+  title: string | null;
+  snippet: string | null;
+  source_provider: string;
+  status: string;
+};
+
+type CompetitorPage = {
+  id: string;
+  content_item_id: string;
+  competitor_result_id: string;
+  url: string;
+  http_status: number | null;
+  title: string | null;
+  h1: string | null;
+  meta_description: string | null;
+  headings: Array<Record<string, unknown>>;
+  text_content: string | null;
+  tables: unknown[];
+  lists: unknown[];
+  faq: unknown[];
+  word_count: number;
+  error_message: string | null;
+  fetched_at: string | null;
+};
+
+type CompetitorResearch = {
+  content_item_id: string;
+  status: string;
+  brief: CompetitorBrief | null;
+  queries: CompetitorQuery[];
+  results: CompetitorResult[];
+  pages: CompetitorPage[];
 };
 
 type Site = {
@@ -250,12 +316,24 @@ const DEFAULT_PROMPT_DRAFT = `Рабочий промпт для конкрет�
 - Желаемый объем: около {{TARGET_WORDS}} слов
 - Текущий год: {{CURRENT_YEAR}}
 - Shortcode context: {{SHORTCODE}}
+- Поисковые запросы: {{SEARCH_QUERIES}}
+- URL конкурентов: {{COMPETITOR_URLS}}
+- Анализ конкурентов: {{COMPETITOR_SUMMARY}}
+- Content gaps: {{CONTENT_GAPS}}
+- Частые заголовки конкурентов: {{COMMON_HEADINGS}}
+- Недостающие блоки: {{MISSING_BLOCKS_TO_COVER}}
 
 Контекст ниши:
 Онлайн-казино, ставки, casino providers, легальные Anbieter, лицензии, Spielerschutz, Zahlungen, Auszahlungen, KYC, Datenschutz, Limits, sichere Online Casinos.
 
 Главная цель:
 Создать полезную, структурированную, юридически аккуратную страницу, которая полно отвечает на поисковый интент пользователя и пригодна для редакторской проверки перед публикацией.
+
+Если передан анализ конкурентов:
+- Используй его только как исследовательский контекст.
+- Не копируй конкурентов и не делай близкий перефраз.
+- Делай оригинальную структуру и закрывай intent полнее.
+- Не утверждай в публичном тексте, что ты изучил Google или конкретных конкурентов.
 
 Внутренняя SEO-логика, НЕ выводить в текст:
 1. Главный интент.
@@ -910,11 +988,14 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
   const [promptTemplateId, setPromptTemplateId] = React.useState("");
   const [sectionId, setSectionId] = React.useState("");
   const [shortcode, setShortcode] = React.useState("");
+  const [collectCompetitors, setCollectCompetitors] = React.useState(false);
   const [formError, setFormError] = React.useState("");
   const [taskDetails, setTaskDetails] = React.useState<TaskDetails | null>(null);
+  const [taskResearch, setTaskResearch] = React.useState<CompetitorResearch[]>([]);
   const [selectedPreview, setSelectedPreview] = React.useState<ContentItem | null>(null);
   const [detailsError, setDetailsError] = React.useState("");
   const [detailsLoadingId, setDetailsLoadingId] = React.useState("");
+  const [researchAction, setResearchAction] = React.useState("");
   const topicCount = topics.split("\n").map((line) => line.trim()).filter(Boolean).length;
   const selectedPrompt = promptTemplates.find((prompt) => prompt.id === promptTemplateId) || promptTemplates.find((prompt) => prompt.is_default) || promptTemplates[0];
 
@@ -959,10 +1040,13 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
         shortcode: shortcode.trim() || null,
         include_toc: true,
         include_faq: true,
+        collect_competitors: collectCompetitors,
         topics: cleanTopics
       })
     });
-    await api(`/tasks/${task.id}/generate`, { method: "POST" });
+    if (!collectCompetitors) {
+      await api(`/tasks/${task.id}/generate`, { method: "POST" });
+    }
     await openTaskDetails(task.id);
     setTitle("");
     setTopics("");
@@ -977,10 +1061,62 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
       const details = await api<TaskDetails>(`/tasks/${taskId}`);
       setTaskDetails(details);
       setSelectedPreview(details.items[0] || null);
+      await refreshTaskResearch(taskId);
     } catch (error) {
       setDetailsError(error instanceof Error ? error.message : "Не удалось открыть задачу.");
     } finally {
       setDetailsLoadingId("");
+    }
+  }
+
+  async function refreshTaskResearch(taskId = taskDetails?.task.id) {
+    if (!taskId) return;
+    const research = await api<CompetitorResearch[]>(`/tasks/${taskId}/competitor-research`);
+    setTaskResearch(research);
+  }
+
+  async function runResearchAction(contentItemId: string, action: "save" | "serp" | "pages" | "brief" | "generate", queries?: string[]) {
+    setDetailsError("");
+    setResearchAction(`${contentItemId}:${action}`);
+    try {
+      if (action === "save") {
+        await api(`/content/${contentItemId}/competitor-queries`, {
+          method: "PUT",
+          body: JSON.stringify({ queries: (queries || []).map((query) => query.trim()).filter(Boolean) })
+        });
+      } else if (action === "serp") {
+        await api(`/content/${contentItemId}/competitor-serp`, { method: "POST" });
+      } else if (action === "pages") {
+        await api(`/content/${contentItemId}/competitor-pages`, { method: "POST" });
+      } else if (action === "brief") {
+        await api(`/content/${contentItemId}/competitor-brief`, { method: "POST" });
+      } else {
+        await api(`/content/${contentItemId}/generate`, { method: "POST" });
+      }
+      await refreshTaskResearch();
+      if (taskDetails) {
+        const updated = await api<TaskDetails>(`/tasks/${taskDetails.task.id}`);
+        setTaskDetails(updated);
+      }
+    } catch (error) {
+      setDetailsError(error instanceof Error ? error.message : "Не удалось выполнить действие с конкурентами.");
+    } finally {
+      setResearchAction("");
+    }
+  }
+
+  async function generateOpenedTask() {
+    if (!taskDetails) return;
+    setDetailsError("");
+    setResearchAction(`${taskDetails.task.id}:generate`);
+    try {
+      await api(`/tasks/${taskDetails.task.id}/generate`, { method: "POST" });
+      await openTaskDetails(taskDetails.task.id);
+      await onChanged();
+    } catch (error) {
+      setDetailsError(error instanceof Error ? error.message : "Не удалось запустить генерацию.");
+    } finally {
+      setResearchAction("");
     }
   }
 
@@ -1032,6 +1168,10 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
             Shortcode
             <input value={shortcode} onChange={(event) => setShortcode(event.target.value)} placeholder="showcase-redesign" />
           </label>
+          <label className="checkboxRow wide">
+            <input checked={collectCompetitors} onChange={(event) => setCollectCompetitors(event.target.checked)} type="checkbox" />
+            Собрать конкурентов перед генерацией
+          </label>
           <label className="wide">
             Темы, каждая с новой строки
             <textarea
@@ -1044,7 +1184,11 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
             <span className={topicCount > 30 ? "fieldHint danger" : "fieldHint"}>{topicCount}/30 тем</span>
           </label>
           {formError ? <span className="formError wide">{formError}</span> : null}
-          <div className="formActions wide"><button className="button primary" type="submit"><Plus size={18} /> Создать и сгенерировать</button></div>
+          <div className="formActions wide">
+            <button className="button primary" type="submit">
+              <Plus size={18} /> {collectCompetitors ? "Создать и перейти к запросам" : "Создать и сгенерировать"}
+            </button>
+          </div>
         </form>
       </DataPanel>
       <DataPanel title="Задачи проекта">
@@ -1076,6 +1220,15 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
             <div><span>Тем</span><strong>{taskDetails.task.topics_count}</strong></div>
             <div><span>Промпт</span><PromptBadge name={taskDetails.task.prompt_template_name} /></div>
           </div>
+          {taskDetails.task.collect_competitors ? (
+            <CompetitorResearchWorkflow
+              items={taskDetails.items}
+              research={taskResearch}
+              actionId={researchAction}
+              onAction={runResearchAction}
+              onGenerateAll={generateOpenedTask}
+            />
+          ) : null}
           <div className="gridTwo">
             <div className="subPanel">
               <h3 className="subPanelTitle"><ListChecks size={18} /> Темы и результаты</h3>
@@ -1112,6 +1265,159 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
         </DataPanel>
       ) : null}
     </section>
+  );
+}
+
+function CompetitorResearchWorkflow({
+  items,
+  research,
+  actionId,
+  onAction,
+  onGenerateAll
+}: {
+  items: ContentItem[];
+  research: CompetitorResearch[];
+  actionId: string;
+  onAction: (contentItemId: string, action: "save" | "serp" | "pages" | "brief" | "generate", queries?: string[]) => Promise<void>;
+  onGenerateAll: () => Promise<void>;
+}) {
+  const byItem = new Map(research.map((item) => [item.content_item_id, item]));
+  const allBriefReady = items.length > 0 && items.every((item) => byItem.get(item.id)?.brief);
+  const generatingAll = actionId.endsWith(":generate") && !items.some((item) => actionId.startsWith(item.id));
+  return (
+    <div className="competitorWorkflow">
+      <div className="workflowSteps">
+        {["Темы", "Запросы", "Конкуренты", "Анализ", "Генерация", "Просмотр и approve"].map((step, index) => (
+          <span key={step} className="workflowStep">{index + 1}. {step}</span>
+        ))}
+      </div>
+      <div className="promptHelp">
+        Перед генерацией проверь запросы, собери TOP-5 URL, спарси страницы и собери brief. В Gemini уйдет brief, а не сырой HTML.
+      </div>
+      <div className="competitorCards">
+        {items.map((item) => (
+          <CompetitorResearchCard
+            key={item.id}
+            item={item}
+            research={byItem.get(item.id)}
+            actionId={actionId}
+            onAction={onAction}
+          />
+        ))}
+      </div>
+      <div className="formActions">
+        <button className="button primary" type="button" onClick={onGenerateAll} disabled={!allBriefReady || generatingAll}>
+          <Play size={18} /> {generatingAll ? "Генерация" : "Сгенерировать все тексты"}
+        </button>
+        {!allBriefReady ? <span className="fieldHint">Кнопка станет доступна, когда brief будет готов по каждой теме.</span> : null}
+      </div>
+    </div>
+  );
+}
+
+function CompetitorResearchCard({
+  item,
+  research,
+  actionId,
+  onAction
+}: {
+  item: ContentItem;
+  research?: CompetitorResearch;
+  actionId: string;
+  onAction: (contentItemId: string, action: "save" | "serp" | "pages" | "brief" | "generate", queries?: string[]) => Promise<void>;
+}) {
+  const [queryDraft, setQueryDraft] = React.useState("");
+  React.useEffect(() => {
+    setQueryDraft((research?.queries || []).map((query) => query.query).join("\n"));
+  }, [research?.queries]);
+
+  const busy = actionId.startsWith(item.id);
+  const activeAction = busy ? actionId.split(":")[1] : "";
+  const pagesOk = (research?.pages || []).filter((page) => (page.http_status || 0) >= 200 && (page.http_status || 0) < 400 && page.word_count > 0).length;
+  const brief = research?.brief || item.competitor_brief;
+  const queryLines = queryDraft.split("\n").map((line) => line.trim()).filter(Boolean);
+  return (
+    <article className="competitorCard">
+      <div className="competitorCardHeader">
+        <div>
+          <span className="fieldHint">Тема</span>
+          <strong>{item.topic}</strong>
+          <div className="topicMeta">
+            <StatusBadge status={research?.status || item.competitor_research_status || "not_requested"} />
+            <span>{research?.results.length || 0} URL</span>
+            <span>{pagesOk}/{research?.pages.length || 0} страниц</span>
+          </div>
+        </div>
+        <button className="button compact" type="button" onClick={() => onAction(item.id, "generate")} disabled={!brief || busy}>
+          <Play size={15} /> {activeAction === "generate" ? "Генерация" : "Сгенерировать текст"}
+        </button>
+      </div>
+      <div className="researchGrid">
+        <label>
+          Запросы для Google
+          <textarea value={queryDraft} onChange={(event) => setQueryDraft(event.target.value)} rows={4} placeholder="2-3 запроса, каждый с новой строки" />
+          <span className={queryLines.length > 5 ? "fieldHint danger" : "fieldHint"}>{queryLines.length}/5 запросов</span>
+        </label>
+        <div className="researchActions">
+          <button className="button compact" type="button" onClick={() => onAction(item.id, "save", queryLines)} disabled={busy || !queryLines.length}>
+            <Edit3 size={15} /> {activeAction === "save" ? "Сохраняю" : "Сохранить запросы"}
+          </button>
+          <button className="button compact" type="button" onClick={() => onAction(item.id, "serp")} disabled={busy || !queryLines.length}>
+            <Globe2 size={15} /> {activeAction === "serp" ? "Собираю" : "Собрать выдачу"}
+          </button>
+          <button className="button compact" type="button" onClick={() => onAction(item.id, "pages")} disabled={busy || !(research?.results.length)}>
+            <Database size={15} /> {activeAction === "pages" ? "Парсинг" : "Спарсить URL"}
+          </button>
+          <button className="button compact" type="button" onClick={() => onAction(item.id, "brief")} disabled={busy || !research?.pages.length}>
+            <ListChecks size={15} /> {activeAction === "brief" ? "Анализ" : "Собрать анализ"}
+          </button>
+        </div>
+      </div>
+      {research?.results.length ? (
+        <div className="competitorList">
+          <strong>Найденные конкуренты</strong>
+          {research.results.slice(0, 15).map((result) => (
+            <div className="competitorResult" key={result.id}>
+              <span>{result.query_text} · #{result.position}</span>
+              <a href={result.url} target="_blank" rel="noreferrer">{result.title || result.url}</a>
+              {result.snippet ? <p>{result.snippet}</p> : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {research?.pages.length ? (
+        <div className="pageParseList">
+          <strong>Парсинг страниц</strong>
+          {research.pages.slice(0, 15).map((page) => (
+            <div className="pageParseItem" key={page.id}>
+              <span>HTTP {page.http_status || "-"} · {page.word_count} слов</span>
+              <a href={page.url} target="_blank" rel="noreferrer">{page.title || page.h1 || page.url}</a>
+              {page.error_message ? <p>{page.error_message}</p> : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {brief ? (
+        <div className="briefPreview">
+          <strong>Краткий анализ конкурентов</strong>
+          <BriefList title="Content gaps" items={brief.content_gaps || []} />
+          <BriefList title="Частые заголовки" items={brief.common_headings || []} />
+          <BriefList title="Что обязательно закрыть" items={brief.missing_blocks_to_cover || []} />
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function BriefList({ title, items }: { title: string; items: string[] }) {
+  if (!items.length) return null;
+  return (
+    <div className="briefList">
+      <span>{title}</span>
+      <ul>
+        {items.slice(0, 8).map((item) => <li key={item}>{item}</li>)}
+      </ul>
+    </div>
   );
 }
 
@@ -1293,7 +1599,7 @@ function ProjectPromptsPanel({ api, site, promptTemplates, basePrompt, isAdmin, 
               </label>
             </div>
             <div className="promptHelp">
-              Это общий список промптов для всех проектов. При генерации система автоматически подставляет значения из формы: <code>{"{{TOPIC}}"}</code>, <code>{"{{GEO}}"}</code>, <code>{"{{LANGUAGE}}"}</code>, <code>{"{{TARGET_WORDS}}"}</code>, <code>{"{{SITE_NAME}}"}</code>, <code>{"{{SLUG}}"}</code>, <code>{"{{CURRENT_YEAR}}"}</code>, <code>{"{{SHORTCODE}}"}</code>.
+              Это общий список промптов для всех проектов. При генерации система автоматически подставляет значения из формы и анализа: <code>{"{{TOPIC}}"}</code>, <code>{"{{GEO}}"}</code>, <code>{"{{LANGUAGE}}"}</code>, <code>{"{{TARGET_WORDS}}"}</code>, <code>{"{{SITE_NAME}}"}</code>, <code>{"{{SLUG}}"}</code>, <code>{"{{CURRENT_YEAR}}"}</code>, <code>{"{{SHORTCODE}}"}</code>, <code>{"{{SEARCH_QUERIES}}"}</code>, <code>{"{{COMPETITOR_URLS}}"}</code>, <code>{"{{COMPETITOR_SUMMARY}}"}</code>, <code>{"{{CONTENT_GAPS}}"}</code>, <code>{"{{COMMON_HEADINGS}}"}</code>, <code>{"{{MISSING_BLOCKS_TO_COVER}}"}</code>.
             </div>
             {editorError ? <span className="formError">{editorError}</span> : null}
             {editorSuccess ? <span className="formSuccess">{editorSuccess}</span> : null}
@@ -1539,6 +1845,7 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
   const [shortcode, setShortcode] = React.useState("");
   const [includeToc, setIncludeToc] = React.useState(true);
   const [includeFaq, setIncludeFaq] = React.useState(true);
+  const [collectCompetitors, setCollectCompetitors] = React.useState(false);
 
   React.useEffect(() => {
     const generationProviders = providers.filter(isGenerationProvider);
@@ -1560,10 +1867,13 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
       shortcode: shortcode.trim() || null,
       include_toc: includeToc,
       include_faq: includeFaq,
+      collect_competitors: collectCompetitors,
       topics: topics.split("\n").map((line: string) => line.trim()).filter(Boolean)
     };
     const task = await api<Task>("/tasks", { method: "POST", body: JSON.stringify(payload) });
-    await api(`/tasks/${task.id}/generate`, { method: "POST" });
+    if (!collectCompetitors) {
+      await api(`/tasks/${task.id}/generate`, { method: "POST" });
+    }
     setTitle("");
     setTopics("");
     setShortcode("");
@@ -1624,12 +1934,18 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
             <input type="checkbox" checked={includeFaq} onChange={(event) => setIncludeFaq(event.target.checked)} />
             Создавать FAQ
           </label>
+          <label className="checkboxRow wide">
+            <input type="checkbox" checked={collectCompetitors} onChange={(event) => setCollectCompetitors(event.target.checked)} />
+            Собрать конкурентов перед генерацией
+          </label>
           <label className="wide">
             Темы, каждая с новой строки
             <textarea value={topics} onChange={(event) => setTopics(event.target.value)} required rows={8} placeholder="best online casinos in Germany" />
           </label>
           <div className="formActions wide">
-            <button className="button primary" type="submit"><Plus size={18} /> Создать и сгенерировать</button>
+            <button className="button primary" type="submit">
+              <Plus size={18} /> {collectCompetitors ? "Создать без автогенерации" : "Создать и сгенерировать"}
+            </button>
           </div>
         </form>
       </DataPanel>
@@ -2221,6 +2537,7 @@ function TopicMetaCell({ item, promptName }: { item: ContentItem; promptName?: s
     <div className="topicMetaCell">
       <strong>{item.topic}</strong>
       <PromptBadge name={generationPrompt} />
+      {item.competitor_brief ? <span className="researchBadge">На основе анализа конкурентов</span> : null}
       <span>Генерация: {generationDate ? formatDate(generationDate) : "-"}</span>
     </div>
   );

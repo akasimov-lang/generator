@@ -11,6 +11,8 @@ from app.db import get_db
 from app.schemas import (
     AiProviderCreate,
     AiProviderResponse,
+    CompetitorQueriesUpdate,
+    CompetitorResearchResponse,
     ContentItemResponse,
     ContentUpdate,
     GenerationTaskCreate,
@@ -38,12 +40,18 @@ from app.schemas import (
 from app.security import AdminUser, AuthUser, create_token, hash_password, verify_password
 from app.services import (
     BASE_PROMPT_TEMPLATE_NAME,
+    build_competitor_brief_for_item,
+    collect_competitor_serp_for_item,
     count_words,
     create_generation_task,
     ensure_base_prompt_template,
     ensure_default_prompt_template,
+    ensure_competitor_queries,
+    fetch_competitor_pages_for_item,
+    generate_content_item,
     generate_task_items,
     get_dashboard,
+    replace_competitor_queries,
     schedule_campaign,
     validate_ai_provider_key,
 )
@@ -104,6 +112,32 @@ def _list_global_prompt_templates(db: Session, site: models.Site | None = None) 
     used_counts = {prompt_id: count for prompt_id, count in used_rows}
     rows = [_prompt_template_response(prompt, site, used_counts.get(prompt.id, 0)) for prompt in prompts]
     return sorted(rows, key=lambda row: (not row["is_default"], row["name"].lower()))
+
+
+def _competitor_research_response(db: Session, item: models.ContentItem) -> dict:
+    queries = db.scalars(
+        select(models.CompetitorQuery)
+        .where(models.CompetitorQuery.content_item_id == item.id)
+        .order_by(models.CompetitorQuery.position.asc())
+    ).all()
+    results = db.scalars(
+        select(models.CompetitorResult)
+        .where(models.CompetitorResult.content_item_id == item.id)
+        .order_by(models.CompetitorResult.query_text.asc(), models.CompetitorResult.position.asc())
+    ).all()
+    pages = db.scalars(
+        select(models.CompetitorPage)
+        .where(models.CompetitorPage.content_item_id == item.id)
+        .order_by(models.CompetitorPage.created_at.desc())
+    ).all()
+    return {
+        "content_item_id": item.id,
+        "status": item.competitor_research_status,
+        "brief": item.competitor_brief,
+        "queries": queries,
+        "results": results,
+        "pages": pages,
+    }
 
 
 @router.get("/health")
@@ -488,6 +522,14 @@ def get_task(task_id: str, _: AuthUser, db: Session = Depends(get_db)) -> dict:
     return {"task": task, "items": task.items}
 
 
+@router.get("/tasks/{task_id}/competitor-research", response_model=list[CompetitorResearchResponse])
+def get_task_competitor_research(task_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    task = db.get(models.GenerationTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return [_competitor_research_response(db, item) for item in task.items]
+
+
 @router.post("/tasks/{task_id}/generate", response_model=GenerationTaskResponse)
 def generate_task(task_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     task = db.get(models.GenerationTask, task_id)
@@ -507,6 +549,89 @@ def get_content(content_id: str, _: AuthUser, db: Session = Depends(get_db)) -> 
     if not item:
         raise HTTPException(status_code=404, detail="Content item not found")
     return item
+
+
+@router.get("/content/{content_id}/competitor-research", response_model=CompetitorResearchResponse)
+def get_content_competitor_research(content_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    item = db.get(models.ContentItem, content_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Content item not found")
+    task = db.get(models.GenerationTask, item.task_id)
+    if task:
+        ensure_competitor_queries(db, item, task.geo, task.language)
+        db.commit()
+        db.refresh(item)
+    return _competitor_research_response(db, item)
+
+
+@router.put("/content/{content_id}/competitor-queries", response_model=CompetitorResearchResponse)
+def update_content_competitor_queries(content_id: str, payload: CompetitorQueriesUpdate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    item = db.get(models.ContentItem, content_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Content item not found")
+    try:
+        replace_competitor_queries(db, item, payload.queries)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.commit()
+    db.refresh(item)
+    return _competitor_research_response(db, item)
+
+
+@router.post("/content/{content_id}/competitor-serp", response_model=CompetitorResearchResponse)
+def collect_content_competitor_serp(content_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    item = db.get(models.ContentItem, content_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Content item not found")
+    try:
+        asyncio.run(collect_competitor_serp_for_item(db, item))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)[:500]) from exc
+    db.refresh(item)
+    return _competitor_research_response(db, item)
+
+
+@router.post("/content/{content_id}/competitor-pages", response_model=CompetitorResearchResponse)
+def fetch_content_competitor_pages(content_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    item = db.get(models.ContentItem, content_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Content item not found")
+    try:
+        asyncio.run(fetch_competitor_pages_for_item(db, item))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)[:500]) from exc
+    db.refresh(item)
+    return _competitor_research_response(db, item)
+
+
+@router.post("/content/{content_id}/competitor-brief", response_model=CompetitorResearchResponse)
+def build_content_competitor_brief(content_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    item = db.get(models.ContentItem, content_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Content item not found")
+    try:
+        build_competitor_brief_for_item(db, item)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.refresh(item)
+    return _competitor_research_response(db, item)
+
+
+@router.post("/content/{content_id}/generate", response_model=ContentItemResponse)
+def generate_content(content_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    item = db.get(models.ContentItem, content_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Content item not found")
+    try:
+        return generate_content_item(db, item)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)[:500]) from exc
 
 
 @router.patch("/content/{content_id}", response_model=ContentItemResponse)

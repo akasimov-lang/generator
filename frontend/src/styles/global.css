@@ -512,6 +512,138 @@ h2 {
   white-space: pre-wrap;
 }
 
+.competitorWorkflow {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+  padding-top: 18px;
+}
+
+.workflowSteps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workflowStep {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 6px 9px;
+}
+
+.competitorCards {
+  display: grid;
+  gap: 12px;
+}
+
+.competitorCard {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.competitorCardHeader {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.competitorCardHeader > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.topicMeta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.topicMeta span:not(.status) {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.researchGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.researchActions {
+  align-content: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.competitorList,
+.pageParseList,
+.briefPreview {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.competitorResult,
+.pageParseItem {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 4px;
+  padding-top: 9px;
+}
+
+.competitorResult:first-of-type,
+.pageParseItem:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.competitorResult span,
+.pageParseItem span,
+.briefList span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.competitorResult p,
+.pageParseItem p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.briefList {
+  display: grid;
+  gap: 5px;
+}
+
+.briefList ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.briefList li {
+  margin: 3px 0;
+}
+
 .promptHelp,
 .fieldHint {
   color: var(--muted);
@@ -634,7 +766,8 @@ td {
 .status-generated,
 .status-approved,
 .status-published,
-.status-valid {
+.status-valid,
+.status-brief-ready {
   background: var(--primary-soft);
   color: var(--primary);
 }
@@ -643,7 +776,13 @@ td {
 .status-scheduled,
 .status-publishing,
 .status-retry-scheduled,
-.status-unchecked {
+.status-unchecked,
+.status-research-queries-ready,
+.status-queries-ready,
+.status-serp-collected,
+.status-pages-fetched,
+.status-discovered,
+.status-fetched {
   background: var(--blue-soft);
   color: var(--blue);
 }
@@ -651,7 +790,9 @@ td {
 .status-publication-failed,
 .status-generation-failed,
 .status-rejected,
-.status-invalid {
+.status-invalid,
+.status-serp-empty,
+.status-fetch-failed {
   background: var(--danger-soft);
   color: var(--danger);
 }
@@ -875,6 +1016,17 @@ textarea:focus {
   color: var(--primary);
 }
 
+.researchBadge {
+  background: var(--blue-soft);
+  border-radius: 999px;
+  color: var(--blue);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 8px;
+  width: fit-content;
+}
+
 .userActions {
   display: flex;
   align-items: center;
@@ -959,8 +1111,17 @@ a {
   .gridTwo,
   .promptEditorLayout,
   .taskDetailGrid,
+  .researchGrid,
   .formGrid {
     grid-template-columns: 1fr;
+  }
+
+  .competitorCardHeader {
+    flex-direction: column;
+  }
+
+  .researchActions {
+    justify-content: flex-start;
   }
 }
 

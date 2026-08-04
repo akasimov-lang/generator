@@ -103,6 +103,7 @@ class GenerationTask(Base, TimestampMixin):
     target_words: Mapped[int | None] = mapped_column(Integer, nullable=True)
     prompt_template_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
     prompt_template: Mapped[str | None] = mapped_column(Text, nullable=True)
+    collect_competitors: Mapped[bool] = mapped_column(Boolean, default=False)
 
     items: Mapped[list["ContentItem"]] = relationship(back_populates="task", cascade="all, delete-orphan")
 
@@ -121,12 +122,63 @@ class ContentItem(Base, TimestampMixin):
     section_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
     generation_prompt_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
     generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    competitor_research_status: Mapped[str] = mapped_column(String(40), default="not_requested")
+    competitor_brief: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    competitor_brief_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     idempotency_key: Mapped[str] = mapped_column(String(240), unique=True, nullable=False)
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     published_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     task: Mapped[GenerationTask] = relationship(back_populates="items")
+
+
+class CompetitorQuery(Base, TimestampMixin):
+    __tablename__ = "competitor_queries"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    content_item_id: Mapped[str] = mapped_column(ForeignKey("content_items.id"), nullable=False, index=True)
+    query: Mapped[str] = mapped_column(Text, nullable=False)
+    position: Mapped[int] = mapped_column(Integer, default=1)
+    status: Mapped[str] = mapped_column(String(40), default="draft")
+    result_count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class CompetitorResult(Base, TimestampMixin):
+    __tablename__ = "competitor_results"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    content_item_id: Mapped[str] = mapped_column(ForeignKey("content_items.id"), nullable=False, index=True)
+    query_id: Mapped[str | None] = mapped_column(ForeignKey("competitor_queries.id"), nullable=True, index=True)
+    query_text: Mapped[str] = mapped_column(Text, nullable=False)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_url: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    snippet: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_provider: Mapped[str] = mapped_column(String(80), default="dataforseo")
+    status: Mapped[str] = mapped_column(String(40), default="discovered")
+
+
+class CompetitorPage(Base, TimestampMixin):
+    __tablename__ = "competitor_pages"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    content_item_id: Mapped[str] = mapped_column(ForeignKey("content_items.id"), nullable=False, index=True)
+    competitor_result_id: Mapped[str] = mapped_column(ForeignKey("competitor_results.id"), nullable=False, index=True)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    h1: Mapped[str | None] = mapped_column(Text, nullable=True)
+    meta_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    headings: Mapped[list] = mapped_column(JSON, default=list)
+    text_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tables: Mapped[list] = mapped_column(JSON, default=list)
+    lists: Mapped[list] = mapped_column(JSON, default=list)
+    faq: Mapped[list] = mapped_column(JSON, default=list)
+    word_count: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class PublicationCampaign(Base, TimestampMixin):
