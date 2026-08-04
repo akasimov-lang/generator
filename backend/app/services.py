@@ -20,6 +20,8 @@ SITE_DEFAULT = "site_default"
 DEFAULT_EDITOR_VERSION = "2.31.0"
 GEMINI_DEFAULT_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 GEMINI_DEFAULT_MODEL = "gemini-3.5-flash"
+DATAFORSEO_DEFAULT_ENDPOINT = "https://api.dataforseo.com/v3"
+DATAFORSEO_USER_DATA_PATH = "/appendix/user_data"
 DEFAULT_CONTENT_PROMPT_TEMPLATE = """Рабочий промпт для конкретной задачи.
 
 Базовые требования качества, юридической осторожности и формата ответа применяются отдельно через "Базовый промпт".
@@ -707,6 +709,9 @@ def compose_prompt_with_base(db: Session, prompt_template: str | None) -> str:
 async def validate_ai_provider_key(provider: models.AiProvider) -> models.AiProvider:
     provider.validated_at = datetime.now(timezone.utc)
 
+    if provider.provider_type == "dataforseo":
+        return await validate_dataforseo_provider(provider)
+
     if provider.provider_type != "gemini":
         provider.validation_status = "unchecked"
         provider.validation_message = "Автопроверка сейчас доступна только для Gemini-провайдеров."
@@ -729,6 +734,107 @@ async def validate_ai_provider_key(provider: models.AiProvider) -> models.AiProv
     provider.validation_status = "valid"
     provider.validation_message = "Gemini API key is valid"
     return provider
+
+
+async def validate_dataforseo_provider(provider: models.AiProvider) -> models.AiProvider:
+    try:
+        login, password = parse_dataforseo_credentials(provider)
+        user_data_url = build_dataforseo_user_data_url(provider.endpoint_url)
+        async with httpx.AsyncClient(timeout=20) as client:
+            response = await client.get(
+                user_data_url,
+                auth=(login, password),
+                headers={"Content-Type": "application/json"},
+            )
+            response.raise_for_status()
+            payload = response.json()
+    except Exception as exc:
+        provider.validation_status = "invalid"
+        provider.validation_message = describe_dataforseo_error(exc)
+        return provider
+
+    status_code = int(payload.get("status_code") or 0) if isinstance(payload, dict) else 0
+    if status_code != 20000:
+        provider.validation_status = "invalid"
+        provider.validation_message = describe_dataforseo_payload_error(payload)
+        return provider
+
+    task = first_dataforseo_task(payload)
+    task_status = int(task.get("status_code") or status_code) if task else status_code
+    if task_status != 20000:
+        provider.validation_status = "invalid"
+        provider.validation_message = describe_dataforseo_payload_error(payload)
+        return provider
+
+    account_login = login
+    result = task.get("result") if task else None
+    if isinstance(result, list) and result and isinstance(result[0], dict):
+        account_login = str(result[0].get("login") or account_login)
+
+    provider.validation_status = "valid"
+    provider.validation_message = f"DataForSEO API connected. Login: {account_login}"
+    return provider
+
+
+def parse_dataforseo_credentials(provider: models.AiProvider) -> tuple[str, str]:
+    raw_credentials = (provider.api_key or "").strip()
+    if not raw_credentials:
+        raise ValueError("DataForSEO API login and API password are not configured")
+
+    if raw_credentials.startswith("{"):
+        try:
+            payload = json.loads(raw_credentials)
+        except ValueError as exc:
+            raise ValueError("DataForSEO credentials JSON is invalid") from exc
+        login = str(payload.get("login") or "").strip()
+        password = str(payload.get("password") or "").strip()
+    else:
+        if ":" not in raw_credentials:
+            raise ValueError("DataForSEO credentials must use login:password format")
+        login, password = (part.strip() for part in raw_credentials.split(":", 1))
+
+    if not login or not password:
+        raise ValueError("DataForSEO API login and API password are required")
+
+    return login, password
+
+
+def build_dataforseo_user_data_url(endpoint_url: str) -> str:
+    clean_url = (endpoint_url or DATAFORSEO_DEFAULT_ENDPOINT).rstrip("/")
+    if clean_url.endswith(DATAFORSEO_USER_DATA_PATH):
+        return clean_url
+    return f"{clean_url}{DATAFORSEO_USER_DATA_PATH}"
+
+
+def first_dataforseo_task(payload: dict) -> dict | None:
+    tasks = payload.get("tasks")
+    if isinstance(tasks, list) and tasks and isinstance(tasks[0], dict):
+        return tasks[0]
+    return None
+
+
+def describe_dataforseo_payload_error(payload: dict | object) -> str:
+    if not isinstance(payload, dict):
+        return "DataForSEO returned an unexpected response"
+
+    status_code = payload.get("status_code")
+    status_message = payload.get("status_message")
+    task = first_dataforseo_task(payload)
+    if task:
+        status_code = task.get("status_code") or status_code
+        status_message = task.get("status_message") or status_message
+
+    parts = ["DataForSEO validation failed", str(status_code or ""), str(status_message or "")]
+    return ": ".join(part for part in parts if part).strip()[:500]
+
+
+def describe_dataforseo_error(error: Exception) -> str:
+    if isinstance(error, httpx.HTTPStatusError) and error.response.status_code == 401:
+        return (
+            "HTTP 401: DataForSEO rejected credentials. "
+            "Use API password from DataForSEO API Access, not the dashboard password."
+        )
+    return describe_ai_provider_error(error)
 
 
 def describe_ai_provider_error(error: Exception) -> str:

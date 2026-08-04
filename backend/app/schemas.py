@@ -46,7 +46,9 @@ class AiProviderCreate(BaseModel):
     endpoint_url: str
     model: str = "default"
     api_key: str | None = None
-    provider_type: Literal["custom", "gemini"] = "custom"
+    api_login: str | None = None
+    api_password: str | None = None
+    provider_type: Literal["custom", "gemini", "dataforseo"] = "custom"
 
 
 class AiProviderResponse(BaseModel):

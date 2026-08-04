@@ -96,7 +96,7 @@ type Section = {
 type AiProvider = {
   id: string;
   name: string;
-  provider_type: "custom" | "gemini";
+  provider_type: "custom" | "gemini" | "dataforseo";
   endpoint_url: string;
   model: string;
   prompt_tokens_used: number;
@@ -572,7 +572,7 @@ function App() {
               <NavButton href={pathForRoute("tasks")} icon={<ListChecks />} label="Задачи" active={activeView === "tasks"} onClick={() => navigateTo("tasks")} />
               <NavButton href={pathForRoute("content")} icon={<FileText />} label="Контент" active={activeView === "content"} onClick={() => navigateTo("content")} />
               <NavButton href={pathForRoute("publications")} icon={<Send />} label="Публикации" active={activeView === "publications"} onClick={() => navigateTo("publications")} />
-              <NavButton href={pathForRoute("providers")} icon={<Bot />} label="AI Providers" active={activeView === "providers"} onClick={() => navigateTo("providers")} />
+              <NavButton href={pathForRoute("providers")} icon={<Bot />} label="API Providers" active={activeView === "providers"} onClick={() => navigateTo("providers")} />
               <NavButton href={pathForRoute("sites")} icon={<Globe2 />} label="Сайты" active={activeView === "sites"} onClick={() => navigateTo("sites")} />
             </>
           ) : (
@@ -919,11 +919,10 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
   const selectedPrompt = promptTemplates.find((prompt) => prompt.id === promptTemplateId) || promptTemplates.find((prompt) => prompt.is_default) || promptTemplates[0];
 
   React.useEffect(() => {
-    if (!providerId) {
-      const geminiProvider = providers.find((provider) => provider.provider_type === "gemini" && provider.is_active);
-      if (geminiProvider) {
-        setProviderId(geminiProvider.id);
-      }
+    const generationProviders = providers.filter(isGenerationProvider);
+    if (!providerId || !generationProviders.some((provider) => provider.id === providerId)) {
+      const geminiProvider = generationProviders.find((provider) => provider.provider_type === "gemini" && provider.is_active);
+      setProviderId(geminiProvider?.id || "");
     }
   }, [providerId, providers]);
 
@@ -1020,7 +1019,7 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
             AI Provider
             <select value={providerId} onChange={(event) => setProviderId(event.target.value)}>
               <option value="">Stub generator</option>
-              {providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
+              {providers.filter(isGenerationProvider).map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
             </select>
           </label>
           <label>
@@ -1542,11 +1541,10 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
   const [includeFaq, setIncludeFaq] = React.useState(true);
 
   React.useEffect(() => {
-    if (!providerId) {
-      const geminiProvider = providers.find((provider) => provider.provider_type === "gemini" && provider.is_active);
-      if (geminiProvider) {
-        setProviderId(geminiProvider.id);
-      }
+    const generationProviders = providers.filter(isGenerationProvider);
+    if (!providerId || !generationProviders.some((provider) => provider.id === providerId)) {
+      const geminiProvider = generationProviders.find((provider) => provider.provider_type === "gemini" && provider.is_active);
+      setProviderId(geminiProvider?.id || "");
     }
   }, [providerId, providers]);
 
@@ -1603,7 +1601,7 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
             AI Provider
             <select value={providerId} onChange={(event) => setProviderId(event.target.value)}>
               <option value="">Stub generator</option>
-              {providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
+              {providers.filter(isGenerationProvider).map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
             </select>
           </label>
           <label>
@@ -1746,23 +1744,30 @@ function PublicationsView({ api, sites, content, onChanged }: ViewProps & { site
 
 function ProvidersView({ api, providers, onChanged }: ViewProps & { providers: AiProvider[] }) {
   const [name, setName] = React.useState("Gemini");
-  const [providerType, setProviderType] = React.useState<"custom" | "gemini">("gemini");
+  const [providerType, setProviderType] = React.useState<"custom" | "gemini" | "dataforseo">("gemini");
   const [endpointUrl, setEndpointUrl] = React.useState("https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent");
   const [model, setModel] = React.useState("gemini-3.5-flash");
   const [apiKey, setApiKey] = React.useState("");
+  const [apiLogin, setApiLogin] = React.useState("");
+  const [apiPassword, setApiPassword] = React.useState("");
   const [validatingId, setValidatingId] = React.useState<string | null>(null);
 
   async function createProvider(event: React.FormEvent) {
     event.preventDefault();
+    const payload = providerType === "dataforseo"
+      ? { name, provider_type: providerType, endpoint_url: endpointUrl, model, api_login: apiLogin, api_password: apiPassword }
+      : { name, provider_type: providerType, endpoint_url: endpointUrl, model, api_key: apiKey || null };
     await api("/ai-providers", {
       method: "POST",
-      body: JSON.stringify({ name, provider_type: providerType, endpoint_url: endpointUrl, model, api_key: apiKey || null })
+      body: JSON.stringify(payload)
     });
     setName("Gemini");
     setProviderType("gemini");
     setEndpointUrl("https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent");
     setModel("gemini-3.5-flash");
     setApiKey("");
+    setApiLogin("");
+    setApiPassword("");
     onChanged();
   }
 
@@ -1778,27 +1783,32 @@ function ProvidersView({ api, providers, onChanged }: ViewProps & { providers: A
 
   return (
     <section className="viewStack">
-      <DataPanel title="Подключить AI API / tunnel">
+      <DataPanel title="Подключить API provider">
         <form className="formGrid" onSubmit={createProvider}>
           <label>
             Название
-            <input value={name} onChange={(event) => setName(event.target.value)} required placeholder="Gemini" />
+            <input value={name} onChange={(event) => setName(event.target.value)} required placeholder={providerType === "dataforseo" ? "DataForSEO" : "Gemini"} />
           </label>
           <label>
             Тип API
             <select
               value={providerType}
               onChange={(event) => {
-                const nextType = event.target.value as "custom" | "gemini";
+                const nextType = event.target.value as "custom" | "gemini" | "dataforseo";
                 setProviderType(nextType);
                 if (nextType === "gemini") {
                   setName((value) => value || "Gemini");
                   setEndpointUrl("https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent");
                   setModel("gemini-3.5-flash");
+                } else if (nextType === "dataforseo") {
+                  setName("DataForSEO");
+                  setEndpointUrl("https://api.dataforseo.com/v3");
+                  setModel("Google Organic SERP Live Advanced");
                 }
               }}
             >
               <option value="gemini">Gemini</option>
+              <option value="dataforseo">DataForSEO SERP</option>
               <option value="custom">Custom / tunnel</option>
             </select>
           </label>
@@ -1810,10 +1820,23 @@ function ProvidersView({ api, providers, onChanged }: ViewProps & { providers: A
             Модель
             <input value={model} onChange={(event) => setModel(event.target.value)} required placeholder="gpt-..." />
           </label>
-          <label>
-            API key
-            <input value={apiKey} onChange={(event) => setApiKey(event.target.value)} type="password" />
-          </label>
+          {providerType === "dataforseo" ? (
+            <>
+              <label>
+                API login
+                <input value={apiLogin} onChange={(event) => setApiLogin(event.target.value)} required placeholder="email@example.com" />
+              </label>
+              <label>
+                API password
+                <input value={apiPassword} onChange={(event) => setApiPassword(event.target.value)} required type="password" />
+              </label>
+            </>
+          ) : (
+            <label>
+              API key
+              <input value={apiKey} onChange={(event) => setApiKey(event.target.value)} type="password" />
+            </label>
+          )}
           <div className="formActions wide"><button className="button primary" type="submit"><Plus size={18} /> Сохранить provider</button></div>
         </form>
       </DataPanel>
@@ -2252,7 +2275,7 @@ function viewTitle(view: AppView, workspaceTab: WorkspaceTab) {
     tasks: "Задачи генерации",
     content: "Контент",
     publications: "Публикации",
-    providers: "AI Providers",
+    providers: "API Providers",
     sites: "Сайты",
     settings: "Настройки"
   };
@@ -2271,7 +2294,12 @@ function humanPayloadMode(value: string) {
 
 function humanProviderType(value: string) {
   if (value === "gemini") return "Gemini";
+  if (value === "dataforseo") return "DataForSEO SERP";
   return "Custom";
+}
+
+function isGenerationProvider(provider: AiProvider) {
+  return provider.provider_type === "gemini" || provider.provider_type === "custom";
 }
 
 function countryFlag(code: string) {

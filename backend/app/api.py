@@ -197,7 +197,16 @@ def list_ai_providers(_: AuthUser, db: Session = Depends(get_db)) -> Any:
 
 @router.post("/ai-providers", response_model=AiProviderResponse)
 def create_ai_provider(payload: AiProviderCreate, _: AdminUser, db: Session = Depends(get_db)) -> Any:
-    provider = models.AiProvider(**payload.model_dump())
+    provider_data = payload.model_dump(exclude={"api_login", "api_password"})
+    if payload.provider_type == "dataforseo":
+        if payload.api_login or payload.api_password:
+            if not payload.api_login or not payload.api_password:
+                raise HTTPException(status_code=400, detail="DataForSEO API login and API password are required")
+            provider_data["api_key"] = f"{(payload.api_login or '').strip()}:{(payload.api_password or '').strip()}"
+        if not provider_data.get("api_key"):
+            raise HTTPException(status_code=400, detail="DataForSEO API login and API password are required")
+
+    provider = models.AiProvider(**provider_data)
     db.add(provider)
     db.commit()
     db.refresh(provider)
