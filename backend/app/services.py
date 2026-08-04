@@ -746,6 +746,7 @@ def build_stub_content(
     shortcode: str | None = None,
     include_toc: bool = True,
     include_faq: bool = True,
+    competitor_brief: dict | None = None,
 ) -> dict:
     resolved_mode = resolve_payload_mode(site, payload_mode)
     page = build_editor_page(
@@ -770,6 +771,14 @@ def build_stub_content(
             "generator": "stub_editorjs",
         },
     }
+    if competitor_brief:
+        payload["generation_meta"]["competitor_research"] = {
+            "status": "used",
+            "generated_at": competitor_brief.get("generated_at"),
+            "search_queries": competitor_brief.get("search_queries", []),
+            "competitor_urls": competitor_brief.get("competitor_urls", []),
+            "content_gaps": competitor_brief.get("content_gaps", []),
+        }
     if resolved_mode == FULL_SITE and site and site.showcase_payload:
         payload["casinos"] = site.showcase_payload.get("casinos", site.showcase_payload)
     return payload
