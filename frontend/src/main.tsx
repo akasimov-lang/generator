@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronRight,
   CheckCircle2,
+  Copy,
   Database,
   Edit3,
   Eye,
@@ -260,6 +261,24 @@ type AppRoute = {
 const API_BASE = "/api";
 const DEFAULT_WORKSPACE_TAB: WorkspaceTab = "overview";
 const DEFAULT_ROUTE: AppRoute = { view: "dashboard", workspaceTab: DEFAULT_WORKSPACE_TAB };
+
+async function copyTextToClipboard(text: string) {
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  document.body.removeChild(textarea);
+  if (!copied) throw new Error("Clipboard copy failed");
+}
 
 const MAIN_VIEW_PATHS: Record<Exclude<AppView, "workspace">, string> = {
   dashboard: "/dashboard",
@@ -1975,6 +1994,43 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
     }
   }
 
+  async function bulkApproveTaskContent(items: ContentItem[]) {
+    const actionable = items.filter((item) => !["approved", "scheduled", "published"].includes(item.status));
+    if (!actionable.length) return;
+    setTaskError("");
+    setTaskActionId("bulk:approve");
+    try {
+      const results = await Promise.allSettled(actionable.map((item) => api(`/content/${item.id}/approve`, { method: "POST" })));
+      const failed = results.filter((result) => result.status === "rejected").length;
+      await refreshExpandedTask();
+      if (failed) {
+        setTaskError(`Не удалось согласовать часть текстов: ${failed}. Проверьте, выбран ли пункт меню.`);
+      }
+    } catch (error) {
+      setTaskError(error instanceof Error ? error.message : "Не удалось согласовать выбранные тексты.");
+    } finally {
+      setTaskActionId("");
+    }
+  }
+
+  async function bulkRegenerateTaskContent(items: ContentItem[]) {
+    if (!items.length) return;
+    setTaskError("");
+    setTaskActionId("bulk:generate");
+    try {
+      const results = await Promise.allSettled(items.map((item) => api(`/content/${item.id}/generate`, { method: "POST" })));
+      const failed = results.filter((result) => result.status === "rejected").length;
+      await refreshExpandedTask();
+      if (failed) {
+        setTaskError(`Не удалось перегенерировать часть текстов: ${failed}.`);
+      }
+    } catch (error) {
+      setTaskError(error instanceof Error ? error.message : "Не удалось запустить повторную генерацию.");
+    } finally {
+      setTaskActionId("");
+    }
+  }
+
   async function deleteContentItem(item: ContentItem) {
     const confirmed = window.confirm(`Удалить сгенерированный контент по теме "${item.topic}"?`);
     if (!confirmed) return;
@@ -1985,6 +2041,27 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
       await refreshExpandedTask();
     } catch (error) {
       setTaskError(error instanceof Error ? error.message : "Не удалось удалить контент.");
+    } finally {
+      setTaskActionId("");
+    }
+  }
+
+  async function bulkDeleteTaskContent(items: ContentItem[]) {
+    const deletable = items.filter((item) => !["scheduled", "publishing", "published"].includes(item.status));
+    if (!deletable.length) return;
+    const confirmed = window.confirm(`Удалить выбранные тексты: ${deletable.length}?`);
+    if (!confirmed) return;
+    setTaskError("");
+    setTaskActionId("bulk:delete");
+    try {
+      const results = await Promise.allSettled(deletable.map((item) => api(`/content/${item.id}`, { method: "DELETE" })));
+      const failed = results.filter((result) => result.status === "rejected").length;
+      await refreshExpandedTask();
+      if (failed) {
+        setTaskError(`Не удалось удалить часть текстов: ${failed}. Scheduled/published контент не удаляется.`);
+      }
+    } catch (error) {
+      setTaskError(error instanceof Error ? error.message : "Не удалось удалить выбранные тексты.");
     } finally {
       setTaskActionId("");
     }
@@ -2072,6 +2149,9 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
           onPreview={setPreviewItem}
           onRegenerate={regenerateContent}
           onDelete={deleteContentItem}
+          onBulkApprove={bulkApproveTaskContent}
+          onBulkRegenerate={bulkRegenerateTaskContent}
+          onBulkDelete={bulkDeleteTaskContent}
           onShowPrompt={(task) => setPromptModalTask(task)}
         />
         {taskError ? <span className="formError">{taskError}</span> : null}
@@ -2123,6 +2203,9 @@ function AdminTasksAccordion({
   onPreview,
   onRegenerate,
   onDelete,
+  onBulkApprove,
+  onBulkRegenerate,
+  onBulkDelete,
   onShowPrompt
 }: {
   tasks: Task[];
@@ -2136,17 +2219,78 @@ function AdminTasksAccordion({
   onPreview: (item: ContentItem) => void;
   onRegenerate: (item: ContentItem) => Promise<void>;
   onDelete: (item: ContentItem) => Promise<void>;
+  onBulkApprove: (items: ContentItem[]) => Promise<void>;
+  onBulkRegenerate: (items: ContentItem[]) => Promise<void>;
+  onBulkDelete: (items: ContentItem[]) => Promise<void>;
   onShowPrompt: (task: Task) => void;
 }) {
-  if (!tasks.length) return <EmptyState text="Данных пока нет." />;
-  const researchByItem = new Map(research.map((entry) => [entry.content_item_id, entry]));
   const expandedTask = expandedDetails?.task;
-  const expandedItems = expandedDetails?.items || [];
+  const expandedItems = React.useMemo(() => expandedDetails?.items || [], [expandedDetails?.items]);
+  const expandedItemIds = React.useMemo(() => expandedItems.map((item) => item.id), [expandedItems]);
+  const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
+  const [copyState, setCopyState] = React.useState("");
+  const selectedItems = expandedItems.filter((item) => selectedIds.includes(item.id));
+  const allSelected = expandedItemIds.length > 0 && expandedItemIds.every((id) => selectedIds.includes(id));
+  const bulkApproveItems = selectedItems.filter((item) => !["approved", "scheduled", "published"].includes(item.status));
+  const bulkDeleteItems = selectedItems.filter((item) => !["scheduled", "publishing", "published"].includes(item.status));
+  const bulkRegenerateItems = selectedItems;
+  const bulkBusy = actionId.startsWith("bulk:");
+  const researchByItem = new Map(research.map((entry) => [entry.content_item_id, entry]));
   const totalQueries = research.reduce((sum, entry) => sum + entry.queries.length, 0);
   const competitorBriefs = expandedItems.filter((item) => item.competitor_brief || researchByItem.get(item.id)?.brief).length;
   const generatedDates = expandedItems.map((item) => item.generated_at).filter(Boolean) as string[];
   const sortedGeneratedDates = generatedDates.sort();
   const latestGeneration = sortedGeneratedDates.length ? sortedGeneratedDates[sortedGeneratedDates.length - 1] : null;
+
+  React.useEffect(() => {
+    setSelectedIds([]);
+    setCopyState("");
+  }, [expandedTaskId]);
+
+  React.useEffect(() => {
+    setSelectedIds((current) => {
+      const next = current.filter((id) => expandedItemIds.includes(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [expandedItemIds]);
+
+  if (!tasks.length) return <EmptyState text="Данных пока нет." />;
+
+  function toggleSelected(id: string) {
+    setSelectedIds((current) => current.includes(id) ? current.filter((itemId) => itemId !== id) : [...current, id]);
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds(allSelected ? [] : expandedItemIds);
+  }
+
+  async function handleBulkApprove() {
+    await onBulkApprove(bulkApproveItems);
+    setSelectedIds([]);
+  }
+
+  async function handleBulkRegenerate() {
+    await onBulkRegenerate(bulkRegenerateItems);
+    setSelectedIds([]);
+  }
+
+  async function handleBulkDelete() {
+    await onBulkDelete(bulkDeleteItems);
+    setSelectedIds([]);
+  }
+
+  async function copyTopicNames() {
+    const topicNames = expandedItems.map((item) => item.topic).join("\n");
+    if (!topicNames) return;
+    setCopyState("");
+    try {
+      await copyTextToClipboard(topicNames);
+      setCopyState("Скопировано");
+      window.setTimeout(() => setCopyState(""), 2400);
+    } catch {
+      setCopyState("Не удалось скопировать");
+    }
+  }
 
   return (
     <div className="tableWrap">
@@ -2198,16 +2342,37 @@ function AdminTasksAccordion({
                               <Eye size={15} /> Посмотреть промпт
                             </button>
                           </div>
+                          <div className="bulkToolbar">
+                            <button className="button compact" type="button" onClick={copyTopicNames} disabled={!expandedItems.length}>
+                              <Copy size={15} /> Скопировать все названия тем
+                            </button>
+                            {copyState ? <span className="fieldHint">{copyState}</span> : null}
+                            <label className="checkboxRow bulkSelectAll">
+                              <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} disabled={!expandedItems.length || bulkBusy} />
+                              Выбрать все
+                            </label>
+                            <span className="fieldHint">Выбрано: {selectedIds.length}</span>
+                            <button className="button compact approve" type="button" onClick={handleBulkApprove} disabled={!bulkApproveItems.length || actionId === "bulk:approve"}>
+                              <CheckCircle2 size={15} /> {actionId === "bulk:approve" ? "Согласовываю" : `Approve выбранные (${bulkApproveItems.length})`}
+                            </button>
+                            <button className="button compact" type="button" onClick={handleBulkRegenerate} disabled={!bulkRegenerateItems.length || actionId === "bulk:generate"}>
+                              <Play size={15} /> {actionId === "bulk:generate" ? "Генерация" : `Сгенерировать выбранные (${bulkRegenerateItems.length})`}
+                            </button>
+                            <button className="button compact danger" type="button" onClick={handleBulkDelete} disabled={!bulkDeleteItems.length || actionId === "bulk:delete"}>
+                              <Trash2 size={15} /> {actionId === "bulk:delete" ? "Удаляю" : `Удалить выбранные (${bulkDeleteItems.length})`}
+                            </button>
+                          </div>
                           <ResponsiveTable
-                            columns={["Тема", "Запросы", "Загружена", "Генерация", "Конкуренты", "Статус", "Действия"]}
+                            columns={["Выбор", "Тема", "Запросы", "Загружена", "Генерация", "Конкуренты", "Статус", "Действия"]}
                             rows={expandedItems.map((item) => {
                               const itemResearch = researchByItem.get(item.id);
                               const queryCount = itemResearch?.queries.length || 0;
                               const competitorState = competitorStatusLabel(item, itemResearch);
-                              const busy = actionId.startsWith(item.id);
+                              const busy = actionId.startsWith(item.id) || bulkBusy;
                               const deleteDisabled = ["scheduled", "publishing", "published"].includes(item.status);
                               return [
-                                <strong>{item.topic}</strong>,
+                                <input className="rowCheckbox" type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelected(item.id)} disabled={bulkBusy} aria-label={`Выбрать ${item.topic}`} />,
+                                <TopicMetaCell item={item} promptName={expandedTask.prompt_template_name} />,
                                 <div className="cellStack">
                                   <span>{queryCount}</span>
                                   <button className="button compact" type="button" onClick={() => onEditQueries(item)} disabled={busy}>
@@ -2231,6 +2396,7 @@ function AdminTasksAccordion({
                                 </div>
                               ];
                             })}
+                            rowClassNames={expandedItems.map(contentRowClassName)}
                           />
                         </div>
                       ) : (
