@@ -6,9 +6,12 @@ import {
   BellRing,
   Bot,
   CalendarClock,
+  ChevronDown,
+  ChevronRight,
   CheckCircle2,
   Database,
   Edit3,
+  Eye,
   ExternalLink,
   FileText,
   FolderKanban,
@@ -21,12 +24,15 @@ import {
   Play,
   Plus,
   RefreshCcw,
+  Search,
   Send,
   Settings,
   ShieldCheck,
   Sun,
+  Trash2,
   UserPlus,
-  Users
+  Users,
+  X
 } from "lucide-react";
 import "./styles/global.css";
 
@@ -43,6 +49,8 @@ type Stats = {
 type Task = {
   id: string;
   title: string;
+  created_by_user_id: string | null;
+  created_by_username: string | null;
   site_id: string | null;
   section_id: string | null;
   ai_provider_id: string | null;
@@ -54,12 +62,14 @@ type Task = {
   status: string;
   collect_competitors: boolean;
   created_at: string;
+  updated_at: string;
   prompt_template_name: string | null;
   prompt_template: string | null;
 };
 
 type ContentItem = {
   id: string;
+  task_id: string;
   site_id: string | null;
   section_id: string | null;
   topic: string;
@@ -74,6 +84,7 @@ type ContentItem = {
   generated_at: string | null;
   competitor_research_status: string;
   competitor_brief: CompetitorBrief | null;
+  created_at: string;
   updated_at: string;
 };
 
@@ -1251,18 +1262,11 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
         </DataPanel>
       ) : null}
       {selectedPreview ? (
-        <DataPanel title={`Просмотр текста: ${selectedPreview.topic}`}>
-          <div className="contentPreviewHeader">
-            <div>
-              <span>{selectedPreview.slug}</span>
-              <strong>{contentItemTitle(selectedPreview)}</strong>
-              <PromptBadge name={selectedPreview.generation_prompt_name || taskDetails?.task.prompt_template_name} />
-              <span>Дата генерации: {selectedPreview.generated_at ? formatDate(selectedPreview.generated_at) : "-"}</span>
-            </div>
-            <StatusBadge status={selectedPreview.status} />
-          </div>
-          <pre className="contentPreviewText">{contentItemPreviewText(selectedPreview)}</pre>
-        </DataPanel>
+        <ContentPreviewModal
+          item={selectedPreview}
+          promptName={taskDetails?.task.prompt_template_name}
+          onClose={() => setSelectedPreview(null)}
+        />
       ) : null}
     </section>
   );
@@ -1846,6 +1850,16 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
   const [includeToc, setIncludeToc] = React.useState(true);
   const [includeFaq, setIncludeFaq] = React.useState(true);
   const [collectCompetitors, setCollectCompetitors] = React.useState(false);
+  const [expandedTaskId, setExpandedTaskId] = React.useState("");
+  const [expandedDetails, setExpandedDetails] = React.useState<TaskDetails | null>(null);
+  const [expandedResearch, setExpandedResearch] = React.useState<CompetitorResearch[]>([]);
+  const [detailsLoadingId, setDetailsLoadingId] = React.useState("");
+  const [taskActionId, setTaskActionId] = React.useState("");
+  const [taskError, setTaskError] = React.useState("");
+  const [queryModal, setQueryModal] = React.useState<{ item: ContentItem } | null>(null);
+  const [queryDraft, setQueryDraft] = React.useState("");
+  const [promptModalTask, setPromptModalTask] = React.useState<Task | null>(null);
+  const [previewItem, setPreviewItem] = React.useState<ContentItem | null>(null);
 
   React.useEffect(() => {
     const generationProviders = providers.filter(isGenerationProvider);
@@ -1878,6 +1892,102 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
     setTopics("");
     setShortcode("");
     onChanged();
+  }
+
+  async function loadTaskDetails(taskId: string) {
+    setTaskError("");
+    setDetailsLoadingId(taskId);
+    try {
+      const [details, research] = await Promise.all([
+        api<TaskDetails>(`/tasks/${taskId}`),
+        api<CompetitorResearch[]>(`/tasks/${taskId}/competitor-research`)
+      ]);
+      setExpandedTaskId(taskId);
+      setExpandedDetails(details);
+      setExpandedResearch(research);
+    } catch (error) {
+      setTaskError(error instanceof Error ? error.message : "Не удалось открыть задачу.");
+    } finally {
+      setDetailsLoadingId("");
+    }
+  }
+
+  async function toggleTask(task: Task) {
+    if (expandedTaskId === task.id) {
+      setExpandedTaskId("");
+      setExpandedDetails(null);
+      setExpandedResearch([]);
+      return;
+    }
+    await loadTaskDetails(task.id);
+  }
+
+  async function refreshExpandedTask() {
+    if (!expandedTaskId) return;
+    await loadTaskDetails(expandedTaskId);
+    await onChanged();
+  }
+
+  async function openQueryEditor(item: ContentItem) {
+    setTaskError("");
+    setTaskActionId(`${item.id}:queries`);
+    try {
+      const research = await api<CompetitorResearch>(`/content/${item.id}/competitor-research`);
+      setQueryModal({ item });
+      setQueryDraft(research.queries.map((query) => query.query).join("\n"));
+    } catch (error) {
+      setTaskError(error instanceof Error ? error.message : "Не удалось открыть запросы.");
+    } finally {
+      setTaskActionId("");
+    }
+  }
+
+  async function saveQueryEditor(event: React.FormEvent) {
+    event.preventDefault();
+    if (!queryModal) return;
+    const cleanQueries = queryDraft.split("\n").map((line) => line.trim()).filter(Boolean);
+    setTaskError("");
+    setTaskActionId(`${queryModal.item.id}:save-queries`);
+    try {
+      await api(`/content/${queryModal.item.id}/competitor-queries`, {
+        method: "PUT",
+        body: JSON.stringify({ queries: cleanQueries })
+      });
+      setQueryModal(null);
+      await refreshExpandedTask();
+    } catch (error) {
+      setTaskError(error instanceof Error ? error.message : "Не удалось сохранить запросы.");
+    } finally {
+      setTaskActionId("");
+    }
+  }
+
+  async function regenerateContent(item: ContentItem) {
+    setTaskError("");
+    setTaskActionId(`${item.id}:generate`);
+    try {
+      await api(`/content/${item.id}/generate`, { method: "POST" });
+      await refreshExpandedTask();
+    } catch (error) {
+      setTaskError(error instanceof Error ? error.message : "Не удалось запустить генерацию.");
+    } finally {
+      setTaskActionId("");
+    }
+  }
+
+  async function deleteContentItem(item: ContentItem) {
+    const confirmed = window.confirm(`Удалить сгенерированный контент по теме "${item.topic}"?`);
+    if (!confirmed) return;
+    setTaskError("");
+    setTaskActionId(`${item.id}:delete`);
+    try {
+      await api(`/content/${item.id}`, { method: "DELETE" });
+      await refreshExpandedTask();
+    } catch (error) {
+      setTaskError(error instanceof Error ? error.message : "Не удалось удалить контент.");
+    } finally {
+      setTaskActionId("");
+    }
   }
 
   return (
@@ -1950,19 +2060,250 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
         </form>
       </DataPanel>
       <DataPanel title="Все задачи">
-        <ResponsiveTable columns={["Задача", "Гео", "Язык", "Формат", "Тем", "Статус"]} rows={tasks.map((task) => [task.title, countryLabel(task.geo), languageLabel(task.language), humanPayloadMode(task.payload_mode), task.topics_count, <StatusBadge status={task.status} />])} />
+        <AdminTasksAccordion
+          tasks={tasks}
+          expandedTaskId={expandedTaskId}
+          expandedDetails={expandedDetails}
+          research={expandedResearch}
+          loadingId={detailsLoadingId}
+          actionId={taskActionId}
+          onToggle={toggleTask}
+          onEditQueries={openQueryEditor}
+          onPreview={setPreviewItem}
+          onRegenerate={regenerateContent}
+          onDelete={deleteContentItem}
+          onShowPrompt={(task) => setPromptModalTask(task)}
+        />
+        {taskError ? <span className="formError">{taskError}</span> : null}
       </DataPanel>
+      {queryModal ? (
+        <Modal title={`Запросы конкурентов: ${queryModal.item.topic}`} onClose={() => setQueryModal(null)} wide>
+          <form className="modalForm" onSubmit={saveQueryEditor}>
+            <label>
+              Список запросов, каждый с новой строки
+              <textarea value={queryDraft} onChange={(event) => setQueryDraft(event.target.value)} rows={8} placeholder="beste online casinos deutschland" />
+              <span className={queryDraft.split("\n").map((line) => line.trim()).filter(Boolean).length > 5 ? "fieldHint danger" : "fieldHint"}>
+                {queryDraft.split("\n").map((line) => line.trim()).filter(Boolean).length}/5 запросов
+              </span>
+            </label>
+            <div className="formActions">
+              <button className="button secondary" type="button" onClick={() => setQueryModal(null)}>Отмена</button>
+              <button className="button primary" type="submit" disabled={taskActionId.endsWith(":save-queries") || queryDraft.split("\n").map((line) => line.trim()).filter(Boolean).length < 1 || queryDraft.split("\n").map((line) => line.trim()).filter(Boolean).length > 5}>
+                <Edit3 size={16} /> {taskActionId.endsWith(":save-queries") ? "Сохраняю" : "Сохранить"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
+      {promptModalTask ? (
+        <Modal title={`Промпт задачи: ${promptModalTask.title}`} onClose={() => setPromptModalTask(null)} wide>
+          <textarea className="promptTextarea modalPrompt" value={promptModalTask.prompt_template || "Промпт не сохранен в задаче."} readOnly rows={22} />
+        </Modal>
+      ) : null}
+      {previewItem ? (
+        <ContentPreviewModal
+          item={previewItem}
+          promptName={previewItem.generation_prompt_name || expandedDetails?.task.prompt_template_name}
+          onClose={() => setPreviewItem(null)}
+        />
+      ) : null}
     </section>
   );
 }
 
+function AdminTasksAccordion({
+  tasks,
+  expandedTaskId,
+  expandedDetails,
+  research,
+  loadingId,
+  actionId,
+  onToggle,
+  onEditQueries,
+  onPreview,
+  onRegenerate,
+  onDelete,
+  onShowPrompt
+}: {
+  tasks: Task[];
+  expandedTaskId: string;
+  expandedDetails: TaskDetails | null;
+  research: CompetitorResearch[];
+  loadingId: string;
+  actionId: string;
+  onToggle: (task: Task) => Promise<void>;
+  onEditQueries: (item: ContentItem) => Promise<void>;
+  onPreview: (item: ContentItem) => void;
+  onRegenerate: (item: ContentItem) => Promise<void>;
+  onDelete: (item: ContentItem) => Promise<void>;
+  onShowPrompt: (task: Task) => void;
+}) {
+  if (!tasks.length) return <EmptyState text="Данных пока нет." />;
+  const researchByItem = new Map(research.map((entry) => [entry.content_item_id, entry]));
+  const expandedTask = expandedDetails?.task;
+  const expandedItems = expandedDetails?.items || [];
+  const totalQueries = research.reduce((sum, entry) => sum + entry.queries.length, 0);
+  const competitorBriefs = expandedItems.filter((item) => item.competitor_brief || researchByItem.get(item.id)?.brief).length;
+  const generatedDates = expandedItems.map((item) => item.generated_at).filter(Boolean) as string[];
+  const sortedGeneratedDates = generatedDates.sort();
+  const latestGeneration = sortedGeneratedDates.length ? sortedGeneratedDates[sortedGeneratedDates.length - 1] : null;
+
+  return (
+    <div className="tableWrap">
+      <table className="expandableTable">
+        <thead>
+          <tr>
+            <th>Задача</th>
+            <th>Гео</th>
+            <th>Язык</th>
+            <th>Формат</th>
+            <th>Тем</th>
+            <th>Статус</th>
+          </tr>
+        </thead>
+        <tbody>
+          {tasks.map((task) => {
+            const expanded = expandedTaskId === task.id;
+            return (
+              <React.Fragment key={task.id}>
+                <tr className={`clickableRow ${expanded ? "isExpanded" : ""}`} onClick={() => onToggle(task)}>
+                  <td data-label="Задача">
+                    <span className="taskTitleCell">
+                      {expanded ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
+                      <strong>{task.title}</strong>
+                    </span>
+                  </td>
+                  <td data-label="Гео">{countryLabel(task.geo)}</td>
+                  <td data-label="Язык">{languageLabel(task.language)}</td>
+                  <td data-label="Формат">{humanPayloadMode(task.payload_mode)}</td>
+                  <td data-label="Тем">{task.topics_count}</td>
+                  <td data-label="Статус"><StatusBadge status={task.status} /></td>
+                </tr>
+                {expanded ? (
+                  <tr className="expandedRow">
+                    <td colSpan={6}>
+                      {loadingId === task.id && !expandedDetails ? (
+                        <EmptyState text="Загружаю детали задачи." />
+                      ) : expandedTask ? (
+                        <div className="taskAccordionBody">
+                          <div className="accordionSummary">
+                            <InfoMetric label="Название темы/задачи" value={expandedTask.title} />
+                            <InfoMetric label="Запросы для сбора конкурентов" value={`${totalQueries}`} />
+                            <InfoMetric label="Дата загрузки темы" value={formatDate(expandedTask.created_at)} />
+                            <InfoMetric label="Дата генерации" value={latestGeneration ? formatDate(latestGeneration) : "-"} />
+                            <InfoMetric label="Конкуренты для генерации" value={expandedTask.collect_competitors ? `${competitorBriefs}/${expandedItems.length} brief` : "Не запрашивались"} />
+                            <InfoMetric label="Загрузил" value={expandedTask.created_by_username || "-"} />
+                            <InfoMetric label="Промпт" value={expandedTask.prompt_template_name || "Не указан"} />
+                            <button className="button compact" type="button" onClick={() => onShowPrompt(expandedTask)}>
+                              <Eye size={15} /> Посмотреть промпт
+                            </button>
+                          </div>
+                          <ResponsiveTable
+                            columns={["Тема", "Запросы", "Загружена", "Генерация", "Конкуренты", "Статус", "Действия"]}
+                            rows={expandedItems.map((item) => {
+                              const itemResearch = researchByItem.get(item.id);
+                              const queryCount = itemResearch?.queries.length || 0;
+                              const competitorState = competitorStatusLabel(item, itemResearch);
+                              const busy = actionId.startsWith(item.id);
+                              const deleteDisabled = ["scheduled", "publishing", "published"].includes(item.status);
+                              return [
+                                <strong>{item.topic}</strong>,
+                                <div className="cellStack">
+                                  <span>{queryCount}</span>
+                                  <button className="button compact" type="button" onClick={() => onEditQueries(item)} disabled={busy}>
+                                    <Search size={15} /> Редактировать
+                                  </button>
+                                </div>,
+                                formatDate(item.created_at),
+                                item.generated_at ? formatDate(item.generated_at) : "-",
+                                competitorState,
+                                <StatusBadge status={item.status} />,
+                                <div className="userActions">
+                                  <button className="button compact" type="button" onClick={() => onPreview(item)}>
+                                    <FileText size={15} /> Просмотр
+                                  </button>
+                                  <button className="button compact" type="button" onClick={() => onRegenerate(item)} disabled={busy}>
+                                    <Play size={15} /> {actionId === `${item.id}:generate` ? "Генерация" : "Сгенерировать заново"}
+                                  </button>
+                                  <button className="button compact danger" type="button" onClick={() => onDelete(item)} disabled={busy || deleteDisabled} title={deleteDisabled ? "Нельзя удалить scheduled/published контент" : undefined}>
+                                    <Trash2 size={15} /> {actionId === `${item.id}:delete` ? "Удаляю" : "Удалить"}
+                                  </button>
+                                </div>
+                              ];
+                            })}
+                          />
+                        </div>
+                      ) : (
+                        <EmptyState text="Детали задачи не загружены." />
+                      )}
+                    </td>
+                  </tr>
+                ) : null}
+              </React.Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function InfoMetric({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="infoMetric">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function competitorStatusLabel(item: ContentItem, research?: CompetitorResearch) {
+  if (item.competitor_brief || research?.brief) return "Да, анализ готов";
+  if ((research?.pages.length || 0) > 0) return "Страницы собраны";
+  if ((research?.results.length || 0) > 0) return "URL собраны";
+  if ((research?.queries.length || 0) > 0 || item.competitor_research_status === "queries_ready") return "Есть запросы";
+  return "Нет";
+}
+
 function ContentView({ api, content, onChanged }: ViewProps & { content: ContentItem[] }) {
   const [selectedPreview, setSelectedPreview] = React.useState<ContentItem | null>(null);
+  const [contentActionId, setContentActionId] = React.useState("");
+  const [contentError, setContentError] = React.useState("");
 
   async function approve(id: string) {
     await api(`/content/${id}/approve`, { method: "POST" });
     setSelectedPreview((current) => current && current.id === id ? { ...current, status: "approved" } : current);
     onChanged();
+  }
+
+  async function regenerate(item: ContentItem) {
+    setContentError("");
+    setContentActionId(`${item.id}:generate`);
+    try {
+      const updated = await api<ContentItem>(`/content/${item.id}/generate`, { method: "POST" });
+      setSelectedPreview((current) => current && current.id === item.id ? updated : current);
+      await onChanged();
+    } catch (error) {
+      setContentError(error instanceof Error ? error.message : "Не удалось запустить повторную генерацию.");
+    } finally {
+      setContentActionId("");
+    }
+  }
+
+  async function deleteItem(item: ContentItem) {
+    const confirmed = window.confirm(`Удалить сгенерированный контент по теме "${item.topic}"?`);
+    if (!confirmed) return;
+    setContentError("");
+    setContentActionId(`${item.id}:delete`);
+    try {
+      await api(`/content/${item.id}`, { method: "DELETE" });
+      setSelectedPreview((current) => current && current.id === item.id ? null : current);
+      await onChanged();
+    } catch (error) {
+      setContentError(error instanceof Error ? error.message : "Не удалось удалить контент.");
+    } finally {
+      setContentActionId("");
+    }
   }
 
   return (
@@ -1977,29 +2318,32 @@ function ContentView({ api, content, onChanged }: ViewProps & { content: Content
             <StatusBadge status={item.status} />,
             <div className="userActions">
               <button className="button compact" type="button" onClick={() => setSelectedPreview(item)}><FileText size={15} /> Просмотр</button>
+              <button className="button compact" type="button" onClick={() => regenerate(item)} disabled={contentActionId.startsWith(item.id)} title={item.competitor_brief ? "Повторная генерация пойдет с сохраненным анализом конкурентов." : "Анализ конкурентов не найден, генерация пойдет без competitor brief."}>
+                <Play size={15} /> {contentActionId === `${item.id}:generate` ? "Генерация" : "Сгенерировать заново"}
+              </button>
+              <button className="button compact danger" type="button" onClick={() => deleteItem(item)} disabled={contentActionId.startsWith(item.id) || ["scheduled", "publishing", "published"].includes(item.status)} title={["scheduled", "publishing", "published"].includes(item.status) ? "Нельзя удалить scheduled/published контент" : undefined}>
+                <Trash2 size={15} /> {contentActionId === `${item.id}:delete` ? "Удаляю" : "Удалить"}
+              </button>
               <button className="button compact" type="button" onClick={() => approve(item.id)} disabled={item.status === "approved" || item.status === "scheduled" || item.status === "published"}>Approve</button>
             </div>
           ])}
         />
+        {contentError ? <span className="formError">{contentError}</span> : null}
       </DataPanel>
 
       {selectedPreview ? (
-        <DataPanel title={`Просмотр текста: ${selectedPreview.topic}`}>
-          <div className="contentPreviewHeader">
-            <div>
-              <span>{selectedPreview.slug}</span>
-              <strong>{contentItemTitle(selectedPreview)}</strong>
-              <PromptBadge name={selectedPreview.generation_prompt_name} />
-              <span>Дата генерации: {selectedPreview.generated_at ? formatDate(selectedPreview.generated_at) : "-"}</span>
-            </div>
-            <div className="userActions">
-              <StatusBadge status={selectedPreview.status} />
-              <button className="button compact" type="button" onClick={() => setSelectedPreview(null)}>Закрыть</button>
+        <ContentPreviewModal
+          item={selectedPreview}
+          onClose={() => setSelectedPreview(null)}
+          actions={
+            <>
+              <button className="button compact" type="button" onClick={() => regenerate(selectedPreview)} disabled={contentActionId.startsWith(selectedPreview.id)}>
+                <Play size={15} /> Сгенерировать заново
+              </button>
               <button className="button compact" type="button" onClick={() => approve(selectedPreview.id)} disabled={selectedPreview.status === "approved" || selectedPreview.status === "scheduled" || selectedPreview.status === "published"}>Approve</button>
-            </div>
-          </div>
-          <pre className="contentPreviewText">{contentItemPreviewText(selectedPreview)}</pre>
-        </DataPanel>
+            </>
+          }
+        />
       ) : null}
     </section>
   );
@@ -2517,6 +2861,41 @@ function ResponsiveTable({ columns, rows }: { columns: string[]; rows: React.Rea
         <tbody>{rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td data-label={columns[cellIndex]} key={cellIndex}>{cell}</td>)}</tr>)}</tbody>
       </table>
     </div>
+  );
+}
+
+function Modal({ title, children, onClose, wide }: { title: string; children: React.ReactNode; onClose: () => void; wide?: boolean }) {
+  return (
+    <div className="modalOverlay" role="dialog" aria-modal="true" aria-labelledby="modal-title" onMouseDown={onClose}>
+      <div className={`modalDialog ${wide ? "wide" : ""}`} onMouseDown={(event) => event.stopPropagation()}>
+        <div className="modalHeader">
+          <h2 id="modal-title">{title}</h2>
+          <button className="iconButton" type="button" onClick={onClose} aria-label="Закрыть окно"><X size={18} /></button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function ContentPreviewModal({ item, promptName, actions, onClose }: { item: ContentItem; promptName?: string | null; actions?: React.ReactNode; onClose: () => void }) {
+  return (
+    <Modal title={`Просмотр текста: ${item.topic}`} onClose={onClose} wide>
+      <div className="contentPreviewHeader">
+        <div>
+          <span>{item.slug}</span>
+          <strong>{contentItemTitle(item)}</strong>
+          <PromptBadge name={item.generation_prompt_name || promptName} />
+          {item.competitor_brief ? <span className="researchBadge">На основе анализа конкурентов</span> : null}
+          <span>Дата генерации: {item.generated_at ? formatDate(item.generated_at) : "-"}</span>
+        </div>
+        <div className="userActions">
+          <StatusBadge status={item.status} />
+          {actions}
+        </div>
+      </div>
+      <pre className="contentPreviewText modalContentText">{contentItemPreviewText(item)}</pre>
+    </Modal>
   );
 }
 

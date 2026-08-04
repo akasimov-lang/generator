@@ -66,6 +66,7 @@ def apply_lightweight_migrations() -> None:
             "generation_tasks",
             columns,
             {
+                "created_by_user_id": "VARCHAR(36)",
                 "payload_mode": "VARCHAR(40) DEFAULT 'site_default' NOT NULL",
                 "target_words": "INTEGER",
                 "prompt_template_name": "VARCHAR(160)",

@@ -1824,11 +1824,12 @@ def breadcrumb_schema_block(slug: str, title: str) -> dict:
     return {"type": "universal", "data": json.dumps(data, ensure_ascii=False, indent=2)}
 
 
-def create_generation_task(db: Session, payload: GenerationTaskCreate) -> models.GenerationTask:
+def create_generation_task(db: Session, payload: GenerationTaskCreate, created_by_user_id: str | None = None) -> models.GenerationTask:
     clean_topics = [topic.strip() for topic in payload.topics if topic.strip()]
     prompt_template = compose_prompt_with_base(db, payload.prompt_template)
     task = models.GenerationTask(
         title=payload.title,
+        created_by_user_id=created_by_user_id,
         site_id=payload.site_id,
         section_id=payload.section_id,
         ai_provider_id=payload.ai_provider_id,

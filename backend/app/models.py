@@ -92,6 +92,7 @@ class GenerationTask(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     title: Mapped[str] = mapped_column(String(180), nullable=False)
+    created_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     site_id: Mapped[str | None] = mapped_column(ForeignKey("sites.id"), nullable=True)
     section_id: Mapped[str | None] = mapped_column(ForeignKey("sections.id"), nullable=True)
     ai_provider_id: Mapped[str | None] = mapped_column(ForeignKey("ai_providers.id"), nullable=True)
@@ -105,7 +106,12 @@ class GenerationTask(Base, TimestampMixin):
     prompt_template: Mapped[str | None] = mapped_column(Text, nullable=True)
     collect_competitors: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    created_by: Mapped[User | None] = relationship()
     items: Mapped[list["ContentItem"]] = relationship(back_populates="task", cascade="all, delete-orphan")
+
+    @property
+    def created_by_username(self) -> str | None:
+        return self.created_by.username if self.created_by else None
 
 
 class ContentItem(Base, TimestampMixin):

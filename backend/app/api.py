@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app import models
@@ -450,14 +450,14 @@ def list_site_tasks(site_id: str, _: AuthUser, db: Session = Depends(get_db)) ->
 
 
 @router.post("/sites/{site_id}/tasks", response_model=GenerationTaskResponse)
-def create_site_task(site_id: str, payload: GenerationTaskCreate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+def create_site_task(site_id: str, payload: GenerationTaskCreate, user: AuthUser, db: Session = Depends(get_db)) -> Any:
     _get_site_or_404(db, site_id)
     _validate_task_topics(payload)
     if payload.section_id:
         _get_section_for_site(db, site_id, payload.section_id)
     data = payload.model_dump()
     data["site_id"] = site_id
-    return create_generation_task(db, GenerationTaskCreate(**data))
+    return create_generation_task(db, GenerationTaskCreate(**data), created_by_user_id=user["id"])
 
 
 @router.get("/sites/{site_id}/content", response_model=list[ContentItemResponse])
@@ -509,9 +509,9 @@ def list_tasks(_: AdminUser, db: Session = Depends(get_db)) -> Any:
 
 
 @router.post("/tasks", response_model=GenerationTaskResponse)
-def create_task(payload: GenerationTaskCreate, _: AdminUser, db: Session = Depends(get_db)) -> Any:
+def create_task(payload: GenerationTaskCreate, user: AdminUser, db: Session = Depends(get_db)) -> Any:
     _validate_task_topics(payload)
-    return create_generation_task(db, payload)
+    return create_generation_task(db, payload, created_by_user_id=user["id"])
 
 
 @router.get("/tasks/{task_id}", response_model=TaskDetailsResponse)
@@ -658,6 +658,29 @@ def update_content(content_id: str, payload: ContentUpdate, _: AuthUser, db: Ses
     db.commit()
     db.refresh(item)
     return item
+
+
+@router.delete("/content/{content_id}")
+def delete_content(content_id: str, _: AuthUser, db: Session = Depends(get_db)) -> dict:
+    item = db.get(models.ContentItem, content_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Content item not found")
+    if item.status in {"scheduled", "publishing", "published"}:
+        raise HTTPException(status_code=400, detail="Scheduled or published content cannot be deleted")
+
+    task = db.get(models.GenerationTask, item.task_id)
+    db.execute(delete(models.CompetitorPage).where(models.CompetitorPage.content_item_id == item.id))
+    db.execute(delete(models.CompetitorResult).where(models.CompetitorResult.content_item_id == item.id))
+    db.execute(delete(models.CompetitorQuery).where(models.CompetitorQuery.content_item_id == item.id))
+    db.execute(delete(models.PublicationLog).where(models.PublicationLog.content_item_id == item.id))
+    db.delete(item)
+    db.flush()
+    if task:
+        task.topics_count = db.scalar(select(func.count(models.ContentItem.id)).where(models.ContentItem.task_id == task.id)) or 0
+        if task.topics_count == 0:
+            task.status = "empty"
+    db.commit()
+    return {"status": "ok"}
 
 
 @router.post("/content/{content_id}/approve", response_model=ContentItemResponse)

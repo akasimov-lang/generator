@@ -168,6 +168,8 @@ class GenerationTaskResponse(BaseModel):
 
     id: str
     title: str
+    created_by_user_id: str | None = None
+    created_by_username: str | None = None
     site_id: str | None
     section_id: str | None
     ai_provider_id: str | None
