@@ -79,7 +79,7 @@ def test_competitor_research_placeholders_are_rendered() -> None:
             "competitor_summary": [{"url": "https://example.com/casinos", "title": "Example", "headings": ["GGL Lizenz"]}],
             "content_gaps": ["Раскрыть сильнее: KYC."],
             "common_headings": ["GGL Lizenz"],
-            "missing_blocks_to_cover": ["KYC und Identitätsprüfung"],
+            "topics_to_cover": ["KYC und Identitätsprüfung"],
         },
     )
 
