@@ -856,6 +856,17 @@ td {
   overflow-wrap: anywhere;
 }
 
+.taskQueriesMetric {
+  cursor: help;
+  position: relative;
+}
+
+.competitorRequestMetric .button {
+  justify-content: center;
+  margin-top: 2px;
+  width: 100%;
+}
+
 .modalOverlay {
   align-items: center;
   background: rgba(15, 20, 25, 0.52);
@@ -1165,10 +1176,40 @@ td {
 }
 
 .queryCell:hover .queryTooltip,
-.queryCell:focus-within .queryTooltip {
+.queryCell:focus-within .queryTooltip,
+.taskQueriesMetric:hover .queryTooltip,
+.taskQueriesMetric:focus-within .queryTooltip {
   opacity: 1;
   transform: translateY(0);
   visibility: visible;
+}
+
+.taskQueriesTooltip {
+  max-height: 440px;
+  max-width: min(560px, 78vw);
+  overflow: auto;
+  pointer-events: auto;
+  top: calc(100% - 4px);
+  width: max-content;
+}
+
+.taskQueryGroup {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+}
+
+.taskQueryGroup b {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.taskQueryGroup li small {
+  color: var(--muted);
+  display: block;
+  font-size: 11px;
+  margin-top: 2px;
 }
 
 .cellHint {

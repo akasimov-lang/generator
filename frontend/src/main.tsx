@@ -2355,6 +2355,11 @@ function AdminTasksAccordion({
   const researchByItem = new Map(research.map((entry) => [entry.content_item_id, entry]));
   const totalQueries = research.reduce((sum, entry) => sum + entry.queries.length, 0);
   const competitorBriefs = expandedItems.filter((item) => item.competitor_brief || researchByItem.get(item.id)?.brief).length;
+  const competitorRequestItems = expandedItems.filter((item) => !(item.competitor_brief || researchByItem.get(item.id)?.brief));
+  const taskQueryGroups = expandedItems.map((item) => ({
+    topic: item.topic,
+    queries: researchByItem.get(item.id)?.queries || []
+  })).filter((group) => group.queries.length > 0);
   const generatedDates = expandedItems.map((item) => item.generated_at).filter(Boolean) as string[];
   const sortedGeneratedDates = generatedDates.sort();
   const latestGeneration = sortedGeneratedDates.length ? sortedGeneratedDates[sortedGeneratedDates.length - 1] : null;
@@ -2394,6 +2399,10 @@ function AdminTasksAccordion({
   async function handleBulkCollectCompetitors() {
     await onBulkCollectCompetitors(bulkCollectItems);
     setSelectedIds([]);
+  }
+
+  async function handleRequestCompetitors() {
+    await onBulkCollectCompetitors(competitorRequestItems);
   }
 
   async function handleBulkDelete() {
@@ -2454,10 +2463,16 @@ function AdminTasksAccordion({
                         <div className="taskAccordionBody">
                           <div className="accordionSummary">
                             <InfoMetric label="Название темы/задачи" value={expandedTask.title} />
-                            <InfoMetric label="Запросы для сбора конкурентов" value={`${totalQueries}`} />
+                            <TaskQueriesMetric total={totalQueries} groups={taskQueryGroups} />
                             <InfoMetric label="Дата загрузки темы" value={formatDate(expandedTask.created_at)} />
                             <InfoMetric label="Дата генерации" value={latestGeneration ? formatDate(latestGeneration) : "-"} />
-                            <InfoMetric label="Конкуренты для генерации" value={expandedTask.collect_competitors ? `${competitorBriefs}/${expandedItems.length} brief` : "Не запрашивались"} />
+                            <div className="infoMetric competitorRequestMetric">
+                              <span>Конкуренты для генерации</span>
+                              <strong>{competitorBriefs ? `${competitorBriefs}/${expandedItems.length} brief` : "Не запрашивались"}</strong>
+                              <button className="button compact" type="button" onClick={handleRequestCompetitors} disabled={!competitorRequestItems.length || actionId === "bulk:collect-competitors"}>
+                                <Globe2 size={15} /> {actionId === "bulk:collect-competitors" ? "Запрашиваю конкурентов" : competitorRequestItems.length ? `Запросить конкурентов (${competitorRequestItems.length})` : "Конкуренты собраны"}
+                              </button>
+                            </div>
                             <InfoMetric label="Загрузил" value={expandedTask.created_by_username || "-"} />
                             <InfoMetric label="Промпт" value={expandedTask.prompt_template_name || "Не указан"} />
                             <button className="button compact" type="button" onClick={() => onShowPrompt(expandedTask)}>
@@ -2547,6 +2562,31 @@ function InfoMetric({ label, value }: { label: string; value: React.ReactNode })
     <div className="infoMetric">
       <span>{label}</span>
       <strong>{value}</strong>
+    </div>
+  );
+}
+
+function TaskQueriesMetric({ total, groups }: { total: number; groups: Array<{ topic: string; queries: CompetitorQuery[] }> }) {
+  return (
+    <div className="infoMetric taskQueriesMetric" tabIndex={0} aria-label="Показать запросы для сбора конкурентов">
+      <span>Запросы для сбора конкурентов</span>
+      <strong>{total}</strong>
+      <div className="queryTooltip taskQueriesTooltip" role="tooltip">
+        <strong>Запросы по темам задачи</strong>
+        {groups.length ? groups.map((group) => (
+          <div className="taskQueryGroup" key={group.topic}>
+            <b>{group.topic}</b>
+            <ol>
+              {group.queries.map((query) => (
+                <li key={query.id}>
+                  {query.query}
+                  <small>{query.status === "serp_collected" ? `Сбор выполнен · результатов: ${query.result_count}` : query.status === "collecting" ? "Сбор выполняется" : "Запрос подготовлен"}</small>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )) : <span>Запросы пока не подготовлены.</span>}
+      </div>
     </div>
   );
 }
