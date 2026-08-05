@@ -16,6 +16,7 @@ COPY alembic.ini ./alembic.ini
 COPY migrations ./migrations
 COPY pytest.ini ./pytest.ini
 COPY tests ./tests
+COPY scripts ./scripts
 COPY app ./app
 
 EXPOSE 8000
