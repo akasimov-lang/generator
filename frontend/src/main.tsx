@@ -2340,6 +2340,7 @@ function TasksView({
   const [queryDraft, setQueryDraft] = React.useState("");
   const [promptModalTask, setPromptModalTask] = React.useState<Task | null>(null);
   const [previewItem, setPreviewItem] = React.useState<ContentItem | null>(null);
+  const createPanelRef = React.useRef<HTMLElement>(null);
   const hasResearchInProgress = expandedResearch.some((entry) => ACTIVE_RESEARCH_STATUSES.includes(entry.status));
   const hasGenerationInProgress = (expandedDetails?.items || []).some((item) => ACTIVE_GENERATION_STATUSES.includes(item.status));
   const cleanTopics = topics.split("\n").map((line) => line.trim()).filter(Boolean);
@@ -2686,15 +2687,26 @@ function TasksView({
     }
   }
 
+  function toggleCreateForm() {
+    if (createFormExpanded) {
+      setCreateFormExpanded(false);
+      return;
+    }
+    setCreateFormExpanded(true);
+    window.requestAnimationFrame(() => {
+      createPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
   return (
     <section className="viewStack">
-      <section className={`dataPanel createTaskPanel ${createFormExpanded ? "expanded" : ""}`}>
+      <section ref={createPanelRef} className={`dataPanel createTaskPanel ${createFormExpanded ? "expanded" : ""}`}>
         <button
           className="createTaskToggle"
           type="button"
           aria-expanded={createFormExpanded}
           aria-controls="create-generation-task-form"
-          onClick={() => setCreateFormExpanded((current) => !current)}
+          onClick={toggleCreateForm}
         >
           <span className="createTaskToggleIcon"><Plus size={20} /></span>
           <span className="createTaskToggleText">
