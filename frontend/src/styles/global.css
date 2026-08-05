@@ -95,9 +95,16 @@ button {
 }
 
 .sidebar {
-  position: sticky;
+  position: fixed;
   top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--sidebar);
   height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  z-index: 20;
   background: var(--sidebar-bg);
   color: var(--sidebar-text);
   padding: 20px 14px;
@@ -168,6 +175,7 @@ button {
 }
 
 .main {
+  grid-column: 2;
   min-width: 0;
   padding: 24px;
 }
@@ -1722,7 +1730,13 @@ a {
 
   .sidebar {
     position: static;
+    width: auto;
     height: auto;
+    overflow-y: visible;
+  }
+
+  .main {
+    grid-column: 1;
   }
 
   .nav {
