@@ -324,8 +324,8 @@ def is_own_domain(url: str, site: models.Site | None) -> bool:
 
 
 def generate_competitor_search_queries(topic: str, geo: str, language: str) -> list[str]:
-    text = re.sub(r"\b20\d{2}\b", " ", topic.lower())
-    text = re.sub(r"[/|:()\\[\\],.!?]+", " ", text)
+    del geo, language
+    text = re.sub(r"[/|:()\\[\\],.!?]+", " ", topic.lower())
     tokens = re.findall(r"[\wäöüßáàâçéèêíìîñóòôúùû-]+", text, flags=re.IGNORECASE)
     stopwords = {
         "und",
@@ -348,44 +348,20 @@ def generate_competitor_search_queries(topic: str, geo: str, language: str) -> l
         "and",
         "for",
         "with",
-        "best",
-        "beste",
-        "new",
-        "neue",
     }
     meaningful = [token for token in tokens if len(token) > 2 and token not in stopwords]
-    country = DATAFORSEO_LOCATION_NAMES.get(geo.upper(), geo).lower()
-    queries: list[str] = []
-    if meaningful:
-        queries.append(" ".join(meaningful[:5]))
+    source_words = meaningful if meaningful else tokens
+    if not source_words:
+        return compact_lines([clean_text(topic.lower())], 1)
 
-    lower_topic = topic.lower()
-    if "casino" in lower_topic:
-        if geo.upper() == "DE":
-            queries.extend(["legale online casinos ggl", "online casino vergleich deutschland"])
-        else:
-            queries.append(f"online casino vergleich {country}".strip())
-    if "spielothek" in lower_topic or "slots" in lower_topic:
-        queries.append(f"online spielotheken {country}".strip())
-    if "sicher" in lower_topic or "safe" in lower_topic:
-        queries.append(f"sichere online casinos {country}".strip())
-    if "neu" in lower_topic or "new" in lower_topic:
-        queries.append(f"neue online casinos {country}".strip())
-    if len(queries) < COMPETITOR_QUERY_LIMIT and meaningful:
-        queries.append(" ".join((meaningful[:3] + ["vergleich"])[:5]))
-    if len(queries) < COMPETITOR_QUERY_LIMIT:
-        queries.append(" ".join(tokens[:5]) or topic.strip())
-
-    normalized_queries = []
-    for query in queries:
-        clean_query = clean_text(query.lower())
-        words = clean_query.split()
-        if len(words) > 5:
-            clean_query = " ".join(words[:5])
-        if len(words) < 3 and country:
-            clean_query = clean_text(f"{clean_query} {country}")
-        normalized_queries.append(clean_query)
-    return compact_lines(normalized_queries, COMPETITOR_QUERY_LIMIT)
+    candidates: list[str] = []
+    for size in (5, 4, 3):
+        if len(source_words) >= size:
+            candidates.append(" ".join(source_words[:size]))
+            candidates.append(" ".join(source_words[-size:]))
+    if not candidates:
+        candidates.append(" ".join(source_words[:5]))
+    return compact_lines(candidates, COMPETITOR_QUERY_LIMIT)
 
 
 def ensure_competitor_queries(db: Session, item: models.ContentItem, geo: str, language: str) -> list[models.CompetitorQuery]:

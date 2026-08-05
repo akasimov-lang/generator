@@ -33,15 +33,23 @@ def test_dataforseo_user_data_url_is_built_from_base_endpoint() -> None:
     )
 
 
-def test_competitor_query_generation_keeps_short_relevant_queries() -> None:
+def test_competitor_query_generation_uses_only_words_from_topic() -> None:
+    topic = "Beste Online Casinos in Deutschland 2026: Legale Anbieter im Vergleich"
     queries = generate_competitor_search_queries(
-        "Beste Online Casinos in Deutschland 2026: Legale Anbieter im Vergleich",
+        topic,
         geo="DE",
         language="de",
     )
 
-    assert 2 <= len(queries) <= 3
-    assert "legale online casinos ggl" in queries
+    topic_words = {
+        "beste", "online", "casinos", "in", "deutschland", "2026", "legale", "anbieter", "im", "vergleich"
+    }
+    assert queries == [
+        "beste online casinos deutschland 2026",
+        "deutschland 2026 legale anbieter vergleich",
+        "beste online casinos deutschland",
+    ]
+    assert all(set(query.split()).issubset(topic_words) for query in queries)
     assert all(3 <= len(query.split()) <= 5 for query in queries)
 
 
