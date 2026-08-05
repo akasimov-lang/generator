@@ -101,9 +101,9 @@ def test_gemini_content_generation_passes_competitor_brief_to_prompt(monkeypatch
                         "parts": [
                             {
                                 "text": (
-                                    "Title: Beste Online Casinos\n"
+                                    "Title: A different and overly long title invented by the model\n"
                                     "Meta Description: Test description.\n"
-                                    "H1: Beste Online Casinos\n"
+                                    "H1: A different and overly long H1 invented by the model\n"
                                     "Intro:\n"
                                     "Test content about safe providers."
                                 )
@@ -124,10 +124,10 @@ def test_gemini_content_generation_passes_competitor_brief_to_prompt(monkeypatch
         api_key="key",
     )
 
-    asyncio.run(
+    generated = asyncio.run(
         build_gemini_content(
             provider=provider,
-            topic="Beste Online Casinos",
+            topic="Beste Online Casinos in Deutschland 2026: Legale Anbieter im Vergleich",
             geo="DE",
             language="de",
             target_words=1600,
@@ -146,3 +146,5 @@ def test_gemini_content_generation_passes_competitor_brief_to_prompt(monkeypatch
 
     assert "Example Casino Page" in captured["prompt"]
     assert "Mehr Details zu KYC und Limits" in captured["prompt"]
+    assert generated["pages"][0]["title"] == "Beste Online Casinos in Deutschland 2026: Legale Anbieter im Vergleich"
+    assert generated["pages"][0]["content"]["blocks"][0]["data"]["text"] == "Beste Online Casinos in Deutschland 2026"

@@ -255,6 +255,20 @@ def normalize_slug(topic: str) -> str:
     return f"/{slug}/"
 
 
+def concise_h1_from_topic(topic: str, max_words: int = 10, max_chars: int = 70) -> str:
+    clean_topic = clean_text(topic)
+    if not clean_topic:
+        return "Content"
+    primary_part = re.split(r"\s*[:|–—]\s*", clean_topic, maxsplit=1)[0].strip() or clean_topic
+    words = primary_part.split()
+    if len(words) > max_words:
+        primary_part = " ".join(words[:max_words])
+    if len(primary_part) > max_chars:
+        shortened = primary_part[: max_chars + 1].rsplit(" ", 1)[0].strip()
+        primary_part = shortened or primary_part[:max_chars].strip()
+    return primary_part.rstrip(" ,;:-") or clean_topic
+
+
 def clean_text(value: object) -> str:
     text = html.unescape(str(value or ""))
     text = re.sub(r"<[^>]+>", " ", text)
@@ -920,12 +934,14 @@ async def build_gemini_content(
         raise ValueError("Gemini returned an empty response")
 
     article_parts = extract_ai_article_parts(generated_text, topic)
-    page["title"] = article_parts["title"]
-    page["breadcrumb"] = article_parts["h1"]
+    page_title = topic.strip()
+    page_h1 = concise_h1_from_topic(topic)
+    page["title"] = page_title
+    page["breadcrumb"] = page_title
     page["description"] = article_parts["meta_description"] or clean_text(article_parts["body"])[:155] or page["description"]
     page["content"]["blocks"] = build_blocks_from_ai_text(
         generated_text=article_parts["body"] or generated_text,
-        topic=article_parts["h1"],
+        topic=page_h1,
         shortcode=shortcode,
         include_toc=include_toc,
         include_faq=include_faq,
@@ -985,6 +1001,8 @@ def build_gemini_prompt(
     prompt += (
         "\n\nGeneration constraints:\n"
         f"- Topic: {topic}\n"
+        "- Title must repeat the Topic exactly, without additions, rewriting, or a year that is absent from the Topic.\n"
+        "- H1 must be a concise, informative version of the Topic: use its primary part before a colon and avoid subtitles.\n"
         f"- Country/geo: {geo}\n"
         f"- Language: {language}\n"
         f"- Target words: {target_words or 'not specified'}\n"
@@ -1778,11 +1796,12 @@ def build_editor_page(
     include_toc: bool,
     include_faq: bool,
 ) -> dict:
-    title = topic.strip().title()
+    title = topic.strip()
+    h1 = concise_h1_from_topic(topic)
     slug = normalize_slug(topic)
     description = f"Useful guide about {topic} for {geo} readers in {language}."
     headings = [
-        title,
+        h1,
         f"What to know about {title}",
         f"How to choose the right option in {geo}",
         "Key comparison points",

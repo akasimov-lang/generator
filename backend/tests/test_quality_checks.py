@@ -1,4 +1,4 @@
-from app.services import analyze_content_quality, build_blocks_from_ai_text, extract_ai_article_parts, faq_block, header_block, paragraph_block
+from app.services import analyze_content_quality, build_blocks_from_ai_text, concise_h1_from_topic, extract_ai_article_parts, faq_block, header_block, paragraph_block
 
 
 def test_quality_check_flags_metadata_and_risky_phrases() -> None:
@@ -100,3 +100,10 @@ Ein weiterer Absatz."""
     headings = [block["data"]["text"] for block in blocks if block["type"] == "header"]
 
     assert headings == ["Test H1", "Echter Abschnitt"]
+
+
+def test_concise_h1_uses_primary_topic_part_and_preserves_title_case() -> None:
+    topic = "Beste Online Casinos in Deutschland 2026: Legale Anbieter im Vergleich"
+
+    assert concise_h1_from_topic(topic) == "Beste Online Casinos in Deutschland 2026"
+    assert concise_h1_from_topic("Legale Anbieter mit GGL-Lizenz") == "Legale Anbieter mit GGL-Lizenz"
