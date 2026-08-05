@@ -1,5 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { createPortal } from "react-dom";
 import {
   Activity,
   AlertTriangle,
@@ -1079,10 +1080,14 @@ function DashboardView({ api, dashboard, tasks, content, sites, onChanged }: Vie
                 <TopicMetaCell item={item} />,
                 sites.find((site) => site.id === item.site_id)?.name || "Не назначен",
                 item.site_id ? (
-                  <select value={item.section_id || ""} onChange={(event) => selectSection(item, event.target.value)} disabled={itemBusy} aria-label={`Раздел для ${item.topic}`}>
-                    <option value="">Выберите раздел</option>
-                    {sections.map((section) => <option key={section.id} value={section.id}>{section.name} · {section.path}</option>)}
-                  </select>
+                  <SearchableSelect
+                    value={item.section_id || ""}
+                    onChange={(value) => selectSection(item, value)}
+                    options={[{ value: "", label: "Выберите раздел" }, ...sections.map((section) => ({ value: section.id, label: `${section.name} · ${section.path}` }))]}
+                    disabled={itemBusy}
+                    ariaLabel={`Раздел для ${item.topic}`}
+                    searchPlaceholder="Найти раздел"
+                  />
                 ) : "Сначала назначьте проект",
                 item.word_count,
                 <StatusBadge status={item.status} />,
@@ -1227,9 +1232,12 @@ function ProjectWorkspaceView({
         <div className="projectHeader">
           <label>
             Проект
-            <select value={selectedSiteId} onChange={(event) => setSelectedSiteId(event.target.value)}>
-              {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={selectedSiteId}
+              onChange={setSelectedSiteId}
+              options={sites.map((site) => ({ value: site.id, label: site.name }))}
+              searchPlaceholder="Найти проект"
+            />
           </label>
           <div className="projectMeta">
             <strong>{selectedSite?.base_url || "..."}</strong>
@@ -1456,22 +1464,30 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
           </label>
           <label>
             Пункт меню
-            <select value={sectionId} onChange={(event) => setSectionId(event.target.value)}>
-              <option value="">Выбрать позже</option>
-              {sections.map((section) => <option key={section.id} value={section.id}>{section.name} · {section.path}</option>)}
-            </select>
+            <SearchableSelect
+              value={sectionId}
+              onChange={setSectionId}
+              options={[{ value: "", label: "Выбрать позже" }, ...sections.map((section) => ({ value: section.id, label: `${section.name} · ${section.path}` }))]}
+              searchPlaceholder="Найти пункт меню"
+            />
           </label>
           <label>
             Страна
-            <select value={geo} onChange={(event) => setGeo(event.target.value)} required>
-              {COUNTRIES.map((country) => <option key={country.code} value={country.code}>{country.flag} {country.code} · {country.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={geo}
+              onChange={setGeo}
+              options={COUNTRIES.map((country) => ({ value: country.code, label: `${country.flag} ${country.name} (${country.code})` }))}
+              searchPlaceholder="Введите страну или код"
+            />
           </label>
           <label>
             Язык
-            <select value={language} onChange={(event) => setLanguage(event.target.value)} required>
-              {LANGUAGE_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.flag} {option.name} · {option.code.toUpperCase()}</option>)}
-            </select>
+            <SearchableSelect
+              value={language}
+              onChange={setLanguage}
+              options={LANGUAGE_OPTIONS.map((option) => ({ value: option.code, label: `${option.flag} ${option.name} (${option.code.toUpperCase()})` }))}
+              searchPlaceholder="Введите язык или код"
+            />
           </label>
           <label>
             Количество слов
@@ -1479,16 +1495,21 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
           </label>
           <label>
             AI Provider
-            <select value={providerId} onChange={(event) => setProviderId(event.target.value)}>
-              <option value="">Stub generator</option>
-              {providers.filter(isGenerationProvider).map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={providerId}
+              onChange={setProviderId}
+              options={[{ value: "", label: "Stub generator" }, ...providers.filter(isGenerationProvider).map((provider) => ({ value: provider.id, label: provider.name }))]}
+              searchPlaceholder="Найти AI Provider"
+            />
           </label>
           <label>
             Промпт генерации
-            <select value={promptTemplateId} onChange={(event) => setPromptTemplateId(event.target.value)}>
-              {promptTemplates.map((prompt) => <option key={prompt.id} value={prompt.id}>{prompt.is_default ? "Default · " : ""}{prompt.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={promptTemplateId}
+              onChange={setPromptTemplateId}
+              options={promptTemplates.map((prompt) => ({ value: prompt.id, label: `${prompt.is_default ? "Default · " : ""}${prompt.name}` }))}
+              searchPlaceholder="Найти промпт"
+            />
           </label>
           <label>
             Shortcode
@@ -1787,9 +1808,12 @@ function PromptsView({ api, sites, isAdmin, onChanged }: ViewProps & { sites: Si
         <div className="projectHeader">
           <label>
             Проект
-            <select value={selectedSiteId} onChange={(event) => setSelectedSiteId(event.target.value)}>
-              {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={selectedSiteId}
+              onChange={setSelectedSiteId}
+              options={sites.map((site) => ({ value: site.id, label: site.name }))}
+              searchPlaceholder="Найти проект"
+            />
           </label>
           <div className="projectMeta">
             <strong>{selectedSite?.base_url || "..."}</strong>
@@ -2085,10 +2109,12 @@ function ProjectContentPanel({ api, content, sections, onChanged }: ViewProps & 
           <form className="formGrid" onSubmit={saveContent}>
             <label>
               Пункт меню
-              <select value={sectionId} onChange={(event) => setSectionId(event.target.value)}>
-                <option value="">Не выбран</option>
-                {sections.map((section) => <option key={section.id} value={section.id}>{section.name} · {section.path}</option>)}
-              </select>
+              <SearchableSelect
+                value={sectionId}
+                onChange={setSectionId}
+                options={[{ value: "", label: "Не выбран" }, ...sections.map((section) => ({ value: section.id, label: `${section.name} · ${section.path}` }))]}
+                searchPlaceholder="Найти пункт меню"
+              />
             </label>
             <label>
               Slug
@@ -2163,10 +2189,12 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, onCh
           </label>
           <label>
             Пункт меню
-            <select value={sectionId} onChange={(event) => setSectionId(event.target.value)}>
-              <option value="">Все approved</option>
-              {sections.map((section) => <option key={section.id} value={section.id}>{section.name} · {section.path}</option>)}
-            </select>
+            <SearchableSelect
+              value={sectionId}
+              onChange={setSectionId}
+              options={[{ value: "", label: "Все approved" }, ...sections.map((section) => ({ value: section.id, label: `${section.name} · ${section.path}` }))]}
+              searchPlaceholder="Найти пункт меню"
+            />
           </label>
           <label>
             Текстов в день
@@ -2636,16 +2664,21 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
         {createFormExpanded ? <form id="create-generation-task-form" className="formGrid createTaskForm" onSubmit={createTask}>
           <label>
             Выберите проект
-            <select value={siteId} onChange={(event) => setSiteId(event.target.value)} required>
-              <option value="">Проект не выбран</option>
-              {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={siteId}
+              onChange={setSiteId}
+              options={[{ value: "", label: "Проект не выбран" }, ...sites.map((site) => ({ value: site.id, label: site.name }))]}
+              searchPlaceholder="Введите название проекта"
+            />
           </label>
           <label>
             Гео
-            <select value={geo} onChange={(event) => setGeo(event.target.value)} required>
-              {COUNTRIES.map((country) => <option key={country.code} value={country.code}>{country.flag} {country.code} · {country.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={geo}
+              onChange={setGeo}
+              options={COUNTRIES.map((country) => ({ value: country.code, label: `${country.flag} ${country.name} (${country.code})` }))}
+              searchPlaceholder="Введите страну или код"
+            />
           </label>
           <label className="automaticTaskTitleField">
             Название задачи
@@ -2654,16 +2687,21 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
           </label>
           <label>
             Язык
-            <select value={language} onChange={(event) => setLanguage(event.target.value)} required>
-              {LANGUAGE_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.flag} {option.name} · {option.code.toUpperCase()}</option>)}
-            </select>
+            <SearchableSelect
+              value={language}
+              onChange={setLanguage}
+              options={LANGUAGE_OPTIONS.map((option) => ({ value: option.code, label: `${option.flag} ${option.name} (${option.code.toUpperCase()})` }))}
+              searchPlaceholder="Введите язык или код"
+            />
           </label>
           <label>
             AI Provider
-            <select value={providerId} onChange={(event) => setProviderId(event.target.value)}>
-              <option value="">Stub generator</option>
-              {providers.filter(isGenerationProvider).map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={providerId}
+              onChange={setProviderId}
+              options={[{ value: "", label: "Stub generator" }, ...providers.filter(isGenerationProvider).map((provider) => ({ value: provider.id, label: provider.name }))]}
+              searchPlaceholder="Найти AI Provider"
+            />
           </label>
           <label>
             Формат payload
@@ -3570,10 +3608,12 @@ function PublicationsView({ api, sites, content, onChanged }: ViewProps & { site
           </label>
           <label>
             Сайт
-            <select value={siteId} onChange={(event) => setSiteId(event.target.value)} required>
-              <option value="">Выберите сайт</option>
-              {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={siteId}
+              onChange={setSiteId}
+              options={[{ value: "", label: "Выберите сайт" }, ...sites.map((site) => ({ value: site.id, label: site.name }))]}
+              searchPlaceholder="Найти сайт"
+            />
           </label>
           <label>
             Интервал, минут
@@ -4057,6 +4097,172 @@ function KpiCard({ icon, label, value, danger, onClick, active }: { icon: React.
   return onClick
     ? <button className={className} type="button" onClick={onClick} aria-expanded={active}>{content}</button>
     : <div className={className}>{content}</div>;
+}
+
+type SearchableSelectOption = {
+  value: string;
+  label: string;
+};
+
+function SearchableSelect({
+  value,
+  options,
+  onChange,
+  searchPlaceholder = "Начните вводить для поиска",
+  disabled = false,
+  ariaLabel
+}: {
+  value: string;
+  options: SearchableSelectOption[];
+  onChange: (value: string) => void;
+  searchPlaceholder?: string;
+  disabled?: boolean;
+  ariaLabel?: string;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [query, setQuery] = React.useState("");
+  const [activeIndex, setActiveIndex] = React.useState(0);
+  const [dropdownStyle, setDropdownStyle] = React.useState<React.CSSProperties>({});
+  const controlRef = React.useRef<HTMLButtonElement>(null);
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
+  const searchRef = React.useRef<HTMLInputElement>(null);
+  const listboxId = React.useId();
+  const selected = options.find((option) => option.value === value);
+  const normalizedQuery = query.trim().toLocaleLowerCase("ru-RU");
+  const filteredOptions = normalizedQuery
+    ? options.filter((option) => `${option.label} ${option.value}`.toLocaleLowerCase("ru-RU").includes(normalizedQuery))
+    : options;
+
+  const updateDropdownPosition = React.useCallback(() => {
+    const control = controlRef.current;
+    if (!control) return;
+    const rect = control.getBoundingClientRect();
+    const availableBelow = window.innerHeight - rect.bottom - 12;
+    const availableAbove = rect.top - 12;
+    const desiredHeight = Math.min(360, Math.max(210, options.length * 44 + 62));
+    const placeAbove = availableBelow < Math.min(240, desiredHeight) && availableAbove > availableBelow;
+    const maxHeight = Math.max(180, Math.min(desiredHeight, placeAbove ? availableAbove : availableBelow));
+    setDropdownStyle({
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8)),
+      top: placeAbove ? Math.max(8, rect.top - maxHeight - 4) : rect.bottom + 4,
+      width: Math.min(rect.width, window.innerWidth - 16),
+      maxHeight
+    });
+  }, [options.length]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    updateDropdownPosition();
+    window.requestAnimationFrame(() => {
+      searchRef.current?.focus();
+      dropdownRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
+    });
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!controlRef.current?.contains(target) && !dropdownRef.current?.contains(target)) {
+        setOpen(false);
+      }
+    };
+    window.addEventListener("resize", updateDropdownPosition);
+    window.addEventListener("scroll", updateDropdownPosition, true);
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => {
+      window.removeEventListener("resize", updateDropdownPosition);
+      window.removeEventListener("scroll", updateDropdownPosition, true);
+      document.removeEventListener("mousedown", handlePointerDown);
+    };
+  }, [open, updateDropdownPosition]);
+
+  React.useEffect(() => {
+    setActiveIndex(0);
+  }, [query]);
+
+  function showOptions() {
+    if (disabled) return;
+    setQuery("");
+    setActiveIndex(Math.max(0, options.findIndex((option) => option.value === value)));
+    setOpen(true);
+  }
+
+  function chooseOption(option: SearchableSelectOption) {
+    onChange(option.value);
+    setQuery("");
+    setOpen(false);
+    window.requestAnimationFrame(() => controlRef.current?.focus());
+  }
+
+  return (
+    <div className={`searchableSelect ${open ? "isOpen" : ""}`}>
+      <button
+        ref={controlRef}
+        className="searchableSelectControl"
+        type="button"
+        disabled={disabled}
+        aria-label={ariaLabel}
+        aria-expanded={open}
+        aria-controls={listboxId}
+        aria-haspopup="listbox"
+        onClick={() => open ? setOpen(false) : showOptions()}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            showOptions();
+          }
+        }}
+      >
+        <span>{selected?.label || "Выберите значение"}</span>
+        <ChevronDown size={17} />
+      </button>
+      {open ? createPortal(
+        <div ref={dropdownRef} className="searchableSelectDropdown" style={dropdownStyle}>
+          <div className="searchableSelectSearch">
+            <Search size={16} />
+            <input
+              ref={searchRef}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  setActiveIndex((current) => Math.min(current + 1, filteredOptions.length - 1));
+                } else if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setActiveIndex((current) => Math.max(current - 1, 0));
+                } else if (event.key === "Enter" && filteredOptions[activeIndex]) {
+                  event.preventDefault();
+                  chooseOption(filteredOptions[activeIndex]);
+                } else if (event.key === "Escape") {
+                  event.preventDefault();
+                  setOpen(false);
+                  controlRef.current?.focus();
+                }
+              }}
+              placeholder={searchPlaceholder}
+              aria-label={searchPlaceholder}
+              autoComplete="off"
+            />
+          </div>
+          <div className="searchableSelectOptions" id={listboxId} role="listbox">
+            {filteredOptions.length ? filteredOptions.map((option, index) => (
+              <button
+                className={`searchableSelectOption ${option.value === value ? "selected" : ""} ${index === activeIndex ? "active" : ""}`}
+                type="button"
+                role="option"
+                aria-selected={option.value === value}
+                key={`${option.value}:${option.label}`}
+                onMouseEnter={() => setActiveIndex(index)}
+                onClick={() => chooseOption(option)}
+              >
+                <span>{option.label}</span>
+                {option.value === value ? <CheckCircle2 size={16} /> : null}
+              </button>
+            )) : <div className="searchableSelectEmpty">Ничего не найдено</div>}
+          </div>
+        </div>,
+        document.body
+      ) : null}
+    </div>
+  );
 }
 
 function DataPanel({ title, children }: { title: string; children: React.ReactNode }) {
