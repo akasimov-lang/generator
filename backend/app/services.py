@@ -1925,8 +1925,14 @@ def breadcrumb_schema_block(slug: str, title: str) -> dict:
 def create_generation_task(db: Session, payload: GenerationTaskCreate, created_by_user_id: str | None = None) -> models.GenerationTask:
     clean_topics = [topic.strip() for topic in payload.topics if topic.strip()]
     prompt_template = compose_prompt_with_base(db, payload.prompt_template)
+    site = db.get(models.Site, payload.site_id) if payload.site_id else None
+    automatic_title = (
+        f"{site.name} · {len(clean_topics)} тем · {payload.language.upper()}-{payload.geo.upper()}"
+        if site
+        else f"Без проекта · {len(clean_topics)} тем · {payload.language.upper()}-{payload.geo.upper()}"
+    )
     task = models.GenerationTask(
-        title=payload.title,
+        title=payload.title.strip() if payload.title and payload.title.strip() else automatic_title,
         created_by_user_id=created_by_user_id,
         site_id=payload.site_id,
         section_id=payload.section_id,
@@ -1945,7 +1951,6 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
     db.flush()
 
     for index, topic in enumerate(clean_topics, start=1):
-        site = db.get(models.Site, payload.site_id) if payload.site_id else None
         generated_json = build_stub_content(
             topic,
             payload.geo,

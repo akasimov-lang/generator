@@ -146,7 +146,7 @@ class PromptTemplateResponse(BaseModel):
 
 
 class GenerationTaskCreate(BaseModel):
-    title: str
+    title: str | None = Field(default=None, max_length=180)
     geo: str
     language: str
     topics: list[str] = Field(min_length=1, max_length=30)

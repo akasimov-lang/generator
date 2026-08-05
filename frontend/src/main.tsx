@@ -2268,7 +2268,6 @@ function ProjectMenuPanel({ api, site, sections, onChanged }: ViewProps & { site
 }
 
 function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { sites: Site[]; providers: AiProvider[]; tasks: Task[] }) {
-  const [title, setTitle] = React.useState("");
   const [geo, setGeo] = React.useState("DE");
   const [language, setLanguage] = React.useState("en");
   const [topics, setTopics] = React.useState("");
@@ -2292,6 +2291,11 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
   const [previewItem, setPreviewItem] = React.useState<ContentItem | null>(null);
   const hasResearchInProgress = expandedResearch.some((entry) => ACTIVE_RESEARCH_STATUSES.includes(entry.status));
   const hasGenerationInProgress = (expandedDetails?.items || []).some((item) => ACTIVE_GENERATION_STATUSES.includes(item.status));
+  const cleanTopics = topics.split("\n").map((line) => line.trim()).filter(Boolean);
+  const selectedSite = sites.find((site) => site.id === siteId);
+  const automaticTaskTitle = selectedSite
+    ? `${selectedSite.name} · ${cleanTopics.length} тем · ${language.toUpperCase()}-${geo.toUpperCase()}`
+    : "Выберите проект — название сформируется автоматически";
 
   React.useEffect(() => {
     const generationProviders = providers.filter(isGenerationProvider);
@@ -2331,8 +2335,12 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
 
   async function createTask(event: React.FormEvent) {
     event.preventDefault();
+    setTaskError("");
+    if (!siteId) {
+      setTaskError("Выберите проект для создания задачи.");
+      return;
+    }
     const payload = {
-      title,
       geo,
       language,
       site_id: siteId || null,
@@ -2342,17 +2350,20 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
       include_toc: includeToc,
       include_faq: includeFaq,
       collect_competitors: collectCompetitors,
-      topics: topics.split("\n").map((line: string) => line.trim()).filter(Boolean)
+      topics: cleanTopics
     };
-    const task = await api<Task>("/tasks", { method: "POST", body: JSON.stringify(payload) });
-    if (!collectCompetitors) {
-      await api(`/tasks/${task.id}/generate`, { method: "POST" });
+    try {
+      const task = await api<Task>("/tasks", { method: "POST", body: JSON.stringify(payload) });
+      if (!collectCompetitors) {
+        await api(`/tasks/${task.id}/generate`, { method: "POST" });
+      }
+      setTopics("");
+      setShortcode("");
+      setCreateFormExpanded(false);
+      await onChanged();
+    } catch (error) {
+      setTaskError(error instanceof Error ? error.message : "Не удалось создать задачу.");
     }
-    setTitle("");
-    setTopics("");
-    setShortcode("");
-    setCreateFormExpanded(false);
-    onChanged();
   }
 
   async function loadTaskDetails(taskId: string) {
@@ -2624,8 +2635,11 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
         </button>
         {createFormExpanded ? <form id="create-generation-task-form" className="formGrid createTaskForm" onSubmit={createTask}>
           <label>
-            Название задачи
-            <input value={title} onChange={(event) => setTitle(event.target.value)} required placeholder="Casino Bonuses DE" />
+            Выберите проект
+            <select value={siteId} onChange={(event) => setSiteId(event.target.value)} required>
+              <option value="">Проект не выбран</option>
+              {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
+            </select>
           </label>
           <label>
             Гео
@@ -2633,17 +2647,15 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
               {COUNTRIES.map((country) => <option key={country.code} value={country.code}>{country.flag} {country.code} · {country.name}</option>)}
             </select>
           </label>
+          <label className="automaticTaskTitleField">
+            Название задачи
+            <input value={automaticTaskTitle} readOnly aria-readonly="true" />
+            <span className="fieldHint">Формируется автоматически: проект · количество тем · язык-гео</span>
+          </label>
           <label>
             Язык
             <select value={language} onChange={(event) => setLanguage(event.target.value)} required>
               {LANGUAGE_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.flag} {option.name} · {option.code.toUpperCase()}</option>)}
-            </select>
-          </label>
-          <label>
-            Сайт
-            <select value={siteId} onChange={(event) => setSiteId(event.target.value)}>
-              <option value="">Не выбран</option>
-              {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
             </select>
           </label>
           <label>
@@ -2680,6 +2692,7 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
           <label className="wide">
             Темы, каждая с новой строки
             <textarea value={topics} onChange={(event) => setTopics(event.target.value)} required rows={8} placeholder="best online casinos in Germany" />
+            <span className="fieldHint">Тем в задаче: {cleanTopics.length}</span>
           </label>
           <div className="formActions wide">
             <button className="button primary" type="submit">
@@ -2931,6 +2944,7 @@ function AdminTasksAccordion({
         <thead>
           <tr>
             <th>Задача</th>
+            <th>Создана</th>
             <th>Гео</th>
             <th>Язык</th>
             <th>Формат</th>
@@ -2960,6 +2974,7 @@ function AdminTasksAccordion({
                       {expanded && !loading ? <span className="taskRowCollapseHint">Нажмите строку, чтобы свернуть</span> : null}
                     </span>
                   </td>
+                  <td data-label="Создана">{formatDate(task.created_at)}</td>
                   <td data-label="Гео">{countryLabel(task.geo)}</td>
                   <td data-label="Язык">{languageLabel(task.language)}</td>
                   <td data-label="Формат">{humanPayloadMode(task.payload_mode)}</td>
@@ -2981,7 +2996,7 @@ function AdminTasksAccordion({
                 </tr>
                 {expanded ? (
                   <tr className="expandedRow">
-                    <td colSpan={7}>
+                    <td colSpan={8}>
                       {loadingId === task.id && !expandedDetails ? (
                         <EmptyState text="Загружаю детали задачи." />
                       ) : expandedTask ? (
