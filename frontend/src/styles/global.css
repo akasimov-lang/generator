@@ -742,6 +742,14 @@ h2 {
   overflow-x: auto;
 }
 
+.tasksTableWrap {
+  width: 100%;
+}
+
+.taskTopicsTableWrap {
+  overflow: visible;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

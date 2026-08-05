@@ -2568,7 +2568,7 @@ function AdminTasksAccordion({
   }
 
   return (
-    <div className="tableWrap">
+    <div className="tasksTableWrap">
       <table className="expandableTable">
         <thead>
           <tr>
@@ -2661,6 +2661,7 @@ function AdminTasksAccordion({
                             </button>
                           </div>
                           <ResponsiveTable
+                            wrapperClassName="taskTopicsTableWrap"
                             columns={["Выбор", "Тема", "Запросы", "Загружена", "Генерация", "Конкуренты", "Статус", "Действия"]}
                             rows={expandedItems.map((item) => {
                               const itemResearch = researchByItem.get(item.id);
@@ -3639,10 +3640,10 @@ function DataPanel({ title, children }: { title: string; children: React.ReactNo
   return <section className="dataPanel"><div className="panelHeader"><h2>{title}</h2></div>{children}</section>;
 }
 
-function ResponsiveTable({ columns, rows, rowClassNames }: { columns: string[]; rows: React.ReactNode[][]; rowClassNames?: string[] }) {
+function ResponsiveTable({ columns, rows, rowClassNames, wrapperClassName = "" }: { columns: string[]; rows: React.ReactNode[][]; rowClassNames?: string[]; wrapperClassName?: string }) {
   if (!rows.length) return <EmptyState text="Данных пока нет." />;
   return (
-    <div className="tableWrap">
+    <div className={`tableWrap ${wrapperClassName}`.trim()}>
       <table>
         <thead><tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr></thead>
         <tbody>{rows.map((row, rowIndex) => <tr className={rowClassNames?.[rowIndex] || undefined} key={rowIndex}>{row.map((cell, cellIndex) => <td data-label={columns[cellIndex]} key={cellIndex}>{cell}</td>)}</tr>)}</tbody>
@@ -3699,11 +3700,17 @@ function PromptBadge({ name }: { name?: string | null }) {
 function TopicMetaCell({ item, promptName }: { item: ContentItem; promptName?: string | null }) {
   const generationPrompt = item.generation_prompt_name || promptName || "Промпт не указан";
   const generationDate = item.generated_at || item.updated_at;
+  const generationMeta = item.generated_json?.generation_meta;
+  const competitorResearch = generationMeta && typeof generationMeta === "object" && !Array.isArray(generationMeta)
+    ? (generationMeta as Record<string, unknown>).competitor_research
+    : null;
+  const usedCompetitorResearch = competitorResearch && typeof competitorResearch === "object" && !Array.isArray(competitorResearch)
+    && (competitorResearch as Record<string, unknown>).status === "used";
   return (
     <div className="topicMetaCell">
       <strong>{item.topic}</strong>
       <PromptBadge name={generationPrompt} />
-      {item.competitor_brief ? <span className="researchBadge">На основе анализа конкурентов</span> : null}
+      {usedCompetitorResearch ? <span className="researchBadge">На основе анализа конкурентов</span> : null}
       <span>Генерация: {generationDate ? formatDate(generationDate) : "-"}</span>
     </div>
   );
