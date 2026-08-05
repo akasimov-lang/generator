@@ -53,7 +53,10 @@ def test_competitor_query_generation_uses_only_words_from_topic() -> None:
         "beste online casinos deutschland 2026",
         "deutschland 2026 legale anbieter vergleich",
         "online casinos deutschland 2026 legale",
+        "casinos deutschland 2026 legale anbieter",
+        "beste online casinos deutschland",
     ]
+    assert len(queries) == 5
     assert all(set(query.split()).issubset(topic_words) for query in queries)
     assert all(3 <= len(query.split()) <= 5 for query in queries)
 
