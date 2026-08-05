@@ -5,7 +5,7 @@ from sqlalchemy import delete, select
 from app import models
 from app.db import SessionLocal
 from app.schemas import GenerationTaskCreate
-from app.services import build_competitor_brief_for_item, create_generation_task
+from app.services import build_competitor_brief_for_item, compose_prompt_with_base, create_generation_task
 from app.worker import generate_task_content_job
 
 
@@ -47,6 +47,27 @@ def build_v5_content(v4_content: str) -> str:
         "- Для Германии раскрывай только релевантные теме аспекты GGL, KYC, OASIS/LUGAS, платежей, лимитов и Spielerschutz; не вставляй весь набор автоматически в каждую статью.",
         "- Для выбранного гео раскрывай только подтверждённые конкурентами локальные аспекты; не вставляй автоматически регуляторов, лицензии и правила другой страны.",
     )
+    content = content.replace(
+        "- Если динамический или юридически значимый факт не подтверждён входными данными, сформулируй раздел без конкретного спорного значения либо не включай этот факт.",
+        "- Спорные, динамические и юридически значимые утверждения можно включать без отдельной проверки фактов и без служебных предупреждений в тексте.",
+    )
+    content = content.replace(
+        "Формат ответа:\n",
+        """Жёсткий запрет служебных пометок в публичном тексте — это правило имеет приоритет над базовым промптом:
+- Не выводи замечания, placeholders и маркеры необходимости проверки ни на каком языке.
+- Запрещены любые варианты конструкций вроде [Muss geprüft werden], [Needs verification], [Требует проверки], [Проверить редактору], TODO, TBD и аналогичные формулировки, в том числе внутри таблиц, списков и FAQ.
+- Не используй placeholders операторов и брендов: [Anbieter 1], [Provider 1], [Оператор 1] и их аналоги.
+- Спорные, динамические и неподтверждённые утверждения указывать можно без проверки фактов; формулируй их как обычный публичный текст без предупреждений и маркеров проверки.
+- Если нет проверенных данных об операторах, не создавай вымышленные карточки и описания операторов; вместо них используй обезличенную таблицу критериев выбора.
+- Не создавай замечания о необходимости проверки фактов даже в служебном блоке Editor Check.
+
+Формат ответа:
+""",
+        1,
+    )
+    content = content.replace("- Неподтверждённые факты в публичном тексте: нет / перечислить\n", "")
+    content = content.replace("- Legal-риск: OK / Risiko\n", "")
+    content = content.replace("- Следующая проверка редактора перед публикацией: ...\n", "")
     return content
 
 
@@ -126,13 +147,6 @@ def clone_competitor_research(db, source_item: models.ContentItem, target_item: 
 def main() -> None:
     db = SessionLocal()
     try:
-        existing_task = db.scalar(
-            select(models.GenerationTask).where(models.GenerationTask.title == TARGET_TASK_TITLE)
-        )
-        if existing_task:
-            print(f"Existing task: {existing_task.id} ({existing_task.status})")
-            return
-
         source_prompt = db.scalar(
             select(models.PromptTemplate).where(models.PromptTemplate.name == SOURCE_PROMPT_NAME)
         )
@@ -156,6 +170,16 @@ def main() -> None:
             db.add(target_prompt)
         else:
             target_prompt.content = v5_content
+        existing_task = db.scalar(
+            select(models.GenerationTask).where(models.GenerationTask.title == TARGET_TASK_TITLE)
+        )
+        if existing_task:
+            existing_task.prompt_template_name = TARGET_PROMPT_NAME
+            existing_task.prompt_template = compose_prompt_with_base(db, v5_content)
+            db.commit()
+            print(f"Updated prompt: {target_prompt.id}")
+            print(f"Updated existing task snapshot: {existing_task.id} ({existing_task.status})")
+            return
         db.flush()
 
         source_items = sorted(source_task.items, key=lambda item: item.created_at)
