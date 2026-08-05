@@ -1256,10 +1256,11 @@ function ProjectWorkspaceView({
         <TasksView
           key={selectedSite.id}
           api={api}
-          sites={[selectedSite]}
+          sites={sites}
           providers={providers}
           tasks={siteTasks}
           fixedSite={selectedSite}
+          onProjectChange={setSelectedSiteId}
           sections={sections}
           promptTemplates={promptTemplates}
           onChanged={refreshProject}
@@ -2305,6 +2306,7 @@ function TasksView({
   providers,
   tasks,
   fixedSite,
+  onProjectChange,
   sections = [],
   promptTemplates = [],
   onChanged
@@ -2313,6 +2315,7 @@ function TasksView({
   providers: AiProvider[];
   tasks: Task[];
   fixedSite?: Site;
+  onProjectChange?: (siteId: string) => void;
   sections?: Section[];
   promptTemplates?: PromptTemplate[];
 }) {
@@ -2718,16 +2721,18 @@ function TasksView({
         {createFormExpanded ? <form id="create-generation-task-form" className="formGrid createTaskForm" onSubmit={createTask}>
           <label>
             {fixedSite ? "Проект" : "Выберите проект"}
-            {fixedSite ? (
-              <input value={fixedSite.name} readOnly aria-readonly="true" />
-            ) : (
-              <SearchableSelect
-                value={siteId}
-                onChange={setSiteId}
-                options={[{ value: "", label: "Проект не выбран" }, ...sites.map((site) => ({ value: site.id, label: site.name }))]}
-                searchPlaceholder="Введите название проекта"
-              />
-            )}
+            <SearchableSelect
+              value={siteId}
+              onChange={(nextSiteId) => {
+                setSiteId(nextSiteId);
+                onProjectChange?.(nextSiteId);
+              }}
+              options={[
+                ...(fixedSite ? [] : [{ value: "", label: "Проект не выбран" }]),
+                ...sites.map((site) => ({ value: site.id, label: site.name }))
+              ]}
+              searchPlaceholder="Введите название проекта"
+            />
           </label>
           <label>
             Гео
