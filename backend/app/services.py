@@ -416,6 +416,27 @@ def ensure_competitor_queries(db: Session, item: models.ContentItem, geo: str, l
     ).all()
 
 
+def regenerate_competitor_queries(db: Session, item: models.ContentItem, geo: str, language: str) -> list[models.CompetitorQuery]:
+    clear_competitor_research(db, item)
+    queries = generate_competitor_search_queries(item.topic, geo, language)
+    for index, query in enumerate(queries, start=1):
+        db.add(
+            models.CompetitorQuery(
+                content_item_id=item.id,
+                query=query,
+                position=index,
+                status="draft",
+            )
+        )
+    item.competitor_research_status = "queries_ready"
+    db.flush()
+    return db.scalars(
+        select(models.CompetitorQuery)
+        .where(models.CompetitorQuery.content_item_id == item.id)
+        .order_by(models.CompetitorQuery.position.asc())
+    ).all()
+
+
 def replace_competitor_queries(db: Session, item: models.ContentItem, queries: list[str]) -> None:
     clean_queries = compact_lines(queries, 5)
     if not clean_queries:
@@ -1517,6 +1538,14 @@ def build_competitor_brief_for_item(db: Session, item: models.ContentItem) -> mo
     item.competitor_brief_text = render_competitor_brief_for_prompt(brief)
     item.competitor_research_status = "brief_ready"
     db.commit()
+    db.refresh(item)
+    return item
+
+
+async def collect_competitor_research_for_item(db: Session, item: models.ContentItem) -> models.ContentItem:
+    await collect_competitor_serp_for_item(db, item)
+    await fetch_competitor_pages_for_item(db, item)
+    build_competitor_brief_for_item(db, item)
     db.refresh(item)
     return item
 

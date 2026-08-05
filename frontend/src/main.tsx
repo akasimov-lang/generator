@@ -1981,6 +1981,32 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
     }
   }
 
+  async function regenerateCompetitorQueries(item: ContentItem) {
+    setTaskError("");
+    setTaskActionId(`${item.id}:regenerate-queries`);
+    try {
+      await api(`/content/${item.id}/competitor-queries/regenerate`, { method: "POST" });
+      await refreshExpandedTask();
+    } catch (error) {
+      setTaskError(error instanceof Error ? error.message : "Не удалось пересоздать запросы.");
+    } finally {
+      setTaskActionId("");
+    }
+  }
+
+  async function collectCompetitors(item: ContentItem) {
+    setTaskError("");
+    setTaskActionId(`${item.id}:collect-competitors`);
+    try {
+      await api(`/content/${item.id}/competitor-collect`, { method: "POST" });
+      await refreshExpandedTask();
+    } catch (error) {
+      setTaskError(error instanceof Error ? error.message : "Не удалось собрать конкурентов.");
+    } finally {
+      setTaskActionId("");
+    }
+  }
+
   async function regenerateContent(item: ContentItem) {
     setTaskError("");
     setTaskActionId(`${item.id}:generate`);
@@ -2026,6 +2052,30 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
       }
     } catch (error) {
       setTaskError(error instanceof Error ? error.message : "Не удалось запустить повторную генерацию.");
+    } finally {
+      setTaskActionId("");
+    }
+  }
+
+  async function bulkCollectTaskCompetitors(items: ContentItem[]) {
+    if (!items.length) return;
+    setTaskError("");
+    setTaskActionId("bulk:collect-competitors");
+    let failed = 0;
+    try {
+      for (const item of items) {
+        try {
+          await api(`/content/${item.id}/competitor-collect`, { method: "POST" });
+        } catch {
+          failed += 1;
+        }
+      }
+      await refreshExpandedTask();
+      if (failed) {
+        setTaskError(`Не удалось собрать конкурентов для части текстов: ${failed}.`);
+      }
+    } catch (error) {
+      setTaskError(error instanceof Error ? error.message : "Не удалось собрать конкурентов для выбранных текстов.");
     } finally {
       setTaskActionId("");
     }
@@ -2146,10 +2196,13 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
           actionId={taskActionId}
           onToggle={toggleTask}
           onEditQueries={openQueryEditor}
+          onRegenerateQueries={regenerateCompetitorQueries}
+          onCollectCompetitors={collectCompetitors}
           onPreview={setPreviewItem}
           onRegenerate={regenerateContent}
           onDelete={deleteContentItem}
           onBulkApprove={bulkApproveTaskContent}
+          onBulkCollectCompetitors={bulkCollectTaskCompetitors}
           onBulkRegenerate={bulkRegenerateTaskContent}
           onBulkDelete={bulkDeleteTaskContent}
           onShowPrompt={(task) => setPromptModalTask(task)}
@@ -2200,10 +2253,13 @@ function AdminTasksAccordion({
   actionId,
   onToggle,
   onEditQueries,
+  onRegenerateQueries,
+  onCollectCompetitors,
   onPreview,
   onRegenerate,
   onDelete,
   onBulkApprove,
+  onBulkCollectCompetitors,
   onBulkRegenerate,
   onBulkDelete,
   onShowPrompt
@@ -2216,10 +2272,13 @@ function AdminTasksAccordion({
   actionId: string;
   onToggle: (task: Task) => Promise<void>;
   onEditQueries: (item: ContentItem) => Promise<void>;
+  onRegenerateQueries: (item: ContentItem) => Promise<void>;
+  onCollectCompetitors: (item: ContentItem) => Promise<void>;
   onPreview: (item: ContentItem) => void;
   onRegenerate: (item: ContentItem) => Promise<void>;
   onDelete: (item: ContentItem) => Promise<void>;
   onBulkApprove: (items: ContentItem[]) => Promise<void>;
+  onBulkCollectCompetitors: (items: ContentItem[]) => Promise<void>;
   onBulkRegenerate: (items: ContentItem[]) => Promise<void>;
   onBulkDelete: (items: ContentItem[]) => Promise<void>;
   onShowPrompt: (task: Task) => void;
@@ -2234,6 +2293,7 @@ function AdminTasksAccordion({
   const bulkApproveItems = selectedItems.filter((item) => !["approved", "scheduled", "published"].includes(item.status));
   const bulkDeleteItems = selectedItems.filter((item) => !["scheduled", "publishing", "published"].includes(item.status));
   const bulkRegenerateItems = selectedItems;
+  const bulkCollectItems = selectedItems;
   const bulkBusy = actionId.startsWith("bulk:");
   const researchByItem = new Map(research.map((entry) => [entry.content_item_id, entry]));
   const totalQueries = research.reduce((sum, entry) => sum + entry.queries.length, 0);
@@ -2271,6 +2331,11 @@ function AdminTasksAccordion({
 
   async function handleBulkRegenerate() {
     await onBulkRegenerate(bulkRegenerateItems);
+    setSelectedIds([]);
+  }
+
+  async function handleBulkCollectCompetitors() {
+    await onBulkCollectCompetitors(bulkCollectItems);
     setSelectedIds([]);
   }
 
@@ -2355,6 +2420,9 @@ function AdminTasksAccordion({
                             <button className="button compact approve" type="button" onClick={handleBulkApprove} disabled={!bulkApproveItems.length || actionId === "bulk:approve"}>
                               <CheckCircle2 size={15} /> {actionId === "bulk:approve" ? "Согласовываю" : `Approve выбранные (${bulkApproveItems.length})`}
                             </button>
+                            <button className="button compact" type="button" onClick={handleBulkCollectCompetitors} disabled={!bulkCollectItems.length || actionId === "bulk:collect-competitors"}>
+                              <Globe2 size={15} /> {actionId === "bulk:collect-competitors" ? "Сбор конкурентов" : `Собрать конкурентов (${bulkCollectItems.length})`}
+                            </button>
                             <button className="button compact" type="button" onClick={handleBulkRegenerate} disabled={!bulkRegenerateItems.length || actionId === "bulk:generate"}>
                               <Play size={15} /> {actionId === "bulk:generate" ? "Генерация" : `Сгенерировать выбранные (${bulkRegenerateItems.length})`}
                             </button>
@@ -2366,24 +2434,27 @@ function AdminTasksAccordion({
                             columns={["Выбор", "Тема", "Запросы", "Загружена", "Генерация", "Конкуренты", "Статус", "Действия"]}
                             rows={expandedItems.map((item) => {
                               const itemResearch = researchByItem.get(item.id);
-                              const queryCount = itemResearch?.queries.length || 0;
                               const competitorState = competitorStatusLabel(item, itemResearch);
                               const busy = actionId.startsWith(item.id) || bulkBusy;
                               const deleteDisabled = ["scheduled", "publishing", "published"].includes(item.status);
                               return [
                                 <input className="rowCheckbox" type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelected(item.id)} disabled={bulkBusy} aria-label={`Выбрать ${item.topic}`} />,
                                 <TopicMetaCell item={item} promptName={expandedTask.prompt_template_name} />,
-                                <div className="cellStack">
-                                  <span>{queryCount}</span>
-                                  <button className="button compact" type="button" onClick={() => onEditQueries(item)} disabled={busy}>
-                                    <Search size={15} /> Редактировать
-                                  </button>
-                                </div>,
+                                <QueryCell
+                                  queries={itemResearch?.queries || []}
+                                  activeAction={actionId.startsWith(item.id) ? actionId.split(":")[1] : ""}
+                                  busy={busy}
+                                  onEdit={() => onEditQueries(item)}
+                                  onRegenerate={() => onRegenerateQueries(item)}
+                                />,
                                 formatDate(item.created_at),
                                 item.generated_at ? formatDate(item.generated_at) : "-",
                                 competitorState,
                                 <StatusBadge status={item.status} />,
                                 <div className="userActions">
+                                  <button className="button compact" type="button" onClick={() => onCollectCompetitors(item)} disabled={busy} title="Собрать SERP, спарсить страницы и подготовить brief для генерации.">
+                                    <Globe2 size={15} /> {actionId === `${item.id}:collect-competitors` ? "Сбор" : "Собрать конкурентов"}
+                                  </button>
                                   <button className="button compact" type="button" onClick={() => onPreview(item)}>
                                     <FileText size={15} /> Просмотр
                                   </button>
@@ -2429,6 +2500,45 @@ function competitorStatusLabel(item: ContentItem, research?: CompetitorResearch)
   if ((research?.results.length || 0) > 0) return "URL собраны";
   if ((research?.queries.length || 0) > 0 || item.competitor_research_status === "queries_ready") return "Есть запросы";
   return "Нет";
+}
+
+function QueryCell({
+  queries,
+  activeAction,
+  busy,
+  onEdit,
+  onRegenerate
+}: {
+  queries: CompetitorQuery[];
+  activeAction: string;
+  busy: boolean;
+  onEdit: () => void;
+  onRegenerate: () => void;
+}) {
+  const queryTexts = queries.map((query) => query.query).filter(Boolean);
+  return (
+    <div className="queryCell" tabIndex={0}>
+      <span className="queryCount">{queryTexts.length}</span>
+      <div className="queryTooltip" role="tooltip">
+        <strong>Подготовленные запросы</strong>
+        {queryTexts.length ? (
+          <ol>
+            {queryTexts.map((query) => <li key={query}>{query}</li>)}
+          </ol>
+        ) : (
+          <span>Запросы пока не подготовлены.</span>
+        )}
+      </div>
+      <div className="queryActions">
+        <button className="button compact" type="button" onClick={onEdit} disabled={busy}>
+          <Search size={15} /> Редактировать
+        </button>
+        <button className="button compact" type="button" onClick={onRegenerate} disabled={busy}>
+          <RefreshCcw size={15} /> {activeAction === "regenerate-queries" ? "Генерация" : "Сгенерировать заново"}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function contentRowClassName(item: ContentItem) {

@@ -1,5 +1,16 @@
 from app import models
-from app.services import build_dataforseo_user_data_url, generate_competitor_search_queries, normalize_slug, parse_dataforseo_credentials
+from sqlalchemy import create_engine, func, select
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from app.db import Base
+from app.services import (
+    build_dataforseo_user_data_url,
+    generate_competitor_search_queries,
+    normalize_slug,
+    parse_dataforseo_credentials,
+    regenerate_competitor_queries,
+)
 
 
 def test_dataforseo_credentials_parse_login_password_pair() -> None:
@@ -39,3 +50,63 @@ def test_normalize_slug_uses_first_five_topic_words() -> None:
         normalize_slug("Beste Online Casinos in Deutschland 2026: Legale Anbieter im Vergleich")
         == "/beste-online-casinos-in-deutschland/"
     )
+
+
+def test_regenerate_competitor_queries_clears_old_research() -> None:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    with TestingSession() as db:
+        task = models.GenerationTask(
+            title="DE test",
+            geo="DE",
+            language="de",
+            topics_count=1,
+            collect_competitors=True,
+        )
+        item = models.ContentItem(
+            task=task,
+            topic="Beste Online Casinos in Deutschland 2026: Legale Anbieter im Vergleich",
+            slug="/beste-online-casinos/",
+            generated_json={},
+            idempotency_key="test-item",
+            competitor_research_status="brief_ready",
+            competitor_brief={"old": True},
+            competitor_brief_text="old",
+        )
+        db.add(item)
+        db.flush()
+        old_query = models.CompetitorQuery(content_item_id=item.id, query="old query", position=1)
+        db.add(old_query)
+        db.flush()
+        old_result = models.CompetitorResult(
+            content_item_id=item.id,
+            query_id=old_query.id,
+            query_text=old_query.query,
+            position=1,
+            url="https://competitor.example/page",
+            normalized_url="https://competitor.example/page",
+        )
+        db.add(old_result)
+        db.flush()
+        db.add(
+            models.CompetitorPage(
+                content_item_id=item.id,
+                competitor_result_id=old_result.id,
+                url=old_result.url,
+                http_status=200,
+                word_count=1000,
+            )
+        )
+        db.commit()
+
+        new_queries = regenerate_competitor_queries(db, item, "DE", "de")
+        db.commit()
+
+        assert item.competitor_research_status == "queries_ready"
+        assert item.competitor_brief is None
+        assert item.competitor_brief_text is None
+        assert [query.query for query in new_queries] != ["old query"]
+        assert db.scalar(select(func.count()).select_from(models.CompetitorResult)) == 0
+        assert db.scalar(select(func.count()).select_from(models.CompetitorPage)) == 0

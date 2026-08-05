@@ -41,6 +41,7 @@ from app.security import AdminUser, AuthUser, create_token, hash_password, verif
 from app.services import (
     BASE_PROMPT_TEMPLATE_NAME,
     build_competitor_brief_for_item,
+    collect_competitor_research_for_item,
     collect_competitor_serp_for_item,
     count_words,
     create_generation_task,
@@ -51,6 +52,7 @@ from app.services import (
     generate_content_item,
     generate_task_items,
     get_dashboard,
+    regenerate_competitor_queries,
     replace_competitor_queries,
     schedule_campaign,
     validate_ai_provider_key,
@@ -574,6 +576,35 @@ def update_content_competitor_queries(content_id: str, payload: CompetitorQuerie
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     db.commit()
+    db.refresh(item)
+    return _competitor_research_response(db, item)
+
+
+@router.post("/content/{content_id}/competitor-queries/regenerate", response_model=CompetitorResearchResponse)
+def regenerate_content_competitor_queries(content_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    item = db.get(models.ContentItem, content_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Content item not found")
+    task = db.get(models.GenerationTask, item.task_id)
+    if not task:
+        raise HTTPException(status_code=400, detail="Generation task not found")
+    regenerate_competitor_queries(db, item, task.geo, task.language)
+    db.commit()
+    db.refresh(item)
+    return _competitor_research_response(db, item)
+
+
+@router.post("/content/{content_id}/competitor-collect", response_model=CompetitorResearchResponse)
+def collect_content_competitors(content_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    item = db.get(models.ContentItem, content_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Content item not found")
+    try:
+        asyncio.run(collect_competitor_research_for_item(db, item))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)[:500]) from exc
     db.refresh(item)
     return _competitor_research_response(db, item)
 

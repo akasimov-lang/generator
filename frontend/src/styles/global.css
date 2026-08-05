@@ -990,6 +990,76 @@ td {
   min-width: 150px;
 }
 
+.queryCell {
+  align-items: flex-start;
+  display: inline-grid;
+  gap: 7px;
+  min-width: 230px;
+  position: relative;
+}
+
+.queryCount {
+  background: var(--surface);
+  border: 1px solid var(--button-border);
+  border-radius: 999px;
+  color: var(--text);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+  padding: 5px 9px;
+  width: max-content;
+}
+
+.queryActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.queryTooltip {
+  background: var(--surface);
+  border: 1px solid var(--button-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  display: grid;
+  gap: 8px;
+  left: 0;
+  max-width: min(420px, 70vw);
+  min-width: 280px;
+  opacity: 0;
+  padding: 11px 12px;
+  pointer-events: none;
+  position: absolute;
+  top: 27px;
+  transform: translateY(4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  visibility: hidden;
+  z-index: 20;
+}
+
+.queryTooltip ol {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.queryTooltip li,
+.queryTooltip span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.queryCell:hover .queryTooltip,
+.queryCell:focus-within .queryTooltip {
+  opacity: 1;
+  transform: translateY(0);
+  visibility: visible;
+}
+
 .cellHint {
   color: var(--muted);
   display: -webkit-box;
