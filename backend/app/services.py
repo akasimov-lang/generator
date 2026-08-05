@@ -25,26 +25,14 @@ GEMINI_DEFAULT_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/mode
 GEMINI_DEFAULT_MODEL = "gemini-3.5-flash"
 DATAFORSEO_DEFAULT_ENDPOINT = "https://api.dataforseo.com/v3"
 DATAFORSEO_USER_DATA_PATH = "/appendix/user_data"
+DATAFORSEO_LOCATIONS_PATH = "/serp/google/locations"
 DATAFORSEO_SERP_PATH = "/serp/google/organic/live/advanced"
 COMPETITOR_QUERY_LIMIT = 5
 COMPETITOR_RESULTS_PER_QUERY = 6
 MAX_COMPETITOR_PAGE_CHARS = 1_200_000
 MAX_COMPETITOR_TEXT_CHARS = 60_000
-DATAFORSEO_LOCATION_NAMES = {
-    "DE": "Germany",
-    "PL": "Poland",
-    "AT": "Austria",
-    "CH": "Switzerland",
-    "GB": "United Kingdom",
-    "UK": "United Kingdom",
-    "US": "United States",
-    "CA": "Canada",
-    "AU": "Australia",
-    "FR": "France",
-    "ES": "Spain",
-    "IT": "Italy",
-    "NL": "Netherlands",
-}
+DATAFORSEO_COUNTRY_ALIASES = {"UK": "GB"}
+DATAFORSEO_LOCATION_CACHE: dict[tuple[str, str], dict[str, int]] = {}
 DEFAULT_CONTENT_PROMPT_TEMPLATE = """Рабочий промпт для конкретной задачи.
 
 Базовые требования качества, юридической осторожности и формата ответа применяются отдельно через "Базовый промпт".
@@ -69,7 +57,7 @@ DEFAULT_CONTENT_PROMPT_TEMPLATE = """Рабочий промпт для конк
 - Краткий анализ конкурентов: {{COMPETITOR_SUMMARY}}
 - Content gaps: {{CONTENT_GAPS}}
 - Частые заголовки конкурентов: {{COMMON_HEADINGS}}
-- Блоки, которые нужно закрыть лучше: {{MISSING_BLOCKS_TO_COVER}}
+- Темы, подтвержденные анализом нескольких конкурентов: {{MISSING_BLOCKS_TO_COVER}}
 
 Контекст ниши:
 Онлайн-казино, ставки, casino providers, легальные Anbieter, лицензии, Spielerschutz, Zahlungen, Auszahlungen, KYC, Datenschutz, Limits, sichere Online Casinos.
@@ -94,16 +82,10 @@ DEFAULT_CONTENT_PROMPT_TEMPLATE = """Рабочий промпт для конк
 7. Гипотетические content gaps.
 8. Риски фактов, которые нужно проверить редактору.
 
-Для страниц по Германии обязательно раскрыть:
-- Was bedeutet GGL-Lizenz?
-- Warum ist Lizenzprüfung wichtig?
-- Wie erkennt man sichere Anbieter?
-- Welche Rolle spielen KYC und Identitätsprüfung?
-- Was muss man vor Einzahlung prüfen?
-- Unterschied zwischen Einzahlung und Auszahlung.
-- Spielerschutz, Limits und Selbstausschluss.
-- Für wen sind Online Casinos nicht geeignet?
-- Welche Warnsignale sollte man beachten?
+Правила локализации и анализа:
+- Структуру и набор смысловых блоков определяй динамически по теме, выбранному гео, языку и фактически собранным материалам конкурентов.
+- Не добавляй обязательный блок только потому, что он обычно встречается в нише или был нужен для другой страны.
+- Не добавляй раздел о проверке лицензии, если эта тема не подтверждена анализом нескольких конкурентов для текущего гео.
 
 Если тема рейтинговая:
 - Если нет проверенного списка брендов, делай таблицу критериев выбора.
@@ -1220,6 +1202,80 @@ def build_dataforseo_user_data_url(endpoint_url: str) -> str:
     return f"{clean_url}{DATAFORSEO_USER_DATA_PATH}"
 
 
+def build_dataforseo_locations_url(endpoint_url: str) -> str:
+    clean_url = (endpoint_url or DATAFORSEO_DEFAULT_ENDPOINT).rstrip("/")
+    if clean_url.endswith(DATAFORSEO_LOCATIONS_PATH):
+        return clean_url
+    return f"{clean_url}{DATAFORSEO_LOCATIONS_PATH}"
+
+
+def extract_dataforseo_country_location_codes(payload: dict | object) -> dict[str, int]:
+    if not isinstance(payload, dict):
+        return {}
+    task = first_dataforseo_task(payload)
+    result = task.get("result") if task else None
+    if not isinstance(result, list):
+        return {}
+
+    preferred: dict[str, int] = {}
+    fallback: dict[str, int] = {}
+    for location in result:
+        if not isinstance(location, dict):
+            continue
+        country_code = str(location.get("country_iso_code") or "").strip().upper()
+        try:
+            location_code = int(location.get("location_code"))
+        except (TypeError, ValueError):
+            continue
+        if not country_code:
+            continue
+        fallback.setdefault(country_code, location_code)
+        if str(location.get("location_type") or "").strip().casefold() == "country":
+            preferred[country_code] = location_code
+
+    return {country_code: preferred.get(country_code, code) for country_code, code in fallback.items()}
+
+
+async def get_dataforseo_country_location_code(provider: models.AiProvider, geo: str) -> int:
+    login, password = parse_dataforseo_credentials(provider)
+    endpoint = build_dataforseo_locations_url(provider.endpoint_url)
+    cache_key = (endpoint, login)
+    locations = DATAFORSEO_LOCATION_CACHE.get(cache_key)
+    if locations is None:
+        async with httpx.AsyncClient(timeout=45) as client:
+            for attempt in range(3):
+                try:
+                    response = await client.get(
+                        endpoint,
+                        auth=(login, password),
+                        headers={"Content-Type": "application/json"},
+                    )
+                    break
+                except httpx.TransportError as exc:
+                    if attempt == 2:
+                        raise ValueError(
+                            f"DataForSEO locations request failed after 3 attempts: {type(exc).__name__}"
+                        ) from exc
+                    await asyncio.sleep(attempt + 1)
+        response.raise_for_status()
+        payload = response.json()
+        status_code = int(payload.get("status_code") or 0) if isinstance(payload, dict) else 0
+        task = first_dataforseo_task(payload)
+        task_status = int(task.get("status_code") or status_code) if task else status_code
+        if status_code != 20000 or task_status != 20000:
+            raise ValueError(describe_dataforseo_payload_error(payload))
+        locations = extract_dataforseo_country_location_codes(payload)
+        if not locations:
+            raise ValueError("DataForSEO returned an empty Google locations catalog")
+        DATAFORSEO_LOCATION_CACHE[cache_key] = locations
+
+    country_code = DATAFORSEO_COUNTRY_ALIASES.get(geo.strip().upper(), geo.strip().upper())
+    location_code = locations.get(country_code)
+    if location_code is None:
+        raise ValueError(f"DataForSEO has no Google country location for geo {country_code}")
+    return location_code
+
+
 def first_dataforseo_task(payload: dict) -> dict | None:
     tasks = payload.get("tasks")
     if isinstance(tasks, list) and tasks and isinstance(tasks[0], dict):
@@ -1267,10 +1323,11 @@ def get_dataforseo_provider(db: Session) -> models.AiProvider:
 async def call_dataforseo_google_serp(provider: models.AiProvider, keyword: str, geo: str, language: str) -> dict:
     login, password = parse_dataforseo_credentials(provider)
     endpoint = f"{(provider.endpoint_url or DATAFORSEO_DEFAULT_ENDPOINT).rstrip('/')}{DATAFORSEO_SERP_PATH}"
+    location_code = await get_dataforseo_country_location_code(provider, geo)
     body = [
         {
             "keyword": keyword,
-            "location_name": DATAFORSEO_LOCATION_NAMES.get(geo.upper(), geo),
+            "location_code": location_code,
             "language_code": language.lower(),
             "device": "desktop",
             "os": "windows",
@@ -1494,12 +1551,18 @@ def build_competitor_brief_for_item(db: Session, item: models.ContentItem) -> mo
         .where(models.CompetitorPage.content_item_id == item.id)
         .order_by(models.CompetitorPage.word_count.desc())
     ).all()
-    if not pages:
+    analyzable_pages = [
+        page
+        for page in pages
+        if (page.http_status or 0) < 400 and (clean_text(page.text_content) or (page.headings or []))
+    ]
+    if not analyzable_pages:
         raise ValueError("No parsed competitor pages found")
 
     heading_counter: Counter[str] = Counter()
     heading_examples: dict[str, str] = {}
-    for page in pages:
+    for page in analyzable_pages:
+        page_heading_keys: set[str] = set()
         for heading in page.headings or []:
             if not isinstance(heading, dict):
                 continue
@@ -1507,48 +1570,33 @@ def build_competitor_brief_for_item(db: Session, item: models.ContentItem) -> mo
             if not text:
                 continue
             key = text.casefold()
-            heading_counter[key] += 1
             heading_examples.setdefault(key, text)
+            page_heading_keys.add(key)
+        heading_counter.update(page_heading_keys)
 
-    common_headings = [heading_examples[key] for key, _ in heading_counter.most_common(14)]
-    all_text = " ".join(
-        clean_text(value)
-        for page in pages
-        for value in [page.title, page.h1, page.meta_description, page.text_content]
-        if value
-    ).lower()
-    required_blocks = [
-        ("GGL-Lizenz / legaler Rahmen", ["ggl", "lizenz", "legal"]),
-        ("KYC und Identitätsprüfung", ["kyc", "identität", "verifizierung"]),
-        ("Zahlungen und Auszahlungen", ["zahlung", "einzahlung", "auszahlung"]),
-        ("Spielerschutz, Limits und Selbstausschluss", ["spielerschutz", "limit", "selbstausschluss"]),
-        ("Warnsignale unseriöser Anbieter", ["warnsignal", "unseriös", "risiko"]),
-        ("Responsible Gambling Hinweis", ["responsible", "glücksspiel", "hilfe"]),
-        ("Für wen nicht geeignet", ["nicht geeignet", "kontrollverlust"]),
-        ("Häufige Fehler vor Registrierung", ["fehler", "registrierung"]),
-    ]
-    missing_blocks = [
-        label
-        for label, keywords in required_blocks
-        if not any(keyword in all_text for keyword in keywords)
-    ]
-    if not missing_blocks:
-        missing_blocks = [
-            "Практический чеклист перед регистрацией",
-            "Редакторская пометка по фактам, которые нужно проверить",
-            "Короткое объяснение рисков без рекламного тона",
-        ]
+    # A subject becomes a recommendation only when it is present on a meaningful
+    # share of the localized SERP pages. This prevents a country-specific block
+    # (for example, license verification) from being invented when competitors do
+    # not actually cover it.
+    minimum_page_coverage = max(2, (len(analyzable_pages) + 3) // 4)
+    confirmed_heading_keys = [
+        key
+        for key, count in heading_counter.most_common()
+        if count >= minimum_page_coverage
+    ][:14]
+    common_headings = [heading_examples[key] for key in confirmed_heading_keys]
+    topics_to_cover = common_headings[:8]
     content_gaps = [
-        f"Раскрыть сильнее: {block}."
-        for block in missing_blocks[:8]
-    ]
-    if len(common_headings) < 5:
-        content_gaps.append("У конкурентов мало явной структуры H2/H3; сделать страницу более сканируемой.")
-    if any((page.word_count or 0) < 800 for page in pages):
-        content_gaps.append("Часть страниц конкурентов выглядит thin-content; дать более полное объяснение интента.")
+        (
+            f"Тема подтверждена {heading_counter[key]} из {len(analyzable_pages)} страниц конкурентов: "
+            f"{heading_examples[key]}."
+        )
+        for key in confirmed_heading_keys
+        if heading_counter[key] < len(analyzable_pages)
+    ][:8]
 
     competitor_summaries = []
-    for page in pages[:12]:
+    for page in analyzable_pages[:12]:
         page_headings = [
             clean_text(heading.get("text"))
             for heading in (page.headings or [])
@@ -1570,16 +1618,27 @@ def build_competitor_brief_for_item(db: Session, item: models.ContentItem) -> mo
 
     brief = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "analysis_version": 2,
+        "analysis_basis": "localized_competitor_evidence_only",
         "topic": item.topic,
+        "geo": item.task.geo if item.task else None,
+        "language": item.task.language if item.task else None,
+        "analyzed_pages_count": len(analyzable_pages),
+        "minimum_page_coverage": minimum_page_coverage,
         "search_queries": [query.query for query in queries],
         "competitor_urls": [result.url for result in results],
         "competitor_summary": competitor_summaries,
         "common_headings": common_headings,
         "content_gaps": content_gaps,
-        "missing_blocks_to_cover": missing_blocks,
+        "topics_to_cover": topics_to_cover,
+        # Kept for compatibility with existing prompt-template placeholders.
+        # Values are observed competitor topics, not invented "missing" blocks.
+        "missing_blocks_to_cover": topics_to_cover,
         "notes": [
             "Использовать конкурентов только как исследовательский контекст.",
             "Не копировать и не делать близкий перефраз.",
+            "Добавлять смысловые блоки только при подтверждении несколькими конкурентами текущего гео.",
+            "Не добавлять проверку лицензии, если эта тема не подтверждена несколькими конкурентами.",
             "Факты, бренды, лицензии и юридические утверждения проверять перед публикацией.",
         ],
     }
@@ -1629,8 +1688,16 @@ def render_competitor_brief_for_prompt(brief: dict | None) -> str:
         "Competitor summary:\n" + "\n".join(competitor_lines),
         "Common competitor headings:\n" + "\n".join(f"- {item}" for item in brief.get("common_headings", [])),
         "Content gaps to close:\n" + "\n".join(f"- {item}" for item in brief.get("content_gaps", [])),
-        "Missing blocks to cover:\n" + "\n".join(f"- {item}" for item in brief.get("missing_blocks_to_cover", [])),
-        "Rules:\n- Do not copy competitors.\n- Do not closely paraphrase competitors.\n- Use this only as research context.\n- Build an original structure and mark facts that need editorial verification.",
+        "Competitor-confirmed topics to consider:\n" + "\n".join(f"- {item}" for item in brief.get("topics_to_cover", [])),
+        (
+            "Rules:\n"
+            "- Do not copy competitors.\n"
+            "- Do not closely paraphrase competitors.\n"
+            "- Use this only as research context.\n"
+            "- Do not invent a content gap from a generic niche checklist.\n"
+            "- Do not add license-verification content unless it is listed among the competitor-confirmed topics.\n"
+            "- Build an original structure and mark facts that need editorial verification."
+        ),
     ]
     return "\n\n".join(section for section in sections if section.strip())[:20_000]
 
@@ -1651,7 +1718,7 @@ def prompt_context_from_brief(brief: dict | None) -> dict[str, str]:
         "competitor_summary": render_competitor_brief_for_prompt(brief),
         "content_gaps": "\n".join(f"- {item}" for item in brief.get("content_gaps", [])) or "No content gaps detected.",
         "common_headings": "\n".join(f"- {item}" for item in brief.get("common_headings", [])) or "No common headings detected.",
-        "missing_blocks_to_cover": "\n".join(f"- {item}" for item in brief.get("missing_blocks_to_cover", [])) or "No missing blocks detected.",
+        "missing_blocks_to_cover": "\n".join(f"- {item}" for item in brief.get("topics_to_cover", [])) or "No competitor-confirmed topics detected.",
     }
 
 

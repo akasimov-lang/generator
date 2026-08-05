@@ -108,6 +108,7 @@ type CompetitorBrief = {
   competitor_summary?: Array<Record<string, unknown>>;
   common_headings?: string[];
   content_gaps?: string[];
+  topics_to_cover?: string[];
   missing_blocks_to_cover?: string[];
   notes?: string[];
 };
@@ -390,7 +391,7 @@ const DEFAULT_PROMPT_DRAFT = `Рабочий промпт для конкрет�
 - Анализ конкурентов: {{COMPETITOR_SUMMARY}}
 - Content gaps: {{CONTENT_GAPS}}
 - Частые заголовки конкурентов: {{COMMON_HEADINGS}}
-- Недостающие блоки: {{MISSING_BLOCKS_TO_COVER}}
+- Темы, подтвержденные анализом нескольких конкурентов: {{MISSING_BLOCKS_TO_COVER}}
 
 Контекст ниши:
 Онлайн-казино, ставки, casino providers, легальные Anbieter, лицензии, Spielerschutz, Zahlungen, Auszahlungen, KYC, Datenschutz, Limits, sichere Online Casinos.
@@ -414,16 +415,10 @@ const DEFAULT_PROMPT_DRAFT = `Рабочий промпт для конкрет�
 7. Гипотетические content gaps.
 8. Риски фактов, которые нужно проверить редактору.
 
-Для страниц по Германии обязательно раскрыть:
-- Was bedeutet GGL-Lizenz?
-- Warum ist Lizenzprüfung wichtig?
-- Wie erkennt man sichere Anbieter?
-- Welche Rolle spielen KYC und Identitätsprüfung?
-- Was muss man vor Einzahlung prüfen?
-- Unterschied zwischen Einzahlung und Auszahlung.
-- Spielerschutz, Limits und Selbstausschluss.
-- Für wen sind Online Casinos nicht geeignet?
-- Welche Warnsignale sollte man beachten?
+Правила локализации и анализа:
+- Структуру и набор смысловых блоков определяй динамически по теме, выбранному гео, языку и фактически собранным материалам конкурентов.
+- Не добавляй обязательный блок только потому, что он обычно встречается в нише или был нужен для другой страны.
+- Не добавляй раздел о проверке лицензии, если эта тема не подтверждена анализом нескольких конкурентов для текущего гео.
 
 Если тема рейтинговая:
 - Если нет проверенного списка брендов, делай таблицу критериев выбора.
@@ -1747,7 +1742,7 @@ function CompetitorResearchCard({
           <strong>Краткий анализ конкурентов</strong>
           <BriefList title="Content gaps" items={brief.content_gaps || []} />
           <BriefList title="Частые заголовки" items={brief.common_headings || []} />
-          <BriefList title="Что обязательно закрыть" items={brief.missing_blocks_to_cover || []} />
+          <BriefList title="Темы, подтвержденные конкурентами" items={brief.topics_to_cover || []} />
         </div>
       ) : null}
     </article>
