@@ -847,10 +847,31 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
 function DashboardView({ api, dashboard, tasks, content, sites, onChanged }: ViewProps & { dashboard: Dashboard; tasks: Task[]; content: ContentItem[]; sites: Site[] }) {
   const [reviewExpanded, setReviewExpanded] = React.useState(false);
   const [selectedPreview, setSelectedPreview] = React.useState<ContentItem | null>(null);
+  const [selectedReviewIds, setSelectedReviewIds] = React.useState<string[]>([]);
   const [actionId, setActionId] = React.useState("");
   const [reviewError, setReviewError] = React.useState("");
   const [sectionsBySite, setSectionsBySite] = React.useState<Record<string, Section[]>>({});
   const awaitingItems = content.filter((item) => item.status === "generated");
+  const awaitingItemIds = awaitingItems.map((item) => item.id);
+  const selectedReviewItems = awaitingItems.filter((item) => selectedReviewIds.includes(item.id));
+  const selectedReadyItems = selectedReviewItems.filter((item) => Boolean(item.site_id && item.section_id));
+  const allReviewSelected = awaitingItemIds.length > 0 && awaitingItemIds.every((id) => selectedReviewIds.includes(id));
+  const bulkReviewBusy = actionId.startsWith("bulk:");
+
+  React.useEffect(() => {
+    setSelectedReviewIds((current) => {
+      const next = current.filter((id) => awaitingItemIds.includes(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [content]);
+
+  function toggleReviewSelected(id: string) {
+    setSelectedReviewIds((current) => current.includes(id) ? current.filter((itemId) => itemId !== id) : [...current, id]);
+  }
+
+  function toggleAllReviewItems() {
+    setSelectedReviewIds(allReviewSelected ? [] : awaitingItemIds);
+  }
 
   async function toggleReview() {
     const nextExpanded = !reviewExpanded;
@@ -928,6 +949,61 @@ function DashboardView({ api, dashboard, tasks, content, sites, onChanged }: Vie
     }
   }
 
+  async function bulkApproveReviewItems() {
+    if (!selectedReadyItems.length) return;
+    setActionId("bulk:approve");
+    setReviewError("");
+    try {
+      const results = await Promise.allSettled(selectedReadyItems.map((item) => api(`/content/${item.id}/approve`, { method: "POST" })));
+      const failed = results.filter((result) => result.status === "rejected").length;
+      setSelectedReviewIds([]);
+      setSelectedPreview((current) => current && selectedReadyItems.some((item) => item.id === current.id) ? null : current);
+      await onChanged();
+      if (failed) setReviewError(`Не удалось согласовать часть текстов: ${failed}.`);
+    } catch (error) {
+      setReviewError(error instanceof Error ? error.message : "Не удалось согласовать выбранные тексты.");
+    } finally {
+      setActionId("");
+    }
+  }
+
+  async function bulkPublishReviewItems() {
+    if (!selectedReadyItems.length) return;
+    setActionId("bulk:publish");
+    setReviewError("");
+    try {
+      const results = await Promise.allSettled(selectedReadyItems.map((item) => api(`/content/${item.id}/publish-now`, { method: "POST" })));
+      const failed = results.filter((result) => result.status === "rejected").length;
+      setSelectedReviewIds([]);
+      setSelectedPreview((current) => current && selectedReadyItems.some((item) => item.id === current.id) ? null : current);
+      await onChanged();
+      if (failed) setReviewError(`Не удалось отправить в публикацию часть текстов: ${failed}.`);
+    } catch (error) {
+      setReviewError(error instanceof Error ? error.message : "Не удалось отправить выбранные тексты в публикацию.");
+    } finally {
+      setActionId("");
+    }
+  }
+
+  async function bulkDeleteReviewItems() {
+    if (!selectedReviewItems.length) return;
+    if (!window.confirm(`Удалить выбранные тексты: ${selectedReviewItems.length}?`)) return;
+    setActionId("bulk:delete");
+    setReviewError("");
+    try {
+      const results = await Promise.allSettled(selectedReviewItems.map((item) => api(`/content/${item.id}`, { method: "DELETE" })));
+      const failed = results.filter((result) => result.status === "rejected").length;
+      setSelectedReviewIds([]);
+      setSelectedPreview((current) => current && selectedReviewItems.some((item) => item.id === current.id) ? null : current);
+      await onChanged();
+      if (failed) setReviewError(`Не удалось удалить часть текстов: ${failed}.`);
+    } catch (error) {
+      setReviewError(error instanceof Error ? error.message : "Не удалось удалить выбранные тексты.");
+    } finally {
+      setActionId("");
+    }
+  }
+
   return (
     <section className="viewStack">
       <div className="kpiGrid">
@@ -940,13 +1016,30 @@ function DashboardView({ api, dashboard, tasks, content, sites, onChanged }: Vie
       </div>
       {reviewExpanded ? (
         <DataPanel title={`Тексты на согласование · ${awaitingItems.length}`}>
+          <div className="bulkToolbar">
+            <label className="checkboxRow bulkSelectAll">
+              <input type="checkbox" checked={allReviewSelected} onChange={toggleAllReviewItems} disabled={!awaitingItems.length || bulkReviewBusy} />
+              Выбрать все
+            </label>
+            <span className="fieldHint">Выбрано: {selectedReviewItems.length}</span>
+            <button className="button compact approve" type="button" onClick={bulkApproveReviewItems} disabled={!selectedReadyItems.length || bulkReviewBusy} title={selectedReviewItems.length && !selectedReadyItems.length ? "Для выбранных текстов сначала назначьте проект и раздел" : undefined}>
+              <CheckCircle2 size={15} /> {actionId === "bulk:approve" ? "Согласовываю" : `Согласовать (${selectedReadyItems.length})`}
+            </button>
+            <button className="button compact primary" type="button" onClick={bulkPublishReviewItems} disabled={!selectedReadyItems.length || bulkReviewBusy} title={selectedReviewItems.length && !selectedReadyItems.length ? "Для выбранных текстов сначала назначьте проект и раздел" : undefined}>
+              <Send size={15} /> {actionId === "bulk:publish" ? "Отправляю" : `В публикацию (${selectedReadyItems.length})`}
+            </button>
+            <button className="button compact danger" type="button" onClick={bulkDeleteReviewItems} disabled={!selectedReviewItems.length || bulkReviewBusy}>
+              <Trash2 size={15} /> {actionId === "bulk:delete" ? "Удаляю" : `Удалить (${selectedReviewItems.length})`}
+            </button>
+          </div>
           <ResponsiveTable
-            columns={["Тема", "Проект", "Раздел", "Слова", "Статус", "Действия"]}
+            columns={["Выбор", "Тема", "Проект", "Раздел", "Слова", "Статус", "Действия"]}
             rows={awaitingItems.map((item) => {
-              const itemBusy = actionId.startsWith(item.id);
+              const itemBusy = actionId.startsWith(item.id) || bulkReviewBusy;
               const sections = item.site_id ? sectionsBySite[item.site_id] || [] : [];
               const publicationReady = Boolean(item.site_id && item.section_id);
               return [
+                <input className="rowCheckbox" type="checkbox" checked={selectedReviewIds.includes(item.id)} onChange={() => toggleReviewSelected(item.id)} disabled={bulkReviewBusy} aria-label={`Выбрать ${item.topic}`} />,
                 <TopicMetaCell item={item} />,
                 sites.find((site) => site.id === item.site_id)?.name || "Не назначен",
                 item.site_id ? (
