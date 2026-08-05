@@ -4074,12 +4074,26 @@ function Modal({ title, children, onClose, wide }: { title: string; children: Re
 }
 
 function ContentPreviewModal({ item, promptName, actions, onClose }: { item: ContentItem; promptName?: string | null; actions?: React.ReactNode; onClose: () => void }) {
+  const previewTitle = contentItemTitle(item);
+  const previewDescription = contentItemDescription(item);
   return (
     <Modal title={`Просмотр текста: ${item.topic}`} onClose={onClose} wide>
       <div className="contentPreviewHeader">
-        <div>
-          <span>{item.slug}</span>
-          <strong>{contentItemTitle(item)}</strong>
+        <div className="contentPreviewInfo">
+          <div className="previewSlugField">
+            <span className="previewBlockLabel">SLUG · АДРЕС СТРАНИЦЫ</span>
+            <code>{item.slug}</code>
+          </div>
+          <div className="previewSeoFields">
+            <div className="previewSeoField">
+              <span className="previewBlockLabel">TITLE · SEO-ЗАГОЛОВОК СТРАНИЦЫ</span>
+              <strong>{previewTitle}</strong>
+            </div>
+            <div className="previewSeoField">
+              <span className="previewBlockLabel">META DESCRIPTION · ОПИСАНИЕ ДЛЯ ПОИСКОВОЙ ВЫДАЧИ</span>
+              <p>{previewDescription || "Не заполнен"}</p>
+            </div>
+          </div>
           <PromptBadge name={item.generation_prompt_name || promptName} />
           {item.competitor_brief ? <span className="researchBadge">На основе анализа конкурентов</span> : null}
           <span>Дата генерации: {item.generated_at ? formatDate(item.generated_at) : "-"}</span>
@@ -4092,6 +4106,9 @@ function ContentPreviewModal({ item, promptName, actions, onClose }: { item: Con
       <div className="contentPreviewGeneration">
         <span className="previewBlockLabel">ПРОГРЕСС ГЕНЕРАЦИИ</span>
         <GenerationProgressCell item={item} />
+      </div>
+      <div className="previewStructureLegend">
+        Служебные метки TITLE, META DESCRIPTION и H1–H4 показаны только для проверки структуры. Они не добавляются в опубликованный текст.
       </div>
       <ContentPreviewBody item={item} />
     </Modal>
@@ -4230,6 +4247,14 @@ function contentItemTitle(item: ContentItem) {
   return item.topic;
 }
 
+function contentItemDescription(item: ContentItem) {
+  const pages = item.generated_json.pages;
+  if (Array.isArray(pages) && pages[0] && typeof pages[0] === "object" && "description" in pages[0]) {
+    return previewPlainText((pages[0] as { description?: unknown }).description);
+  }
+  return "";
+}
+
 function previewPlainText(value: unknown) {
   return String(value ?? "").replace(/<[^>]+>/g, "").trim();
 }
@@ -4244,21 +4269,21 @@ function ContentPreviewBody({ item }: { item: ContentItem }) {
 
   return (
     <div className="contentPreviewBody modalContentText">
-      {page.description ? (
-        <section className="previewMetaDescription">
-          <span className="previewBlockLabel">META DESCRIPTION</span>
-          <p>{previewPlainText(page.description)}</p>
-        </section>
-      ) : null}
       {blocks.map((block, blockIndex) => {
         const data = block.data as Record<string, unknown> | unknown[] | undefined;
         if (block.type === "header" && data && !Array.isArray(data)) {
           const rawLevel = Number(data.level);
           const level = Math.min(4, Math.max(1, Number.isFinite(rawLevel) ? rawLevel : 2)) as 1 | 2 | 3 | 4;
           const HeadingTag = `h${level}` as "h1" | "h2" | "h3" | "h4";
+          const headingLabels = {
+            1: "H1 · ГЛАВНЫЙ ЗАГОЛОВОК СТАТЬИ",
+            2: "H2 · РАЗДЕЛ СТАТЬИ",
+            3: "H3 · ПОДРАЗДЕЛ",
+            4: "H4 · ВЛОЖЕННЫЙ ПОДРАЗДЕЛ"
+          };
           return (
             <section className={`previewHeading previewHeadingH${level}`} key={String(block.id || blockIndex)}>
-              <span className="previewBlockLabel">H{level}</span>
+              <span className="previewBlockLabel">{headingLabels[level]}</span>
               <HeadingTag>{previewPlainText(data.text)}</HeadingTag>
             </section>
           );

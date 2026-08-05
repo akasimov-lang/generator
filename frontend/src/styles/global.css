@@ -539,6 +539,58 @@ h2 {
   gap: 4px;
 }
 
+.contentPreviewInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.previewSeoFields {
+  gap: 8px !important;
+  margin: 6px 0;
+}
+
+.previewSlugField {
+  align-items: start;
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 8px !important;
+}
+
+.previewSlugField .previewBlockLabel {
+  font-size: 10px;
+  margin: 0;
+}
+
+.previewSlugField code {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.previewSeoField {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.previewSeoField .previewBlockLabel {
+  font-size: 10px;
+  margin-bottom: 2px;
+  width: fit-content;
+}
+
+.previewSeoField strong,
+.previewSeoField p {
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.previewSeoField p {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .contentPreviewText {
   background: var(--surface-3);
   border: 1px solid var(--border);
@@ -585,15 +637,16 @@ h2 {
   width: 100%;
 }
 
-.previewMetaDescription {
-  background: var(--blue-soft);
+.previewStructureLegend {
+  background: var(--notice-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  margin-bottom: 24px;
-  padding: 14px 16px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 9px 12px;
 }
 
-.previewMetaDescription p,
 .previewParagraph,
 .previewFaq p {
   margin: 0;
