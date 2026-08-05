@@ -154,7 +154,7 @@ class GenerationTaskCreate(BaseModel):
     section_id: str | None = None
     ai_provider_id: str | None = None
     payload_mode: Literal["site_default", "simple_page", "full_site"] = "site_default"
-    target_words: int | None = Field(default=None, ge=300, le=8000)
+    target_words: int | None = Field(default=2000, ge=300, le=8000)
     prompt_template_name: str | None = Field(default=None, max_length=160)
     prompt_template: str | None = None
     shortcode: str | None = None

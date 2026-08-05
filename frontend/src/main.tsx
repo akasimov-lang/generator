@@ -285,6 +285,7 @@ type AppRoute = {
 const API_BASE = "/api";
 const ACTIVE_RESEARCH_STATUSES = ["queued", "collecting_serp", "serp_collected", "serp_empty", "fetching_pages", "pages_fetched"];
 const ACTIVE_GENERATION_STATUSES = ["generation_queued", "generating"];
+const DEFAULT_TARGET_WORDS = 2000;
 const DEFAULT_WORKSPACE_TAB: WorkspaceTab = "overview";
 const DEFAULT_ROUTE: AppRoute = { view: "dashboard", workspaceTab: DEFAULT_WORKSPACE_TAB };
 
@@ -1307,7 +1308,7 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
   const [title, setTitle] = React.useState("");
   const [geo, setGeo] = React.useState("DE");
   const [language, setLanguage] = React.useState("de");
-  const [targetWords, setTargetWords] = React.useState(1600);
+  const [targetWords, setTargetWords] = React.useState(DEFAULT_TARGET_WORDS);
   const [topics, setTopics] = React.useState("");
   const [providerId, setProviderId] = React.useState("");
   const [promptTemplateId, setPromptTemplateId] = React.useState("");
