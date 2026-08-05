@@ -926,6 +926,111 @@ td {
   padding: 10px;
 }
 
+.projectSearchField {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--button-border);
+  border-radius: var(--radius);
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+  max-width: 620px;
+  padding: 0 13px;
+}
+
+.projectSearchField svg {
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+
+.projectSearchField input {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  min-width: 0;
+  padding-left: 0;
+  width: 100%;
+}
+
+.contentProjectTree {
+  display: grid;
+  gap: 10px;
+}
+
+.contentProject {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.contentProject.expanded {
+  border-color: var(--button-border);
+  box-shadow: 0 8px 22px rgba(31, 42, 55, 0.06);
+}
+
+.contentProjectHeader {
+  align-items: center;
+  background: var(--surface);
+  border: 0;
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(220px, 1fr) auto;
+  padding: 16px 18px;
+  text-align: left;
+  width: 100%;
+}
+
+.contentProjectHeader:hover {
+  background: var(--surface-2);
+}
+
+.contentProjectChevron {
+  color: var(--muted);
+  display: inline-flex;
+}
+
+.contentProjectIdentity {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.contentProjectIdentity strong {
+  font-size: 15px;
+}
+
+.contentProjectIdentity span {
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contentProjectStats {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 8px 14px;
+  justify-content: flex-end;
+}
+
+.contentProjectBody {
+  border-top: 1px solid var(--border);
+  padding: 14px;
+}
+
+.projectSelectionRow {
+  align-items: center;
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
 .bulkSelectAll {
   min-height: 32px;
   width: auto;
@@ -952,6 +1057,8 @@ td {
 .status-approved,
 .status-published,
 .status-valid,
+.status-active,
+.status-completed,
 .status-brief-ready {
   background: var(--primary-soft);
   color: var(--primary);
@@ -961,6 +1068,8 @@ td {
 .status-scheduled,
 .status-publishing,
 .status-retry-scheduled,
+.status-paused,
+.status-publication-paused,
 .status-unchecked,
 .status-research-queries-ready,
 .status-queries-ready,
@@ -975,6 +1084,8 @@ td {
 .status-publication-failed,
 .status-generation-failed,
 .status-rejected,
+.status-stopped,
+.status-completed-with-errors,
 .status-invalid,
 .status-serp-empty,
 .status-fetch-failed {
@@ -1395,6 +1506,29 @@ a {
   .userPill {
     width: 100%;
     justify-items: start;
+  }
+
+  .projectSearchField {
+    max-width: none;
+  }
+
+  .contentProjectHeader {
+    align-items: start;
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 14px;
+  }
+
+  .contentProjectStats {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+
+  .contentProjectBody {
+    padding: 10px;
+  }
+
+  .projectSelectionRow {
+    justify-content: flex-start;
   }
 
   .kpiGrid {

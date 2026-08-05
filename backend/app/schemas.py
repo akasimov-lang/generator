@@ -192,6 +192,7 @@ class ContentItemResponse(BaseModel):
     id: str
     task_id: str
     site_id: str | None
+    publication_campaign_id: str | None
     section_id: str | None
     topic: str
     slug: str
@@ -313,12 +314,16 @@ class ContentUpdate(BaseModel):
 
 
 class PublicationCampaignCreate(BaseModel):
-    name: str
+    name: str = Field(min_length=2, max_length=180)
     site_id: str
-    content_item_ids: list[str]
+    content_item_ids: list[str] = Field(min_length=1)
     start_at: datetime
-    interval_minutes: int = 1440
-    items_per_run: int = 1
+    interval_minutes: int = Field(default=1440, ge=1)
+    items_per_run: int = Field(default=1, ge=1, le=100)
+
+
+class PublicationCampaignUpdate(BaseModel):
+    action: Literal["pause", "resume", "stop"]
 
 
 class PublicationCampaignResponse(BaseModel):

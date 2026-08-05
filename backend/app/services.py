@@ -757,6 +757,16 @@ def analyze_content_quality(payload: dict) -> dict:
     }
 
 
+def validate_content_for_publication(item: models.ContentItem) -> dict:
+    if item.status not in {"generated", "rejected", "approved", "scheduled", "retry_scheduled", "publishing"}:
+        raise ValueError(f"Content in status '{item.status}' cannot be approved or published")
+    quality = analyze_content_quality(item.generated_json)
+    if quality["issues"]:
+        messages = [str(issue.get("message") or issue.get("code") or "Invalid content") for issue in quality["issues"]]
+        raise ValueError("Content validation failed: " + "; ".join(messages[:10]))
+    return quality
+
+
 def build_stub_content(
     topic: str,
     geo: str,
@@ -1926,12 +1936,15 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
 
 
 def generate_task_items(db: Session, task: models.GenerationTask) -> models.GenerationTask:
+    mutable_items = [item for item in task.items if item.status not in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "published"}]
+    if not mutable_items:
+        raise ValueError("Task has no content that can be generated")
     task.status = "generating"
     db.flush()
     provider = db.get(models.AiProvider, task.ai_provider_id) if task.ai_provider_id else None
     site = db.get(models.Site, task.site_id) if task.site_id else None
     try:
-        for item in task.items:
+        for item in mutable_items:
             if provider and provider.is_active:
                 item.generated_json = asyncio.run(
                     build_ai_content(
@@ -1956,7 +1969,7 @@ def generate_task_items(db: Session, task: models.GenerationTask) -> models.Gene
             item.status = "generated"
         task.status = "generated"
     except Exception:
-        for item in task.items:
+        for item in mutable_items:
             if item.status not in {"generated", "approved", "scheduled", "published"}:
                 item.status = "generation_failed"
         task.status = "generation_failed"
@@ -1968,6 +1981,8 @@ def generate_task_items(db: Session, task: models.GenerationTask) -> models.Gene
 
 
 def generate_content_item(db: Session, item: models.ContentItem) -> models.ContentItem:
+    if item.status in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "published"}:
+        raise ValueError(f"Content in status '{item.status}' cannot be regenerated")
     task = db.get(models.GenerationTask, item.task_id)
     if not task:
         raise ValueError("Generation task not found")
@@ -2003,6 +2018,24 @@ def generate_content_item(db: Session, item: models.ContentItem) -> models.Conte
 
 
 def schedule_campaign(db: Session, payload: PublicationCampaignCreate) -> models.PublicationCampaign:
+    site = db.get(models.Site, payload.site_id)
+    if not site or not site.is_active:
+        raise ValueError("Publication site not found or inactive")
+    item_ids = list(dict.fromkeys(payload.content_item_ids))
+    if len(item_ids) != len(payload.content_item_ids):
+        raise ValueError("Campaign contains duplicate content items")
+    items = db.scalars(select(models.ContentItem).where(models.ContentItem.id.in_(item_ids))).all()
+    items_by_id = {item.id: item for item in items}
+    if len(items_by_id) != len(item_ids):
+        raise ValueError("One or more content items were not found")
+    for item_id in item_ids:
+        item = items_by_id[item_id]
+        if item.site_id != payload.site_id:
+            raise ValueError("Campaign can include only content from the selected site")
+        if item.status != "approved":
+            raise ValueError("Campaign can include only approved content")
+        validate_content_for_publication(item)
+
     campaign = models.PublicationCampaign(
         name=payload.name,
         site_id=payload.site_id,
@@ -2012,14 +2045,75 @@ def schedule_campaign(db: Session, payload: PublicationCampaignCreate) -> models
         status="active",
     )
     db.add(campaign)
-    for index, item_id in enumerate(payload.content_item_ids):
-        item = db.get(models.ContentItem, item_id)
-        if item and item.status == "approved" and item.site_id == payload.site_id:
-            item.status = "scheduled"
-            item.scheduled_at = payload.start_at + timedelta(minutes=payload.interval_minutes * index)
+    db.flush()
+    for index, item_id in enumerate(item_ids):
+        item = items_by_id[item_id]
+        item.publication_campaign_id = campaign.id
+        item.status = "scheduled"
+        item.scheduled_at = payload.start_at + timedelta(minutes=payload.interval_minutes * index)
     db.commit()
     db.refresh(campaign)
     return campaign
+
+
+def update_campaign_status(db: Session, campaign: models.PublicationCampaign, action: str) -> models.PublicationCampaign:
+    items = db.scalars(
+        select(models.ContentItem)
+        .where(models.ContentItem.publication_campaign_id == campaign.id)
+        .order_by(models.ContentItem.scheduled_at.asc(), models.ContentItem.created_at.asc())
+    ).all()
+    if action == "pause":
+        if campaign.status != "active":
+            raise ValueError("Only an active campaign can be paused")
+        campaign.status = "paused"
+        for item in items:
+            if item.status in {"scheduled", "retry_scheduled"}:
+                item.status = "publication_paused"
+    elif action == "resume":
+        if campaign.status != "paused":
+            raise ValueError("Only a paused campaign can be resumed")
+        campaign.status = "active"
+        campaign_start = campaign.start_at
+        if campaign_start.tzinfo is None:
+            campaign_start = campaign_start.replace(tzinfo=timezone.utc)
+        resume_at = max(datetime.now(timezone.utc), campaign_start)
+        paused_items = [item for item in items if item.status == "publication_paused"]
+        for index, item in enumerate(paused_items):
+            item.status = "scheduled"
+            item.scheduled_at = resume_at + timedelta(minutes=campaign.interval_minutes * index)
+    elif action == "stop":
+        if campaign.status not in {"active", "paused"}:
+            raise ValueError("Only an active or paused campaign can be stopped")
+        campaign.status = "stopped"
+        for item in items:
+            if item.status in {"scheduled", "retry_scheduled", "publication_paused"}:
+                item.status = "approved"
+                item.scheduled_at = None
+    else:
+        raise ValueError("Unknown campaign action")
+    db.commit()
+    db.refresh(campaign)
+    return campaign
+
+
+def refresh_campaign_status(db: Session, campaign_id: str | None) -> None:
+    if not campaign_id:
+        return
+    campaign = db.get(models.PublicationCampaign, campaign_id)
+    if not campaign or campaign.status not in {"active", "paused"}:
+        return
+    pending = db.scalar(
+        select(func.count(models.ContentItem.id))
+        .where(models.ContentItem.publication_campaign_id == campaign_id)
+        .where(models.ContentItem.status.in_(["scheduled", "retry_scheduled", "publication_paused", "publishing"]))
+    ) or 0
+    if pending == 0:
+        failed = db.scalar(
+            select(func.count(models.ContentItem.id))
+            .where(models.ContentItem.publication_campaign_id == campaign_id)
+            .where(models.ContentItem.status == "publication_failed")
+        ) or 0
+        campaign.status = "completed_with_errors" if failed else "completed"
 
 
 def get_dashboard(db: Session) -> dict:
@@ -2091,6 +2185,21 @@ def get_dashboard(db: Session) -> dict:
 
 
 async def publish_item(db: Session, item: models.ContentItem, site: models.Site) -> None:
+    try:
+        validate_content_for_publication(item)
+    except ValueError as exc:
+        db.add(
+            models.PublicationLog(
+                content_item_id=item.id,
+                endpoint_url=site.publication_endpoint,
+                request_payload=item.generated_json,
+                error_message=str(exc),
+            )
+        )
+        item.status = "publication_failed"
+        refresh_campaign_status(db, item.publication_campaign_id)
+        db.commit()
+        return
     item.status = "publishing"
     db.commit()
     headers = {"Content-Type": "application/json", "Idempotency-Key": item.idempotency_key}
@@ -2119,6 +2228,7 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site)
             item.scheduled_at = datetime.now(timezone.utc) + timedelta(minutes=30)
         else:
             item.status = "publication_failed"
+        refresh_campaign_status(db, item.publication_campaign_id)
         db.commit()
     except Exception as exc:
         db.add(

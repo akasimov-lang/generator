@@ -72,6 +72,7 @@ type ContentItem = {
   id: string;
   task_id: string;
   site_id: string | null;
+  publication_campaign_id: string | null;
   section_id: string | null;
   topic: string;
   slug: string;
@@ -247,6 +248,18 @@ type PublicationLog = {
   response_status: number | null;
   error_message: string | null;
   created_at: string;
+};
+
+type PublicationCampaign = {
+  id: string;
+  name: string;
+  site_id: string;
+  status: "active" | "paused" | "stopped" | "completed" | string;
+  interval_minutes: number;
+  items_per_run: number;
+  start_at: string;
+  created_at: string;
+  updated_at: string;
 };
 
 type ThemeMode = "light" | "dark";
@@ -734,7 +747,7 @@ function App() {
         {activeView === "workspace" && <ProjectWorkspaceView api={api} sites={sites} providers={providers} isAdmin={isAdmin} activeTab={workspaceTab} onTabChange={(tab) => navigateTo("workspace", tab)} onChanged={loadAll} />}
         {isAdmin && activeView === "dashboard" && dashboard && <DashboardView dashboard={dashboard} tasks={tasks} content={content} />}
         {isAdmin && activeView === "tasks" && <TasksView api={api} sites={sites} providers={providers} tasks={tasks} onChanged={loadAll} />}
-        {isAdmin && activeView === "content" && <ContentView api={api} content={content} onChanged={loadAll} />}
+        {isAdmin && activeView === "content" && <ContentView api={api} sites={sites} content={content} onChanged={loadAll} />}
         {isAdmin && activeView === "publications" && <PublicationsView api={api} sites={sites} content={content} onChanged={loadAll} />}
         {isAdmin && activeView === "providers" && <ProvidersView api={api} providers={providers} onChanged={loadAll} />}
         {isAdmin && activeView === "sites" && <SitesView api={api} sites={sites} onChanged={loadAll} />}
@@ -867,20 +880,22 @@ function ProjectWorkspaceView({
   const [promptTemplates, setPromptTemplates] = React.useState<PromptTemplate[]>([]);
   const [basePrompt, setBasePrompt] = React.useState<PromptTemplate | null>(null);
   const [logs, setLogs] = React.useState<PublicationLog[]>([]);
+  const [campaigns, setCampaigns] = React.useState<PublicationCampaign[]>([]);
   const [workspaceError, setWorkspaceError] = React.useState("");
   const selectedSite = sites.find((site) => site.id === selectedSiteId) || null;
 
   const loadProject = React.useCallback(async () => {
     if (!selectedSiteId) return;
     setWorkspaceError("");
-    const [nextOverview, nextTasks, nextContent, nextSections, nextPrompts, nextBasePrompt, nextLogs] = await Promise.all([
+    const [nextOverview, nextTasks, nextContent, nextSections, nextPrompts, nextBasePrompt, nextLogs, nextCampaigns] = await Promise.all([
       api<SiteOverview>(`/sites/${selectedSiteId}/overview`),
       api<Task[]>(`/sites/${selectedSiteId}/tasks`),
       api<ContentItem[]>(`/sites/${selectedSiteId}/content`),
       api<Section[]>(`/sites/${selectedSiteId}/sections`),
       api<PromptTemplate[]>(`/sites/${selectedSiteId}/prompt-templates`),
       api<PromptTemplate>("/prompt-templates/base"),
-      api<PublicationLog[]>(`/sites/${selectedSiteId}/publication-logs`)
+      api<PublicationLog[]>(`/sites/${selectedSiteId}/publication-logs`),
+      api<PublicationCampaign[]>(`/sites/${selectedSiteId}/publication-campaigns`)
     ]);
     setOverview(nextOverview);
     setSiteTasks(nextTasks);
@@ -889,6 +904,7 @@ function ProjectWorkspaceView({
     setPromptTemplates(nextPrompts);
     setBasePrompt(nextBasePrompt);
     setLogs(nextLogs);
+    setCampaigns(nextCampaigns);
   }, [api, selectedSiteId]);
 
   React.useEffect(() => {
@@ -907,6 +923,7 @@ function ProjectWorkspaceView({
       setPromptTemplates([]);
       setBasePrompt(null);
       setLogs([]);
+      setCampaigns([]);
       setWorkspaceError("");
       loadProject().catch((error: unknown) => setWorkspaceError(error instanceof Error ? error.message : "Не удалось загрузить проект"));
     }
@@ -961,7 +978,7 @@ function ProjectWorkspaceView({
         <ProjectContentPanel key={selectedSite.id} api={api} content={siteContent} sections={sections} onChanged={refreshProject} />
       ) : null}
       {selectedSite && activeTab === "publication" ? (
-        <ProjectPublicationPanel key={selectedSite.id} api={api} site={selectedSite} content={siteContent} sections={sections} onChanged={refreshProject} />
+        <ProjectPublicationPanel key={selectedSite.id} api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} onChanged={refreshProject} />
       ) : null}
       {selectedSite && activeTab === "menu" ? (
         <ProjectMenuPanel api={api} site={selectedSite} sections={sections} onChanged={refreshProject} />
@@ -1701,8 +1718,8 @@ function ProjectContentPanel({ api, content, sections, onChanged }: ViewProps & 
             <StatusBadge status={item.status} />,
             item.published_url ? <a href={item.published_url} target="_blank" rel="noreferrer"><ExternalLink size={15} /> URL</a> : item.published_at ? formatDate(item.published_at) : "-",
             <div className="userActions">
-              <button className="button compact" type="button" onClick={() => openEditor(item)}><Edit3 size={15} /> Открыть</button>
-              <button className="button compact approve" type="button" onClick={() => approve(item)} disabled={["approved", "scheduled", "published"].includes(item.status)}>Approve</button>
+              <button className="button compact" type="button" onClick={() => openEditor(item)} disabled={isPublicationLocked(item)}><Edit3 size={15} /> Открыть</button>
+              <button className="button compact approve" type="button" onClick={() => approve(item)} disabled={!canApproveContent(item)}>Approve</button>
             </div>
           ])}
         />
@@ -1738,7 +1755,7 @@ function ProjectContentPanel({ api, content, sections, onChanged }: ViewProps & 
   );
 }
 
-function ProjectPublicationPanel({ api, site, content, sections, onChanged }: ViewProps & { site: Site; content: ContentItem[]; sections: Section[] }) {
+function ProjectPublicationPanel({ api, site, content, sections, campaigns, onChanged }: ViewProps & { site: Site; content: ContentItem[]; sections: Section[]; campaigns: PublicationCampaign[] }) {
   const [name, setName] = React.useState("Daily publication");
   const [itemsPerDay, setItemsPerDay] = React.useState(1);
   const [sectionId, setSectionId] = React.useState("");
@@ -1753,16 +1770,33 @@ function ProjectPublicationPanel({ api, site, content, sections, onChanged }: Vi
       setFormError("Нет approved-текстов для выбранного фильтра.");
       return;
     }
-    await api(`/sites/${site.id}/publication-campaigns`, {
-      method: "POST",
-      body: JSON.stringify({
-        name,
-        content_item_ids: approved.map((item) => item.id),
-        start_at: new Date(startAt).toISOString(),
-        items_per_day: itemsPerDay
-      })
-    });
-    await onChanged();
+    try {
+      await api(`/sites/${site.id}/publication-campaigns`, {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          content_item_ids: approved.map((item) => item.id),
+          start_at: new Date(startAt).toISOString(),
+          items_per_day: itemsPerDay
+        })
+      });
+      await onChanged();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось создать кампанию.");
+    }
+  }
+
+  async function changeCampaign(campaign: PublicationCampaign, action: "pause" | "resume" | "stop") {
+    setFormError("");
+    try {
+      await api(`/publication-campaigns/${campaign.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ action })
+      });
+      await onChanged();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось изменить кампанию.");
+    }
   }
 
   return (
@@ -1793,6 +1827,28 @@ function ProjectPublicationPanel({ api, site, content, sections, onChanged }: Vi
             <button className="button primary" type="submit" disabled={!approved.length}><Play size={18} /> Запланировать ({approved.length})</button>
           </div>
         </form>
+      </DataPanel>
+      <DataPanel title="Кампании проекта">
+        <ResponsiveTable
+          columns={["Кампания", "Старт", "Интервал", "Статус", "Действия"]}
+          rows={campaigns.map((campaign) => [
+            campaign.name,
+            formatDate(campaign.start_at),
+            `${campaign.interval_minutes} мин.`,
+            <StatusBadge status={campaign.status} />,
+            <div className="userActions">
+              {campaign.status === "active" ? (
+                <button className="button compact" type="button" onClick={() => changeCampaign(campaign, "pause")}>Pause</button>
+              ) : null}
+              {campaign.status === "paused" ? (
+                <button className="button compact" type="button" onClick={() => changeCampaign(campaign, "resume")}><Play size={15} /> Resume</button>
+              ) : null}
+              {["active", "paused"].includes(campaign.status) ? (
+                <button className="button compact danger" type="button" onClick={() => changeCampaign(campaign, "stop")}><X size={15} /> Stop</button>
+              ) : null}
+            </div>
+          ])}
+        />
       </DataPanel>
       <DataPanel title="Approved к публикации">
         <ResponsiveTable
@@ -1994,7 +2050,7 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
     }
   }
 
-  async function collectCompetitors(item: ContentItem) {
+  async function collectItemCompetitors(item: ContentItem) {
     setTaskError("");
     setTaskActionId(`${item.id}:collect-competitors`);
     try {
@@ -2021,7 +2077,7 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
   }
 
   async function bulkApproveTaskContent(items: ContentItem[]) {
-    const actionable = items.filter((item) => !["approved", "scheduled", "published"].includes(item.status));
+    const actionable = items.filter(canApproveContent);
     if (!actionable.length) return;
     setTaskError("");
     setTaskActionId("bulk:approve");
@@ -2040,11 +2096,12 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
   }
 
   async function bulkRegenerateTaskContent(items: ContentItem[]) {
-    if (!items.length) return;
+    const actionable = items.filter((item) => !isPublicationLocked(item));
+    if (!actionable.length) return;
     setTaskError("");
     setTaskActionId("bulk:generate");
     try {
-      const results = await Promise.allSettled(items.map((item) => api(`/content/${item.id}/generate`, { method: "POST" })));
+      const results = await Promise.allSettled(actionable.map((item) => api(`/content/${item.id}/generate`, { method: "POST" })));
       const failed = results.filter((result) => result.status === "rejected").length;
       await refreshExpandedTask();
       if (failed) {
@@ -2097,7 +2154,7 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
   }
 
   async function bulkDeleteTaskContent(items: ContentItem[]) {
-    const deletable = items.filter((item) => !["scheduled", "publishing", "published"].includes(item.status));
+    const deletable = items.filter((item) => !isPublicationLocked(item));
     if (!deletable.length) return;
     const confirmed = window.confirm(`Удалить выбранные тексты: ${deletable.length}?`);
     if (!confirmed) return;
@@ -2197,7 +2254,7 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
           onToggle={toggleTask}
           onEditQueries={openQueryEditor}
           onRegenerateQueries={regenerateCompetitorQueries}
-          onCollectCompetitors={collectCompetitors}
+          onCollectCompetitors={collectItemCompetitors}
           onPreview={setPreviewItem}
           onRegenerate={regenerateContent}
           onDelete={deleteContentItem}
@@ -2290,9 +2347,9 @@ function AdminTasksAccordion({
   const [copyState, setCopyState] = React.useState("");
   const selectedItems = expandedItems.filter((item) => selectedIds.includes(item.id));
   const allSelected = expandedItemIds.length > 0 && expandedItemIds.every((id) => selectedIds.includes(id));
-  const bulkApproveItems = selectedItems.filter((item) => !["approved", "scheduled", "published"].includes(item.status));
-  const bulkDeleteItems = selectedItems.filter((item) => !["scheduled", "publishing", "published"].includes(item.status));
-  const bulkRegenerateItems = selectedItems;
+  const bulkApproveItems = selectedItems.filter(canApproveContent);
+  const bulkDeleteItems = selectedItems.filter((item) => !isPublicationLocked(item));
+  const bulkRegenerateItems = selectedItems.filter((item) => !isPublicationLocked(item));
   const bulkCollectItems = selectedItems;
   const bulkBusy = actionId.startsWith("bulk:");
   const researchByItem = new Map(research.map((entry) => [entry.content_item_id, entry]));
@@ -2436,7 +2493,7 @@ function AdminTasksAccordion({
                               const itemResearch = researchByItem.get(item.id);
                               const competitorState = competitorStatusLabel(item, itemResearch);
                               const busy = actionId.startsWith(item.id) || bulkBusy;
-                              const deleteDisabled = ["scheduled", "publishing", "published"].includes(item.status);
+                              const deleteDisabled = isPublicationLocked(item);
                               return [
                                 <input className="rowCheckbox" type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelected(item.id)} disabled={bulkBusy} aria-label={`Выбрать ${item.topic}`} />,
                                 <TopicMetaCell item={item} promptName={expandedTask.prompt_template_name} />,
@@ -2458,7 +2515,7 @@ function AdminTasksAccordion({
                                   <button className="button compact" type="button" onClick={() => onPreview(item)}>
                                     <FileText size={15} /> Просмотр
                                   </button>
-                                  <button className="button compact" type="button" onClick={() => onRegenerate(item)} disabled={busy}>
+                                  <button className="button compact" type="button" onClick={() => onRegenerate(item)} disabled={busy || isPublicationLocked(item)}>
                                     <Play size={15} /> {actionId === `${item.id}:generate` ? "Генерация" : "Сгенерировать заново"}
                                   </button>
                                   <button className="button compact danger" type="button" onClick={() => onDelete(item)} disabled={busy || deleteDisabled} title={deleteDisabled ? "Нельзя удалить scheduled/published контент" : undefined}>
@@ -2547,20 +2604,51 @@ function contentRowClassName(item: ContentItem) {
   return "";
 }
 
-function ContentView({ api, content, onChanged }: ViewProps & { content: ContentItem[] }) {
+function isPublicationLocked(item: ContentItem) {
+  return ["scheduled", "retry_scheduled", "publication_paused", "publishing", "published"].includes(item.status);
+}
+
+function canApproveContent(item: ContentItem) {
+  return ["generated", "rejected"].includes(item.status);
+}
+
+function ContentView({ api, sites, content, onChanged }: ViewProps & { sites: Site[]; content: ContentItem[] }) {
   const [selectedPreview, setSelectedPreview] = React.useState<ContentItem | null>(null);
   const [contentActionId, setContentActionId] = React.useState("");
   const [contentError, setContentError] = React.useState("");
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
-  const selectableIds = React.useMemo(() => content.map((item) => item.id), [content]);
+  const [projectSearch, setProjectSearch] = React.useState("");
+  const [expandedProjectIds, setExpandedProjectIds] = React.useState<string[]>([]);
+  const projectGroups = React.useMemo(() => {
+    const knownSiteIds = new Set(sites.map((site) => site.id));
+    const groups = sites
+      .map((site) => ({
+        id: site.id,
+        name: site.name,
+        baseUrl: site.base_url,
+        items: content.filter((item) => item.site_id === site.id)
+      }))
+      .sort((first, second) => first.name.localeCompare(second.name, "ru"));
+    const unassigned = content.filter((item) => !item.site_id || !knownSiteIds.has(item.site_id));
+    if (unassigned.length) {
+      groups.push({ id: "__unassigned__", name: "Без проекта", baseUrl: "", items: unassigned });
+    }
+    return groups;
+  }, [content, sites]);
+  const visibleProjectGroups = React.useMemo(() => {
+    const search = projectSearch.trim().toLocaleLowerCase("ru");
+    if (!search) return projectGroups;
+    return projectGroups.filter((group) => `${group.name} ${group.baseUrl}`.toLocaleLowerCase("ru").includes(search));
+  }, [projectGroups, projectSearch]);
+  const selectableIds = React.useMemo(() => visibleProjectGroups.flatMap((group) => group.items.map((item) => item.id)), [visibleProjectGroups]);
   const selectedItems = content.filter((item) => selectedIds.includes(item.id));
   const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.includes(id));
-  const bulkApproveItems = selectedItems.filter((item) => !["approved", "scheduled", "published"].includes(item.status));
-  const bulkDeleteItems = selectedItems.filter((item) => !["scheduled", "publishing", "published"].includes(item.status));
+  const bulkApproveItems = selectedItems.filter(canApproveContent);
+  const bulkDeleteItems = selectedItems.filter((item) => !isPublicationLocked(item));
 
   React.useEffect(() => {
     setSelectedIds((current) => current.filter((id) => selectableIds.includes(id)));
-  }, [content]);
+  }, [selectableIds]);
 
   async function approve(id: string) {
     setContentError("");
@@ -2579,6 +2667,19 @@ function ContentView({ api, content, onChanged }: ViewProps & { content: Content
 
   function toggleSelectAll() {
     setSelectedIds(allSelected ? [] : selectableIds);
+  }
+
+  function toggleProject(projectId: string) {
+    setExpandedProjectIds((current) => current.includes(projectId) ? current.filter((id) => id !== projectId) : [...current, projectId]);
+  }
+
+  function toggleProjectSelection(items: ContentItem[]) {
+    const itemIds = items.map((item) => item.id);
+    const projectSelected = itemIds.length > 0 && itemIds.every((id) => selectedIds.includes(id));
+    setSelectedIds((current) => projectSelected
+      ? current.filter((id) => !itemIds.includes(id))
+      : Array.from(new Set([...current, ...itemIds]))
+    );
   }
 
   async function bulkApprove() {
@@ -2655,6 +2756,15 @@ function ContentView({ api, content, onChanged }: ViewProps & { content: Content
   return (
     <section className="viewStack">
       <DataPanel title="Контент">
+        <label className="projectSearchField">
+          <Search size={18} />
+          <input
+            type="search"
+            value={projectSearch}
+            onChange={(event) => setProjectSearch(event.target.value)}
+            placeholder="Найти проект по названию или адресу"
+          />
+        </label>
         <div className="bulkToolbar">
           <label className="checkboxRow bulkSelectAll">
             <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} />
@@ -2668,27 +2778,63 @@ function ContentView({ api, content, onChanged }: ViewProps & { content: Content
             <Trash2 size={15} /> {contentActionId === "bulk:delete" ? "Удаляю" : `Удалить выбранные (${bulkDeleteItems.length})`}
           </button>
         </div>
-        <ResponsiveTable
-          columns={["Выбор", "Тема", "Slug", "Слова", "Статус", "Действие"]}
-          rows={content.map((item) => [
-            <input className="rowCheckbox" type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelected(item.id)} aria-label={`Выбрать ${item.topic}`} />,
-            <TopicMetaCell item={item} />,
-            item.slug,
-            item.word_count,
-            <StatusBadge status={item.status} />,
-            <div className="userActions">
-              <button className="button compact" type="button" onClick={() => setSelectedPreview(item)}><FileText size={15} /> Просмотр</button>
-              <button className="button compact" type="button" onClick={() => regenerate(item)} disabled={contentActionId.startsWith(item.id)} title={item.competitor_brief ? "Повторная генерация пойдет с сохраненным анализом конкурентов." : "Анализ конкурентов не найден, генерация пойдет без competitor brief."}>
-                <Play size={15} /> {contentActionId === `${item.id}:generate` ? "Генерация" : "Сгенерировать заново"}
-              </button>
-              <button className="button compact danger" type="button" onClick={() => deleteItem(item)} disabled={contentActionId.startsWith(item.id) || ["scheduled", "publishing", "published"].includes(item.status)} title={["scheduled", "publishing", "published"].includes(item.status) ? "Нельзя удалить scheduled/published контент" : undefined}>
-                <Trash2 size={15} /> {contentActionId === `${item.id}:delete` ? "Удаляю" : "Удалить"}
-              </button>
-              <button className="button compact approve" type="button" onClick={() => approve(item.id)} disabled={item.status === "approved" || item.status === "scheduled" || item.status === "published"}>Approve</button>
-            </div>
-          ])}
-          rowClassNames={content.map(contentRowClassName)}
-        />
+        <div className="contentProjectTree">
+          {visibleProjectGroups.map((group) => {
+            const expanded = expandedProjectIds.includes(group.id);
+            const projectItemIds = group.items.map((item) => item.id);
+            const projectSelected = projectItemIds.length > 0 && projectItemIds.every((id) => selectedIds.includes(id));
+            const publishedCount = group.items.filter((item) => item.status === "published").length;
+            return (
+              <article className={`contentProject ${expanded ? "expanded" : ""}`} key={group.id}>
+                <button className="contentProjectHeader" type="button" onClick={() => toggleProject(group.id)} aria-expanded={expanded}>
+                  <span className="contentProjectChevron">{expanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}</span>
+                  <span className="contentProjectIdentity">
+                    <strong>{group.name}</strong>
+                    <span>{group.baseUrl || "Проект не назначен"}</span>
+                  </span>
+                  <span className="contentProjectStats">
+                    <span>Тем: {group.items.length}</span>
+                    <span>Опубликовано: {publishedCount}</span>
+                  </span>
+                </button>
+                {expanded ? (
+                  <div className="contentProjectBody">
+                    <div className="projectSelectionRow">
+                      <label className="checkboxRow">
+                        <input type="checkbox" checked={projectSelected} onChange={() => toggleProjectSelection(group.items)} disabled={!group.items.length} />
+                        Выбрать все темы проекта
+                      </label>
+                    </div>
+                    {group.items.length ? (
+                      <ResponsiveTable
+                        columns={["Выбор", "Тема", "Slug", "Слова", "Статус", "Действие"]}
+                        rows={group.items.map((item) => [
+                          <input className="rowCheckbox" type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelected(item.id)} aria-label={`Выбрать ${item.topic}`} />,
+                          <TopicMetaCell item={item} />,
+                          item.slug,
+                          item.word_count,
+                          <StatusBadge status={item.status} />,
+                          <div className="userActions">
+                            <button className="button compact" type="button" onClick={() => setSelectedPreview(item)}><FileText size={15} /> Просмотр</button>
+                            <button className="button compact" type="button" onClick={() => regenerate(item)} disabled={contentActionId.startsWith(item.id) || isPublicationLocked(item)} title={item.competitor_brief ? "Повторная генерация пойдет с сохраненным анализом конкурентов." : "Анализ конкурентов не найден, генерация пойдет без competitor brief."}>
+                              <Play size={15} /> {contentActionId === `${item.id}:generate` ? "Генерация" : "Сгенерировать заново"}
+                            </button>
+                            <button className="button compact danger" type="button" onClick={() => deleteItem(item)} disabled={contentActionId.startsWith(item.id) || isPublicationLocked(item)} title={isPublicationLocked(item) ? "Нельзя удалить контент из публикационной очереди" : undefined}>
+                              <Trash2 size={15} /> {contentActionId === `${item.id}:delete` ? "Удаляю" : "Удалить"}
+                            </button>
+                            <button className="button compact approve" type="button" onClick={() => approve(item.id)} disabled={!canApproveContent(item)}>Approve</button>
+                          </div>
+                        ])}
+                        rowClassNames={group.items.map(contentRowClassName)}
+                      />
+                    ) : <EmptyState text="В этом проекте пока нет добавленных тем." />}
+                  </div>
+                ) : null}
+              </article>
+            );
+          })}
+          {!visibleProjectGroups.length ? <EmptyState text="Проекты по этому запросу не найдены." /> : null}
+        </div>
         {contentError ? <span className="formError">{contentError}</span> : null}
       </DataPanel>
 
@@ -2698,10 +2844,10 @@ function ContentView({ api, content, onChanged }: ViewProps & { content: Content
           onClose={() => setSelectedPreview(null)}
           actions={
             <>
-              <button className="button compact" type="button" onClick={() => regenerate(selectedPreview)} disabled={contentActionId.startsWith(selectedPreview.id)}>
+              <button className="button compact" type="button" onClick={() => regenerate(selectedPreview)} disabled={contentActionId.startsWith(selectedPreview.id) || isPublicationLocked(selectedPreview)}>
                 <Play size={15} /> Сгенерировать заново
               </button>
-              <button className="button compact approve" type="button" onClick={() => approve(selectedPreview.id)} disabled={selectedPreview.status === "approved" || selectedPreview.status === "scheduled" || selectedPreview.status === "published"}>Approve</button>
+              <button className="button compact approve" type="button" onClick={() => approve(selectedPreview.id)} disabled={!canApproveContent(selectedPreview)}>Approve</button>
             </>
           }
         />
@@ -2714,22 +2860,47 @@ function PublicationsView({ api, sites, content, onChanged }: ViewProps & { site
   const [name, setName] = React.useState("Daily publication");
   const [siteId, setSiteId] = React.useState("");
   const [interval, setIntervalValue] = React.useState(1440);
+  const [campaigns, setCampaigns] = React.useState<PublicationCampaign[]>([]);
+  const [formError, setFormError] = React.useState("");
   const approved = content.filter((item) => item.status === "approved" && (!siteId || item.site_id === siteId));
+
+  const loadCampaigns = React.useCallback(async () => {
+    setCampaigns(await api<PublicationCampaign[]>("/publication-campaigns"));
+  }, [api]);
+
+  React.useEffect(() => {
+    loadCampaigns().catch((error: unknown) => setFormError(error instanceof Error ? error.message : "Не удалось загрузить кампании."));
+  }, [loadCampaigns]);
 
   async function createCampaign(event: React.FormEvent) {
     event.preventDefault();
-    await api("/publication-campaigns", {
-      method: "POST",
-      body: JSON.stringify({
-        name,
-        site_id: siteId,
-        content_item_ids: approved.map((item) => item.id),
-        start_at: new Date().toISOString(),
-        interval_minutes: interval,
-        items_per_run: 1
-      })
-    });
-    onChanged();
+    setFormError("");
+    try {
+      await api("/publication-campaigns", {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          site_id: siteId,
+          content_item_ids: approved.map((item) => item.id),
+          start_at: new Date().toISOString(),
+          interval_minutes: interval,
+          items_per_run: 1
+        })
+      });
+      await Promise.all([onChanged(), loadCampaigns()]);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось создать кампанию.");
+    }
+  }
+
+  async function changeCampaign(campaign: PublicationCampaign, action: "pause" | "resume" | "stop") {
+    setFormError("");
+    try {
+      await api(`/publication-campaigns/${campaign.id}`, { method: "PATCH", body: JSON.stringify({ action }) });
+      await Promise.all([onChanged(), loadCampaigns()]);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось изменить кампанию.");
+    }
   }
 
   return (
@@ -2754,7 +2925,25 @@ function PublicationsView({ api, sites, content, onChanged }: ViewProps & { site
           <div className="formActions wide">
             <button className="button primary" type="submit" disabled={!approved.length || !siteId}><Play size={18} /> Запланировать approved ({approved.length})</button>
           </div>
+          {formError ? <span className="formError wide">{formError}</span> : null}
         </form>
+      </DataPanel>
+      <DataPanel title="Все кампании">
+        <ResponsiveTable
+          columns={["Название", "Сайт", "Старт", "Интервал", "Статус", "Действия"]}
+          rows={campaigns.map((campaign) => [
+            campaign.name,
+            sites.find((site) => site.id === campaign.site_id)?.name || campaign.site_id,
+            formatDate(campaign.start_at),
+            `${campaign.interval_minutes} мин.`,
+            <StatusBadge status={campaign.status} />,
+            <div className="userActions">
+              {campaign.status === "active" ? <button className="button compact" type="button" onClick={() => changeCampaign(campaign, "pause")}>Pause</button> : null}
+              {campaign.status === "paused" ? <button className="button compact" type="button" onClick={() => changeCampaign(campaign, "resume")}><Play size={15} /> Resume</button> : null}
+              {["active", "paused"].includes(campaign.status) ? <button className="button compact danger" type="button" onClick={() => changeCampaign(campaign, "stop")}><X size={15} /> Stop</button> : null}
+            </div>
+          ])}
+        />
       </DataPanel>
       <DataPanel title="Готово к публикации">
         <ResponsiveTable columns={["Тема", "Статус", "Slug"]} rows={approved.map((item) => [<TopicMetaCell item={item} />, <StatusBadge status={item.status} />, item.slug])} />

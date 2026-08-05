@@ -62,3 +62,31 @@ def test_orm_list_endpoints_serialize_json() -> None:
     assert tasks_response.json() == []
     assert content_response.status_code == 200
     assert content_response.json() == []
+
+
+def test_approve_rejects_invalid_payload() -> None:
+    client, TestingSession = make_client()
+    with TestingSession() as db:
+        site = db.query(models.Site).one()
+        section = models.Section(site_id=site.id, external_id="main", name="Main", path="/")
+        db.add(section)
+        db.flush()
+        task = models.GenerationTask(title="Test", site_id=site.id, geo="DE", language="de", topics_count=1)
+        item = models.ContentItem(
+            task=task,
+            site_id=site.id,
+            section_id=section.id,
+            topic="Invalid",
+            slug="/invalid/",
+            generated_json={"pages": []},
+            status="generated",
+            idempotency_key="invalid-approve",
+        )
+        db.add_all([task, item])
+        db.commit()
+        item_id = item.id
+
+    response = client.post(f"/api/content/{item_id}/approve")
+
+    assert response.status_code == 400
+    assert "Content validation failed" in response.json()["detail"]

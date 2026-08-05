@@ -120,6 +120,7 @@ class ContentItem(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     task_id: Mapped[str] = mapped_column(ForeignKey("generation_tasks.id"), nullable=False)
     site_id: Mapped[str | None] = mapped_column(ForeignKey("sites.id"), nullable=True)
+    publication_campaign_id: Mapped[str | None] = mapped_column(ForeignKey("publication_campaigns.id"), nullable=True, index=True)
     topic: Mapped[str] = mapped_column(Text, nullable=False)
     slug: Mapped[str] = mapped_column(String(240), nullable=False)
     generated_json: Mapped[dict] = mapped_column(JSON, nullable=False)

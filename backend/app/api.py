@@ -20,6 +20,7 @@ from app.schemas import (
     LoginRequest,
     PasswordChange,
     PublicationCampaignResponse,
+    PublicationCampaignUpdate,
     PublicationLogResponse,
     PromptTemplateCreate,
     PromptTemplateResponse,
@@ -55,6 +56,8 @@ from app.services import (
     regenerate_competitor_queries,
     replace_competitor_queries,
     schedule_campaign,
+    update_campaign_status,
+    validate_content_for_publication,
     validate_ai_provider_key,
 )
 
@@ -502,7 +505,20 @@ def create_site_campaign(site_id: str, payload: SitePublicationCampaignCreate, _
         interval_minutes=interval_minutes,
         items_per_run=1,
     )
-    return schedule_campaign(db, campaign_payload)
+    try:
+        return schedule_campaign(db, campaign_payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/sites/{site_id}/publication-campaigns", response_model=list[PublicationCampaignResponse])
+def list_site_campaigns(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    _get_site_or_404(db, site_id)
+    return db.scalars(
+        select(models.PublicationCampaign)
+        .where(models.PublicationCampaign.site_id == site_id)
+        .order_by(models.PublicationCampaign.created_at.desc())
+    ).all()
 
 
 @router.get("/tasks", response_model=list[GenerationTaskResponse])
@@ -537,7 +553,12 @@ def generate_task(task_id: str, _: AuthUser, db: Session = Depends(get_db)) -> A
     task = db.get(models.GenerationTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    return generate_task_items(db, task)
+    try:
+        return generate_task_items(db, task)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)[:500]) from exc
 
 
 @router.get("/content", response_model=list[ContentItemResponse])
@@ -670,6 +691,8 @@ def update_content(content_id: str, payload: ContentUpdate, _: AuthUser, db: Ses
     item = db.get(models.ContentItem, content_id)
     if not item:
         raise HTTPException(status_code=404, detail="Content item not found")
+    if item.status in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "published"}:
+        raise HTTPException(status_code=400, detail=f"Content in status '{item.status}' cannot be edited")
 
     if "section_id" in payload.model_fields_set:
         if payload.section_id:
@@ -696,7 +719,7 @@ def delete_content(content_id: str, _: AuthUser, db: Session = Depends(get_db)) 
     item = db.get(models.ContentItem, content_id)
     if not item:
         raise HTTPException(status_code=404, detail="Content item not found")
-    if item.status in {"scheduled", "publishing", "published"}:
+    if item.status in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "published"}:
         raise HTTPException(status_code=400, detail="Scheduled or published content cannot be deleted")
 
     task = db.get(models.GenerationTask, item.task_id)
@@ -719,8 +742,16 @@ def approve_content(content_id: str, _: AuthUser, db: Session = Depends(get_db))
     item = db.get(models.ContentItem, content_id)
     if not item:
         raise HTTPException(status_code=404, detail="Content item not found")
+    if item.status not in {"generated", "rejected", "approved"}:
+        raise HTTPException(status_code=400, detail=f"Content in status '{item.status}' cannot be approved")
     if item.site_id and not item.section_id:
         raise HTTPException(status_code=400, detail="Select a menu item before approval")
+    if item.site_id and item.section_id:
+        _get_section_for_site(db, item.site_id, item.section_id)
+    try:
+        validate_content_for_publication(item)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     item.status = "approved"
     db.commit()
     db.refresh(item)
@@ -732,6 +763,8 @@ def reject_content(content_id: str, _: AuthUser, db: Session = Depends(get_db)) 
     item = db.get(models.ContentItem, content_id)
     if not item:
         raise HTTPException(status_code=404, detail="Content item not found")
+    if item.status not in {"generated", "approved", "rejected"}:
+        raise HTTPException(status_code=400, detail=f"Content in status '{item.status}' cannot be rejected")
     item.status = "rejected"
     db.commit()
     db.refresh(item)
@@ -740,12 +773,26 @@ def reject_content(content_id: str, _: AuthUser, db: Session = Depends(get_db)) 
 
 @router.post("/publication-campaigns", response_model=PublicationCampaignResponse)
 def create_campaign(payload: PublicationCampaignCreate, _: AdminUser, db: Session = Depends(get_db)) -> Any:
-    return schedule_campaign(db, payload)
+    try:
+        return schedule_campaign(db, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/publication-campaigns", response_model=list[PublicationCampaignResponse])
 def list_campaigns(_: AdminUser, db: Session = Depends(get_db)) -> Any:
     return db.scalars(select(models.PublicationCampaign).order_by(models.PublicationCampaign.created_at.desc())).all()
+
+
+@router.patch("/publication-campaigns/{campaign_id}", response_model=PublicationCampaignResponse)
+def update_campaign(campaign_id: str, payload: PublicationCampaignUpdate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    campaign = db.get(models.PublicationCampaign, campaign_id)
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Publication campaign not found")
+    try:
+        return update_campaign_status(db, campaign, payload.action)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/publication-logs", response_model=list[PublicationLogResponse])
