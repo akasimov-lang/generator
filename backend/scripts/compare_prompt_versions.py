@@ -13,7 +13,8 @@ TASK_TITLES = {
     "v5": "DE обзорник: Gemini v5 prompt test",
 }
 WORD_RE = re.compile(r"[\wÀ-ÿА-Яа-яЁё-]+", re.UNICODE)
-URL_RE = re.compile(r"https?://|www\.", re.IGNORECASE)
+URL_RE = re.compile(r"https?://(?:www\.)?[a-z0-9]", re.IGNORECASE)
+PLACEHOLDER_RE = re.compile(r"\[[^\]]*muss geprüft werden[^\]]*\]", re.IGNORECASE)
 LICENSE_TERMS = ("lizenz", "ggl", "oasis", "lugas", "glüstv", "whitelist")
 TESTING_CLAIMS = (
     "wir haben getestet",
@@ -57,13 +58,6 @@ def item_metrics(item: models.ContentItem, target_words: int) -> dict:
         if block.get("type") == "paragraph" and isinstance(block.get("data"), dict)
     ]
     paragraph_lengths = [len(WORD_RE.findall(text)) for text in paragraphs if text]
-    faq_questions = sum(
-        1
-        for block in blocks
-        if block.get("type") == "faq"
-        for text in strings_from_value(block.get("data"))
-        if text.strip()
-    )
     block_types = Counter(str(block.get("type") or "unknown") for block in blocks)
     meta_description = str(page.get("description") or "")
     word_delta_percent = round(abs(item.word_count - target_words) / target_words * 100, 1)
@@ -74,9 +68,9 @@ def item_metrics(item: models.ContentItem, target_words: int) -> dict:
         "title_exact": 10 if page.get("title") == item.topic else 0,
         "concise_h1": 10 if 3 <= len(WORD_RE.findall(h1)) <= 10 else 5 if len(WORD_RE.findall(h1)) <= 14 else 0,
         "no_public_urls": 10 if not URL_RE.search(public_text) else 0,
-        "no_placeholders": 10 if "[muss geprüft" not in lowered else 0,
+        "no_placeholders": 10 if not PLACEHOLDER_RE.search(public_text) else 0,
         "readable_paragraphs": 10 if paragraph_lengths and sum(paragraph_lengths) / len(paragraph_lengths) <= 120 else 0,
-        "faq_present": 5 if block_types.get("faq", 0) else 0,
+        "faq_present": 5 if any(heading.strip().casefold() == "faq" for heading in h2) else 0,
     }
     return {
         "topic": item.topic,
@@ -92,8 +86,12 @@ def item_metrics(item: models.ContentItem, target_words: int) -> dict:
         "block_types": dict(block_types),
         "average_paragraph_words": round(sum(paragraph_lengths) / len(paragraph_lengths), 1) if paragraph_lengths else 0,
         "public_urls": len(URL_RE.findall(public_text)),
-        "placeholders": lowered.count("[muss geprüft"),
+        "placeholders": len(PLACEHOLDER_RE.findall(public_text)),
         "license_term_mentions": sum(lowered.count(term) for term in LICENSE_TERMS),
+        "license_mentions_per_1000_words": round(
+            sum(lowered.count(term) for term in LICENSE_TERMS) / max(item.word_count, 1) * 1000,
+            1,
+        ),
         "testing_claims": sum(lowered.count(claim) for claim in TESTING_CLAIMS),
         "confirmed_competitor_topics": (item.competitor_brief or {}).get("topics_to_cover", []),
         "score": sum(score_parts.values()),
