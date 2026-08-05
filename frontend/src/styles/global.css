@@ -861,7 +861,8 @@ td {
   position: relative;
 }
 
-.competitorRequestMetric .button {
+.competitorRequestMetric .button,
+.taskQueriesMetric > .button {
   justify-content: center;
   margin-top: 2px;
   width: 100%;

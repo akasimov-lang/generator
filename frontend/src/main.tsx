@@ -2050,6 +2050,30 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
     }
   }
 
+  async function bulkRegenerateCompetitorQueries(items: ContentItem[]) {
+    if (!items.length) return;
+    setTaskError("");
+    setTaskActionId("bulk:regenerate-queries");
+    let failed = 0;
+    try {
+      for (const item of items) {
+        try {
+          await api(`/content/${item.id}/competitor-queries/regenerate`, { method: "POST" });
+        } catch {
+          failed += 1;
+        }
+      }
+      await refreshExpandedTask();
+      if (failed) {
+        setTaskError(`Не удалось сгенерировать запросы для части тем: ${failed}.`);
+      }
+    } catch (error) {
+      setTaskError(error instanceof Error ? error.message : "Не удалось сгенерировать запросы для задачи.");
+    } finally {
+      setTaskActionId("");
+    }
+  }
+
   async function collectItemCompetitors(item: ContentItem) {
     setTaskError("");
     setTaskActionId(`${item.id}:collect-competitors`);
@@ -2259,6 +2283,7 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
           onRegenerate={regenerateContent}
           onDelete={deleteContentItem}
           onBulkApprove={bulkApproveTaskContent}
+          onBulkRegenerateQueries={bulkRegenerateCompetitorQueries}
           onBulkCollectCompetitors={bulkCollectTaskCompetitors}
           onBulkRegenerate={bulkRegenerateTaskContent}
           onBulkDelete={bulkDeleteTaskContent}
@@ -2316,6 +2341,7 @@ function AdminTasksAccordion({
   onRegenerate,
   onDelete,
   onBulkApprove,
+  onBulkRegenerateQueries,
   onBulkCollectCompetitors,
   onBulkRegenerate,
   onBulkDelete,
@@ -2335,6 +2361,7 @@ function AdminTasksAccordion({
   onRegenerate: (item: ContentItem) => Promise<void>;
   onDelete: (item: ContentItem) => Promise<void>;
   onBulkApprove: (items: ContentItem[]) => Promise<void>;
+  onBulkRegenerateQueries: (items: ContentItem[]) => Promise<void>;
   onBulkCollectCompetitors: (items: ContentItem[]) => Promise<void>;
   onBulkRegenerate: (items: ContentItem[]) => Promise<void>;
   onBulkDelete: (items: ContentItem[]) => Promise<void>;
@@ -2405,6 +2432,15 @@ function AdminTasksAccordion({
     await onBulkCollectCompetitors(competitorRequestItems);
   }
 
+  async function handleGenerateQueries() {
+    const hasCollectedResearch = research.some((entry) => entry.results.length || entry.pages.length || entry.brief);
+    if (hasCollectedResearch) {
+      const confirmed = window.confirm("Сгенерировать запросы заново? Старые результаты сбора конкурентов и competitor brief для тем этой задачи будут удалены.");
+      if (!confirmed) return;
+    }
+    await onBulkRegenerateQueries(expandedItems);
+  }
+
   async function handleBulkDelete() {
     await onBulkDelete(bulkDeleteItems);
     setSelectedIds([]);
@@ -2463,7 +2499,7 @@ function AdminTasksAccordion({
                         <div className="taskAccordionBody">
                           <div className="accordionSummary">
                             <InfoMetric label="Название темы/задачи" value={expandedTask.title} />
-                            <TaskQueriesMetric total={totalQueries} groups={taskQueryGroups} />
+                            <TaskQueriesMetric total={totalQueries} groups={taskQueryGroups} busy={actionId === "bulk:regenerate-queries"} onGenerate={handleGenerateQueries} />
                             <InfoMetric label="Дата загрузки темы" value={formatDate(expandedTask.created_at)} />
                             <InfoMetric label="Дата генерации" value={latestGeneration ? formatDate(latestGeneration) : "-"} />
                             <div className="infoMetric competitorRequestMetric">
@@ -2566,11 +2602,14 @@ function InfoMetric({ label, value }: { label: string; value: React.ReactNode })
   );
 }
 
-function TaskQueriesMetric({ total, groups }: { total: number; groups: Array<{ topic: string; queries: CompetitorQuery[] }> }) {
+function TaskQueriesMetric({ total, groups, busy, onGenerate }: { total: number; groups: Array<{ topic: string; queries: CompetitorQuery[] }>; busy: boolean; onGenerate: () => void }) {
   return (
     <div className="infoMetric taskQueriesMetric" tabIndex={0} aria-label="Показать запросы для сбора конкурентов">
       <span>Запросы для сбора конкурентов</span>
       <strong>{total}</strong>
+      <button className="button compact" type="button" onClick={onGenerate} disabled={busy}>
+        <RefreshCcw size={15} /> {busy ? "Генерирую запросы" : "Сгенерировать запросы"}
+      </button>
       <div className="queryTooltip taskQueriesTooltip" role="tooltip">
         <strong>Запросы по темам задачи</strong>
         {groups.length ? groups.map((group) => (
