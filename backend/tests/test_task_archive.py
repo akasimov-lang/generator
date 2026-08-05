@@ -5,7 +5,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app import models
-from app.api import archive_task, collect_content_competitors, get_task, list_archived_tasks, list_tasks, restore_task
+from app.api import archive_task, collect_content_competitors, generate_content, get_task, list_archived_tasks, list_tasks, restore_task
 from app.db import Base
 
 
@@ -68,3 +68,34 @@ def test_competitor_collection_is_queued_without_waiting_for_http(monkeypatch: p
         assert queued_ids == [item.id]
         assert response["status"] == "queued"
         assert response["progress"] == 1
+
+
+def test_content_generation_is_queued_with_initial_progress(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    queued_ids: list[str] = []
+    monkeypatch.setattr("app.api.generate_content_item_job.delay", queued_ids.append)
+
+    with TestingSession() as db:
+        task = models.GenerationTask(title="Generate", geo="DE", language="de", topics_count=1)
+        item = models.ContentItem(
+            task=task,
+            topic="Beste Online Casinos Deutschland",
+            slug="/beste-online-casinos/",
+            generated_json={},
+            idempotency_key="queued-generation-item",
+        )
+        db.add(item)
+        db.commit()
+
+        response = generate_content(
+            item.id,
+            {"id": "admin-id", "username": "admin", "is_admin": True},
+            db,
+        )
+
+        assert queued_ids == [item.id]
+        assert response.status == "generation_queued"
+        assert response.generation_progress == 1

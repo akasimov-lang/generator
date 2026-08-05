@@ -131,6 +131,8 @@ class ContentItem(Base, TimestampMixin):
     section_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
     generation_prompt_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
     generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    generation_progress: Mapped[int] = mapped_column(Integer, default=0)
+    generation_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     competitor_research_status: Mapped[str] = mapped_column(String(40), default="not_requested")
     competitor_research_progress: Mapped[int] = mapped_column(Integer, default=0)
     competitor_research_error: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -87,6 +87,8 @@ type ContentItem = {
   generated_json: Record<string, unknown>;
   generation_prompt_name: string | null;
   generated_at: string | null;
+  generation_progress: number;
+  generation_error: string | null;
   competitor_research_status: string;
   competitor_research_progress: number;
   competitor_research_error: string | null;
@@ -280,6 +282,7 @@ type AppRoute = {
 
 const API_BASE = "/api";
 const ACTIVE_RESEARCH_STATUSES = ["queued", "collecting_serp", "serp_collected", "serp_empty", "fetching_pages", "pages_fetched"];
+const ACTIVE_GENERATION_STATUSES = ["generation_queued", "generating"];
 const DEFAULT_WORKSPACE_TAB: WorkspaceTab = "overview";
 const DEFAULT_ROUTE: AppRoute = { view: "dashboard", workspaceTab: DEFAULT_WORKSPACE_TAB };
 
@@ -1941,6 +1944,7 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
   const [includeToc, setIncludeToc] = React.useState(true);
   const [includeFaq, setIncludeFaq] = React.useState(true);
   const [collectCompetitors, setCollectCompetitors] = React.useState(false);
+  const [createFormExpanded, setCreateFormExpanded] = React.useState(false);
   const [expandedTaskId, setExpandedTaskId] = React.useState("");
   const [expandedDetails, setExpandedDetails] = React.useState<TaskDetails | null>(null);
   const [expandedResearch, setExpandedResearch] = React.useState<CompetitorResearch[]>([]);
@@ -1952,6 +1956,7 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
   const [promptModalTask, setPromptModalTask] = React.useState<Task | null>(null);
   const [previewItem, setPreviewItem] = React.useState<ContentItem | null>(null);
   const hasResearchInProgress = expandedResearch.some((entry) => ACTIVE_RESEARCH_STATUSES.includes(entry.status));
+  const hasGenerationInProgress = (expandedDetails?.items || []).some((item) => ACTIVE_GENERATION_STATUSES.includes(item.status));
 
   React.useEffect(() => {
     const generationProviders = providers.filter(isGenerationProvider);
@@ -1962,7 +1967,7 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
   }, [providerId, providers]);
 
   React.useEffect(() => {
-    if (!expandedTaskId || !hasResearchInProgress) return;
+    if (!expandedTaskId || (!hasResearchInProgress && !hasGenerationInProgress)) return;
     let cancelled = false;
     const pollResearch = async () => {
       try {
@@ -1973,7 +1978,9 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
         if (cancelled) return;
         setExpandedDetails(details);
         setExpandedResearch(research);
-        if (!research.some((entry) => ACTIVE_RESEARCH_STATUSES.includes(entry.status))) {
+        const researchFinished = !research.some((entry) => ACTIVE_RESEARCH_STATUSES.includes(entry.status));
+        const generationFinished = !details.items.some((item) => ACTIVE_GENERATION_STATUSES.includes(item.status));
+        if (researchFinished && generationFinished) {
           await onChanged();
         }
       } catch (pollError) {
@@ -1985,7 +1992,7 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [api, expandedTaskId, hasResearchInProgress, onChanged]);
+  }, [api, expandedTaskId, hasGenerationInProgress, hasResearchInProgress, onChanged]);
 
   async function createTask(event: React.FormEvent) {
     event.preventDefault();
@@ -2009,6 +2016,7 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
     setTitle("");
     setTopics("");
     setShortcode("");
+    setCreateFormExpanded(false);
     onChanged();
   }
 
@@ -2263,8 +2271,22 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
 
   return (
     <section className="viewStack">
-      <DataPanel title="Создать задачу генерации">
-        <form className="formGrid" onSubmit={createTask}>
+      <section className={`dataPanel createTaskPanel ${createFormExpanded ? "expanded" : ""}`}>
+        <button
+          className="createTaskToggle"
+          type="button"
+          aria-expanded={createFormExpanded}
+          aria-controls="create-generation-task-form"
+          onClick={() => setCreateFormExpanded((current) => !current)}
+        >
+          <span className="createTaskToggleIcon"><Plus size={20} /></span>
+          <span className="createTaskToggleText">
+            <strong>Создать задачу генерации</strong>
+            <small>{createFormExpanded ? "Нажмите, чтобы свернуть рабочую область" : "Нажмите, чтобы развернуть рабочую область и создать задачу генерации контента по темам"}</small>
+          </span>
+          {createFormExpanded ? <ChevronDown size={22} /> : <ChevronRight size={22} />}
+        </button>
+        {createFormExpanded ? <form id="create-generation-task-form" className="formGrid createTaskForm" onSubmit={createTask}>
           <label>
             Название задачи
             <input value={title} onChange={(event) => setTitle(event.target.value)} required placeholder="Casino Bonuses DE" />
@@ -2328,8 +2350,8 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
               <Plus size={18} /> {collectCompetitors ? "Создать без автогенерации" : "Создать и сгенерировать"}
             </button>
           </div>
-        </form>
-      </DataPanel>
+        </form> : null}
+      </section>
       <DataPanel title="Все задачи">
         <AdminTasksAccordion
           tasks={tasks}
@@ -2665,7 +2687,7 @@ function AdminTasksAccordion({
                             columns={["Выбор", "Тема", "Запросы", "Загружена", "Генерация", "Конкуренты", "Статус", "Действия"]}
                             rows={expandedItems.map((item) => {
                               const itemResearch = researchByItem.get(item.id);
-                              const busy = actionId.startsWith(item.id) || bulkBusy;
+                              const busy = actionId.startsWith(item.id) || bulkBusy || ACTIVE_GENERATION_STATUSES.includes(item.status);
                               const deleteDisabled = isPublicationLocked(item);
                               return [
                                 <input className="rowCheckbox" type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelected(item.id)} disabled={bulkBusy} aria-label={`Выбрать ${item.topic}`} />,
@@ -2678,7 +2700,7 @@ function AdminTasksAccordion({
                                   onRegenerate={() => onRegenerateQueries(item)}
                                 />,
                                 formatDate(item.created_at),
-                                item.generated_at ? formatDate(item.generated_at) : "-",
+                                <GenerationProgressCell item={item} />,
                                 <CompetitorCell item={item} research={itemResearch} />,
                                 <StatusBadge status={item.status} />,
                                 <div className="userActions">
@@ -2763,6 +2785,30 @@ function competitorStatusLabel(item: ContentItem, research?: CompetitorResearch)
   if ((research?.results.length || 0) > 0) return "URL собраны";
   if ((research?.queries.length || 0) > 0 || item.competitor_research_status === "queries_ready") return "Есть запросы";
   return "Нет";
+}
+
+function GenerationProgressCell({ item }: { item: ContentItem }) {
+  const complete = ["generated", "approved", "scheduled", "retry_scheduled", "publication_paused", "publishing", "published"].includes(item.status);
+  const progress = Math.max(0, Math.min(100, complete ? 100 : item.generation_progress || 0));
+  const stage = item.status === "generation_queued"
+    ? "В очереди"
+    : item.status === "generating"
+      ? "Gemini генерирует текст"
+      : item.status === "generation_failed"
+        ? "Ошибка генерации"
+        : complete
+          ? "Готово"
+          : "Не запускалась";
+  return (
+    <div className="generationProgressCell" title={item.generation_error || undefined}>
+      <span>{item.generated_at ? formatDate(item.generated_at) : "-"}</span>
+      <small className={item.generation_error ? "danger" : ""}>{stage}</small>
+      <div className="generationProgress" aria-label={`Прогресс генерации текста: ${progress}%`}>
+        <span style={{ width: `${progress}%` }} />
+      </div>
+      <b>{progress}%</b>
+    </div>
+  );
 }
 
 function CompetitorCell({ item, research }: { item: ContentItem; research?: CompetitorResearch }) {

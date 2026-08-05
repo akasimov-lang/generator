@@ -1967,11 +1967,15 @@ def generate_task_items(db: Session, task: models.GenerationTask) -> models.Gene
     if not mutable_items:
         raise ValueError("Task has no content that can be generated")
     task.status = "generating"
-    db.flush()
+    db.commit()
     provider = db.get(models.AiProvider, task.ai_provider_id) if task.ai_provider_id else None
     site = db.get(models.Site, task.site_id) if task.site_id else None
     try:
         for item in mutable_items:
+            item.status = "generating"
+            item.generation_progress = 15
+            item.generation_error = None
+            db.commit()
             if provider and provider.is_active:
                 item.generated_json = asyncio.run(
                     build_ai_content(
@@ -1991,14 +1995,19 @@ def generate_task_items(db: Session, task: models.GenerationTask) -> models.Gene
                 )
                 item.slug = item.generated_json["pages"][0]["slug"]
                 item.word_count = count_words(item.generated_json)
+            item.generation_progress = 90
             item.generation_prompt_name = task.prompt_template_name
             item.generated_at = datetime.now(timezone.utc)
             item.status = "generated"
+            item.generation_progress = 100
+            db.commit()
         task.status = "generated"
-    except Exception:
+    except Exception as exc:
+        db.rollback()
         for item in mutable_items:
-            if item.status not in {"generated", "approved", "scheduled", "published"}:
+            if item.status in {"generation_queued", "generating"}:
                 item.status = "generation_failed"
+                item.generation_error = f"{type(exc).__name__}: {exc}"[:500]
         task.status = "generation_failed"
         db.commit()
         raise
@@ -2016,32 +2025,52 @@ def generate_content_item(db: Session, item: models.ContentItem) -> models.Conte
     provider = db.get(models.AiProvider, task.ai_provider_id) if task.ai_provider_id else None
     site = db.get(models.Site, task.site_id) if task.site_id else None
     item.status = "generating"
-    db.flush()
-    if provider and provider.is_active:
-        item.generated_json = asyncio.run(
-            build_ai_content(
-                provider=provider,
-                topic=item.topic,
-                geo=task.geo,
-                language=task.language,
-                target_words=task.target_words,
-                site=site,
-                payload_mode=task.payload_mode,
-                prompt_template=task.prompt_template,
-                shortcode=None,
-                include_toc=True,
-                include_faq=True,
-                competitor_brief=item.competitor_brief,
-            )
-        )
-        item.slug = item.generated_json["pages"][0]["slug"]
-        item.word_count = count_words(item.generated_json)
-    item.generation_prompt_name = task.prompt_template_name
-    item.generated_at = datetime.now(timezone.utc)
-    item.status = "generated"
+    item.generation_progress = 15
+    item.generation_error = None
+    task.status = "generating"
     db.commit()
-    db.refresh(item)
-    return item
+    try:
+        if provider and provider.is_active:
+            item.generated_json = asyncio.run(
+                build_ai_content(
+                    provider=provider,
+                    topic=item.topic,
+                    geo=task.geo,
+                    language=task.language,
+                    target_words=task.target_words,
+                    site=site,
+                    payload_mode=task.payload_mode,
+                    prompt_template=task.prompt_template,
+                    shortcode=None,
+                    include_toc=True,
+                    include_faq=True,
+                    competitor_brief=item.competitor_brief,
+                )
+            )
+            item.slug = item.generated_json["pages"][0]["slug"]
+            item.word_count = count_words(item.generated_json)
+        item.generation_progress = 90
+        item.generation_prompt_name = task.prompt_template_name
+        item.generated_at = datetime.now(timezone.utc)
+        item.status = "generated"
+        item.generation_progress = 100
+        active_items = [task_item for task_item in task.items if task_item.id != item.id and task_item.status in {"generation_queued", "generating"}]
+        failed_items = [task_item for task_item in task.items if task_item.id != item.id and task_item.status == "generation_failed"]
+        task.status = "generating" if active_items else "generation_failed" if failed_items else "generated"
+        db.commit()
+        db.refresh(item)
+        return item
+    except Exception as exc:
+        db.rollback()
+        failed_item = db.get(models.ContentItem, item.id)
+        failed_task = db.get(models.GenerationTask, item.task_id)
+        if failed_item:
+            failed_item.status = "generation_failed"
+            failed_item.generation_error = f"{type(exc).__name__}: {exc}"[:500]
+        if failed_task:
+            failed_task.status = "generation_failed"
+        db.commit()
+        raise
 
 
 def schedule_campaign(db: Session, payload: PublicationCampaignCreate) -> models.PublicationCampaign:

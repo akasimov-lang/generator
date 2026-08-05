@@ -203,6 +203,8 @@ class ContentItemResponse(BaseModel):
     word_count: int
     generation_prompt_name: str | None
     generated_at: datetime | None
+    generation_progress: int = 0
+    generation_error: str | None = None
     competitor_research_status: str
     competitor_research_progress: int = 0
     competitor_research_error: str | None = None

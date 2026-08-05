@@ -49,8 +49,6 @@ from app.services import (
     ensure_default_prompt_template,
     ensure_competitor_queries,
     fetch_competitor_pages_for_item,
-    generate_content_item,
-    generate_task_items,
     get_dashboard,
     regenerate_competitor_queries,
     replace_competitor_queries,
@@ -59,7 +57,7 @@ from app.services import (
     validate_content_for_publication,
     validate_ai_provider_key,
 )
-from app.worker import collect_competitor_research_job
+from app.worker import collect_competitor_research_job, generate_content_item_job, generate_task_content_job
 
 router = APIRouter()
 
@@ -601,12 +599,28 @@ def generate_task(task_id: str, _: AuthUser, db: Session = Depends(get_db)) -> A
         raise HTTPException(status_code=404, detail="Task not found")
     if task.archived_at is not None:
         raise HTTPException(status_code=400, detail="Archived task must be restored before generation")
+    mutable_items = [item for item in task.items if item.status not in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "published"}]
+    if not mutable_items:
+        raise HTTPException(status_code=400, detail="Task has no content that can be generated")
+    if any(item.status in {"generation_queued", "generating"} for item in mutable_items):
+        return task
+    task.status = "generating"
+    for item in mutable_items:
+        item.status = "generation_queued"
+        item.generation_progress = 1
+        item.generation_error = None
+    db.commit()
     try:
-        return generate_task_items(db, task)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        generate_task_content_job.delay(task.id)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc)[:500]) from exc
+        task.status = "generation_failed"
+        for item in mutable_items:
+            item.status = "generation_failed"
+            item.generation_error = f"{type(exc).__name__}: {exc}"[:500]
+        db.commit()
+        raise HTTPException(status_code=502, detail="Failed to queue content generation") from exc
+    db.refresh(task)
+    return task
 
 
 @router.get("/content", response_model=list[ContentItemResponse])
@@ -733,12 +747,23 @@ def generate_content(content_id: str, _: AuthUser, db: Session = Depends(get_db)
     item = db.get(models.ContentItem, content_id)
     if not item:
         raise HTTPException(status_code=404, detail="Content item not found")
+    if item.status in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "published"}:
+        raise HTTPException(status_code=400, detail=f"Content in status '{item.status}' cannot be regenerated")
+    if item.status in {"generation_queued", "generating"}:
+        return item
+    item.status = "generation_queued"
+    item.generation_progress = 1
+    item.generation_error = None
+    db.commit()
     try:
-        return generate_content_item(db, item)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        generate_content_item_job.delay(item.id)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc)[:500]) from exc
+        item.status = "generation_failed"
+        item.generation_error = f"{type(exc).__name__}: {exc}"[:500]
+        db.commit()
+        raise HTTPException(status_code=502, detail="Failed to queue content generation") from exc
+    db.refresh(item)
+    return item
 
 
 @router.patch("/content/{content_id}", response_model=ContentItemResponse)

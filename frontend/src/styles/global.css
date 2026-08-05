@@ -729,6 +729,63 @@ h2 {
   min-width: 0;
 }
 
+.createTaskPanel {
+  padding: 0;
+}
+
+.createTaskPanel.expanded {
+  padding-bottom: 18px;
+}
+
+.createTaskToggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 18px;
+  text-align: left;
+  width: 100%;
+}
+
+.createTaskToggle:hover {
+  background: var(--surface-3);
+}
+
+.createTaskToggleIcon {
+  align-items: center;
+  background: var(--primary-soft);
+  border-radius: var(--radius);
+  color: var(--primary);
+  display: inline-flex;
+  height: 40px;
+  justify-content: center;
+  width: 40px;
+}
+
+.createTaskToggleText {
+  display: grid;
+  gap: 4px;
+}
+
+.createTaskToggleText strong {
+  font-size: 18px;
+}
+
+.createTaskToggleText small {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.createTaskForm {
+  border-top: 1px solid var(--border);
+  margin: 0 18px;
+  padding-top: 18px;
+}
+
 .panelHeader {
   display: flex;
   align-items: center;
@@ -1085,6 +1142,7 @@ td {
 }
 
 .status-generating,
+.status-generation-queued,
 .status-scheduled,
 .status-publishing,
 .status-retry-scheduled,
@@ -1103,6 +1161,7 @@ td {
 
 .status-publication-failed,
 .status-generation-failed,
+.status-research-failed,
 .status-rejected,
 .status-stopped,
 .status-completed-with-errors,
@@ -1252,10 +1311,40 @@ td {
   color: var(--danger);
 }
 
+.generationProgressCell {
+  display: grid;
+  gap: 5px;
+  min-width: 120px;
+}
+
+.generationProgressCell small,
+.generationProgressCell b {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.generationProgressCell small.danger {
+  color: var(--danger);
+}
+
+.generationProgress {
+  background: var(--border);
+  border-radius: 999px;
+  height: 7px;
+  overflow: hidden;
+  width: 120px;
+}
+
+.generationProgress span {
+  background: linear-gradient(90deg, var(--blue), var(--primary));
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  transition: width 0.35s ease;
+}
+
 .competitorTooltip {
-  max-height: 420px;
   max-width: min(520px, 76vw);
-  overflow: auto;
   top: 30px;
   width: max-content;
 }

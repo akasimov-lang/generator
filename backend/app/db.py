@@ -87,6 +87,8 @@ def apply_lightweight_migrations() -> None:
                 "publication_campaign_id": "VARCHAR(36)",
                 "generation_prompt_name": "VARCHAR(160)",
                 "generated_at": "TIMESTAMP WITH TIME ZONE",
+                "generation_progress": "INTEGER DEFAULT 0 NOT NULL",
+                "generation_error": "TEXT",
                 "competitor_research_status": "VARCHAR(40) DEFAULT 'not_requested' NOT NULL",
                 "competitor_research_progress": "INTEGER DEFAULT 0 NOT NULL",
                 "competitor_research_error": "TEXT",

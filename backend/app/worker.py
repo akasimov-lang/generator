@@ -7,7 +7,7 @@ from sqlalchemy import select
 from app import models
 from app.core.config import get_settings
 from app.db import SessionLocal
-from app.services import collect_competitor_research_for_item, publish_item, refresh_campaign_status
+from app.services import collect_competitor_research_for_item, generate_content_item, generate_task_items, publish_item, refresh_campaign_status
 
 settings = get_settings()
 
@@ -38,6 +38,32 @@ def collect_competitor_research_job(content_item_id: str) -> dict:
             item.competitor_research_error = f"{type(exc).__name__}: {exc}"[:500]
             db.commit()
         raise
+    finally:
+        db.close()
+
+
+@celery_app.task(name="app.worker.generate_task_content")
+def generate_task_content_job(task_id: str) -> dict:
+    db = SessionLocal()
+    try:
+        task = db.get(models.GenerationTask, task_id)
+        if not task:
+            return {"status": "missing", "task_id": task_id}
+        generate_task_items(db, task)
+        return {"status": "complete", "task_id": task_id}
+    finally:
+        db.close()
+
+
+@celery_app.task(name="app.worker.generate_content_item")
+def generate_content_item_job(content_item_id: str) -> dict:
+    db = SessionLocal()
+    try:
+        item = db.get(models.ContentItem, content_item_id)
+        if not item:
+            return {"status": "missing", "content_item_id": content_item_id}
+        generate_content_item(db, item)
+        return {"status": "complete", "content_item_id": content_item_id}
     finally:
         db.close()
 
