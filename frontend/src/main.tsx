@@ -272,8 +272,8 @@ type PublicationCampaign = {
 };
 
 type ThemeMode = "light" | "dark";
-type AppView = "dashboard" | "workspace" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "settings";
-type WorkspaceTab = "overview" | "topics" | "prompts" | "content" | "publication" | "menu";
+type AppView = "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "settings";
+type WorkspaceTab = "overview" | "topics" | "content" | "publication" | "menu";
 
 type AppRoute = {
   view: AppView;
@@ -306,6 +306,7 @@ async function copyTextToClipboard(text: string) {
 
 const MAIN_VIEW_PATHS: Record<Exclude<AppView, "workspace">, string> = {
   dashboard: "/dashboard",
+  prompts: "/prompts",
   tasks: "/tasks",
   taskArchive: "/task-archive",
   content: "/content",
@@ -318,7 +319,6 @@ const MAIN_VIEW_PATHS: Record<Exclude<AppView, "workspace">, string> = {
 const WORKSPACE_TAB_PATHS: Record<WorkspaceTab, string> = {
   overview: "/project-overview",
   topics: "/project-topics",
-  prompts: "/project-prompts",
   content: "/project-content",
   publication: "/project-publication",
   menu: "/project-menu"
@@ -326,6 +326,9 @@ const WORKSPACE_TAB_PATHS: Record<WorkspaceTab, string> = {
 
 function routeFromPath(pathname: string): AppRoute {
   const path = pathname.replace(/\/+$/, "") || "/";
+  if (path === "/project-prompts") {
+    return { view: "prompts", workspaceTab: DEFAULT_WORKSPACE_TAB };
+  }
   const workspaceEntry = Object.entries(WORKSPACE_TAB_PATHS).find(([, routePath]) => routePath === path);
   if (workspaceEntry) {
     return { view: "workspace", workspaceTab: workspaceEntry[0] as WorkspaceTab };
@@ -349,7 +352,7 @@ function pathForRoute(view: AppView, workspaceTab: WorkspaceTab = DEFAULT_WORKSP
 }
 
 function isAdminOnlyView(view: AppView) {
-  return !["workspace", "settings"].includes(view);
+  return !["workspace", "prompts", "settings"].includes(view);
 }
 
 const DEFAULT_PROMPT_DRAFT = `Рабочий промпт для конкретной задачи.
@@ -706,6 +709,7 @@ function App() {
             <>
               <NavButton href={pathForRoute("dashboard")} icon={<LayoutDashboard />} label="Dashboard" active={activeView === "dashboard"} onClick={() => navigateTo("dashboard")} />
               <NavButton href={pathForRoute("workspace", DEFAULT_WORKSPACE_TAB)} icon={<FolderKanban />} label="Рабочий экран" active={activeView === "workspace"} onClick={() => navigateTo("workspace", DEFAULT_WORKSPACE_TAB)} />
+              <NavButton href={pathForRoute("prompts")} icon={<Edit3 />} label="Промпты" active={activeView === "prompts"} onClick={() => navigateTo("prompts")} />
               <NavButton href={pathForRoute("tasks")} icon={<ListChecks />} label="Задачи" active={activeView === "tasks"} onClick={() => navigateTo("tasks")} />
               <NavButton href={pathForRoute("taskArchive")} icon={<Archive />} label="Архив" active={activeView === "taskArchive"} onClick={() => navigateTo("taskArchive")} />
               <NavButton href={pathForRoute("content")} icon={<FileText />} label="Контент" active={activeView === "content"} onClick={() => navigateTo("content")} />
@@ -714,7 +718,10 @@ function App() {
               <NavButton href={pathForRoute("sites")} icon={<Globe2 />} label="Сайты" active={activeView === "sites"} onClick={() => navigateTo("sites")} />
             </>
           ) : (
-            <NavButton href={pathForRoute("workspace", DEFAULT_WORKSPACE_TAB)} icon={<FolderKanban />} label="Рабочий экран" active={activeView === "workspace"} onClick={() => navigateTo("workspace", DEFAULT_WORKSPACE_TAB)} />
+            <>
+              <NavButton href={pathForRoute("workspace", DEFAULT_WORKSPACE_TAB)} icon={<FolderKanban />} label="Рабочий экран" active={activeView === "workspace"} onClick={() => navigateTo("workspace", DEFAULT_WORKSPACE_TAB)} />
+              <NavButton href={pathForRoute("prompts")} icon={<Edit3 />} label="Промпты" active={activeView === "prompts"} onClick={() => navigateTo("prompts")} />
+            </>
           )}
           <NavButton href={pathForRoute("settings")} icon={<Settings />} label="Настройки" active={activeView === "settings"} onClick={() => navigateTo("settings")} />
         </nav>
@@ -762,7 +769,8 @@ function App() {
 
         {message ? <div className="notice">{message}</div> : null}
 
-        {activeView === "workspace" && <ProjectWorkspaceView api={api} sites={sites} providers={providers} isAdmin={isAdmin} activeTab={workspaceTab} onTabChange={(tab) => navigateTo("workspace", tab)} onChanged={loadAll} />}
+        {activeView === "workspace" && <ProjectWorkspaceView api={api} sites={sites} providers={providers} activeTab={workspaceTab} onTabChange={(tab) => navigateTo("workspace", tab)} onChanged={loadAll} />}
+        {activeView === "prompts" && <PromptsView api={api} sites={sites} isAdmin={isAdmin} onChanged={loadAll} />}
         {isAdmin && activeView === "dashboard" && dashboard && <DashboardView dashboard={dashboard} tasks={tasks} content={content} />}
         {isAdmin && activeView === "tasks" && <TasksView api={api} sites={sites} providers={providers} tasks={tasks} onChanged={loadAll} />}
         {isAdmin && activeView === "taskArchive" && <TaskArchiveView api={api} tasks={archivedTasks} onChanged={loadAll} />}
@@ -880,14 +888,12 @@ function ProjectWorkspaceView({
   api,
   sites,
   providers,
-  isAdmin,
   activeTab,
   onTabChange,
   onChanged
 }: ViewProps & {
   sites: Site[];
   providers: AiProvider[];
-  isAdmin: boolean;
   activeTab: WorkspaceTab;
   onTabChange: (tab: WorkspaceTab) => void;
 }) {
@@ -897,7 +903,6 @@ function ProjectWorkspaceView({
   const [siteContent, setSiteContent] = React.useState<ContentItem[]>([]);
   const [sections, setSections] = React.useState<Section[]>([]);
   const [promptTemplates, setPromptTemplates] = React.useState<PromptTemplate[]>([]);
-  const [basePrompt, setBasePrompt] = React.useState<PromptTemplate | null>(null);
   const [logs, setLogs] = React.useState<PublicationLog[]>([]);
   const [campaigns, setCampaigns] = React.useState<PublicationCampaign[]>([]);
   const [workspaceError, setWorkspaceError] = React.useState("");
@@ -906,13 +911,12 @@ function ProjectWorkspaceView({
   const loadProject = React.useCallback(async () => {
     if (!selectedSiteId) return;
     setWorkspaceError("");
-    const [nextOverview, nextTasks, nextContent, nextSections, nextPrompts, nextBasePrompt, nextLogs, nextCampaigns] = await Promise.all([
+    const [nextOverview, nextTasks, nextContent, nextSections, nextPrompts, nextLogs, nextCampaigns] = await Promise.all([
       api<SiteOverview>(`/sites/${selectedSiteId}/overview`),
       api<Task[]>(`/sites/${selectedSiteId}/tasks`),
       api<ContentItem[]>(`/sites/${selectedSiteId}/content`),
       api<Section[]>(`/sites/${selectedSiteId}/sections`),
       api<PromptTemplate[]>(`/sites/${selectedSiteId}/prompt-templates`),
-      api<PromptTemplate>("/prompt-templates/base"),
       api<PublicationLog[]>(`/sites/${selectedSiteId}/publication-logs`),
       api<PublicationCampaign[]>(`/sites/${selectedSiteId}/publication-campaigns`)
     ]);
@@ -921,7 +925,6 @@ function ProjectWorkspaceView({
     setSiteContent(nextContent);
     setSections(nextSections);
     setPromptTemplates(nextPrompts);
-    setBasePrompt(nextBasePrompt);
     setLogs(nextLogs);
     setCampaigns(nextCampaigns);
   }, [api, selectedSiteId]);
@@ -940,7 +943,6 @@ function ProjectWorkspaceView({
       setSiteContent([]);
       setSections([]);
       setPromptTemplates([]);
-      setBasePrompt(null);
       setLogs([]);
       setCampaigns([]);
       setWorkspaceError("");
@@ -976,7 +978,6 @@ function ProjectWorkspaceView({
         <div className="workspaceTabs">
           <TabButton href={pathForRoute("workspace", "overview")} label="Обзор" active={activeTab === "overview"} onClick={() => onTabChange("overview")} />
           <TabButton href={pathForRoute("workspace", "topics")} label="Темы" active={activeTab === "topics"} onClick={() => onTabChange("topics")} />
-          <TabButton href={pathForRoute("workspace", "prompts")} label="Промпты" active={activeTab === "prompts"} onClick={() => onTabChange("prompts")} />
           <TabButton href={pathForRoute("workspace", "content")} label="Контент" active={activeTab === "content"} onClick={() => onTabChange("content")} />
           <TabButton href={pathForRoute("workspace", "publication")} label="Публикация" active={activeTab === "publication"} onClick={() => onTabChange("publication")} />
           <TabButton href={pathForRoute("workspace", "menu")} label="Меню" active={activeTab === "menu"} onClick={() => onTabChange("menu")} />
@@ -989,9 +990,6 @@ function ProjectWorkspaceView({
       ) : null}
       {selectedSite && activeTab === "topics" ? (
         <ProjectTopicsPanel key={selectedSite.id} api={api} site={selectedSite} providers={providers} sections={sections} promptTemplates={promptTemplates} tasks={siteTasks} onChanged={refreshProject} />
-      ) : null}
-      {selectedSite && activeTab === "prompts" ? (
-        <ProjectPromptsPanel key={selectedSite.id} api={api} site={selectedSite} promptTemplates={promptTemplates} basePrompt={basePrompt} isAdmin={isAdmin} onChanged={refreshProject} />
       ) : null}
       {selectedSite && activeTab === "content" ? (
         <ProjectContentPanel key={selectedSite.id} api={api} content={siteContent} sections={sections} onChanged={refreshProject} />
@@ -1477,6 +1475,81 @@ function BriefList({ title, items }: { title: string; items: string[] }) {
         {items.slice(0, 8).map((item) => <li key={item}>{item}</li>)}
       </ul>
     </div>
+  );
+}
+
+function PromptsView({ api, sites, isAdmin, onChanged }: ViewProps & { sites: Site[]; isAdmin: boolean }) {
+  const [selectedSiteId, setSelectedSiteId] = React.useState(() => localStorage.getItem("workspace_site_id") || "");
+  const [promptTemplates, setPromptTemplates] = React.useState<PromptTemplate[]>([]);
+  const [basePrompt, setBasePrompt] = React.useState<PromptTemplate | null>(null);
+  const [promptsError, setPromptsError] = React.useState("");
+  const selectedSite = sites.find((site) => site.id === selectedSiteId) || null;
+
+  const loadPrompts = React.useCallback(async () => {
+    if (!selectedSiteId) return;
+    setPromptsError("");
+    const [nextPrompts, nextBasePrompt] = await Promise.all([
+      api<PromptTemplate[]>(`/sites/${selectedSiteId}/prompt-templates`),
+      api<PromptTemplate>("/prompt-templates/base")
+    ]);
+    setPromptTemplates(nextPrompts);
+    setBasePrompt(nextBasePrompt);
+  }, [api, selectedSiteId]);
+
+  React.useEffect(() => {
+    if (sites.length && (!selectedSiteId || !sites.some((site) => site.id === selectedSiteId))) {
+      setSelectedSiteId(sites[0].id);
+    }
+  }, [selectedSiteId, sites]);
+
+  React.useEffect(() => {
+    if (!selectedSiteId) return;
+    localStorage.setItem("workspace_site_id", selectedSiteId);
+    setPromptTemplates([]);
+    setBasePrompt(null);
+    loadPrompts().catch((error: unknown) => setPromptsError(error instanceof Error ? error.message : "Не удалось загрузить промпты"));
+  }, [loadPrompts, selectedSiteId]);
+
+  async function refreshPrompts() {
+    await loadPrompts();
+    await onChanged();
+  }
+
+  if (!sites.length) {
+    return <EmptyState text="Сначала добавьте сайт в разделе Сайты." />;
+  }
+
+  return (
+    <section className="viewStack">
+      <DataPanel title="Проект для промптов">
+        <div className="projectHeader">
+          <label>
+            Проект
+            <select value={selectedSiteId} onChange={(event) => setSelectedSiteId(event.target.value)}>
+              {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
+            </select>
+          </label>
+          <div className="projectMeta">
+            <strong>{selectedSite?.base_url || "..."}</strong>
+            <span>{selectedSite ? humanPayloadMode(selectedSite.payload_mode) : ""}</span>
+          </div>
+          <button className="button secondary" type="button" onClick={() => refreshPrompts()}><RefreshCcw size={18} /> Обновить промпты</button>
+        </div>
+        {promptsError ? <div className="notice">{promptsError}</div> : null}
+      </DataPanel>
+
+      {selectedSite ? (
+        <ProjectPromptsPanel
+          key={selectedSite.id}
+          api={api}
+          site={selectedSite}
+          promptTemplates={promptTemplates}
+          basePrompt={basePrompt}
+          isAdmin={isAdmin}
+          onChanged={refreshPrompts}
+        />
+      ) : null}
+    </section>
   );
 }
 
@@ -3798,7 +3871,6 @@ function viewTitle(view: AppView, workspaceTab: WorkspaceTab) {
     const tabTitles: Record<WorkspaceTab, string> = {
       overview: "Рабочий экран: обзор",
       topics: "Рабочий экран: темы",
-      prompts: "Рабочий экран: промпты",
       content: "Рабочий экран: контент",
       publication: "Рабочий экран: публикация",
       menu: "Рабочий экран: меню"
@@ -3808,6 +3880,7 @@ function viewTitle(view: AppView, workspaceTab: WorkspaceTab) {
 
   const titles: Record<Exclude<AppView, "workspace">, string> = {
     dashboard: "Dashboard",
+    prompts: "Промпты",
     tasks: "Задачи генерации",
     taskArchive: "Архив задач",
     content: "Контент",
