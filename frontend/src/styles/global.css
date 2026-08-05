@@ -917,6 +917,13 @@ td {
   white-space: nowrap;
 }
 
+.taskRowCollapseHint {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 @keyframes taskRowSpin {
   to {
     transform: rotate(360deg);
@@ -932,6 +939,17 @@ td {
   display: grid;
   gap: 14px;
   padding: 16px;
+}
+
+.taskAccordionControls {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.taskAccordionCollapseButton {
+  margin-left: auto;
 }
 
 .accordionSummary {

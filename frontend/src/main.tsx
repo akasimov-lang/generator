@@ -9,6 +9,7 @@ import {
   CalendarClock,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   CheckCircle2,
   Copy,
   Database,
@@ -2824,6 +2825,7 @@ function AdminTasksAccordion({
                       {loading ? <LoaderCircle className="taskRowSpinner" size={17} /> : expanded ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
                       <strong>{task.title}</strong>
                       {loading ? <span className="taskRowLoadingText">Загружаем темы…</span> : null}
+                      {expanded && !loading ? <span className="taskRowCollapseHint">Нажмите строку, чтобы свернуть</span> : null}
                     </span>
                   </td>
                   <td data-label="Гео">{countryLabel(task.geo)}</td>
@@ -2852,6 +2854,19 @@ function AdminTasksAccordion({
                         <EmptyState text="Загружаю детали задачи." />
                       ) : expandedTask ? (
                         <div className="taskAccordionBody">
+                          <div className="taskAccordionControls">
+                            <strong>Темы задачи</strong>
+                            <button
+                              className="button compact taskAccordionCollapseButton"
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                onToggle(task);
+                              }}
+                            >
+                              <ChevronUp size={16} /> Свернуть задачу
+                            </button>
+                          </div>
                           <div className="accordionSummary">
                             <InfoMetric label="Название темы/задачи" value={expandedTask.title} />
                             <TaskQueriesMetric total={totalQueries} groups={taskQueryGroups} busy={actionId === "bulk:regenerate-queries"} onGenerate={handleGenerateQueries} />
