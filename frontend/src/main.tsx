@@ -4051,7 +4051,7 @@ function ContentPreviewModal({ item, promptName, actions, onClose }: { item: Con
           {actions}
         </div>
       </div>
-      <pre className="contentPreviewText modalContentText">{contentItemPreviewText(item)}</pre>
+      <ContentPreviewBody item={item} />
     </Modal>
   );
 }
@@ -4188,32 +4188,71 @@ function contentItemTitle(item: ContentItem) {
   return item.topic;
 }
 
-function contentItemPreviewText(item: ContentItem) {
+function previewPlainText(value: unknown) {
+  return String(value ?? "").replace(/<[^>]+>/g, "").trim();
+}
+
+function ContentPreviewBody({ item }: { item: ContentItem }) {
   const pages = item.generated_json.pages;
   if (!Array.isArray(pages) || !pages[0] || typeof pages[0] !== "object") {
-    return JSON.stringify(item.generated_json, null, 2);
+    return <pre className="contentPreviewText modalContentText">{JSON.stringify(item.generated_json, null, 2)}</pre>;
   }
   const page = pages[0] as { description?: unknown; content?: { blocks?: Array<Record<string, unknown>> } };
-  const lines: string[] = [];
-  if (page.description) lines.push(String(page.description));
-  for (const block of page.content?.blocks || []) {
-    const data = block.data as Record<string, unknown> | undefined;
-    if (block.type === "header" && data?.text) lines.push(`\n${String(data.text)}`);
-    if (block.type === "paragraph" && data?.text) lines.push(String(data.text));
-    if (block.type === "list" && Array.isArray(data?.items)) {
-      lines.push((data.items as unknown[]).map((itemText) => `- ${String(itemText)}`).join("\n"));
-    }
-    if (block.type === "table" && Array.isArray(data?.content)) {
-      lines.push((data.content as unknown[]).map((row) => Array.isArray(row) ? row.map(String).join(" | ") : String(row)).join("\n"));
-    }
-    if (block.type === "faq" && Array.isArray(data)) {
-      lines.push(data.map((entry) => {
-        const faq = entry as { question?: unknown; answer?: unknown };
-        return `Q: ${String(faq.question || "")}\nA: ${String(faq.answer || "")}`;
-      }).join("\n\n"));
-    }
-  }
-  return lines.join("\n\n").replace(/<[^>]+>/g, "").trim() || JSON.stringify(item.generated_json, null, 2);
+  const blocks = page.content?.blocks || [];
+
+  return (
+    <div className="contentPreviewBody modalContentText">
+      {page.description ? (
+        <section className="previewMetaDescription">
+          <span className="previewBlockLabel">META DESCRIPTION</span>
+          <p>{previewPlainText(page.description)}</p>
+        </section>
+      ) : null}
+      {blocks.map((block, blockIndex) => {
+        const data = block.data as Record<string, unknown> | unknown[] | undefined;
+        if (block.type === "header" && data && !Array.isArray(data)) {
+          const rawLevel = Number(data.level);
+          const level = Math.min(4, Math.max(1, Number.isFinite(rawLevel) ? rawLevel : 2)) as 1 | 2 | 3 | 4;
+          const HeadingTag = `h${level}` as "h1" | "h2" | "h3" | "h4";
+          return (
+            <section className={`previewHeading previewHeadingH${level}`} key={String(block.id || blockIndex)}>
+              <span className="previewBlockLabel">H{level}</span>
+              <HeadingTag>{previewPlainText(data.text)}</HeadingTag>
+            </section>
+          );
+        }
+        if (block.type === "paragraph" && data && !Array.isArray(data)) {
+          return <p className="previewParagraph" key={String(block.id || blockIndex)}>{previewPlainText(data.text)}</p>;
+        }
+        if (block.type === "list" && data && !Array.isArray(data) && Array.isArray(data.items)) {
+          const items = data.items as unknown[];
+          const ListTag = data.style === "ordered" ? "ol" : "ul";
+          return <ListTag className="previewList" key={String(block.id || blockIndex)}>{items.map((entry, entryIndex) => <li key={entryIndex}>{previewPlainText(entry)}</li>)}</ListTag>;
+        }
+        if (block.type === "table" && data && !Array.isArray(data) && Array.isArray(data.content)) {
+          return (
+            <div className="previewTableWrap" key={String(block.id || blockIndex)}>
+              <table className="previewTable"><tbody>{(data.content as unknown[]).map((row, rowIndex) => (
+                <tr key={rowIndex}>{(Array.isArray(row) ? row : [row]).map((cell, cellIndex) => <td key={cellIndex}>{previewPlainText(cell)}</td>)}</tr>
+              ))}</tbody></table>
+            </div>
+          );
+        }
+        if (block.type === "faq" && Array.isArray(data)) {
+          return (
+            <section className="previewFaq" key={String(block.id || blockIndex)}>
+              <span className="previewBlockLabel">FAQ</span>
+              {data.map((entry, entryIndex) => {
+                const faq = entry as { question?: unknown; answer?: unknown };
+                return <div key={entryIndex}><strong>{previewPlainText(faq.question)}</strong><p>{previewPlainText(faq.answer)}</p></div>;
+              })}
+            </section>
+          );
+        }
+        return null;
+      })}
+    </div>
+  );
 }
 
 function formatNumber(value: number) {

@@ -554,6 +554,117 @@ h2 {
   white-space: pre-wrap;
 }
 
+.contentPreviewBody {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.7;
+  max-height: 680px;
+  overflow: auto;
+  padding: 20px;
+}
+
+.previewMetaDescription {
+  background: var(--blue-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 24px;
+  padding: 14px 16px;
+}
+
+.previewMetaDescription p,
+.previewParagraph,
+.previewFaq p {
+  margin: 0;
+}
+
+.previewBlockLabel {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  margin-bottom: 8px;
+  padding: 5px 7px;
+}
+
+.previewHeading {
+  border-left: 3px solid var(--border);
+  margin: 28px 0 14px;
+  padding-left: 14px;
+}
+
+.previewHeading h1,
+.previewHeading h2,
+.previewHeading h3,
+.previewHeading h4 {
+  color: var(--text);
+  line-height: 1.3;
+  margin: 0;
+}
+
+.previewHeadingH1 {
+  border-left-color: var(--primary);
+}
+
+.previewHeadingH1 .previewBlockLabel {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.previewHeadingH1 h1 {
+  font-size: 28px;
+}
+
+.previewHeadingH2 h2 {
+  font-size: 22px;
+}
+
+.previewHeadingH3 h3 {
+  font-size: 18px;
+}
+
+.previewHeadingH4 h4 {
+  font-size: 16px;
+}
+
+.previewParagraph {
+  margin-bottom: 18px;
+}
+
+.previewList {
+  margin: 0 0 18px;
+  padding-left: 24px;
+}
+
+.previewTableWrap {
+  margin-bottom: 20px;
+  overflow-x: auto;
+}
+
+.previewTable td {
+  border: 1px solid var(--border);
+}
+
+.previewFaq {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+  padding-top: 20px;
+}
+
+.previewFaq div {
+  display: grid;
+  gap: 6px;
+}
+
 .competitorWorkflow {
   border-top: 1px solid var(--border);
   display: grid;
