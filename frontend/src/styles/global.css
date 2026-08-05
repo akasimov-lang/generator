@@ -566,6 +566,25 @@ h2 {
   padding: 20px;
 }
 
+.contentPreviewGeneration {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+}
+
+.contentPreviewGeneration .previewBlockLabel {
+  margin-bottom: 2px;
+  width: fit-content;
+}
+
+.contentPreviewGeneration .generationProgressCell,
+.contentPreviewGeneration .generationProgress {
+  width: 100%;
+}
+
 .previewMetaDescription {
   background: var(--blue-soft);
   border: 1px solid var(--border);

@@ -865,6 +865,27 @@ function DashboardView({ api, dashboard, tasks, content, sites, onChanged }: Vie
     });
   }, [content]);
 
+  React.useEffect(() => {
+    if (!selectedPreview || !ACTIVE_GENERATION_STATUSES.includes(selectedPreview.status)) return;
+    let cancelled = false;
+    const contentId = selectedPreview.id;
+    const pollGeneration = async () => {
+      try {
+        const updated = await api<ContentItem>(`/content/${contentId}`);
+        if (cancelled) return;
+        setSelectedPreview(updated);
+        if (!ACTIVE_GENERATION_STATUSES.includes(updated.status)) await onChanged();
+      } catch (error) {
+        if (!cancelled) setReviewError(error instanceof Error ? error.message : "Не удалось обновить прогресс генерации.");
+      }
+    };
+    const intervalId = window.setInterval(pollGeneration, 1500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [api, onChanged, selectedPreview?.id, selectedPreview?.status]);
+
   function toggleReviewSelected(id: string) {
     setSelectedReviewIds((current) => current.includes(id) ? current.filter((itemId) => itemId !== id) : [...current, id]);
   }
@@ -4067,6 +4088,10 @@ function ContentPreviewModal({ item, promptName, actions, onClose }: { item: Con
           <StatusBadge status={item.status} />
           {actions}
         </div>
+      </div>
+      <div className="contentPreviewGeneration">
+        <span className="previewBlockLabel">ПРОГРЕСС ГЕНЕРАЦИИ</span>
+        <GenerationProgressCell item={item} />
       </div>
       <ContentPreviewBody item={item} />
     </Modal>
