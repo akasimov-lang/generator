@@ -5,12 +5,17 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import Base
 from app.services import (
+    COMPETITOR_RESULTS_PER_QUERY,
     build_dataforseo_user_data_url,
     generate_competitor_search_queries,
     normalize_slug,
     parse_dataforseo_credentials,
     regenerate_competitor_queries,
 )
+
+
+def test_competitor_collection_uses_first_six_google_results() -> None:
+    assert COMPETITOR_RESULTS_PER_QUERY == 6
 
 
 def test_dataforseo_credentials_parse_login_password_pair() -> None:

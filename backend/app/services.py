@@ -27,7 +27,7 @@ DATAFORSEO_DEFAULT_ENDPOINT = "https://api.dataforseo.com/v3"
 DATAFORSEO_USER_DATA_PATH = "/appendix/user_data"
 DATAFORSEO_SERP_PATH = "/serp/google/organic/live/advanced"
 COMPETITOR_QUERY_LIMIT = 3
-COMPETITOR_RESULTS_PER_QUERY = 5
+COMPETITOR_RESULTS_PER_QUERY = 6
 MAX_COMPETITOR_PAGE_CHARS = 1_200_000
 MAX_COMPETITOR_TEXT_CHARS = 60_000
 DATAFORSEO_LOCATION_NAMES = {
@@ -454,6 +454,9 @@ def clear_competitor_research(db: Session, item: models.ContentItem) -> None:
         db.delete(page)
     for result in db.scalars(select(models.CompetitorResult).where(models.CompetitorResult.id.in_(result_ids))).all():
         db.delete(result)
+    # Results reference their source queries, so persist their deletion before
+    # deleting the queries themselves (PostgreSQL enforces this foreign key).
+    db.flush()
     for query in db.scalars(select(models.CompetitorQuery).where(models.CompetitorQuery.id.in_(query_ids))).all():
         db.delete(query)
     item.competitor_brief = None
@@ -1323,9 +1326,7 @@ async def collect_competitor_serp_for_item(db: Session, item: models.ContentItem
         db.flush()
         payload = await call_dataforseo_google_serp(provider, query.query, task.geo, task.language)
         added_for_query = 0
-        for serp_item in extract_organic_serp_items(payload):
-            if added_for_query >= COMPETITOR_RESULTS_PER_QUERY:
-                break
+        for serp_item in extract_organic_serp_items(payload)[:COMPETITOR_RESULTS_PER_QUERY]:
             url = serp_item["url"]
             if is_own_domain(url, site):
                 continue
