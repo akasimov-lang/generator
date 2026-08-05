@@ -4059,12 +4059,15 @@ function ResponsiveTable({ columns, rows, rowClassNames, wrapperClassName = "" }
   );
 }
 
-function Modal({ title, children, onClose, wide }: { title: string; children: React.ReactNode; onClose: () => void; wide?: boolean }) {
+function Modal({ title, subtitle, children, onClose, wide, className = "" }: { title: string; subtitle?: string; children: React.ReactNode; onClose: () => void; wide?: boolean; className?: string }) {
   return (
     <div className="modalOverlay" role="dialog" aria-modal="true" aria-labelledby="modal-title" onMouseDown={onClose}>
-      <div className={`modalDialog ${wide ? "wide" : ""}`} onMouseDown={(event) => event.stopPropagation()}>
+      <div className={`modalDialog ${wide ? "wide" : ""} ${className}`.trim()} onMouseDown={(event) => event.stopPropagation()}>
         <div className="modalHeader">
-          <h2 id="modal-title">{title}</h2>
+          <div className="modalTitleGroup">
+            <h2 id="modal-title">{title}</h2>
+            {subtitle ? <small>{subtitle}</small> : null}
+          </div>
           <button className="iconButton" type="button" onClick={onClose} aria-label="Закрыть окно"><X size={18} /></button>
         </div>
         {children}
@@ -4074,41 +4077,33 @@ function Modal({ title, children, onClose, wide }: { title: string; children: Re
 }
 
 function ContentPreviewModal({ item, promptName, actions, onClose }: { item: ContentItem; promptName?: string | null; actions?: React.ReactNode; onClose: () => void }) {
-  const previewTitle = contentItemTitle(item);
   const previewDescription = contentItemDescription(item);
   return (
-    <Modal title={`Просмотр текста: ${item.topic}`} onClose={onClose} wide>
+    <Modal title={`Просмотр текста: ${item.topic}`} subtitle="Название темы используется как Title страницы" onClose={onClose} wide className="contentPreviewModal">
       <div className="contentPreviewHeader">
         <div className="contentPreviewInfo">
-          <div className="previewSlugField">
-            <span className="previewBlockLabel">SLUG · АДРЕС СТРАНИЦЫ</span>
-            <code>{item.slug}</code>
+          <div className="contentPreviewMetaLine">
+            <span>URL: <code>{item.slug}</code></span>
+            <PromptBadge name={item.generation_prompt_name || promptName} />
+            {item.competitor_brief ? <span className="researchBadge">На основе анализа конкурентов</span> : null}
+            <span>Сгенерировано: {item.generated_at ? formatDate(item.generated_at) : "-"}</span>
           </div>
-          <div className="previewSeoFields">
-            <div className="previewSeoField">
-              <span className="previewBlockLabel">TITLE · SEO-ЗАГОЛОВОК СТРАНИЦЫ</span>
-              <strong>{previewTitle}</strong>
-            </div>
-            <div className="previewSeoField">
-              <span className="previewBlockLabel">META DESCRIPTION · ОПИСАНИЕ ДЛЯ ПОИСКОВОЙ ВЫДАЧИ</span>
-              <p>{previewDescription || "Не заполнен"}</p>
-            </div>
+          <div className="previewDescriptionCompact">
+            <strong>Meta Description</strong>
+            <span>{previewDescription || "Не заполнен"}</span>
           </div>
-          <PromptBadge name={item.generation_prompt_name || promptName} />
-          {item.competitor_brief ? <span className="researchBadge">На основе анализа конкурентов</span> : null}
-          <span>Дата генерации: {item.generated_at ? formatDate(item.generated_at) : "-"}</span>
         </div>
-        <div className="userActions">
+        <div className="userActions contentPreviewActions">
           <StatusBadge status={item.status} />
           {actions}
         </div>
       </div>
       <div className="contentPreviewGeneration">
-        <span className="previewBlockLabel">ПРОГРЕСС ГЕНЕРАЦИИ</span>
+        <span className="previewGenerationLabel">Генерация</span>
         <GenerationProgressCell item={item} />
       </div>
       <div className="previewStructureLegend">
-        Служебные метки TITLE, META DESCRIPTION и H1–H4 показаны только для проверки структуры. Они не добавляются в опубликованный текст.
+        Метки H1–H4 показаны только для проверки структуры и не добавляются в опубликованный текст.
       </div>
       <ContentPreviewBody item={item} />
     </Modal>
