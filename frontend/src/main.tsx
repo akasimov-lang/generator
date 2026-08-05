@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { createPortal } from "react-dom";
+import { LANGUAGE_OPTIONS, type LanguageOption } from "./languageOptions";
 import {
   Activity,
   AlertTriangle,
@@ -322,7 +323,7 @@ const MAIN_VIEW_PATHS: Record<Exclude<AppView, "workspace">, string> = {
 
 const WORKSPACE_TAB_PATHS: Record<WorkspaceTab, string> = {
   overview: "/project-overview",
-  topics: "/project-topics",
+  topics: "/project-tasks",
   content: "/project-content",
   publication: "/project-publication",
   menu: "/project-menu"
@@ -332,6 +333,12 @@ function routeFromPath(pathname: string): AppRoute {
   const path = pathname.replace(/\/+$/, "") || "/";
   if (path === "/project-prompts") {
     return { view: "prompts", workspaceTab: DEFAULT_WORKSPACE_TAB };
+  }
+  if (path === "/project-topics") {
+    return { view: "workspace", workspaceTab: "topics" };
+  }
+  if (path === "/tasks") {
+    return { view: "workspace", workspaceTab: "topics" };
   }
   const workspaceEntry = Object.entries(WORKSPACE_TAB_PATHS).find(([, routePath]) => routePath === path);
   if (workspaceEntry) {
@@ -503,18 +510,6 @@ const COUNTRY_CODES = [
   "TO", "TT", "TN", "TR", "TM", "TC", "TV", "UG", "UA", "AE", "GB", "US", "UM", "UY", "UZ", "VU",
   "VE", "VN", "VG", "VI", "WF", "EH", "YE", "ZM", "ZW"
 ] as const;
-
-const LANGUAGE_OPTIONS = [
-  { code: "de", name: "Deutsch", flag: "🇩🇪" },
-  { code: "en", name: "English", flag: "🇬🇧" },
-  { code: "ru", name: "Русский", flag: "🇷🇺" },
-  { code: "es", name: "Español", flag: "🇪🇸" },
-  { code: "fr", name: "Français", flag: "🇫🇷" },
-  { code: "it", name: "Italiano", flag: "🇮🇹" },
-  { code: "pl", name: "Polski", flag: "🇵🇱" },
-  { code: "pt", name: "Português", flag: "🇵🇹" },
-  { code: "nl", name: "Nederlands", flag: "🇳🇱" }
-];
 
 const regionNames = new Intl.DisplayNames(["ru"], { type: "region" });
 const COUNTRIES = COUNTRY_CODES.map((code) => ({
@@ -714,7 +709,6 @@ function App() {
               <NavButton href={pathForRoute("dashboard")} icon={<LayoutDashboard />} label="Dashboard" active={activeView === "dashboard"} onClick={() => navigateTo("dashboard")} />
               <NavButton href={pathForRoute("workspace", DEFAULT_WORKSPACE_TAB)} icon={<FolderKanban />} label="Рабочий экран" active={activeView === "workspace"} onClick={() => navigateTo("workspace", DEFAULT_WORKSPACE_TAB)} />
               <NavButton href={pathForRoute("prompts")} icon={<Edit3 />} label="Промпты" active={activeView === "prompts"} onClick={() => navigateTo("prompts")} />
-              <NavButton href={pathForRoute("tasks")} icon={<ListChecks />} label="Задачи" active={activeView === "tasks"} onClick={() => navigateTo("tasks")} />
               <NavButton href={pathForRoute("taskArchive")} icon={<Archive />} label="Архив" active={activeView === "taskArchive"} onClick={() => navigateTo("taskArchive")} />
               <NavButton href={pathForRoute("content")} icon={<FileText />} label="Контент" active={activeView === "content"} onClick={() => navigateTo("content")} />
               <NavButton href={pathForRoute("publications")} icon={<Send />} label="Публикации" active={activeView === "publications"} onClick={() => navigateTo("publications")} />
@@ -1247,7 +1241,7 @@ function ProjectWorkspaceView({
         </div>
         <div className="workspaceTabs">
           <TabButton href={pathForRoute("workspace", "overview")} label="Обзор" active={activeTab === "overview"} onClick={() => onTabChange("overview")} />
-          <TabButton href={pathForRoute("workspace", "topics")} label="Темы" active={activeTab === "topics"} onClick={() => onTabChange("topics")} />
+          <TabButton href={pathForRoute("workspace", "topics")} label="Задачи" active={activeTab === "topics"} onClick={() => onTabChange("topics")} />
           <TabButton href={pathForRoute("workspace", "content")} label="Контент" active={activeTab === "content"} onClick={() => onTabChange("content")} />
           <TabButton href={pathForRoute("workspace", "publication")} label="Публикация" active={activeTab === "publication"} onClick={() => onTabChange("publication")} />
           <TabButton href={pathForRoute("workspace", "menu")} label="Меню" active={activeTab === "menu"} onClick={() => onTabChange("menu")} />
@@ -1259,7 +1253,17 @@ function ProjectWorkspaceView({
         <ProjectOverviewPanel key={selectedSite.id} overview={overview} content={siteContent} sections={sections} logs={logs} />
       ) : null}
       {selectedSite && activeTab === "topics" ? (
-        <ProjectTopicsPanel key={selectedSite.id} api={api} site={selectedSite} providers={providers} sections={sections} promptTemplates={promptTemplates} tasks={siteTasks} onChanged={refreshProject} />
+        <TasksView
+          key={selectedSite.id}
+          api={api}
+          sites={[selectedSite]}
+          providers={providers}
+          tasks={siteTasks}
+          fixedSite={selectedSite}
+          sections={sections}
+          promptTemplates={promptTemplates}
+          onChanged={refreshProject}
+        />
       ) : null}
       {selectedSite && activeTab === "content" ? (
         <ProjectContentPanel key={selectedSite.id} api={api} content={siteContent} sections={sections} onChanged={refreshProject} />
@@ -1485,7 +1489,7 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
             <SearchableSelect
               value={language}
               onChange={setLanguage}
-              options={LANGUAGE_OPTIONS.map((option) => ({ value: option.code, label: `${option.flag} ${option.name} (${option.code.toUpperCase()})` }))}
+              options={LANGUAGE_OPTIONS.map((option) => ({ value: option.code, label: `${option.flag} ${option.nativeName} (${option.code.toUpperCase()})`, keywords: option.name }))}
               searchPlaceholder="Введите язык или код"
             />
           </label>
@@ -2295,12 +2299,31 @@ function ProjectMenuPanel({ api, site, sections, onChanged }: ViewProps & { site
   );
 }
 
-function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { sites: Site[]; providers: AiProvider[]; tasks: Task[] }) {
+function TasksView({
+  api,
+  sites,
+  providers,
+  tasks,
+  fixedSite,
+  sections = [],
+  promptTemplates = [],
+  onChanged
+}: ViewProps & {
+  sites: Site[];
+  providers: AiProvider[];
+  tasks: Task[];
+  fixedSite?: Site;
+  sections?: Section[];
+  promptTemplates?: PromptTemplate[];
+}) {
   const [geo, setGeo] = React.useState("DE");
   const [language, setLanguage] = React.useState("en");
   const [topics, setTopics] = React.useState("");
-  const [siteId, setSiteId] = React.useState("");
+  const [siteId, setSiteId] = React.useState(fixedSite?.id || "");
   const [providerId, setProviderId] = React.useState("");
+  const [sectionId, setSectionId] = React.useState("");
+  const [promptTemplateId, setPromptTemplateId] = React.useState("");
+  const [targetWords, setTargetWords] = React.useState(DEFAULT_TARGET_WORDS);
   const [payloadMode, setPayloadMode] = React.useState("site_default");
   const [shortcode, setShortcode] = React.useState("");
   const [includeToc, setIncludeToc] = React.useState(true);
@@ -2324,6 +2347,15 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
   const automaticTaskTitle = selectedSite
     ? `${selectedSite.name} · ${cleanTopics.length} тем · ${language.toUpperCase()}-${geo.toUpperCase()}`
     : "Выберите проект — название сформируется автоматически";
+  const selectedPrompt = promptTemplates.find((prompt) => prompt.id === promptTemplateId)
+    || promptTemplates.find((prompt) => prompt.is_default)
+    || promptTemplates[0];
+
+  React.useEffect(() => {
+    if (fixedSite && siteId !== fixedSite.id) {
+      setSiteId(fixedSite.id);
+    }
+  }, [fixedSite, siteId]);
 
   React.useEffect(() => {
     const generationProviders = providers.filter(isGenerationProvider);
@@ -2332,6 +2364,12 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
       setProviderId(geminiProvider?.id || "");
     }
   }, [providerId, providers]);
+
+  React.useEffect(() => {
+    if (!promptTemplateId && promptTemplates.length) {
+      setPromptTemplateId((promptTemplates.find((prompt) => prompt.is_default) || promptTemplates[0]).id);
+    }
+  }, [promptTemplateId, promptTemplates]);
 
   React.useEffect(() => {
     if (!expandedTaskId || (!hasResearchInProgress && !hasGenerationInProgress)) return;
@@ -2372,8 +2410,12 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
       geo,
       language,
       site_id: siteId || null,
+      section_id: sectionId || null,
       ai_provider_id: providerId || null,
       payload_mode: payloadMode,
+      target_words: targetWords || null,
+      prompt_template_name: selectedPrompt?.name || null,
+      prompt_template: selectedPrompt?.content || null,
       shortcode: shortcode.trim() || null,
       include_toc: includeToc,
       include_faq: includeFaq,
@@ -2663,13 +2705,17 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
         </button>
         {createFormExpanded ? <form id="create-generation-task-form" className="formGrid createTaskForm" onSubmit={createTask}>
           <label>
-            Выберите проект
-            <SearchableSelect
-              value={siteId}
-              onChange={setSiteId}
-              options={[{ value: "", label: "Проект не выбран" }, ...sites.map((site) => ({ value: site.id, label: site.name }))]}
-              searchPlaceholder="Введите название проекта"
-            />
+            {fixedSite ? "Проект" : "Выберите проект"}
+            {fixedSite ? (
+              <input value={fixedSite.name} readOnly aria-readonly="true" />
+            ) : (
+              <SearchableSelect
+                value={siteId}
+                onChange={setSiteId}
+                options={[{ value: "", label: "Проект не выбран" }, ...sites.map((site) => ({ value: site.id, label: site.name }))]}
+                searchPlaceholder="Введите название проекта"
+              />
+            )}
           </label>
           <label>
             Гео
@@ -2690,7 +2736,7 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
             <SearchableSelect
               value={language}
               onChange={setLanguage}
-              options={LANGUAGE_OPTIONS.map((option) => ({ value: option.code, label: `${option.flag} ${option.name} (${option.code.toUpperCase()})` }))}
+              options={LANGUAGE_OPTIONS.map((option) => ({ value: option.code, label: `${option.flag} ${option.nativeName} (${option.code.toUpperCase()})`, keywords: option.name }))}
               searchPlaceholder="Введите язык или код"
             />
           </label>
@@ -2703,6 +2749,32 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
               searchPlaceholder="Найти AI Provider"
             />
           </label>
+          <label>
+            Количество слов
+            <input value={targetWords} onChange={(event) => setTargetWords(Number(event.target.value))} type="number" min={300} max={8000} step={100} required />
+          </label>
+          {promptTemplates.length ? (
+            <label>
+              Промпт генерации
+              <SearchableSelect
+                value={promptTemplateId}
+                onChange={setPromptTemplateId}
+                options={promptTemplates.map((prompt) => ({ value: prompt.id, label: `${prompt.is_default ? "Default · " : ""}${prompt.name}` }))}
+                searchPlaceholder="Найти промпт"
+              />
+            </label>
+          ) : null}
+          {sections.length ? (
+            <label>
+              Пункт меню
+              <SearchableSelect
+                value={sectionId}
+                onChange={setSectionId}
+                options={[{ value: "", label: "Выбрать позже" }, ...sections.map((section) => ({ value: section.id, label: `${section.name} · ${section.path}` }))]}
+                searchPlaceholder="Найти пункт меню"
+              />
+            </label>
+          ) : null}
           <label>
             Формат payload
             <select value={payloadMode} onChange={(event) => setPayloadMode(event.target.value)}>
@@ -4102,6 +4174,7 @@ function KpiCard({ icon, label, value, danger, onClick, active }: { icon: React.
 type SearchableSelectOption = {
   value: string;
   label: string;
+  keywords?: string;
 };
 
 function SearchableSelect({
@@ -4130,7 +4203,7 @@ function SearchableSelect({
   const selected = options.find((option) => option.value === value);
   const normalizedQuery = query.trim().toLocaleLowerCase("ru-RU");
   const filteredOptions = normalizedQuery
-    ? options.filter((option) => `${option.label} ${option.value}`.toLocaleLowerCase("ru-RU").includes(normalizedQuery))
+    ? options.filter((option) => `${option.label} ${option.value} ${option.keywords || ""}`.toLocaleLowerCase("ru-RU").includes(normalizedQuery))
     : options;
 
   const updateDropdownPosition = React.useCallback(() => {
@@ -4396,7 +4469,7 @@ function viewTitle(view: AppView, workspaceTab: WorkspaceTab) {
   if (view === "workspace") {
     const tabTitles: Record<WorkspaceTab, string> = {
       overview: "Рабочий экран: обзор",
-      topics: "Рабочий экран: темы",
+      topics: "Рабочий экран: задачи",
       content: "Рабочий экран: контент",
       publication: "Рабочий экран: публикация",
       menu: "Рабочий экран: меню"
@@ -4451,9 +4524,9 @@ function countryLabel(code: string) {
   return country ? `${country.flag} ${country.code}` : code;
 }
 
-function languageLabel(code: string) {
-  const language = LANGUAGE_OPTIONS.find((item) => item.code === code.toLowerCase());
-  return language ? `${language.flag} ${language.code.toUpperCase()}` : code;
+function languageLabel(code: string, languages: LanguageOption[] = LANGUAGE_OPTIONS) {
+  const language = languages.find((item) => item.code === code.toLowerCase());
+  return language ? `${language.flag} ${language.code.toUpperCase()}` : code.toUpperCase();
 }
 
 function contentItemTitle(item: ContentItem) {
