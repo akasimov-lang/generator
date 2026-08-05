@@ -23,6 +23,7 @@ def upgrade() -> None:
     )
     op.execute("ALTER TABLE content_items ADD COLUMN IF NOT EXISTS competitor_research_progress INTEGER DEFAULT 0 NOT NULL")
     op.execute("ALTER TABLE content_items ADD COLUMN IF NOT EXISTS competitor_research_error TEXT")
+    op.execute("UPDATE content_items SET competitor_research_progress = 100 WHERE competitor_brief IS NOT NULL")
 
 
 def downgrade() -> None:

@@ -35,7 +35,7 @@ def collect_competitor_research_job(content_item_id: str) -> dict:
         item = db.get(models.ContentItem, content_item_id)
         if item:
             item.competitor_research_status = "research_failed"
-            item.competitor_research_error = str(exc)[:500]
+            item.competitor_research_error = f"{type(exc).__name__}: {exc}"[:500]
             db.commit()
         raise
     finally:

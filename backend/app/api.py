@@ -138,7 +138,7 @@ def _competitor_research_response(db: Session, item: models.ContentItem) -> dict
     return {
         "content_item_id": item.id,
         "status": item.competitor_research_status,
-        "progress": item.competitor_research_progress,
+        "progress": 100 if item.competitor_brief or item.competitor_research_status == "brief_ready" else item.competitor_research_progress,
         "error": item.competitor_research_error,
         "brief": item.competitor_brief,
         "queries": queries,

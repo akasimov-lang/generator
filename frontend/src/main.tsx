@@ -279,6 +279,7 @@ type AppRoute = {
 };
 
 const API_BASE = "/api";
+const ACTIVE_RESEARCH_STATUSES = ["queued", "collecting_serp", "serp_collected", "serp_empty", "fetching_pages", "pages_fetched"];
 const DEFAULT_WORKSPACE_TAB: WorkspaceTab = "overview";
 const DEFAULT_ROUTE: AppRoute = { view: "dashboard", workspaceTab: DEFAULT_WORKSPACE_TAB };
 
@@ -1950,7 +1951,7 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
   const [queryDraft, setQueryDraft] = React.useState("");
   const [promptModalTask, setPromptModalTask] = React.useState<Task | null>(null);
   const [previewItem, setPreviewItem] = React.useState<ContentItem | null>(null);
-  const hasResearchInProgress = expandedResearch.some((entry) => ["queued", "collecting_serp", "fetching_pages"].includes(entry.status));
+  const hasResearchInProgress = expandedResearch.some((entry) => ACTIVE_RESEARCH_STATUSES.includes(entry.status));
 
   React.useEffect(() => {
     const generationProviders = providers.filter(isGenerationProvider);
@@ -1972,7 +1973,7 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
         if (cancelled) return;
         setExpandedDetails(details);
         setExpandedResearch(research);
-        if (!research.some((entry) => ["queued", "collecting_serp", "fetching_pages"].includes(entry.status))) {
+        if (!research.some((entry) => ACTIVE_RESEARCH_STATUSES.includes(entry.status))) {
           await onChanged();
         }
       } catch (pollError) {

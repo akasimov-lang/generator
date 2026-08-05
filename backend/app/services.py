@@ -1259,7 +1259,14 @@ async def call_dataforseo_google_serp(provider: models.AiProvider, keyword: str,
         }
     ]
     async with httpx.AsyncClient(timeout=45) as client:
-        response = await client.post(endpoint, json=body, auth=(login, password), headers={"Content-Type": "application/json"})
+        for attempt in range(3):
+            try:
+                response = await client.post(endpoint, json=body, auth=(login, password), headers={"Content-Type": "application/json"})
+                break
+            except httpx.TransportError as exc:
+                if attempt == 2:
+                    raise ValueError(f"DataForSEO request failed after 3 attempts: {type(exc).__name__}") from exc
+                await asyncio.sleep(attempt + 1)
     try:
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:
