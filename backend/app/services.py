@@ -2112,6 +2112,32 @@ def schedule_campaign(db: Session, payload: PublicationCampaignCreate) -> models
     return campaign
 
 
+def approve_and_schedule_item(db: Session, item: models.ContentItem) -> models.PublicationCampaign:
+    if item.status not in {"generated", "rejected", "approved"}:
+        raise ValueError(f"Content in status '{item.status}' cannot be sent to publication")
+    if not item.site_id:
+        raise ValueError("Select a project before publication")
+    if not item.section_id:
+        raise ValueError("Select a menu item before publication")
+    section = db.get(models.Section, item.section_id)
+    if not section or section.site_id != item.site_id:
+        raise ValueError("Menu item does not belong to the content site")
+    validate_content_for_publication(item)
+    item.status = "approved"
+    db.flush()
+    return schedule_campaign(
+        db,
+        PublicationCampaignCreate(
+            name=f"Dashboard · {item.topic}"[:180],
+            site_id=item.site_id,
+            content_item_ids=[item.id],
+            start_at=datetime.now(timezone.utc),
+            interval_minutes=1440,
+            items_per_run=1,
+        ),
+    )
+
+
 def update_campaign_status(db: Session, campaign: models.PublicationCampaign, action: str) -> models.PublicationCampaign:
     items = db.scalars(
         select(models.ContentItem)

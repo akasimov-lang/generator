@@ -10,6 +10,7 @@ from app import models
 from app.db import Base
 from app.schemas import PublicationCampaignCreate
 from app.services import (
+    approve_and_schedule_item,
     publish_item,
     schedule_campaign,
     update_campaign_status,
@@ -109,6 +110,22 @@ def test_campaign_pause_resume_and_stop_updates_queued_content(db: Session) -> N
     assert campaign.status == "stopped"
     assert item.status == "approved"
     assert item.scheduled_at is None
+
+
+def test_approve_and_schedule_item_creates_immediate_campaign(db: Session) -> None:
+    site, item = make_content(db, status="generated")
+    section = models.Section(site_id=site.id, external_id="news", name="News", path="/news/")
+    db.add(section)
+    db.flush()
+    item.section_id = section.id
+    db.commit()
+
+    campaign = approve_and_schedule_item(db, item)
+
+    assert campaign.status == "active"
+    assert item.status == "scheduled"
+    assert item.publication_campaign_id == campaign.id
+    assert item.scheduled_at is not None
 
 
 def test_invalid_payload_is_not_sent_by_publication_worker(db: Session) -> None:

@@ -41,6 +41,7 @@ from app.schemas import (
 from app.security import AdminUser, AuthUser, create_token, hash_password, verify_password
 from app.services import (
     BASE_PROMPT_TEMPLATE_NAME,
+    approve_and_schedule_item,
     build_competitor_brief_for_item,
     collect_competitor_serp_for_item,
     count_words,
@@ -836,6 +837,18 @@ def approve_content(content_id: str, _: AuthUser, db: Session = Depends(get_db))
     db.commit()
     db.refresh(item)
     return item
+
+
+@router.post("/content/{content_id}/publish-now", response_model=PublicationCampaignResponse)
+def publish_content_now(content_id: str, _: AdminUser, db: Session = Depends(get_db)) -> Any:
+    item = db.get(models.ContentItem, content_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Content item not found")
+    try:
+        return approve_and_schedule_item(db, item)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/content/{content_id}/reject", response_model=ContentItemResponse)

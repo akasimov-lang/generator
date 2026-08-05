@@ -366,12 +366,32 @@ h2 {
 }
 
 .kpiCard {
+  color: var(--text);
+  font: inherit;
+  text-align: left;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 16px;
   min-height: 126px;
   box-shadow: var(--shadow);
+}
+
+.kpiCard.interactive {
+  cursor: pointer;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.kpiCard.interactive:hover,
+.kpiCard.interactive:focus-visible,
+.kpiCard.interactive.active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft), var(--shadow);
+  outline: none;
+}
+
+.kpiCard.interactive:active {
+  transform: translateY(1px);
 }
 
 .kpiCard span {
@@ -1592,6 +1612,10 @@ textarea:focus {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.dashboardReviewActions {
+  min-width: 420px;
 }
 
 a {

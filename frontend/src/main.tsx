@@ -771,7 +771,7 @@ function App() {
 
         {activeView === "workspace" && <ProjectWorkspaceView api={api} sites={sites} providers={providers} activeTab={workspaceTab} onTabChange={(tab) => navigateTo("workspace", tab)} onChanged={loadAll} />}
         {activeView === "prompts" && <PromptsView api={api} sites={sites} isAdmin={isAdmin} onChanged={loadAll} />}
-        {isAdmin && activeView === "dashboard" && dashboard && <DashboardView dashboard={dashboard} tasks={tasks} content={content} />}
+        {isAdmin && activeView === "dashboard" && dashboard && <DashboardView api={api} dashboard={dashboard} tasks={tasks} content={content} sites={sites} onChanged={loadAll} />}
         {isAdmin && activeView === "tasks" && <TasksView api={api} sites={sites} providers={providers} tasks={tasks} onChanged={loadAll} />}
         {isAdmin && activeView === "taskArchive" && <TaskArchiveView api={api} tasks={archivedTasks} onChanged={loadAll} />}
         {isAdmin && activeView === "content" && <ContentView api={api} sites={sites} content={content} onChanged={loadAll} />}
@@ -842,17 +842,131 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
   );
 }
 
-function DashboardView({ dashboard, tasks, content }: { dashboard: Dashboard; tasks: Task[]; content: ContentItem[] }) {
+function DashboardView({ api, dashboard, tasks, content, sites, onChanged }: ViewProps & { dashboard: Dashboard; tasks: Task[]; content: ContentItem[]; sites: Site[] }) {
+  const [reviewExpanded, setReviewExpanded] = React.useState(false);
+  const [selectedPreview, setSelectedPreview] = React.useState<ContentItem | null>(null);
+  const [actionId, setActionId] = React.useState("");
+  const [reviewError, setReviewError] = React.useState("");
+  const [sectionsBySite, setSectionsBySite] = React.useState<Record<string, Section[]>>({});
+  const awaitingItems = content.filter((item) => item.status === "generated");
+
+  async function toggleReview() {
+    const nextExpanded = !reviewExpanded;
+    setReviewExpanded(nextExpanded);
+    setReviewError("");
+    if (!nextExpanded) return;
+    const siteIds = Array.from(new Set(awaitingItems.map((item) => item.site_id).filter((siteId): siteId is string => Boolean(siteId))));
+    const missingSiteIds = siteIds.filter((siteId) => !sectionsBySite[siteId]);
+    if (!missingSiteIds.length) return;
+    try {
+      const loaded = await Promise.all(missingSiteIds.map(async (siteId) => [siteId, await api<Section[]>(`/sites/${siteId}/sections`)] as const));
+      setSectionsBySite((current) => ({ ...current, ...Object.fromEntries(loaded) }));
+    } catch (error) {
+      setReviewError(error instanceof Error ? error.message : "Не удалось загрузить пункты меню.");
+    }
+  }
+
+  async function selectSection(item: ContentItem, sectionId: string) {
+    setActionId(`${item.id}:section`);
+    setReviewError("");
+    try {
+      await api(`/content/${item.id}`, { method: "PATCH", body: JSON.stringify({ section_id: sectionId || null }) });
+      await onChanged();
+    } catch (error) {
+      setReviewError(error instanceof Error ? error.message : "Не удалось выбрать раздел.");
+    } finally {
+      setActionId("");
+    }
+  }
+
+  async function approveItem(item: ContentItem) {
+    setActionId(`${item.id}:approve`);
+    setReviewError("");
+    try {
+      await api(`/content/${item.id}/approve`, { method: "POST" });
+      setSelectedPreview((current) => current?.id === item.id ? null : current);
+      await onChanged();
+    } catch (error) {
+      setReviewError(error instanceof Error ? error.message : "Не удалось согласовать текст.");
+    } finally {
+      setActionId("");
+    }
+  }
+
+  async function deleteItem(item: ContentItem) {
+    if (!window.confirm(`Удалить сгенерированный контент по теме "${item.topic}"?`)) return;
+    setActionId(`${item.id}:delete`);
+    setReviewError("");
+    try {
+      await api(`/content/${item.id}`, { method: "DELETE" });
+      setSelectedPreview((current) => current?.id === item.id ? null : current);
+      await onChanged();
+    } catch (error) {
+      setReviewError(error instanceof Error ? error.message : "Не удалось удалить текст.");
+    } finally {
+      setActionId("");
+    }
+  }
+
+  async function sendToPublication(item: ContentItem) {
+    if (!item.site_id || !item.section_id) {
+      setReviewError("Перед публикацией выберите проект и раздел.");
+      return;
+    }
+    setActionId(`${item.id}:publish`);
+    setReviewError("");
+    try {
+      await api(`/content/${item.id}/publish-now`, { method: "POST" });
+      setSelectedPreview((current) => current?.id === item.id ? null : current);
+      await onChanged();
+    } catch (error) {
+      setReviewError(error instanceof Error ? error.message : "Не удалось отправить текст в публикацию.");
+    } finally {
+      setActionId("");
+    }
+  }
+
   return (
     <section className="viewStack">
       <div className="kpiGrid">
         <KpiCard icon={<Database />} label="Всего задач" value={dashboard.stats.total_tasks} />
         <KpiCard icon={<CheckCircle2 />} label="Сгенерировано" value={dashboard.stats.generated} />
-        <KpiCard icon={<FileText />} label="Ждет approve" value={dashboard.stats.awaiting_approve} />
+        <KpiCard icon={<FileText />} label="Ждет approve" value={dashboard.stats.awaiting_approve} onClick={toggleReview} active={reviewExpanded} />
         <KpiCard icon={<Send />} label="В очереди" value={dashboard.stats.scheduled} />
         <KpiCard icon={<Activity />} label="Опубликовано" value={dashboard.stats.published} />
         <KpiCard icon={<AlertTriangle />} label="Ошибки" value={dashboard.stats.errors} danger />
       </div>
+      {reviewExpanded ? (
+        <DataPanel title={`Тексты на согласование · ${awaitingItems.length}`}>
+          <ResponsiveTable
+            columns={["Тема", "Проект", "Раздел", "Слова", "Статус", "Действия"]}
+            rows={awaitingItems.map((item) => {
+              const itemBusy = actionId.startsWith(item.id);
+              const sections = item.site_id ? sectionsBySite[item.site_id] || [] : [];
+              const publicationReady = Boolean(item.site_id && item.section_id);
+              return [
+                <TopicMetaCell item={item} />,
+                sites.find((site) => site.id === item.site_id)?.name || "Не назначен",
+                item.site_id ? (
+                  <select value={item.section_id || ""} onChange={(event) => selectSection(item, event.target.value)} disabled={itemBusy} aria-label={`Раздел для ${item.topic}`}>
+                    <option value="">Выберите раздел</option>
+                    {sections.map((section) => <option key={section.id} value={section.id}>{section.name} · {section.path}</option>)}
+                  </select>
+                ) : "Сначала назначьте проект",
+                item.word_count,
+                <StatusBadge status={item.status} />,
+                <div className="userActions dashboardReviewActions">
+                  <button className="button compact" type="button" onClick={() => setSelectedPreview(item)} disabled={itemBusy}><Eye size={15} /> Просмотр</button>
+                  <button className="button compact danger" type="button" onClick={() => deleteItem(item)} disabled={itemBusy}><Trash2 size={15} /> Удалить</button>
+                  <button className="button compact approve" type="button" onClick={() => approveItem(item)} disabled={itemBusy || !publicationReady} title={publicationReady ? undefined : "Сначала выберите раздел"}><CheckCircle2 size={15} /> Согласовать</button>
+                  <button className="button compact primary" type="button" onClick={() => sendToPublication(item)} disabled={itemBusy || !publicationReady} title={publicationReady ? "Согласовать и поставить в очередь публикации" : "Сначала выберите раздел"}><Send size={15} /> В публикацию</button>
+                </div>
+              ];
+            })}
+          />
+          {reviewError ? <span className="formError">{reviewError}</span> : null}
+        </DataPanel>
+      ) : null}
       <div className="gridTwo">
         <DataPanel title="Активные задачи">
           <ResponsiveTable
@@ -880,6 +994,20 @@ function DashboardView({ dashboard, tasks, content }: { dashboard: Dashboard; ta
           <EmptyState text="Ошибок пока нет." />
         )}
       </DataPanel>
+      {selectedPreview ? (
+        <ContentPreviewModal
+          item={selectedPreview}
+          promptName={selectedPreview.generation_prompt_name}
+          onClose={() => setSelectedPreview(null)}
+          actions={
+            <>
+              <button className="button compact danger" type="button" onClick={() => deleteItem(selectedPreview)} disabled={actionId.startsWith(selectedPreview.id)}><Trash2 size={15} /> Удалить</button>
+              <button className="button compact approve" type="button" onClick={() => approveItem(selectedPreview)} disabled={actionId.startsWith(selectedPreview.id) || !selectedPreview.section_id}><CheckCircle2 size={15} /> Согласовать</button>
+              <button className="button compact primary" type="button" onClick={() => sendToPublication(selectedPreview)} disabled={actionId.startsWith(selectedPreview.id) || !selectedPreview.site_id || !selectedPreview.section_id}><Send size={15} /> В публикацию</button>
+            </>
+          }
+        />
+      ) : null}
     </section>
   );
 }
@@ -3751,8 +3879,12 @@ function TabButton({ href, label, active, onClick }: { href: string; label: stri
   );
 }
 
-function KpiCard({ icon, label, value, danger }: { icon: React.ReactNode; label: string; value: number; danger?: boolean }) {
-  return <div className={`kpiCard ${danger ? "danger" : ""}`}><div className="kpiIcon">{icon}</div><span>{label}</span><strong>{value}</strong></div>;
+function KpiCard({ icon, label, value, danger, onClick, active }: { icon: React.ReactNode; label: string; value: number; danger?: boolean; onClick?: () => void; active?: boolean }) {
+  const className = `kpiCard ${danger ? "danger" : ""} ${onClick ? "interactive" : ""} ${active ? "active" : ""}`.trim();
+  const content = <><div className="kpiIcon">{icon}</div><span>{label}</span><strong>{value}</strong></>;
+  return onClick
+    ? <button className={className} type="button" onClick={onClick} aria-expanded={active}>{content}</button>
+    : <div className={className}>{content}</div>;
 }
 
 function DataPanel({ title, children }: { title: string; children: React.ReactNode }) {
