@@ -949,6 +949,20 @@ function DashboardView({ api, dashboard, tasks, content, sites, onChanged }: Vie
     }
   }
 
+  async function regenerateReviewItem(item: ContentItem) {
+    setActionId(`${item.id}:generate`);
+    setReviewError("");
+    try {
+      const updated = await api<ContentItem>(`/content/${item.id}/generate`, { method: "POST" });
+      setSelectedPreview(updated);
+      await onChanged();
+    } catch (error) {
+      setReviewError(error instanceof Error ? error.message : "Не удалось запустить повторную генерацию.");
+    } finally {
+      setActionId("");
+    }
+  }
+
   async function bulkApproveReviewItems() {
     if (!selectedReadyItems.length) return;
     setActionId("bulk:approve");
@@ -1096,6 +1110,9 @@ function DashboardView({ api, dashboard, tasks, content, sites, onChanged }: Vie
           onClose={() => setSelectedPreview(null)}
           actions={
             <>
+              <button className="button compact" type="button" onClick={() => regenerateReviewItem(selectedPreview)} disabled={actionId.startsWith(selectedPreview.id) || ACTIVE_GENERATION_STATUSES.includes(selectedPreview.status)} title={selectedPreview.competitor_brief ? "Текст будет создан заново с сохранённым анализом конкурентов" : "Текст будет создан заново без анализа конкурентов"}>
+                <RefreshCcw size={15} /> {actionId === `${selectedPreview.id}:generate` ? "Запускаю…" : "Сгенерировать заново"}
+              </button>
               <button className="button compact danger" type="button" onClick={() => deleteItem(selectedPreview)} disabled={actionId.startsWith(selectedPreview.id)}><Trash2 size={15} /> Удалить</button>
               <button className="button compact approve" type="button" onClick={() => approveItem(selectedPreview)} disabled={actionId.startsWith(selectedPreview.id) || !selectedPreview.section_id}><CheckCircle2 size={15} /> Согласовать</button>
               <button className="button compact primary" type="button" onClick={() => sendToPublication(selectedPreview)} disabled={actionId.startsWith(selectedPreview.id) || !selectedPreview.site_id || !selectedPreview.section_id}><Send size={15} /> В публикацию</button>
