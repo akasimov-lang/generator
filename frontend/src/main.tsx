@@ -2542,7 +2542,6 @@ function AdminTasksAccordion({
                             columns={["Выбор", "Тема", "Запросы", "Загружена", "Генерация", "Конкуренты", "Статус", "Действия"]}
                             rows={expandedItems.map((item) => {
                               const itemResearch = researchByItem.get(item.id);
-                              const competitorState = competitorStatusLabel(item, itemResearch);
                               const busy = actionId.startsWith(item.id) || bulkBusy;
                               const deleteDisabled = isPublicationLocked(item);
                               return [
@@ -2557,7 +2556,7 @@ function AdminTasksAccordion({
                                 />,
                                 formatDate(item.created_at),
                                 item.generated_at ? formatDate(item.generated_at) : "-",
-                                competitorState,
+                                <CompetitorCell item={item} research={itemResearch} />,
                                 <StatusBadge status={item.status} />,
                                 <div className="userActions">
                                   <button className="button compact" type="button" onClick={() => onCollectCompetitors(item)} disabled={busy} title="Собрать SERP, спарсить страницы и подготовить brief для генерации.">
@@ -2636,6 +2635,31 @@ function competitorStatusLabel(item: ContentItem, research?: CompetitorResearch)
   if ((research?.results.length || 0) > 0) return "URL собраны";
   if ((research?.queries.length || 0) > 0 || item.competitor_research_status === "queries_ready") return "Есть запросы";
   return "Нет";
+}
+
+function CompetitorCell({ item, research }: { item: ContentItem; research?: CompetitorResearch }) {
+  const competitors = Array.from(
+    new Map((research?.results || []).map((result) => [result.normalized_url || result.url, result])).values()
+  );
+  return (
+    <div className="queryCell competitorCell" tabIndex={0} aria-label="Показать список собранных конкурентов">
+      <span className="queryCount">{competitors.length}</span>
+      <span className="cellHint">{competitorStatusLabel(item, research)}</span>
+      <div className="queryTooltip competitorTooltip" role="tooltip">
+        <strong>Собранные конкуренты</strong>
+        {competitors.length ? (
+          <ol>
+            {competitors.map((competitor) => (
+              <li key={competitor.id}>
+                <b>{competitor.title || competitor.url}</b>
+                <small>{competitor.url}</small>
+              </li>
+            ))}
+          </ol>
+        ) : <span>Конкуренты по этой теме ещё не собраны.</span>}
+      </div>
+    </div>
+  );
 }
 
 function QueryCell({

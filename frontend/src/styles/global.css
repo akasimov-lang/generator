@@ -1213,6 +1213,34 @@ td {
   margin-top: 2px;
 }
 
+.competitorCell {
+  min-width: 135px;
+}
+
+.competitorTooltip {
+  max-height: 420px;
+  max-width: min(520px, 76vw);
+  overflow: auto;
+  top: 30px;
+  width: max-content;
+}
+
+.competitorTooltip li {
+  overflow-wrap: anywhere;
+}
+
+.competitorTooltip li b,
+.competitorTooltip li small {
+  display: block;
+  max-width: 460px;
+}
+
+.competitorTooltip li small {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
 .cellHint {
   color: var(--muted);
   display: -webkit-box;

@@ -47,10 +47,24 @@ def test_competitor_query_generation_uses_only_words_from_topic() -> None:
     assert queries == [
         "beste online casinos deutschland 2026",
         "deutschland 2026 legale anbieter vergleich",
-        "beste online casinos deutschland",
+        "online casinos deutschland 2026 legale",
     ]
     assert all(set(query.split()).issubset(topic_words) for query in queries)
     assert all(3 <= len(query.split()) <= 5 for query in queries)
+
+
+def test_competitor_queries_are_unique_across_topics() -> None:
+    first = generate_competitor_search_queries(
+        "Beste Online Casinos in Deutschland 2026: Legale Anbieter im Vergleich",
+        geo="DE",
+        language="de",
+    )
+    second_topic = "Legale Online Casinos in Deutschland: Anbieter mit GGL-Lizenz"
+    second = generate_competitor_search_queries(second_topic, geo="DE", language="de", excluded_queries=set(first))
+    second_topic_words = {"legale", "online", "casinos", "in", "deutschland", "anbieter", "mit", "ggl-lizenz"}
+
+    assert set(first).isdisjoint(second)
+    assert all(set(query.split()).issubset(second_topic_words) for query in second)
 
 
 def test_normalize_slug_uses_first_five_topic_words() -> None:

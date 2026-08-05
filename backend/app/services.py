@@ -323,7 +323,7 @@ def is_own_domain(url: str, site: models.Site | None) -> bool:
     return url_host == site_host or url_host.endswith(f".{site_host}")
 
 
-def generate_competitor_search_queries(topic: str, geo: str, language: str) -> list[str]:
+def generate_competitor_search_queries(topic: str, geo: str, language: str, excluded_queries: set[str] | None = None) -> list[str]:
     del geo, language
     text = re.sub(r"[/|:()\\[\\],.!?]+", " ", topic.lower())
     tokens = re.findall(r"[\wäöüßáàâçéèêíìîñóòôúùû-]+", text, flags=re.IGNORECASE)
@@ -357,11 +357,26 @@ def generate_competitor_search_queries(topic: str, geo: str, language: str) -> l
     candidates: list[str] = []
     for size in (5, 4, 3):
         if len(source_words) >= size:
-            candidates.append(" ".join(source_words[:size]))
-            candidates.append(" ".join(source_words[-size:]))
+            last_start = len(source_words) - size
+            starts = [0, last_start, *range(1, last_start)]
+            for start in starts:
+                candidates.append(" ".join(source_words[start : start + size]))
     if not candidates:
         candidates.append(" ".join(source_words[:5]))
-    return compact_lines(candidates, COMPETITOR_QUERY_LIMIT)
+    excluded = {clean_text(query.lower()) for query in (excluded_queries or set())}
+    available = [query for query in compact_lines(candidates) if clean_text(query.lower()) not in excluded]
+    return available[:COMPETITOR_QUERY_LIMIT]
+
+
+def task_competitor_queries(db: Session, item: models.ContentItem) -> set[str]:
+    return set(
+        db.scalars(
+            select(models.CompetitorQuery.query)
+            .join(models.ContentItem, models.ContentItem.id == models.CompetitorQuery.content_item_id)
+            .where(models.ContentItem.task_id == item.task_id)
+            .where(models.ContentItem.id != item.id)
+        ).all()
+    )
 
 
 def ensure_competitor_queries(db: Session, item: models.ContentItem, geo: str, language: str) -> list[models.CompetitorQuery]:
@@ -373,7 +388,7 @@ def ensure_competitor_queries(db: Session, item: models.ContentItem, geo: str, l
     if existing:
         return existing
 
-    queries = generate_competitor_search_queries(item.topic, geo, language)
+    queries = generate_competitor_search_queries(item.topic, geo, language, task_competitor_queries(db, item))
     for index, query in enumerate(queries, start=1):
         db.add(
             models.CompetitorQuery(
@@ -394,7 +409,7 @@ def ensure_competitor_queries(db: Session, item: models.ContentItem, geo: str, l
 
 def regenerate_competitor_queries(db: Session, item: models.ContentItem, geo: str, language: str) -> list[models.CompetitorQuery]:
     clear_competitor_research(db, item)
-    queries = generate_competitor_search_queries(item.topic, geo, language)
+    queries = generate_competitor_search_queries(item.topic, geo, language, task_competitor_queries(db, item))
     for index, query in enumerate(queries, start=1):
         db.add(
             models.CompetitorQuery(
