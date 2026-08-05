@@ -7,7 +7,7 @@ from sqlalchemy import select
 from app import models
 from app.core.config import get_settings
 from app.db import SessionLocal
-from app.services import publish_item, refresh_campaign_status
+from app.services import collect_competitor_research_for_item, publish_item, refresh_campaign_status
 
 settings = get_settings()
 
@@ -19,6 +19,27 @@ celery_app.conf.beat_schedule = {
         "schedule": 60.0,
     }
 }
+
+
+@celery_app.task(name="app.worker.collect_competitor_research")
+def collect_competitor_research_job(content_item_id: str) -> dict:
+    db = SessionLocal()
+    try:
+        item = db.get(models.ContentItem, content_item_id)
+        if not item:
+            return {"status": "missing", "content_item_id": content_item_id}
+        asyncio.run(collect_competitor_research_for_item(db, item))
+        return {"status": "complete", "content_item_id": content_item_id}
+    except Exception as exc:
+        db.rollback()
+        item = db.get(models.ContentItem, content_item_id)
+        if item:
+            item.competitor_research_status = "research_failed"
+            item.competitor_research_error = str(exc)[:500]
+            db.commit()
+        raise
+    finally:
+        db.close()
 
 
 @celery_app.task(name="app.worker.publish_due_items")

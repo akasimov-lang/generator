@@ -399,6 +399,8 @@ def ensure_competitor_queries(db: Session, item: models.ContentItem, geo: str, l
             )
         )
     item.competitor_research_status = "queries_ready"
+    item.competitor_research_progress = 0
+    item.competitor_research_error = None
     db.flush()
     return db.scalars(
         select(models.CompetitorQuery)
@@ -420,6 +422,8 @@ def regenerate_competitor_queries(db: Session, item: models.ContentItem, geo: st
             )
         )
     item.competitor_research_status = "queries_ready"
+    item.competitor_research_progress = 0
+    item.competitor_research_error = None
     db.flush()
     return db.scalars(
         select(models.CompetitorQuery)
@@ -443,6 +447,8 @@ def replace_competitor_queries(db: Session, item: models.ContentItem, queries: l
             )
         )
     item.competitor_research_status = "queries_ready"
+    item.competitor_research_progress = 0
+    item.competitor_research_error = None
     db.flush()
 
 
@@ -461,6 +467,8 @@ def clear_competitor_research(db: Session, item: models.ContentItem) -> None:
         db.delete(query)
     item.competitor_brief = None
     item.competitor_brief_text = None
+    item.competitor_research_progress = 0
+    item.competitor_research_error = None
     db.flush()
 
 
@@ -1311,6 +1319,11 @@ async def collect_competitor_serp_for_item(db: Session, item: models.ContentItem
     queries = ensure_competitor_queries(db, item, task.geo, task.language)
     provider = get_dataforseo_provider(db)
 
+    item.competitor_research_status = "collecting_serp"
+    item.competitor_research_progress = 5
+    item.competitor_research_error = None
+    db.commit()
+
     for page in db.scalars(select(models.CompetitorPage).where(models.CompetitorPage.content_item_id == item.id)).all():
         db.delete(page)
     for result in db.scalars(select(models.CompetitorResult).where(models.CompetitorResult.content_item_id == item.id)).all():
@@ -1321,9 +1334,9 @@ async def collect_competitor_serp_for_item(db: Session, item: models.ContentItem
 
     seen_urls: set[str] = set()
     total_results = 0
-    for query in queries:
+    for query_index, query in enumerate(queries, start=1):
         query.status = "collecting"
-        db.flush()
+        db.commit()
         payload = await call_dataforseo_google_serp(provider, query.query, task.geo, task.language)
         added_for_query = 0
         for serp_item in extract_organic_serp_items(payload)[:COMPETITOR_RESULTS_PER_QUERY]:
@@ -1352,6 +1365,8 @@ async def collect_competitor_serp_for_item(db: Session, item: models.ContentItem
             total_results += 1
         query.result_count = added_for_query
         query.status = "serp_collected"
+        item.competitor_research_progress = 5 + int(query_index / len(queries) * 30)
+        db.commit()
 
     item.competitor_research_status = "serp_collected" if total_results else "serp_empty"
     db.commit()
@@ -1368,6 +1383,10 @@ async def fetch_competitor_pages_for_item(db: Session, item: models.ContentItem)
     if not results:
         raise ValueError("No competitor URLs collected")
 
+    item.competitor_research_status = "fetching_pages"
+    item.competitor_research_progress = 35
+    db.commit()
+
     for page in db.scalars(select(models.CompetitorPage).where(models.CompetitorPage.content_item_id == item.id)).all():
         db.delete(page)
     db.flush()
@@ -1377,7 +1396,7 @@ async def fetch_competitor_pages_for_item(db: Session, item: models.ContentItem)
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
     async with httpx.AsyncClient(timeout=25, follow_redirects=True, headers=headers) as client:
-        for result in results:
+        for result_index, result in enumerate(results, start=1):
             page_data = {
                 "title": None,
                 "h1": None,
@@ -1424,8 +1443,11 @@ async def fetch_competitor_pages_for_item(db: Session, item: models.ContentItem)
                     fetched_at=datetime.now(timezone.utc),
                 )
             )
+            item.competitor_research_progress = 35 + int(result_index / len(results) * 55)
+            db.commit()
 
     item.competitor_research_status = "pages_fetched"
+    item.competitor_research_progress = 90
     db.commit()
     db.refresh(item)
     return item
@@ -1539,12 +1561,18 @@ def build_competitor_brief_for_item(db: Session, item: models.ContentItem) -> mo
     item.competitor_brief = brief
     item.competitor_brief_text = render_competitor_brief_for_prompt(brief)
     item.competitor_research_status = "brief_ready"
+    item.competitor_research_progress = 100
+    item.competitor_research_error = None
     db.commit()
     db.refresh(item)
     return item
 
 
 async def collect_competitor_research_for_item(db: Session, item: models.ContentItem) -> models.ContentItem:
+    item.competitor_research_status = "queued"
+    item.competitor_research_progress = 1
+    item.competitor_research_error = None
+    db.commit()
     await collect_competitor_serp_for_item(db, item)
     await fetch_competitor_pages_for_item(db, item)
     build_competitor_brief_for_item(db, item)
@@ -2109,7 +2137,9 @@ def refresh_campaign_status(db: Session, campaign_id: str | None) -> None:
 
 
 def get_dashboard(db: Session) -> dict:
-    total_tasks = db.scalar(select(func.count(models.GenerationTask.id))) or 0
+    total_tasks = db.scalar(
+        select(func.count(models.GenerationTask.id)).where(models.GenerationTask.archived_at.is_(None))
+    ) or 0
     generated = db.scalar(select(func.count(models.ContentItem.id)).where(models.ContentItem.status.in_(["generated", "approved", "scheduled", "published"]))) or 0
     awaiting_approve = db.scalar(select(func.count(models.ContentItem.id)).where(models.ContentItem.status == "generated")) or 0
     scheduled = db.scalar(select(func.count(models.ContentItem.id)).where(models.ContentItem.status == "scheduled")) or 0
@@ -2123,7 +2153,12 @@ def get_dashboard(db: Session) -> dict:
         .limit(1)
     ).first()
 
-    active_tasks = db.scalars(select(models.GenerationTask).order_by(models.GenerationTask.created_at.desc()).limit(6)).all()
+    active_tasks = db.scalars(
+        select(models.GenerationTask)
+        .where(models.GenerationTask.archived_at.is_(None))
+        .order_by(models.GenerationTask.created_at.desc())
+        .limit(6)
+    ).all()
     queue = db.scalars(
         select(models.ContentItem)
         .where(models.ContentItem.status.in_(["scheduled", "publishing"]))

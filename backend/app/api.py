@@ -42,7 +42,6 @@ from app.security import AdminUser, AuthUser, create_token, hash_password, verif
 from app.services import (
     BASE_PROMPT_TEMPLATE_NAME,
     build_competitor_brief_for_item,
-    collect_competitor_research_for_item,
     collect_competitor_serp_for_item,
     count_words,
     create_generation_task,
@@ -60,6 +59,7 @@ from app.services import (
     validate_content_for_publication,
     validate_ai_provider_key,
 )
+from app.worker import collect_competitor_research_job
 
 router = APIRouter()
 
@@ -138,6 +138,8 @@ def _competitor_research_response(db: Session, item: models.ContentItem) -> dict
     return {
         "content_item_id": item.id,
         "status": item.competitor_research_status,
+        "progress": item.competitor_research_progress,
+        "error": item.competitor_research_error,
         "brief": item.competitor_brief,
         "queries": queries,
         "results": results,
@@ -300,7 +302,10 @@ def get_site_overview(site_id: str, _: AuthUser, db: Session = Depends(get_db)) 
         .limit(8)
     ).all()
     section_count = db.scalar(select(func.count(models.Section.id)).where(models.Section.site_id == site_id)) or 0
-    task_count = db.scalar(select(func.count(models.GenerationTask.id)).where(models.GenerationTask.site_id == site_id)) or 0
+    task_count = db.scalar(
+        select(func.count(models.GenerationTask.id))
+        .where(models.GenerationTask.site_id == site_id, models.GenerationTask.archived_at.is_(None))
+    ) or 0
     error_count = db.scalar(
         select(func.count(models.PublicationLog.id))
         .join(models.ContentItem, models.ContentItem.id == models.PublicationLog.content_item_id)
@@ -451,7 +456,11 @@ def delete_prompt_template(prompt_id: str, _: AdminUser, db: Session = Depends(g
 @router.get("/sites/{site_id}/tasks", response_model=list[GenerationTaskResponse])
 def list_site_tasks(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     _get_site_or_404(db, site_id)
-    return db.scalars(select(models.GenerationTask).where(models.GenerationTask.site_id == site_id).order_by(models.GenerationTask.created_at.desc())).all()
+    return db.scalars(
+        select(models.GenerationTask)
+        .where(models.GenerationTask.site_id == site_id, models.GenerationTask.archived_at.is_(None))
+        .order_by(models.GenerationTask.created_at.desc())
+    ).all()
 
 
 @router.post("/sites/{site_id}/tasks", response_model=GenerationTaskResponse)
@@ -523,7 +532,20 @@ def list_site_campaigns(site_id: str, _: AuthUser, db: Session = Depends(get_db)
 
 @router.get("/tasks", response_model=list[GenerationTaskResponse])
 def list_tasks(_: AdminUser, db: Session = Depends(get_db)) -> Any:
-    return db.scalars(select(models.GenerationTask).order_by(models.GenerationTask.created_at.desc())).all()
+    return db.scalars(
+        select(models.GenerationTask)
+        .where(models.GenerationTask.archived_at.is_(None))
+        .order_by(models.GenerationTask.created_at.desc())
+    ).all()
+
+
+@router.get("/tasks-archive", response_model=list[GenerationTaskResponse])
+def list_archived_tasks(_: AdminUser, db: Session = Depends(get_db)) -> Any:
+    return db.scalars(
+        select(models.GenerationTask)
+        .where(models.GenerationTask.archived_at.is_not(None))
+        .order_by(models.GenerationTask.archived_at.desc())
+    ).all()
 
 
 @router.post("/tasks", response_model=GenerationTaskResponse)
@@ -532,18 +554,42 @@ def create_task(payload: GenerationTaskCreate, user: AdminUser, db: Session = De
     return create_generation_task(db, payload, created_by_user_id=user["id"])
 
 
-@router.get("/tasks/{task_id}", response_model=TaskDetailsResponse)
-def get_task(task_id: str, _: AuthUser, db: Session = Depends(get_db)) -> dict:
+@router.delete("/tasks/{task_id}")
+def archive_task(task_id: str, user: AdminUser, db: Session = Depends(get_db)) -> dict:
     task = db.get(models.GenerationTask, task_id)
     if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task.archived_at is None:
+        task.archived_at = datetime.now(timezone.utc)
+        task.archived_by_user_id = user["id"]
+        db.commit()
+    return {"status": "archived"}
+
+
+@router.post("/tasks/{task_id}/restore", response_model=GenerationTaskResponse)
+def restore_task(task_id: str, _: AdminUser, db: Session = Depends(get_db)) -> Any:
+    task = db.get(models.GenerationTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    task.archived_at = None
+    task.archived_by_user_id = None
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+@router.get("/tasks/{task_id}", response_model=TaskDetailsResponse)
+def get_task(task_id: str, user: AuthUser, db: Session = Depends(get_db)) -> dict:
+    task = db.get(models.GenerationTask, task_id)
+    if not task or (task.archived_at is not None and not user["is_admin"]):
         raise HTTPException(status_code=404, detail="Task not found")
     return {"task": task, "items": task.items}
 
 
 @router.get("/tasks/{task_id}/competitor-research", response_model=list[CompetitorResearchResponse])
-def get_task_competitor_research(task_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+def get_task_competitor_research(task_id: str, user: AuthUser, db: Session = Depends(get_db)) -> Any:
     task = db.get(models.GenerationTask, task_id)
-    if not task:
+    if not task or (task.archived_at is not None and not user["is_admin"]):
         raise HTTPException(status_code=404, detail="Task not found")
     return [_competitor_research_response(db, item) for item in task.items]
 
@@ -553,6 +599,8 @@ def generate_task(task_id: str, _: AuthUser, db: Session = Depends(get_db)) -> A
     task = db.get(models.GenerationTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    if task.archived_at is not None:
+        raise HTTPException(status_code=400, detail="Archived task must be restored before generation")
     try:
         return generate_task_items(db, task)
     except ValueError as exc:
@@ -620,12 +668,19 @@ def collect_content_competitors(content_id: str, _: AuthUser, db: Session = Depe
     item = db.get(models.ContentItem, content_id)
     if not item:
         raise HTTPException(status_code=404, detail="Content item not found")
+    if item.competitor_research_status in {"queued", "collecting_serp", "fetching_pages"}:
+        return _competitor_research_response(db, item)
+    item.competitor_research_status = "queued"
+    item.competitor_research_progress = 1
+    item.competitor_research_error = None
+    db.commit()
     try:
-        asyncio.run(collect_competitor_research_for_item(db, item))
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        collect_competitor_research_job.delay(item.id)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc)[:500]) from exc
+        item.competitor_research_status = "research_failed"
+        item.competitor_research_error = str(exc)[:500]
+        db.commit()
+        raise HTTPException(status_code=502, detail="Failed to queue competitor research") from exc
     db.refresh(item)
     return _competitor_research_response(db, item)
 

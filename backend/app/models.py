@@ -105,8 +105,10 @@ class GenerationTask(Base, TimestampMixin):
     prompt_template_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
     prompt_template: Mapped[str | None] = mapped_column(Text, nullable=True)
     collect_competitors: Mapped[bool] = mapped_column(Boolean, default=False)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    archived_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
-    created_by: Mapped[User | None] = relationship()
+    created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_user_id])
     items: Mapped[list["ContentItem"]] = relationship(back_populates="task", cascade="all, delete-orphan")
 
     @property
@@ -130,6 +132,8 @@ class ContentItem(Base, TimestampMixin):
     generation_prompt_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
     generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     competitor_research_status: Mapped[str] = mapped_column(String(40), default="not_requested")
+    competitor_research_progress: Mapped[int] = mapped_column(Integer, default=0)
+    competitor_research_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     competitor_brief: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     competitor_brief_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     idempotency_key: Mapped[str] = mapped_column(String(240), unique=True, nullable=False)

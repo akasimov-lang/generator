@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import {
   Activity,
   AlertTriangle,
+  Archive,
   BellRing,
   Bot,
   CalendarClock,
@@ -62,6 +63,8 @@ type Task = {
   target_words: number | null;
   status: string;
   collect_competitors: boolean;
+  archived_at: string | null;
+  archived_by_user_id: string | null;
   created_at: string;
   updated_at: string;
   prompt_template_name: string | null;
@@ -85,6 +88,8 @@ type ContentItem = {
   generation_prompt_name: string | null;
   generated_at: string | null;
   competitor_research_status: string;
+  competitor_research_progress: number;
+  competitor_research_error: string | null;
   competitor_brief: CompetitorBrief | null;
   created_at: string;
   updated_at: string;
@@ -146,6 +151,8 @@ type CompetitorPage = {
 type CompetitorResearch = {
   content_item_id: string;
   status: string;
+  progress: number;
+  error: string | null;
   brief: CompetitorBrief | null;
   queries: CompetitorQuery[];
   results: CompetitorResult[];
@@ -263,7 +270,7 @@ type PublicationCampaign = {
 };
 
 type ThemeMode = "light" | "dark";
-type AppView = "dashboard" | "workspace" | "tasks" | "content" | "publications" | "providers" | "sites" | "settings";
+type AppView = "dashboard" | "workspace" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "settings";
 type WorkspaceTab = "overview" | "topics" | "prompts" | "content" | "publication" | "menu";
 
 type AppRoute = {
@@ -296,6 +303,7 @@ async function copyTextToClipboard(text: string) {
 const MAIN_VIEW_PATHS: Record<Exclude<AppView, "workspace">, string> = {
   dashboard: "/dashboard",
   tasks: "/tasks",
+  taskArchive: "/task-archive",
   content: "/content",
   publications: "/publications",
   providers: "/ai-providers",
@@ -512,6 +520,7 @@ function App() {
   const [workspaceTab, setWorkspaceTab] = React.useState<WorkspaceTab>(initialRoute.workspaceTab);
   const [dashboard, setDashboard] = React.useState<Dashboard | null>(null);
   const [tasks, setTasks] = React.useState<Task[]>([]);
+  const [archivedTasks, setArchivedTasks] = React.useState<Task[]>([]);
   const [content, setContent] = React.useState<ContentItem[]>([]);
   const [sites, setSites] = React.useState<Site[]>([]);
   const [providers, setProviders] = React.useState<AiProvider[]>([]);
@@ -548,6 +557,7 @@ function App() {
         setToken("");
         setCurrentUser(null);
         setUsers([]);
+        setArchivedTasks([]);
         throw new Error("Нужно войти заново");
       }
       if (!response.ok) {
@@ -566,17 +576,19 @@ function App() {
       api<Site[]>("/sites"),
       api<AiProvider[]>("/ai-providers")
     ]);
-    const [nextDashboard, nextTasks, nextContent] = nextUser.is_admin
+    const [nextDashboard, nextTasks, nextArchivedTasks, nextContent] = nextUser.is_admin
       ? await Promise.all([
         api<Dashboard>("/dashboard"),
         api<Task[]>("/tasks"),
+        api<Task[]>("/tasks-archive"),
         api<ContentItem[]>("/content")
       ])
-      : [null, [], []] as [Dashboard | null, Task[], ContentItem[]];
+      : [null, [], [], []] as [Dashboard | null, Task[], Task[], ContentItem[]];
     const nextUsers = nextUser.is_admin ? await api<User[]>("/users") : [];
     setCurrentUser(nextUser);
     setDashboard(nextDashboard);
     setTasks(nextTasks);
+    setArchivedTasks(nextArchivedTasks);
     setContent(nextContent);
     setSites(nextSites);
     setProviders(nextProviders);
@@ -691,6 +703,7 @@ function App() {
               <NavButton href={pathForRoute("dashboard")} icon={<LayoutDashboard />} label="Dashboard" active={activeView === "dashboard"} onClick={() => navigateTo("dashboard")} />
               <NavButton href={pathForRoute("workspace", DEFAULT_WORKSPACE_TAB)} icon={<FolderKanban />} label="Рабочий экран" active={activeView === "workspace"} onClick={() => navigateTo("workspace", DEFAULT_WORKSPACE_TAB)} />
               <NavButton href={pathForRoute("tasks")} icon={<ListChecks />} label="Задачи" active={activeView === "tasks"} onClick={() => navigateTo("tasks")} />
+              <NavButton href={pathForRoute("taskArchive")} icon={<Archive />} label="Архив" active={activeView === "taskArchive"} onClick={() => navigateTo("taskArchive")} />
               <NavButton href={pathForRoute("content")} icon={<FileText />} label="Контент" active={activeView === "content"} onClick={() => navigateTo("content")} />
               <NavButton href={pathForRoute("publications")} icon={<Send />} label="Публикации" active={activeView === "publications"} onClick={() => navigateTo("publications")} />
               <NavButton href={pathForRoute("providers")} icon={<Bot />} label="API Providers" active={activeView === "providers"} onClick={() => navigateTo("providers")} />
@@ -734,6 +747,7 @@ function App() {
                 setToken("");
                 setCurrentUser(null);
                 setUsers([]);
+                setArchivedTasks([]);
               }}
               title="Выйти"
             >
@@ -747,6 +761,7 @@ function App() {
         {activeView === "workspace" && <ProjectWorkspaceView api={api} sites={sites} providers={providers} isAdmin={isAdmin} activeTab={workspaceTab} onTabChange={(tab) => navigateTo("workspace", tab)} onChanged={loadAll} />}
         {isAdmin && activeView === "dashboard" && dashboard && <DashboardView dashboard={dashboard} tasks={tasks} content={content} />}
         {isAdmin && activeView === "tasks" && <TasksView api={api} sites={sites} providers={providers} tasks={tasks} onChanged={loadAll} />}
+        {isAdmin && activeView === "taskArchive" && <TaskArchiveView api={api} tasks={archivedTasks} onChanged={loadAll} />}
         {isAdmin && activeView === "content" && <ContentView api={api} sites={sites} content={content} onChanged={loadAll} />}
         {isAdmin && activeView === "publications" && <PublicationsView api={api} sites={sites} content={content} onChanged={loadAll} />}
         {isAdmin && activeView === "providers" && <ProvidersView api={api} providers={providers} onChanged={loadAll} />}
@@ -1935,6 +1950,7 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
   const [queryDraft, setQueryDraft] = React.useState("");
   const [promptModalTask, setPromptModalTask] = React.useState<Task | null>(null);
   const [previewItem, setPreviewItem] = React.useState<ContentItem | null>(null);
+  const hasResearchInProgress = expandedResearch.some((entry) => ["queued", "collecting_serp", "fetching_pages"].includes(entry.status));
 
   React.useEffect(() => {
     const generationProviders = providers.filter(isGenerationProvider);
@@ -1943,6 +1959,32 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
       setProviderId(geminiProvider?.id || "");
     }
   }, [providerId, providers]);
+
+  React.useEffect(() => {
+    if (!expandedTaskId || !hasResearchInProgress) return;
+    let cancelled = false;
+    const pollResearch = async () => {
+      try {
+        const [details, research] = await Promise.all([
+          api<TaskDetails>(`/tasks/${expandedTaskId}`),
+          api<CompetitorResearch[]>(`/tasks/${expandedTaskId}/competitor-research`)
+        ]);
+        if (cancelled) return;
+        setExpandedDetails(details);
+        setExpandedResearch(research);
+        if (!research.some((entry) => ["queued", "collecting_serp", "fetching_pages"].includes(entry.status))) {
+          await onChanged();
+        }
+      } catch (pollError) {
+        if (!cancelled) setTaskError(pollError instanceof Error ? pollError.message : "Не удалось обновить прогресс сбора конкурентов.");
+      }
+    };
+    const intervalId = window.setInterval(pollResearch, 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [api, expandedTaskId, hasResearchInProgress, onChanged]);
 
   async function createTask(event: React.FormEvent) {
     event.preventDefault();
@@ -2001,6 +2043,26 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
     if (!expandedTaskId) return;
     await loadTaskDetails(expandedTaskId);
     await onChanged();
+  }
+
+  async function archiveTask(task: Task) {
+    const confirmed = window.confirm(`Удалить задачу "${task.title}"? Она будет перемещена в архив и её можно будет восстановить.`);
+    if (!confirmed) return;
+    setTaskError("");
+    setTaskActionId(`${task.id}:archive`);
+    try {
+      await api(`/tasks/${task.id}`, { method: "DELETE" });
+      if (expandedTaskId === task.id) {
+        setExpandedTaskId("");
+        setExpandedDetails(null);
+        setExpandedResearch([]);
+      }
+      await onChanged();
+    } catch (error) {
+      setTaskError(error instanceof Error ? error.message : "Не удалось переместить задачу в архив.");
+    } finally {
+      setTaskActionId("");
+    }
   }
 
   async function openQueryEditor(item: ContentItem) {
@@ -2276,6 +2338,7 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
           loadingId={detailsLoadingId}
           actionId={taskActionId}
           onToggle={toggleTask}
+          onArchive={archiveTask}
           onEditQueries={openQueryEditor}
           onRegenerateQueries={regenerateCompetitorQueries}
           onCollectCompetitors={collectItemCompetitors}
@@ -2326,6 +2389,48 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
   );
 }
 
+function TaskArchiveView({ api, tasks, onChanged }: ViewProps & { tasks: Task[] }) {
+  const [actionId, setActionId] = React.useState("");
+  const [error, setError] = React.useState("");
+
+  async function restoreTask(task: Task) {
+    setError("");
+    setActionId(task.id);
+    try {
+      await api(`/tasks/${task.id}/restore`, { method: "POST" });
+      await onChanged();
+    } catch (restoreError) {
+      setError(restoreError instanceof Error ? restoreError.message : "Не удалось восстановить задачу.");
+    } finally {
+      setActionId("");
+    }
+  }
+
+  return (
+    <section className="viewStack">
+      <DataPanel title="Архив задач">
+        {tasks.length ? (
+          <ResponsiveTable
+            columns={["Задача", "Гео", "Язык", "Тем", "Создана", "Перемещена в архив", "Действия"]}
+            rows={tasks.map((task) => [
+              <strong>{task.title}</strong>,
+              countryLabel(task.geo),
+              languageLabel(task.language),
+              task.topics_count,
+              formatDate(task.created_at),
+              task.archived_at ? formatDate(task.archived_at) : "-",
+              <button className="button compact" type="button" onClick={() => restoreTask(task)} disabled={actionId === task.id}>
+                <RefreshCcw size={15} /> {actionId === task.id ? "Восстанавливаю" : "Восстановить"}
+              </button>
+            ])}
+          />
+        ) : <EmptyState text="В архиве пока нет задач." />}
+        {error ? <span className="formError">{error}</span> : null}
+      </DataPanel>
+    </section>
+  );
+}
+
 function AdminTasksAccordion({
   tasks,
   expandedTaskId,
@@ -2334,6 +2439,7 @@ function AdminTasksAccordion({
   loadingId,
   actionId,
   onToggle,
+  onArchive,
   onEditQueries,
   onRegenerateQueries,
   onCollectCompetitors,
@@ -2354,6 +2460,7 @@ function AdminTasksAccordion({
   loadingId: string;
   actionId: string;
   onToggle: (task: Task) => Promise<void>;
+  onArchive: (task: Task) => Promise<void>;
   onEditQueries: (item: ContentItem) => Promise<void>;
   onRegenerateQueries: (item: ContentItem) => Promise<void>;
   onCollectCompetitors: (item: ContentItem) => Promise<void>;
@@ -2470,6 +2577,7 @@ function AdminTasksAccordion({
             <th>Формат</th>
             <th>Тем</th>
             <th>Статус</th>
+            <th>Действия</th>
           </tr>
         </thead>
         <tbody>
@@ -2489,10 +2597,23 @@ function AdminTasksAccordion({
                   <td data-label="Формат">{humanPayloadMode(task.payload_mode)}</td>
                   <td data-label="Тем">{task.topics_count}</td>
                   <td data-label="Статус"><StatusBadge status={task.status} /></td>
+                  <td data-label="Действия">
+                    <button
+                      className="button compact danger"
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onArchive(task);
+                      }}
+                      disabled={actionId === `${task.id}:archive`}
+                    >
+                      <Archive size={15} /> {actionId === `${task.id}:archive` ? "Переношу" : "Удалить"}
+                    </button>
+                  </td>
                 </tr>
                 {expanded ? (
                   <tr className="expandedRow">
-                    <td colSpan={6}>
+                    <td colSpan={7}>
                       {loadingId === task.id && !expandedDetails ? (
                         <EmptyState text="Загружаю детали задачи." />
                       ) : expandedTask ? (
@@ -2630,6 +2751,11 @@ function TaskQueriesMetric({ total, groups, busy, onGenerate }: { total: number;
 }
 
 function competitorStatusLabel(item: ContentItem, research?: CompetitorResearch) {
+  const status = research?.status || item.competitor_research_status;
+  if (status === "queued") return "В очереди";
+  if (status === "collecting_serp") return "Собираю выдачу Google";
+  if (status === "fetching_pages") return "Загружаю страницы";
+  if (status === "research_failed") return "Ошибка сбора";
   if (item.competitor_brief || research?.brief) return "Да, анализ готов";
   if ((research?.pages.length || 0) > 0) return "Страницы собраны";
   if ((research?.results.length || 0) > 0) return "URL собраны";
@@ -2641,12 +2767,19 @@ function CompetitorCell({ item, research }: { item: ContentItem; research?: Comp
   const competitors = Array.from(
     new Map((research?.results || []).map((result) => [result.normalized_url || result.url, result])).values()
   );
+  const progress = Math.max(0, Math.min(100, research?.progress ?? item.competitor_research_progress ?? 0));
+  const error = research?.error || item.competitor_research_error;
   return (
     <div className="queryCell competitorCell" tabIndex={0} aria-label="Показать список собранных конкурентов">
       <span className="queryCount">{competitors.length}</span>
       <span className="cellHint">{competitorStatusLabel(item, research)}</span>
+      <div className="competitorProgress" aria-label={`Прогресс сбора конкурентов: ${progress}%`}>
+        <span style={{ width: `${progress}%` }} />
+      </div>
+      <small className={error ? "competitorProgressText danger" : "competitorProgressText"}>{error ? `Ошибка · ${progress}%` : `${progress}%`}</small>
       <div className="queryTooltip competitorTooltip" role="tooltip">
         <strong>Собранные конкуренты</strong>
+        {error ? <span className="formError">{error}</span> : null}
         {competitors.length ? (
           <ol>
             {competitors.map((competitor) => (
@@ -3622,6 +3755,7 @@ function viewTitle(view: AppView, workspaceTab: WorkspaceTab) {
   const titles: Record<Exclude<AppView, "workspace">, string> = {
     dashboard: "Dashboard",
     tasks: "Задачи генерации",
+    taskArchive: "Архив задач",
     content: "Контент",
     publications: "Публикации",
     providers: "API Providers",

@@ -182,6 +182,8 @@ class GenerationTaskResponse(BaseModel):
     prompt_template_name: str | None
     prompt_template: str | None
     collect_competitors: bool
+    archived_at: datetime | None = None
+    archived_by_user_id: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -202,6 +204,8 @@ class ContentItemResponse(BaseModel):
     generation_prompt_name: str | None
     generated_at: datetime | None
     competitor_research_status: str
+    competitor_research_progress: int = 0
+    competitor_research_error: str | None = None
     competitor_brief: dict[str, Any] | None
     idempotency_key: str
     scheduled_at: datetime | None
@@ -302,6 +306,8 @@ class CompetitorPageResponse(BaseModel):
 class CompetitorResearchResponse(BaseModel):
     content_item_id: str
     status: str
+    progress: int = 0
+    error: str | None = None
     brief: dict[str, Any] | None
     queries: list[CompetitorQueryResponse]
     results: list[CompetitorResultResponse]

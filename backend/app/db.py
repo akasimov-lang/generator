@@ -72,6 +72,8 @@ def apply_lightweight_migrations() -> None:
                 "prompt_template_name": "VARCHAR(160)",
                 "prompt_template": "TEXT",
                 "collect_competitors": "BOOLEAN DEFAULT FALSE NOT NULL",
+                "archived_at": "TIMESTAMP WITH TIME ZONE",
+                "archived_by_user_id": "VARCHAR(36)",
             },
         )
 
@@ -86,6 +88,8 @@ def apply_lightweight_migrations() -> None:
                 "generation_prompt_name": "VARCHAR(160)",
                 "generated_at": "TIMESTAMP WITH TIME ZONE",
                 "competitor_research_status": "VARCHAR(40) DEFAULT 'not_requested' NOT NULL",
+                "competitor_research_progress": "INTEGER DEFAULT 0 NOT NULL",
+                "competitor_research_error": "TEXT",
                 "competitor_brief": "JSON",
                 "competitor_brief_text": "TEXT",
             },
