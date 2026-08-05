@@ -21,6 +21,7 @@ import {
   KeyRound,
   LayoutDashboard,
   ListChecks,
+  LoaderCircle,
   LogOut,
   Moon,
   Play,
@@ -2240,6 +2241,7 @@ function TasksView({ api, sites, providers, tasks, onChanged }: ViewProps & { si
   }
 
   async function toggleTask(task: Task) {
+    if (detailsLoadingId) return;
     if (expandedTaskId === task.id) {
       setExpandedTaskId("");
       setExpandedDetails(null);
@@ -2807,13 +2809,21 @@ function AdminTasksAccordion({
         <tbody>
           {tasks.map((task) => {
             const expanded = expandedTaskId === task.id;
+            const loading = loadingId === task.id;
             return (
               <React.Fragment key={task.id}>
-                <tr className={`clickableRow ${expanded ? "isExpanded" : ""}`} onClick={() => onToggle(task)}>
+                <tr
+                  className={`clickableRow ${expanded ? "isExpanded" : ""} ${loading ? "isLoading" : ""}`}
+                  onClick={() => {
+                    if (!loadingId) onToggle(task);
+                  }}
+                  aria-busy={loading}
+                >
                   <td data-label="Задача">
                     <span className="taskTitleCell">
-                      {expanded ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
+                      {loading ? <LoaderCircle className="taskRowSpinner" size={17} /> : expanded ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
                       <strong>{task.title}</strong>
+                      {loading ? <span className="taskRowLoadingText">Загружаем темы…</span> : null}
                     </span>
                   </td>
                   <td data-label="Гео">{countryLabel(task.geo)}</td>
@@ -2829,7 +2839,7 @@ function AdminTasksAccordion({
                         event.stopPropagation();
                         onArchive(task);
                       }}
-                      disabled={actionId === `${task.id}:archive`}
+                      disabled={loading || actionId === `${task.id}:archive`}
                     >
                       <Archive size={15} /> {actionId === `${task.id}:archive` ? "Переношу" : "Удалить"}
                     </button>

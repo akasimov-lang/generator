@@ -884,8 +884,13 @@ td {
 }
 
 .expandableTable .clickableRow:hover,
-.expandableTable .clickableRow.isExpanded {
+.expandableTable .clickableRow.isExpanded,
+.expandableTable .clickableRow.isLoading {
   background: var(--surface-3);
+}
+
+.expandableTable .clickableRow.isLoading {
+  cursor: progress;
 }
 
 .taskTitleCell {
@@ -898,6 +903,24 @@ td {
 .taskTitleCell svg {
   color: var(--muted);
   flex: 0 0 auto;
+}
+
+.taskRowSpinner {
+  animation: taskRowSpin 0.8s linear infinite;
+  color: var(--primary) !important;
+}
+
+.taskRowLoadingText {
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+@keyframes taskRowSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .expandedRow > td {
