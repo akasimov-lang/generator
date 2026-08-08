@@ -2564,7 +2564,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, mode
           ])}
         />
       </DataPanel> : null}
-      {mode === "details" ? <DataPanel title="Согласовано к публикации">
+      {mode === "details" ? <DataPanel title="Процесс публикации">
         <ResponsiveTable
           columns={["Тема", "Меню", "Slug"]}
           rows={approved.map((item) => [<TopicMetaCell item={item} />, sectionLabel(item.section_id, sections), item.slug])}
