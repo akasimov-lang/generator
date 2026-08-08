@@ -184,6 +184,7 @@ type Section = {
   external_id: string;
   name: string;
   path: string;
+  menu_type: "header" | "footer";
 };
 
 type AiProvider = {
@@ -2195,6 +2196,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
   const [menuName, setMenuName] = React.useState("");
   const [menuExternalId, setMenuExternalId] = React.useState("");
   const [menuPath, setMenuPath] = React.useState("");
+  const [menuType, setMenuType] = React.useState<"header" | "footer">("header");
   const [jsonDraft, setJsonDraft] = React.useState("");
   const [sectionId, setSectionId] = React.useState("");
   const [editorError, setEditorError] = React.useState("");
@@ -2281,12 +2283,14 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
         body: JSON.stringify({
           name: menuName.trim(),
           external_id: menuExternalId.trim() || slugFromText(menuName),
-          path: menuPath.trim() || `/${slugFromText(menuName)}/`
+          path: menuPath.trim() || `/${slugFromText(menuName)}/`,
+          menu_type: menuType
         })
       });
       setMenuName("");
       setMenuExternalId("");
       setMenuPath("");
+      setMenuType("header");
       setBulkSectionId(created.id);
       setCreateMenuVisible(false);
       await onChanged();
@@ -2378,6 +2382,13 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
             <label>
               Path
               <input value={menuPath} onChange={(event) => setMenuPath(event.target.value)} placeholder="/casino-bonus/" />
+            </label>
+            <label>
+              Тип меню
+              <select value={menuType} onChange={(event) => setMenuType(event.target.value as "header" | "footer")}>
+                <option value="header">Header</option>
+                <option value="footer">Footer</option>
+              </select>
             </label>
             <div className="formActions alignEnd">
               <button className="button compact secondary" type="button" onClick={() => setCreateMenuVisible(false)}>Отмена</button>
@@ -2564,6 +2575,7 @@ function ProjectMenuPanel({ api, site, sections, onChanged }: ViewProps & { site
   const [name, setName] = React.useState("");
   const [externalId, setExternalId] = React.useState("");
   const [path, setPath] = React.useState("");
+  const [menuType, setMenuType] = React.useState<"header" | "footer">("header");
   const [formError, setFormError] = React.useState("");
 
   async function createSection(event: React.FormEvent) {
@@ -2574,12 +2586,14 @@ function ProjectMenuPanel({ api, site, sections, onChanged }: ViewProps & { site
       body: JSON.stringify({
         name,
         external_id: externalId || slugFromText(name),
-        path: path || "/"
+        path: path || "/",
+        menu_type: menuType
       })
     });
     setName("");
     setExternalId("");
     setPath("");
+    setMenuType("header");
     await onChanged();
   }
 
@@ -2599,14 +2613,21 @@ function ProjectMenuPanel({ api, site, sections, onChanged }: ViewProps & { site
             Path
             <input value={path} onChange={(event) => setPath(event.target.value)} placeholder="/casino-bonuses/" />
           </label>
+          <label>
+            Тип меню
+            <select value={menuType} onChange={(event) => setMenuType(event.target.value as "header" | "footer")}>
+              <option value="header">Header</option>
+              <option value="footer">Footer</option>
+            </select>
+          </label>
           {formError ? <span className="formError wide">{formError}</span> : null}
           <div className="formActions wide"><button className="button primary" type="submit"><Plus size={18} /> Добавить</button></div>
         </form>
       </DataPanel>
       <DataPanel title="Пункты меню проекта">
         <ResponsiveTable
-          columns={["Название", "External ID", "Path"]}
-          rows={sections.map((section) => [section.name, section.external_id, section.path])}
+          columns={["Название", "Тип меню", "External ID", "Path"]}
+          rows={sections.map((section) => [section.name, section.menu_type === "footer" ? "Footer" : "Header", section.external_id, section.path])}
         />
       </DataPanel>
     </section>

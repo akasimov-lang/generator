@@ -73,6 +73,7 @@ class Section(Base, TimestampMixin):
     external_id: Mapped[str] = mapped_column(String(160), nullable=False)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     path: Mapped[str] = mapped_column(String(240), nullable=False)
+    menu_type: Mapped[str] = mapped_column(String(20), nullable=False, default="header", server_default="header")
 
     site: Mapped[Site] = relationship(back_populates="sections")
 

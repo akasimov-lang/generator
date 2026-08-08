@@ -15,7 +15,7 @@ class FakeDb:
 
 
 def test_publication_payload_adds_section_target() -> None:
-    section = SimpleNamespace(external_id="casino-menu", name="Casinos", path="/online-casinos/")
+    section = SimpleNamespace(external_id="casino-menu", name="Casinos", path="/online-casinos/", menu_type="footer")
     item = SimpleNamespace(
         section_id="section-id",
         generated_json={
@@ -30,6 +30,7 @@ def test_publication_payload_adds_section_target() -> None:
         "section_id": "casino-menu",
         "section_name": "Casinos",
         "section_path": "/online-casinos/",
+        "menu_type": "footer",
     }
     assert payload["pages"][0]["sectionId"] == "casino-menu"
     assert payload["pages"][0]["sectionPath"] == "/online-casinos/"

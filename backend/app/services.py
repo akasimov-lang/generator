@@ -2437,6 +2437,7 @@ def build_publication_payload(db: Session, item: models.ContentItem) -> dict:
         "section_id": section.external_id,
         "section_name": section.name,
         "section_path": section.path,
+        "menu_type": section.menu_type,
     }
     payload["publication_target"] = publication_target
     for page in payload.get("pages", []):

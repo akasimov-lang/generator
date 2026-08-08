@@ -105,6 +105,7 @@ class SectionCreate(BaseModel):
     external_id: str
     name: str
     path: str
+    menu_type: Literal["header", "footer"] = "header"
 
 
 class SectionResponse(BaseModel):
@@ -115,6 +116,7 @@ class SectionResponse(BaseModel):
     external_id: str
     name: str
     path: str
+    menu_type: str
     created_at: datetime
     updated_at: datetime
 

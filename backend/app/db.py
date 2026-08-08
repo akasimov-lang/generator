@@ -46,6 +46,10 @@ def apply_lightweight_migrations() -> None:
         }
         _add_missing_columns("sites", columns, site_columns)
 
+    if "sections" in tables:
+        columns = {column["name"] for column in inspector.get_columns("sections")}
+        _add_missing_columns("sections", columns, {"menu_type": "VARCHAR(20) DEFAULT 'header' NOT NULL"})
+
     if "ai_providers" in tables:
         columns = {column["name"] for column in inspector.get_columns("ai_providers")}
         provider_columns = {
