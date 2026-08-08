@@ -292,7 +292,8 @@ const ACTIVE_GENERATION_STATUSES = ["generation_queued", "generating"];
 const DEFAULT_TARGET_WORDS = 2000;
 const DEFAULT_WORKSPACE_TAB: WorkspaceTab = "overview";
 const DEFAULT_ROUTE: AppRoute = { view: "dashboard", workspaceTab: DEFAULT_WORKSPACE_TAB };
-const DEFAULT_INPUT_STYLE: InputStyle = "balanced";
+const DEFAULT_INPUT_STYLE: InputStyle = "emerald";
+const INPUT_STYLE_STORAGE_VERSION = "emerald-default-v1";
 const INPUT_STYLE_OPTIONS: Array<{ id: InputStyle; name: string; description: string }> = [
   { id: "balanced", name: "Сбалансированный", description: "Чёткая рамка и аккуратная мягкая тень." },
   { id: "classic", name: "Классический", description: "Строгая форма без декоративной тени." },
@@ -307,6 +308,7 @@ const INPUT_STYLE_OPTIONS: Array<{ id: InputStyle; name: string; description: st
 ];
 
 function storedInputStyle(): InputStyle {
+  if (localStorage.getItem("input_style_version") !== INPUT_STYLE_STORAGE_VERSION) return DEFAULT_INPUT_STYLE;
   const stored = localStorage.getItem("input_style");
   return INPUT_STYLE_OPTIONS.some((option) => option.id === stored) ? stored as InputStyle : DEFAULT_INPUT_STYLE;
 }
@@ -669,6 +671,7 @@ function App() {
   React.useEffect(() => {
     document.documentElement.dataset.inputStyle = inputStyle;
     localStorage.setItem("input_style", inputStyle);
+    localStorage.setItem("input_style_version", INPUT_STYLE_STORAGE_VERSION);
   }, [inputStyle]);
 
   React.useEffect(() => {
@@ -4285,6 +4288,8 @@ function SettingsView({ api, currentUser, users, inputStyle, onInputStyleChange,
   inputStyle: InputStyle;
   onInputStyleChange: (style: InputStyle) => void;
 }) {
+  const [inputSettingsExpanded, setInputSettingsExpanded] = React.useState(false);
+
   return (
     <section className="viewStack">
       <DataPanel title="Профиль">
@@ -4296,37 +4301,6 @@ function SettingsView({ api, currentUser, users, inputStyle, onInputStyleChange,
           {currentUser ? <RoleBadge admin={currentUser.is_admin} /> : null}
         </div>
         <PasswordChangeForm api={api} />
-      </DataPanel>
-
-      <DataPanel title="Оформление полей ввода">
-        <div className="inputStyleHeader">
-          <p>Выберите один из 10 вариантов. Стиль применяется сразу ко всем полям, выпадающим спискам и поиску.</p>
-          <span>Выбрано: <strong>{INPUT_STYLE_OPTIONS.find((option) => option.id === inputStyle)?.name}</strong></span>
-        </div>
-        <div className="inputStyleGrid" role="radiogroup" aria-label="Стиль полей ввода">
-          {INPUT_STYLE_OPTIONS.map((option) => (
-            <button
-              className={`inputStyleCard ${inputStyle === option.id ? "isSelected" : ""}`}
-              data-preview-style={option.id}
-              key={option.id}
-              type="button"
-              role="radio"
-              aria-checked={inputStyle === option.id}
-              onClick={() => onInputStyleChange(option.id)}
-            >
-              <span className="inputStyleCardTitle">
-                <strong>{option.name}</strong>
-                {inputStyle === option.id ? <CheckCircle2 size={18} aria-hidden="true" /> : null}
-              </span>
-              <small>{option.description}</small>
-              <span className="inputStylePreview" aria-hidden="true">
-                <span className="inputStylePreviewField">Пример поля</span>
-                <span className="inputStylePreviewField isFocused">Активное поле</span>
-              </span>
-            </button>
-          ))}
-        </div>
-        <p className="inputStyleFootnote">Настройка сохраняется в текущем браузере и применяется также к окну авторизации.</p>
       </DataPanel>
 
       {currentUser?.is_admin ? (
@@ -4343,6 +4317,49 @@ function SettingsView({ api, currentUser, users, inputStyle, onInputStyleChange,
           <div><strong>Deploy</strong><span>Git push через SSH-ключ на production remote</span></div>
         </div>
       </DataPanel>
+
+      <section className={`dataPanel inputStyleSettingsPanel ${inputSettingsExpanded ? "expanded" : ""}`}>
+        <button className="inputStyleSettingsToggle" type="button" onClick={() => setInputSettingsExpanded((current) => !current)} aria-expanded={inputSettingsExpanded}>
+          <span className="inputStyleSettingsIcon"><Edit3 size={20} /></span>
+          <span className="inputStyleSettingsText">
+            <strong>Оформление полей ввода</strong>
+            <small>Текущий стиль: {INPUT_STYLE_OPTIONS.find((option) => option.id === inputStyle)?.name}. Нажмите, чтобы {inputSettingsExpanded ? "свернуть" : "изменить"}.</small>
+          </span>
+          {inputSettingsExpanded ? <ChevronUp size={22} /> : <ChevronDown size={22} />}
+        </button>
+        {inputSettingsExpanded ? (
+          <div className="inputStyleSettingsBody">
+            <div className="inputStyleHeader">
+              <p>Выберите один из 10 вариантов. Стиль применяется сразу ко всем полям, выпадающим спискам и поиску.</p>
+              <span>Выбрано: <strong>{INPUT_STYLE_OPTIONS.find((option) => option.id === inputStyle)?.name}</strong></span>
+            </div>
+            <div className="inputStyleGrid" role="radiogroup" aria-label="Стиль полей ввода">
+              {INPUT_STYLE_OPTIONS.map((option) => (
+                <button
+                  className={`inputStyleCard ${inputStyle === option.id ? "isSelected" : ""}`}
+                  data-preview-style={option.id}
+                  key={option.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={inputStyle === option.id}
+                  onClick={() => onInputStyleChange(option.id)}
+                >
+                  <span className="inputStyleCardTitle">
+                    <strong>{option.name}</strong>
+                    {inputStyle === option.id ? <CheckCircle2 size={18} aria-hidden="true" /> : null}
+                  </span>
+                  <small>{option.description}</small>
+                  <span className="inputStylePreview" aria-hidden="true">
+                    <span className="inputStylePreviewField">Пример поля</span>
+                    <span className="inputStylePreviewField isFocused">Активное поле</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+            <p className="inputStyleFootnote">Настройка сохраняется в текущем браузере и применяется также к окну авторизации.</p>
+          </div>
+        ) : null}
+      </section>
     </section>
   );
 }

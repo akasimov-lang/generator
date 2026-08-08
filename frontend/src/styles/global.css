@@ -2233,6 +2233,63 @@ textarea:focus {
   margin-bottom: 16px;
 }
 
+.inputStyleSettingsPanel {
+  padding: 0;
+}
+
+.inputStyleSettingsToggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 16px 18px;
+  text-align: left;
+  width: 100%;
+}
+
+.inputStyleSettingsToggle:hover {
+  background: var(--surface-3);
+}
+
+.inputStyleSettingsIcon {
+  align-items: center;
+  background: var(--primary-soft);
+  border-radius: var(--radius);
+  color: var(--primary);
+  display: inline-flex;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.inputStyleSettingsText {
+  display: grid;
+  gap: 3px;
+}
+
+.inputStyleSettingsText strong {
+  font-size: 17px;
+}
+
+.inputStyleSettingsText small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.inputStyleSettingsToggle > svg {
+  color: var(--muted);
+}
+
+.inputStyleSettingsBody {
+  border-top: 1px solid var(--border);
+  padding: 18px;
+}
+
 .inputStyleHeader p,
 .inputStyleFootnote {
   color: var(--muted);
