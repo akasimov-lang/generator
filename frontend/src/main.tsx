@@ -1408,10 +1408,13 @@ function ProjectWorkspaceView({
         />
       ) : null}
       {selectedSite && (activeTab === "content" || activeTab === "publication") ? (
-        <ProjectPublicationPanel key={`${selectedSite.id}:publication`} api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} onChanged={refreshProject} />
+        <ProjectPublicationPanel key={`${selectedSite.id}:publication-launch`} mode="launch" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} onChanged={refreshProject} />
       ) : null}
       {selectedSite && (activeTab === "content" || activeTab === "publication") ? (
         <ProjectContentPanel key={`${selectedSite.id}:content`} api={api} site={selectedSite} content={siteContent} sections={sections} onChanged={refreshProject} />
+      ) : null}
+      {selectedSite && (activeTab === "content" || activeTab === "publication") ? (
+        <ProjectPublicationPanel key={`${selectedSite.id}:publication-details`} mode="details" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} onChanged={refreshProject} />
       ) : null}
       {selectedSite && activeTab === "menu" ? (
         <ProjectMenuPanel api={api} site={selectedSite} sections={sections} onChanged={refreshProject} />
@@ -2453,7 +2456,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
   );
 }
 
-function ProjectPublicationPanel({ api, site, content, sections, campaigns, onChanged }: ViewProps & { site: Site; content: ContentItem[]; sections: Section[]; campaigns: PublicationCampaign[] }) {
+function ProjectPublicationPanel({ api, site, content, sections, campaigns, mode, onChanged }: ViewProps & { site: Site; content: ContentItem[]; sections: Section[]; campaigns: PublicationCampaign[]; mode: "launch" | "details" }) {
   const [launchExpanded, setLaunchExpanded] = React.useState(false);
   const [name, setName] = React.useState("Daily publication");
   const [itemsPerDay, setItemsPerDay] = React.useState(1);
@@ -2500,7 +2503,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, onCh
 
   return (
     <section className="viewStack">
-      <section className={`dataPanel publicationLaunchPanel ${launchExpanded ? "expanded" : ""}`}>
+      {mode === "launch" ? <section className={`dataPanel publicationLaunchPanel ${launchExpanded ? "expanded" : ""}`}>
         <button className="publicationLaunchToggle" type="button" onClick={() => setLaunchExpanded((current) => !current)} aria-expanded={launchExpanded}>
           <span className="publicationLaunchIcon"><Send size={20} /></span>
           <span className="publicationLaunchText">
@@ -2538,8 +2541,8 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, onCh
             </div>
           </form>
         ) : null}
-      </section>
-      <DataPanel title="Кампании проекта">
+      </section> : null}
+      {mode === "details" ? <DataPanel title="Кампании проекта">
         <ResponsiveTable
           columns={["Кампания", "Старт", "Интервал", "Статус", "Действия"]}
           rows={campaigns.map((campaign) => [
@@ -2560,13 +2563,13 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, onCh
             </div>
           ])}
         />
-      </DataPanel>
-      <DataPanel title="Approved к публикации">
+      </DataPanel> : null}
+      {mode === "details" ? <DataPanel title="Согласовано к публикации">
         <ResponsiveTable
           columns={["Тема", "Меню", "Slug"]}
           rows={approved.map((item) => [<TopicMetaCell item={item} />, sectionLabel(item.section_id, sections), item.slug])}
         />
-      </DataPanel>
+      </DataPanel> : null}
     </section>
   );
 }
