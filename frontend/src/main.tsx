@@ -678,7 +678,7 @@ function App() {
     return (
       <AuthScreen>
         <div className="loginPanel">
-          <div className="brandMark large"><ShieldCheck size={28} /></div>
+          <div className="brandMark large logoMark"><BrandLogo /></div>
           <h1>Загрузка панели</h1>
           <p>{message || "Проверяем сессию и права пользователя."}</p>
           <div className="loginLoadingBar" aria-hidden="true"><span /></div>
@@ -693,7 +693,7 @@ function App() {
     <div className="appShell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brandMark"><Bot size={20} /></div>
+          <div className="brandMark logoMark"><BrandLogo /></div>
           <div>
             <strong>Content Admin</strong>
             <span>AI publishing control</span>
@@ -817,7 +817,7 @@ function AuthDashboardBackdrop() {
     <div className="authDashboardBackdrop" aria-hidden="true">
       <aside className="authPreviewSidebar">
         <div className="authPreviewBrand">
-          <div className="brandMark"><Bot size={20} /></div>
+          <div className="brandMark logoMark"><BrandLogo /></div>
           <div><strong>Content Admin</strong><span>AI publishing control</span></div>
         </div>
         <div className="authPreviewNav">
@@ -857,6 +857,34 @@ function AuthDashboardBackdrop() {
         </div>
       </main>
     </div>
+  );
+}
+
+function BrandLogo() {
+  return (
+    <svg className="brandLogo" viewBox="0 0 128 128" role="img" aria-label="AI Content panel">
+      <defs>
+        <linearGradient id="brand-logo-background" x1="20" y1="12" x2="110" y2="118" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#35BE73" />
+          <stop offset="1" stopColor="#178149" />
+        </linearGradient>
+        <linearGradient id="brand-logo-spark" x1="78" y1="15" x2="104" y2="49" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#FFFFFF" />
+          <stop offset="0.48" stopColor="#D8FFE7" />
+          <stop offset="1" stopColor="#91EDB6" />
+        </linearGradient>
+      </defs>
+      <rect className="brandLogoTile" x="7" y="7" width="114" height="114" rx="27" fill="url(#brand-logo-background)" />
+      <g className="brandLogoDocument" fill="none" stroke="#fff" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M39 42h29l15 15v39a6 6 0 0 1-6 6H39a6 6 0 0 1-6-6V48a6 6 0 0 1 6-6Z" strokeWidth="7" />
+        <path d="M68 43v16h14M47 72h23M47 85h17" strokeWidth="6" />
+      </g>
+      <g className="brandLogoSpark">
+        <path d="M93 11c1.8 9.1 4.3 14.7 8 18 3.3 3.2 8.5 5.2 15.7 6.3-7.7 1.8-13 4.2-16.2 7.5-3.1 3.2-5.6 8.2-7.5 15.2-1.9-7.3-4.5-12.4-7.8-15.6-3.2-3.1-8.3-5.5-15.2-7.1 7.3-1.4 12.5-3.6 15.6-6.8 3.2-3.3 5.7-9.1 7.4-17.5Z" fill="url(#brand-logo-spark)" />
+        <path d="M93 19c1.1 5.8 2.8 9.5 5.1 11.6 2.1 2 5.4 3.4 9.9 4.4-4.8 1.2-8.2 2.8-10.2 4.9-2 2-3.6 5.2-4.8 9.6-1.2-4.6-2.9-7.9-5-10-2.1-2.1-5.3-3.6-9.8-4.5 4.6-.9 7.9-2.4 10-4.4 2-2.2 3.6-6 4.8-11.6Z" fill="#fff" fillOpacity="0.5" />
+        <circle cx="111" cy="17" r="3.5" fill="#D8FFE7" />
+      </g>
+    </svg>
   );
 }
 
@@ -903,8 +931,10 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
   return (
     <AuthScreen>
       <form className="loginPanel" onSubmit={submit} aria-busy={submitting}>
-        <div className="brandMark large"><ShieldCheck size={28} /></div>
-        <h1>AI Content panel</h1>
+        <div className="loginBrandRow">
+          <div className="brandMark large logoMark loginBrandLogo"><BrandLogo /></div>
+          <h1>AI Content panel</h1>
+        </div>
         <p>Вход в панель генерации и публикации контента.</p>
         <label>
           Логин
