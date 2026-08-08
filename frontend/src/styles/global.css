@@ -25,6 +25,7 @@
   --danger-border: #fda29b;
   --button-border: #9fb0c1;
   --focus-ring: rgba(22, 101, 52, 0.12);
+  --auth-overlay: rgba(244, 246, 248, 0.48);
   --radius: 8px;
   --shadow: 0 10px 30px rgba(22, 32, 42, 0.08);
   --sidebar: 264px;
@@ -58,6 +59,7 @@
   --danger-border: #7f1d1d;
   --button-border: #4e6276;
   --focus-ring: rgba(74, 222, 128, 0.16);
+  --auth-overlay: rgba(15, 20, 25, 0.54);
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.32);
 }
 
@@ -2046,13 +2048,223 @@ a {
 }
 
 .loginPage {
+  position: relative;
+  isolation: isolate;
   min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
   padding: 24px;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.authDashboardBackdrop {
+  position: absolute;
+  inset: -18px;
+  z-index: -2;
+  display: grid;
+  grid-template-columns: var(--sidebar) minmax(760px, 1fr);
+  min-width: 1100px;
+  min-height: calc(100% + 36px);
+  background: var(--bg);
+  filter: blur(7px) saturate(0.78);
+  opacity: 0.88;
+  pointer-events: none;
+  transform: scale(1.025);
+  transform-origin: center;
+  user-select: none;
+}
+
+.authBackdropShade {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--auth-overlay);
+  backdrop-filter: blur(1px);
+  pointer-events: none;
+}
+
+.authPreviewSidebar {
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text);
+  padding: 28px 20px;
+}
+
+.authPreviewBrand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.authPreviewBrand strong,
+.authPreviewBrand span {
+  display: block;
+}
+
+.authPreviewBrand span {
+  color: var(--sidebar-muted);
+  font-size: 13px;
+  margin-top: 3px;
+}
+
+.authPreviewNav {
+  display: grid;
+  gap: 5px;
+}
+
+.authPreviewNavItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: var(--radius);
+  color: var(--sidebar-muted);
+}
+
+.authPreviewNavItem.active {
+  color: var(--sidebar-text);
+  background: var(--sidebar-active);
+}
+
+.authPreviewMain {
+  min-width: 0;
+  padding: 30px;
+}
+
+.authPreviewTopbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.authPreviewTopbar span,
+.authPreviewTopbar strong {
+  display: block;
+}
+
+.authPreviewTopbar span {
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.authPreviewTopbar strong {
+  color: var(--text);
+  font-size: 30px;
+}
+
+.authPreviewControls {
+  display: flex;
+  gap: 10px;
+}
+
+.authPreviewControls i {
+  width: 48px;
+  height: 42px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.authPreviewControls i:first-child {
+  width: 126px;
+}
+
+.authPreviewKpis {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.authPreviewKpi,
+.authPreviewPanel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.authPreviewKpi {
+  display: grid;
+  gap: 10px;
+  min-height: 132px;
+  padding: 18px;
+  color: var(--primary);
+}
+
+.authPreviewKpi span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.authPreviewKpi strong {
+  color: var(--text);
+  font-size: 28px;
+}
+
+.authPreviewPanels {
+  display: grid;
+  grid-template-columns: 1.25fr 0.9fr;
+  gap: 18px;
+}
+
+.authPreviewPanel {
+  padding: 20px;
+  color: var(--text);
+}
+
+.authPreviewTableHead,
+.authPreviewTableRow {
+  display: grid;
+  grid-template-columns: 2fr 0.7fr 0.5fr 0.7fr;
+  gap: 14px;
+  align-items: center;
+  min-height: 44px;
+  border-bottom: 1px solid var(--border);
+}
+
+.authPreviewTableHead {
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.authPreviewTableRow i {
+  display: block;
+  height: 9px;
+  border-radius: 99px;
+  background: var(--surface-2);
+}
+
+.authPreviewTableRow i:last-child {
+  background: var(--primary-soft);
+}
+
+.authPreviewEmpty {
+  display: grid;
+  place-items: center;
+  min-height: 205px;
+  margin-top: 16px;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+}
+
+.authPreviewErrors {
+  margin-top: 18px;
+}
+
+.authPreviewErrors .authPreviewEmpty {
+  min-height: 95px;
 }
 
 .loginPanel {
+  position: relative;
+  z-index: 1;
   width: min(100%, 420px);
   display: grid;
   gap: 16px;
@@ -2061,6 +2273,7 @@ a {
   border-radius: var(--radius);
   padding: 28px;
   box-shadow: var(--shadow);
+  animation: loginPanelIn 220ms ease-out;
 }
 
 .loginPanel h1 {
@@ -2070,6 +2283,40 @@ a {
 .loginPanel p {
   color: var(--muted);
   margin-bottom: 4px;
+}
+
+.loginLoadingBar {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: var(--surface-2);
+}
+
+.loginLoadingBar span {
+  display: block;
+  width: 45%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary);
+  animation: loginLoading 1.15s ease-in-out infinite;
+}
+
+.spin {
+  animation: spin 0.85s linear infinite;
+}
+
+@keyframes loginPanelIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes loginLoading {
+  from { transform: translateX(-115%); }
+  to { transform: translateX(245%); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .formError {

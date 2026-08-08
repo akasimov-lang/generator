@@ -676,13 +676,14 @@ function App() {
 
   if (!currentUser) {
     return (
-      <div className="loginPage">
+      <AuthScreen>
         <div className="loginPanel">
           <div className="brandMark large"><ShieldCheck size={28} /></div>
           <h1>Загрузка панели</h1>
           <p>{message || "Проверяем сессию и права пользователя."}</p>
+          <div className="loginLoadingBar" aria-hidden="true"><span /></div>
         </div>
-      </div>
+      </AuthScreen>
     );
   }
 
@@ -792,46 +793,133 @@ function App() {
   );
 }
 
+function AuthDashboardBackdrop() {
+  const navigation = [
+    { icon: <LayoutDashboard size={18} />, label: "Dashboard", active: true },
+    { icon: <FolderKanban size={18} />, label: "Рабочий экран" },
+    { icon: <Edit3 size={18} />, label: "Промпты" },
+    { icon: <Archive size={18} />, label: "Архив" },
+    { icon: <FileText size={18} />, label: "Контент" },
+    { icon: <Send size={18} />, label: "Публикации" },
+    { icon: <Globe2 size={18} />, label: "Сайты" },
+    { icon: <Settings size={18} />, label: "Настройки" }
+  ];
+  const metrics = [
+    { icon: <Database size={20} />, label: "Всего задач" },
+    { icon: <CheckCircle2 size={20} />, label: "Сгенерировано" },
+    { icon: <FileText size={20} />, label: "Ждет approve" },
+    { icon: <Send size={20} />, label: "В очереди" },
+    { icon: <Activity size={20} />, label: "Опубликовано" },
+    { icon: <AlertTriangle size={20} />, label: "Ошибки" }
+  ];
+
+  return (
+    <div className="authDashboardBackdrop" aria-hidden="true">
+      <aside className="authPreviewSidebar">
+        <div className="authPreviewBrand">
+          <div className="brandMark"><Bot size={20} /></div>
+          <div><strong>Content Admin</strong><span>AI publishing control</span></div>
+        </div>
+        <div className="authPreviewNav">
+          {navigation.map((item) => (
+            <div className={`authPreviewNavItem${item.active ? " active" : ""}`} key={item.label}>
+              {item.icon}<span>{item.label}</span>
+            </div>
+          ))}
+        </div>
+      </aside>
+      <main className="authPreviewMain">
+        <div className="authPreviewTopbar">
+          <div><span>Рабочая панель</span><strong>Dashboard</strong></div>
+          <div className="authPreviewControls"><i /><i /><i /></div>
+        </div>
+        <div className="authPreviewKpis">
+          {metrics.map((metric) => (
+            <div className="authPreviewKpi" key={metric.label}>
+              {metric.icon}<span>{metric.label}</span><strong>—</strong>
+            </div>
+          ))}
+        </div>
+        <div className="authPreviewPanels">
+          <div className="authPreviewPanel">
+            <strong>Активные задачи</strong>
+            <div className="authPreviewTableHead"><span>Задача</span><span>Гео</span><span>Тем</span><span>Статус</span></div>
+            {[0, 1, 2, 3].map((row) => <div className="authPreviewTableRow" key={row}><i /><i /><i /><i /></div>)}
+          </div>
+          <div className="authPreviewPanel">
+            <strong>Очередь публикаций</strong>
+            <div className="authPreviewEmpty">Данных пока нет.</div>
+          </div>
+        </div>
+        <div className="authPreviewPanel authPreviewErrors">
+          <strong>Последние ошибки</strong>
+          <div className="authPreviewEmpty">Ошибок пока нет.</div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function AuthScreen({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="loginPage">
+      <AuthDashboardBackdrop />
+      <div className="authBackdropShade" aria-hidden="true" />
+      {children}
+    </div>
+  );
+}
+
 function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
   const [username, setUsername] = React.useState("admin");
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState("");
+  const [submitting, setSubmitting] = React.useState(false);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setError("");
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password })
-    });
-    if (!response.ok) {
-      setError("Неверный логин или пароль");
-      return;
+    setSubmitting(true);
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+      if (!response.ok) {
+        setError("Неверный логин или пароль");
+        return;
+      }
+      const data = await response.json();
+      localStorage.setItem("admin_token", data.access_token);
+      onLogin(data.access_token);
+    } catch {
+      setError("Не удалось подключиться к серверу");
+    } finally {
+      setSubmitting(false);
     }
-    const data = await response.json();
-    localStorage.setItem("admin_token", data.access_token);
-    onLogin(data.access_token);
   }
 
   return (
-    <div className="loginPage">
-      <form className="loginPanel" onSubmit={submit}>
+    <AuthScreen>
+      <form className="loginPanel" onSubmit={submit} aria-busy={submitting}>
         <div className="brandMark large"><ShieldCheck size={28} /></div>
-        <h1>Content Generator Admin</h1>
+        <h1>AI Content panel</h1>
         <p>Вход в панель генерации и публикации контента.</p>
         <label>
           Логин
-          <input value={username} onChange={(event) => setUsername(event.target.value)} />
+          <input value={username} onChange={(event) => setUsername(event.target.value)} disabled={submitting} />
         </label>
         <label>
           Пароль
-          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoFocus />
+          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoFocus disabled={submitting} />
         </label>
         {error ? <span className="formError">{error}</span> : null}
-        <button className="button primary" type="submit">Войти</button>
+        <button className="button primary" type="submit" disabled={submitting}>
+          {submitting ? <><LoaderCircle className="spin" size={18} /> Входим…</> : "Войти"}
+        </button>
       </form>
-    </div>
+    </AuthScreen>
   );
 }
 
