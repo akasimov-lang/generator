@@ -1404,10 +1404,10 @@ function ProjectWorkspaceView({
         />
       ) : null}
       {selectedSite && (activeTab === "content" || activeTab === "publication") ? (
-        <ProjectContentPanel key={`${selectedSite.id}:content`} api={api} site={selectedSite} content={siteContent} sections={sections} onChanged={refreshProject} />
+        <ProjectPublicationPanel key={`${selectedSite.id}:publication`} api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} onChanged={refreshProject} />
       ) : null}
       {selectedSite && (activeTab === "content" || activeTab === "publication") ? (
-        <ProjectPublicationPanel key={`${selectedSite.id}:publication`} api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} onChanged={refreshProject} />
+        <ProjectContentPanel key={`${selectedSite.id}:content`} api={api} site={selectedSite} content={siteContent} sections={sections} onChanged={refreshProject} />
       ) : null}
       {selectedSite && activeTab === "menu" ? (
         <ProjectMenuPanel api={api} site={selectedSite} sections={sections} onChanged={refreshProject} />
@@ -2440,6 +2440,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
 }
 
 function ProjectPublicationPanel({ api, site, content, sections, campaigns, onChanged }: ViewProps & { site: Site; content: ContentItem[]; sections: Section[]; campaigns: PublicationCampaign[] }) {
+  const [launchExpanded, setLaunchExpanded] = React.useState(false);
   const [name, setName] = React.useState("Daily publication");
   const [itemsPerDay, setItemsPerDay] = React.useState(1);
   const [sectionId, setSectionId] = React.useState("");
@@ -2485,35 +2486,45 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, onCh
 
   return (
     <section className="viewStack">
-      <DataPanel title="Запустить публикацию">
-        <form className="formGrid" onSubmit={createCampaign}>
-          <label>
-            Название кампании
-            <input value={name} onChange={(event) => setName(event.target.value)} required />
-          </label>
-          <label>
-            Пункт меню
-            <SearchableSelect
-              value={sectionId}
-              onChange={setSectionId}
-              options={[{ value: "", label: "Все approved" }, ...sections.map((section) => ({ value: section.id, label: `${section.name} · ${section.path}` }))]}
-              searchPlaceholder="Найти пункт меню"
-            />
-          </label>
-          <label>
-            Текстов в день
-            <input type="number" value={itemsPerDay} onChange={(event) => setItemsPerDay(Number(event.target.value))} min={1} max={24} />
-          </label>
-          <label>
-            Старт
-            <input type="datetime-local" value={startAt} onChange={(event) => setStartAt(event.target.value)} required />
-          </label>
-          {formError ? <span className="formError wide">{formError}</span> : null}
-          <div className="formActions wide">
-            <button className="button primary" type="submit" disabled={!approved.length}><Play size={18} /> Запланировать ({approved.length})</button>
-          </div>
-        </form>
-      </DataPanel>
+      <section className={`dataPanel publicationLaunchPanel ${launchExpanded ? "expanded" : ""}`}>
+        <button className="publicationLaunchToggle" type="button" onClick={() => setLaunchExpanded((current) => !current)} aria-expanded={launchExpanded}>
+          <span className="publicationLaunchIcon"><Send size={20} /></span>
+          <span className="publicationLaunchText">
+            <strong>Запустить публикацию</strong>
+            <small>{launchExpanded ? "Нажмите, чтобы свернуть настройки" : `Нажмите, чтобы настроить кампанию · готово текстов: ${approved.length}`}</small>
+          </span>
+          {launchExpanded ? <ChevronUp size={22} /> : <ChevronDown size={22} />}
+        </button>
+        {launchExpanded ? (
+          <form className="formGrid publicationLaunchForm" onSubmit={createCampaign}>
+            <label>
+              Название кампании
+              <input value={name} onChange={(event) => setName(event.target.value)} required />
+            </label>
+            <label>
+              Пункт меню
+              <SearchableSelect
+                value={sectionId}
+                onChange={setSectionId}
+                options={[{ value: "", label: "Все approved" }, ...sections.map((section) => ({ value: section.id, label: `${section.name} · ${section.path}` }))]}
+                searchPlaceholder="Найти пункт меню"
+              />
+            </label>
+            <label>
+              Текстов в день
+              <input type="number" value={itemsPerDay} onChange={(event) => setItemsPerDay(Number(event.target.value))} min={1} max={24} />
+            </label>
+            <label>
+              Старт
+              <input type="datetime-local" value={startAt} onChange={(event) => setStartAt(event.target.value)} required />
+            </label>
+            {formError ? <span className="formError wide">{formError}</span> : null}
+            <div className="formActions wide">
+              <button className="button primary" type="submit" disabled={!approved.length}><Play size={18} /> Запланировать ({approved.length})</button>
+            </div>
+          </form>
+        ) : null}
+      </section>
       <DataPanel title="Кампании проекта">
         <ResponsiveTable
           columns={["Кампания", "Старт", "Интервал", "Статус", "Действия"]}
