@@ -2361,7 +2361,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
           <button className="button compact primary" type="button" onClick={publishSelected} disabled={!bulkPublishItems.length || bulkBusy} title={selectedIds.length && !bulkPublishItems.length ? "Сначала назначьте пункт меню" : "Согласовать и поставить выбранные тексты в очередь публикации"}>
             <Send size={15} /> В публикацию ({bulkPublishItems.length})
           </button>
-          <button className="button compact secondary" type="button" onClick={() => setCreateMenuVisible((current) => !current)} disabled={bulkBusy}>
+          <button className="button compact secondary createMenuButton" type="button" onClick={() => setCreateMenuVisible((current) => !current)} disabled={bulkBusy}>
             <Plus size={15} /> Создать пункт меню
           </button>
         </div>

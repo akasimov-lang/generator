@@ -1546,6 +1546,11 @@ td {
   max-width: 420px;
 }
 
+.createMenuButton {
+  border-width: 2px;
+  font-weight: 800;
+}
+
 .inlineMenuCreate {
   background: var(--surface-3);
   border: 1px solid var(--border);
