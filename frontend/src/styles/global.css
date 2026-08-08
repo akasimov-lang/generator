@@ -25,6 +25,10 @@
   --danger-border: #fda29b;
   --button-border: #9fb0c1;
   --focus-ring: rgba(22, 101, 52, 0.12);
+  --login-input-border: #9aabba;
+  --login-input-shadow: 0 3px 9px rgba(22, 32, 42, 0.1), inset 0 1px 2px rgba(22, 32, 42, 0.04);
+  --login-input-shadow-hover: 0 5px 13px rgba(22, 32, 42, 0.13), inset 0 1px 2px rgba(22, 32, 42, 0.04);
+  --login-input-shadow-focus: 0 0 0 4px rgba(37, 165, 95, 0.14), 0 7px 16px rgba(22, 101, 52, 0.14);
   --auth-overlay: rgba(244, 246, 248, 0.48);
   --radius: 8px;
   --shadow: 0 10px 30px rgba(22, 32, 42, 0.08);
@@ -59,6 +63,10 @@
   --danger-border: #7f1d1d;
   --button-border: #4e6276;
   --focus-ring: rgba(74, 222, 128, 0.16);
+  --login-input-border: #596d80;
+  --login-input-shadow: 0 4px 11px rgba(0, 0, 0, 0.28), inset 0 1px 2px rgba(255, 255, 255, 0.035);
+  --login-input-shadow-hover: 0 6px 15px rgba(0, 0, 0, 0.34), inset 0 1px 2px rgba(255, 255, 255, 0.04);
+  --login-input-shadow-focus: 0 0 0 4px rgba(74, 222, 128, 0.17), 0 8px 18px rgba(0, 0, 0, 0.32);
   --auth-overlay: rgba(15, 20, 25, 0.54);
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.32);
 }
@@ -2324,6 +2332,26 @@ a {
 .loginPanel p {
   color: var(--muted);
   margin-bottom: 4px;
+}
+
+.loginPanel input {
+  border: 1.5px solid var(--login-input-border);
+  background: var(--surface-3);
+  box-shadow: var(--login-input-shadow);
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease, transform 150ms ease;
+}
+
+.loginPanel input:hover:not(:disabled) {
+  border-color: var(--button-border);
+  box-shadow: var(--login-input-shadow-hover);
+}
+
+.loginPanel input:focus {
+  border-color: var(--primary);
+  background: var(--input-bg);
+  box-shadow: var(--login-input-shadow-focus);
+  outline: none;
+  transform: translateY(-1px);
 }
 
 .loginLoadingBar {

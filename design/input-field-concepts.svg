@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 720" role="img" aria-labelledby="title desc">
+  <title id="title">Варианты оформления полей авторизации</title>
+  <desc id="desc">Три варианта полей: контрастная рамка, мягкое заполнение и плавающая подпись.</desc>
+  <defs>
+    <filter id="cardShadow" x="-15%" y="-15%" width="130%" height="145%"><feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#17202A" flood-opacity=".09"/></filter>
+    <filter id="fieldInset" x="-10%" y="-30%" width="120%" height="160%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#17202A" flood-opacity=".08"/></filter>
+  </defs>
+  <rect width="1500" height="720" fill="#F4F6F8"/>
+  <text x="62" y="70" fill="#17202A" font-family="Inter,Arial,sans-serif" font-size="38" font-weight="750">Поля авторизации — варианты на согласование</text>
+  <text x="62" y="111" fill="#617080" font-family="Inter,Arial,sans-serif" font-size="20">В каждом варианте показано обычное состояние и активное поле</text>
+
+  <g transform="translate(50 150)" filter="url(#cardShadow)">
+    <rect width="440" height="510" rx="24" fill="#FFF" stroke="#D8E0E8" stroke-width="2"/>
+    <circle cx="52" cy="52" r="23" fill="#DCFCE7"/><text x="52" y="60" text-anchor="middle" fill="#166534" font-family="Arial,sans-serif" font-size="22" font-weight="700">1</text>
+    <text x="87" y="59" fill="#17202A" font-family="Inter,Arial,sans-serif" font-size="25" font-weight="750">Контрастная рамка</text>
+    <text x="34" y="105" fill="#617080" font-family="Inter,Arial,sans-serif" font-size="16">Строго, понятно, в стиле текущей админки</text>
+    <text x="34" y="156" fill="#435363" font-family="Inter,Arial,sans-serif" font-size="17" font-weight="700">Логин</text>
+    <rect x="34" y="174" width="372" height="68" rx="11" fill="#F8FAFC" stroke="#91A2B4" stroke-width="2"/>
+    <text x="56" y="217" fill="#17202A" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="600">admin</text>
+    <text x="34" y="286" fill="#166534" font-family="Inter,Arial,sans-serif" font-size="17" font-weight="700">Пароль · фокус</text>
+    <rect x="31" y="301" width="378" height="74" rx="14" fill="#DCFCE7" opacity=".75"/>
+    <rect x="34" y="304" width="372" height="68" rx="11" fill="#FFF" stroke="#25A55F" stroke-width="2.5"/>
+    <circle cx="58" cy="338" r="5" fill="#17202A"/><circle cx="76" cy="338" r="5" fill="#17202A"/><circle cx="94" cy="338" r="5" fill="#17202A"/>
+    <rect x="34" y="414" width="372" height="60" rx="11" fill="#166534"/><text x="220" y="452" text-anchor="middle" fill="#FFF" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="700">Войти</text>
+    <text x="220" y="498" text-anchor="middle" fill="#166534" font-family="Inter,Arial,sans-serif" font-size="15" font-weight="700">Рекомендуемый</text>
+  </g>
+
+  <g transform="translate(530 150)" filter="url(#cardShadow)">
+    <rect width="440" height="510" rx="24" fill="#FFF" stroke="#D8E0E8" stroke-width="2"/>
+    <circle cx="52" cy="52" r="23" fill="#E8F1FF"/><text x="52" y="60" text-anchor="middle" fill="#175CD3" font-family="Arial,sans-serif" font-size="22" font-weight="700">2</text>
+    <text x="87" y="59" fill="#17202A" font-family="Inter,Arial,sans-serif" font-size="25" font-weight="750">Мягкое заполнение</text>
+    <text x="34" y="105" fill="#617080" font-family="Inter,Arial,sans-serif" font-size="16">Современнее и визуально легче</text>
+    <text x="34" y="156" fill="#435363" font-family="Inter,Arial,sans-serif" font-size="17" font-weight="700">Логин</text>
+    <rect x="34" y="174" width="372" height="68" rx="13" fill="#EEF2F6" filter="url(#fieldInset)"/>
+    <text x="56" y="217" fill="#17202A" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="600">admin</text>
+    <text x="34" y="286" fill="#166534" font-family="Inter,Arial,sans-serif" font-size="17" font-weight="700">Пароль · фокус</text>
+    <rect x="34" y="304" width="372" height="68" rx="13" fill="#F3FBF6" stroke="#25A55F" stroke-width="2.5"/>
+    <rect x="48" y="318" width="4" height="40" rx="2" fill="#25A55F"/>
+    <circle cx="70" cy="338" r="5" fill="#17202A"/><circle cx="88" cy="338" r="5" fill="#17202A"/><circle cx="106" cy="338" r="5" fill="#17202A"/>
+    <rect x="34" y="414" width="372" height="60" rx="13" fill="#166534"/><text x="220" y="452" text-anchor="middle" fill="#FFF" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="700">Войти</text>
+    <text x="220" y="498" text-anchor="middle" fill="#617080" font-family="Inter,Arial,sans-serif" font-size="15">Минимум линий</text>
+  </g>
+
+  <g transform="translate(1010 150)" filter="url(#cardShadow)">
+    <rect width="440" height="510" rx="24" fill="#FFF" stroke="#D8E0E8" stroke-width="2"/>
+    <circle cx="52" cy="52" r="23" fill="#FFF4D6"/><text x="52" y="60" text-anchor="middle" fill="#B54708" font-family="Arial,sans-serif" font-size="22" font-weight="700">3</text>
+    <text x="87" y="59" fill="#17202A" font-family="Inter,Arial,sans-serif" font-size="25" font-weight="750">Плавающая подпись</text>
+    <text x="34" y="105" fill="#617080" font-family="Inter,Arial,sans-serif" font-size="16">Компактно и ближе к SaaS-интерфейсам</text>
+    <rect x="34" y="159" width="372" height="76" rx="12" fill="#FFF" stroke="#91A2B4" stroke-width="2"/>
+    <rect x="49" y="150" width="68" height="20" fill="#FFF"/><text x="54" y="166" fill="#617080" font-family="Inter,Arial,sans-serif" font-size="14" font-weight="700">Логин</text>
+    <text x="54" y="207" fill="#17202A" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="600">admin</text>
+    <rect x="31" y="283" width="378" height="82" rx="15" fill="#DCFCE7" opacity=".75"/>
+    <rect x="34" y="286" width="372" height="76" rx="12" fill="#FFF" stroke="#25A55F" stroke-width="2.5"/>
+    <rect x="49" y="277" width="83" height="20" fill="#FFF"/><text x="54" y="293" fill="#166534" font-family="Inter,Arial,sans-serif" font-size="14" font-weight="700">Пароль</text>
+    <circle cx="58" cy="326" r="5" fill="#17202A"/><circle cx="76" cy="326" r="5" fill="#17202A"/><circle cx="94" cy="326" r="5" fill="#17202A"/>
+    <rect x="34" y="414" width="372" height="60" rx="12" fill="#166534"/><text x="220" y="452" text-anchor="middle" fill="#FFF" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="700">Войти</text>
+    <text x="220" y="498" text-anchor="middle" fill="#617080" font-family="Inter,Arial,sans-serif" font-size="15">Потребует изменения разметки</text>
+  </g>
+</svg>
