@@ -277,6 +277,7 @@ type PublicationCampaign = {
 };
 
 type ThemeMode = "light" | "dark";
+type InputStyle = "balanced" | "classic" | "soft" | "inset" | "underline" | "emerald" | "graphite" | "rounded" | "contrast" | "glass";
 type AppView = "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "settings";
 type WorkspaceTab = "overview" | "topics" | "content" | "publication" | "menu";
 
@@ -291,6 +292,24 @@ const ACTIVE_GENERATION_STATUSES = ["generation_queued", "generating"];
 const DEFAULT_TARGET_WORDS = 2000;
 const DEFAULT_WORKSPACE_TAB: WorkspaceTab = "overview";
 const DEFAULT_ROUTE: AppRoute = { view: "dashboard", workspaceTab: DEFAULT_WORKSPACE_TAB };
+const DEFAULT_INPUT_STYLE: InputStyle = "balanced";
+const INPUT_STYLE_OPTIONS: Array<{ id: InputStyle; name: string; description: string }> = [
+  { id: "balanced", name: "Сбалансированный", description: "Чёткая рамка и аккуратная мягкая тень." },
+  { id: "classic", name: "Классический", description: "Строгая форма без декоративной тени." },
+  { id: "soft", name: "Мягкое заполнение", description: "Спокойный фон и деликатный объём." },
+  { id: "inset", name: "Внутренняя глубина", description: "Лёгкая внутренняя тень подчёркивает ввод." },
+  { id: "underline", name: "Нижняя линия", description: "Минималистичное поле только с акцентом снизу." },
+  { id: "emerald", name: "Изумрудный", description: "Фирменный зелёный акцент и мягкое свечение." },
+  { id: "graphite", name: "Графитовый", description: "Насыщенный нейтральный фон и контрастная рамка." },
+  { id: "rounded", name: "Скруглённый", description: "Выраженное скругление и воздушная тень." },
+  { id: "contrast", name: "Высокий контраст", description: "Усиленная рамка для максимальной заметности." },
+  { id: "glass", name: "Стекло", description: "Полупрозрачная поверхность с лёгким бликом." }
+];
+
+function storedInputStyle(): InputStyle {
+  const stored = localStorage.getItem("input_style");
+  return INPUT_STYLE_OPTIONS.some((option) => option.id === stored) ? stored as InputStyle : DEFAULT_INPUT_STYLE;
+}
 
 async function copyTextToClipboard(text: string) {
   if (navigator.clipboard && window.isSecureContext) {
@@ -517,6 +536,7 @@ function App() {
   const initialRoute = React.useMemo(() => routeFromPath(window.location.pathname), []);
   const [token, setToken] = React.useState(() => localStorage.getItem("admin_token") || "");
   const [theme, setTheme] = React.useState<ThemeMode>(() => (localStorage.getItem("theme_mode") === "dark" ? "dark" : "light"));
+  const [inputStyle, setInputStyle] = React.useState<InputStyle>(storedInputStyle);
   const [activeView, setActiveView] = React.useState<AppView>(initialRoute.view);
   const [workspaceTab, setWorkspaceTab] = React.useState<WorkspaceTab>(initialRoute.workspaceTab);
   const [dashboard, setDashboard] = React.useState<Dashboard | null>(null);
@@ -647,6 +667,11 @@ function App() {
   }, [theme]);
 
   React.useEffect(() => {
+    document.documentElement.dataset.inputStyle = inputStyle;
+    localStorage.setItem("input_style", inputStyle);
+  }, [inputStyle]);
+
+  React.useEffect(() => {
     if (!currentUser) {
       setNotificationPromptVisible(false);
       return;
@@ -772,7 +797,7 @@ function App() {
         {isAdmin && activeView === "publications" && <PublicationsView api={api} sites={sites} content={content} onChanged={loadAll} />}
         {isAdmin && activeView === "providers" && <ProvidersView api={api} providers={providers} onChanged={loadAll} />}
         {isAdmin && activeView === "sites" && <SitesView api={api} sites={sites} onChanged={loadAll} />}
-        {activeView === "settings" && <SettingsView api={api} currentUser={currentUser} users={users} onChanged={loadAll} />}
+        {activeView === "settings" && <SettingsView api={api} currentUser={currentUser} users={users} inputStyle={inputStyle} onInputStyleChange={setInputStyle} onChanged={loadAll} />}
       </main>
       {notificationPromptVisible ? (
         <div className="permissionOverlay" role="dialog" aria-modal="true" aria-labelledby="popup-permission-title">
@@ -1355,8 +1380,7 @@ function ProjectWorkspaceView({
         <div className="workspaceTabs">
           <TabButton href={pathForRoute("workspace", "overview")} label="Обзор" active={activeTab === "overview"} onClick={() => onTabChange("overview")} />
           <TabButton href={pathForRoute("workspace", "topics")} label="Задачи" active={activeTab === "topics"} onClick={() => onTabChange("topics")} />
-          <TabButton href={pathForRoute("workspace", "content")} label="Контент" active={activeTab === "content"} onClick={() => onTabChange("content")} />
-          <TabButton href={pathForRoute("workspace", "publication")} label="Публикация" active={activeTab === "publication"} onClick={() => onTabChange("publication")} />
+          <TabButton href={pathForRoute("workspace", "content")} label="Контент и публикация" active={activeTab === "content" || activeTab === "publication"} onClick={() => onTabChange("content")} />
           <TabButton href={pathForRoute("workspace", "menu")} label="Меню" active={activeTab === "menu"} onClick={() => onTabChange("menu")} />
         </div>
         {workspaceError ? <div className="notice">{workspaceError}</div> : null}
@@ -1379,11 +1403,11 @@ function ProjectWorkspaceView({
           onChanged={refreshProject}
         />
       ) : null}
-      {selectedSite && activeTab === "content" ? (
-        <ProjectContentPanel key={selectedSite.id} api={api} content={siteContent} sections={sections} onChanged={refreshProject} />
+      {selectedSite && (activeTab === "content" || activeTab === "publication") ? (
+        <ProjectContentPanel key={`${selectedSite.id}:content`} api={api} site={selectedSite} content={siteContent} sections={sections} onChanged={refreshProject} />
       ) : null}
-      {selectedSite && activeTab === "publication" ? (
-        <ProjectPublicationPanel key={selectedSite.id} api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} onChanged={refreshProject} />
+      {selectedSite && (activeTab === "content" || activeTab === "publication") ? (
+        <ProjectPublicationPanel key={`${selectedSite.id}:publication`} api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} onChanged={refreshProject} />
       ) : null}
       {selectedSite && activeTab === "menu" ? (
         <ProjectMenuPanel api={api} site={selectedSite} sections={sections} onChanged={refreshProject} />
@@ -2159,11 +2183,116 @@ function ProjectPromptsPanel({ api, site, promptTemplates, basePrompt, isAdmin, 
   );
 }
 
-function ProjectContentPanel({ api, content, sections, onChanged }: ViewProps & { content: ContentItem[]; sections: Section[] }) {
+function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewProps & { site: Site; content: ContentItem[]; sections: Section[] }) {
   const [selectedItem, setSelectedItem] = React.useState<ContentItem | null>(null);
+  const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
+  const [bulkSectionId, setBulkSectionId] = React.useState("");
+  const [bulkBusy, setBulkBusy] = React.useState(false);
+  const [createMenuVisible, setCreateMenuVisible] = React.useState(false);
+  const [menuName, setMenuName] = React.useState("");
+  const [menuExternalId, setMenuExternalId] = React.useState("");
+  const [menuPath, setMenuPath] = React.useState("");
   const [jsonDraft, setJsonDraft] = React.useState("");
   const [sectionId, setSectionId] = React.useState("");
   const [editorError, setEditorError] = React.useState("");
+  const selectableIds = React.useMemo(() => content.filter((item) => !isPublicationLocked(item)).map((item) => item.id), [content]);
+  const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.includes(id));
+  const selectedItems = content.filter((item) => selectedIds.includes(item.id));
+  const bulkApproveItems = selectedItems.filter((item) => Boolean(item.section_id) && canApproveContent(item));
+  const bulkPublishItems = selectedItems.filter((item) => Boolean(item.section_id) && ["generated", "rejected", "approved"].includes(item.status));
+
+  React.useEffect(() => {
+    setSelectedIds((current) => current.filter((id) => selectableIds.includes(id)));
+  }, [selectableIds]);
+
+  function toggleSelected(id: string) {
+    setSelectedIds((current) => current.includes(id) ? current.filter((itemId) => itemId !== id) : [...current, id]);
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds(allSelected ? [] : selectableIds);
+  }
+
+  async function applyBulkSection() {
+    if (!selectedIds.length || !bulkSectionId) {
+      setEditorError(!selectedIds.length ? "Выберите хотя бы один текст." : "Выберите пункт меню.");
+      return;
+    }
+    setEditorError("");
+    setBulkBusy(true);
+    try {
+      const results = await Promise.allSettled(selectedIds.map((id) => api(`/content/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ section_id: bulkSectionId })
+      })));
+      const failed = results.filter((result) => result.status === "rejected").length;
+      await onChanged();
+      if (failed) setEditorError(`Не удалось изменить пункт меню у ${failed} текстов.`);
+    } catch (error) {
+      setEditorError(error instanceof Error ? error.message : "Не удалось применить пункт меню.");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function approveSelected() {
+    if (!bulkApproveItems.length) return;
+    setEditorError("");
+    setBulkBusy(true);
+    try {
+      const results = await Promise.allSettled(bulkApproveItems.map((item) => api(`/content/${item.id}/approve`, { method: "POST" })));
+      const failed = results.filter((result) => result.status === "rejected").length;
+      await onChanged();
+      if (failed) setEditorError(`Не удалось согласовать ${failed} текстов.`);
+    } catch (error) {
+      setEditorError(error instanceof Error ? error.message : "Не удалось согласовать выбранные тексты.");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function publishSelected() {
+    if (!bulkPublishItems.length) return;
+    setEditorError("");
+    setBulkBusy(true);
+    try {
+      const results = await Promise.allSettled(bulkPublishItems.map((item) => api(`/content/${item.id}/publish-now`, { method: "POST" })));
+      const failed = results.filter((result) => result.status === "rejected").length;
+      setSelectedIds([]);
+      await onChanged();
+      if (failed) setEditorError(`Не удалось отправить в публикацию ${failed} текстов.`);
+    } catch (error) {
+      setEditorError(error instanceof Error ? error.message : "Не удалось отправить выбранные тексты в публикацию.");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function createMenuItem(event: React.FormEvent) {
+    event.preventDefault();
+    setEditorError("");
+    setBulkBusy(true);
+    try {
+      const created = await api<Section>(`/sites/${site.id}/sections`, {
+        method: "POST",
+        body: JSON.stringify({
+          name: menuName.trim(),
+          external_id: menuExternalId.trim() || slugFromText(menuName),
+          path: menuPath.trim() || `/${slugFromText(menuName)}/`
+        })
+      });
+      setMenuName("");
+      setMenuExternalId("");
+      setMenuPath("");
+      setBulkSectionId(created.id);
+      setCreateMenuVisible(false);
+      await onChanged();
+    } catch (error) {
+      setEditorError(error instanceof Error ? error.message : "Не удалось создать пункт меню.");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
 
   function openEditor(item: ContentItem) {
     setSelectedItem(item);
@@ -2205,9 +2334,66 @@ function ProjectContentPanel({ api, content, sections, onChanged }: ViewProps & 
   return (
     <section className="viewStack">
       <DataPanel title="Контент проекта">
+        <div className="bulkToolbar projectContentBulkToolbar">
+          <label className="checkboxRow bulkSelectAll">
+            <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} disabled={!selectableIds.length || bulkBusy} />
+            Выбрать все
+          </label>
+          <span className="fieldHint">Выбрано: {selectedIds.length}</span>
+          <div className="bulkMenuSelect">
+            <SearchableSelect
+              value={bulkSectionId}
+              onChange={setBulkSectionId}
+              options={[{ value: "", label: "Выберите пункт меню" }, ...sections.map((section) => ({ value: section.id, label: `${section.name} · ${section.path}` }))]}
+              searchPlaceholder="Найти пункт меню"
+              disabled={bulkBusy}
+            />
+          </div>
+          <button className="button compact primary" type="button" onClick={applyBulkSection} disabled={!selectedIds.length || !bulkSectionId || bulkBusy}>
+            <CheckCircle2 size={15} /> {bulkBusy ? "Сохраняю" : `Назначить выбранным (${selectedIds.length})`}
+          </button>
+          <button className="button compact approve" type="button" onClick={approveSelected} disabled={!bulkApproveItems.length || bulkBusy} title={selectedIds.length && !bulkApproveItems.length ? "Сначала назначьте пункт меню текстам со статусом generated" : undefined}>
+            <CheckCircle2 size={15} /> Согласовать ({bulkApproveItems.length})
+          </button>
+          <button className="button compact primary" type="button" onClick={publishSelected} disabled={!bulkPublishItems.length || bulkBusy} title={selectedIds.length && !bulkPublishItems.length ? "Сначала назначьте пункт меню" : "Согласовать и поставить выбранные тексты в очередь публикации"}>
+            <Send size={15} /> В публикацию ({bulkPublishItems.length})
+          </button>
+          <button className="button compact secondary" type="button" onClick={() => setCreateMenuVisible((current) => !current)} disabled={bulkBusy}>
+            <Plus size={15} /> Создать пункт меню
+          </button>
+        </div>
+        {createMenuVisible ? (
+          <form className="inlineMenuCreate" onSubmit={createMenuItem}>
+            <label>
+              Название пункта
+              <input value={menuName} onChange={(event) => setMenuName(event.target.value)} placeholder="Casino bonus" required />
+            </label>
+            <label>
+              External ID
+              <input value={menuExternalId} onChange={(event) => setMenuExternalId(event.target.value)} placeholder="Сформируется автоматически" />
+            </label>
+            <label>
+              Path
+              <input value={menuPath} onChange={(event) => setMenuPath(event.target.value)} placeholder="/casino-bonus/" />
+            </label>
+            <div className="formActions alignEnd">
+              <button className="button compact secondary" type="button" onClick={() => setCreateMenuVisible(false)}>Отмена</button>
+              <button className="button compact primary" type="submit" disabled={bulkBusy}><Plus size={15} /> Создать</button>
+            </div>
+          </form>
+        ) : null}
         <ResponsiveTable
-          columns={["Тема", "Меню", "Слова", "Статус", "Опубликовано", "Действия"]}
+          columns={["Выбор", "Тема", "Меню", "Слова", "Статус", "Опубликовано", "Действия"]}
           rows={content.map((item) => [
+            <input
+              className="rowCheckbox"
+              type="checkbox"
+              checked={selectedIds.includes(item.id)}
+              onChange={() => toggleSelected(item.id)}
+              disabled={isPublicationLocked(item) || bulkBusy}
+              aria-label={`Выбрать ${item.topic}`}
+              title={isPublicationLocked(item) ? "Пункт меню опубликованного или запланированного текста изменять нельзя" : undefined}
+            />,
             <TopicMetaCell item={item} />,
             sectionLabel(item.section_id, sections),
             item.word_count,
@@ -4082,7 +4268,12 @@ function SitesView({ api, sites, onChanged }: ViewProps & { sites: Site[] }) {
   );
 }
 
-function SettingsView({ api, currentUser, users, onChanged }: ViewProps & { currentUser: User | null; users: User[] }) {
+function SettingsView({ api, currentUser, users, inputStyle, onInputStyleChange, onChanged }: ViewProps & {
+  currentUser: User | null;
+  users: User[];
+  inputStyle: InputStyle;
+  onInputStyleChange: (style: InputStyle) => void;
+}) {
   return (
     <section className="viewStack">
       <DataPanel title="Профиль">
@@ -4096,13 +4287,44 @@ function SettingsView({ api, currentUser, users, onChanged }: ViewProps & { curr
         <PasswordChangeForm api={api} />
       </DataPanel>
 
+      <DataPanel title="Оформление полей ввода">
+        <div className="inputStyleHeader">
+          <p>Выберите один из 10 вариантов. Стиль применяется сразу ко всем полям, выпадающим спискам и поиску.</p>
+          <span>Выбрано: <strong>{INPUT_STYLE_OPTIONS.find((option) => option.id === inputStyle)?.name}</strong></span>
+        </div>
+        <div className="inputStyleGrid" role="radiogroup" aria-label="Стиль полей ввода">
+          {INPUT_STYLE_OPTIONS.map((option) => (
+            <button
+              className={`inputStyleCard ${inputStyle === option.id ? "isSelected" : ""}`}
+              data-preview-style={option.id}
+              key={option.id}
+              type="button"
+              role="radio"
+              aria-checked={inputStyle === option.id}
+              onClick={() => onInputStyleChange(option.id)}
+            >
+              <span className="inputStyleCardTitle">
+                <strong>{option.name}</strong>
+                {inputStyle === option.id ? <CheckCircle2 size={18} aria-hidden="true" /> : null}
+              </span>
+              <small>{option.description}</small>
+              <span className="inputStylePreview" aria-hidden="true">
+                <span className="inputStylePreviewField">Пример поля</span>
+                <span className="inputStylePreviewField isFocused">Активное поле</span>
+              </span>
+            </button>
+          ))}
+        </div>
+        <p className="inputStyleFootnote">Настройка сохраняется в текущем браузере и применяется также к окну авторизации.</p>
+      </DataPanel>
+
       {currentUser?.is_admin ? (
         <UsersAdminPanel api={api} currentUser={currentUser} users={users} onChanged={onChanged} />
       ) : null}
 
       <DataPanel title="Настройки проекта">
         <div className="settingsList">
-          <div><strong>Доступ по IP</strong><span>http://91.199.133.86</span></div>
+          <div><strong>Адрес сервиса</strong><span>https://ai-seo-content-panel.site</span></div>
           <div><strong>Frontend</strong><span>React, CSS Modules/global CSS, без Tailwind и CDN</span></div>
           <div><strong>Backend</strong><span>FastAPI, PostgreSQL, Redis, Celery</span></div>
           <div><strong>Payload</strong><span>Simple: menu + pages; Full: menu + pages + casinos</span></div>
@@ -4600,8 +4822,8 @@ function viewTitle(view: AppView, workspaceTab: WorkspaceTab) {
     const tabTitles: Record<WorkspaceTab, string> = {
       overview: "Рабочий экран: обзор",
       topics: "Рабочий экран: задачи",
-      content: "Рабочий экран: контент",
-      publication: "Рабочий экран: публикация",
+      content: "Рабочий экран: контент и публикация",
+      publication: "Рабочий экран: контент и публикация",
       menu: "Рабочий экран: меню"
     };
     return tabTitles[workspaceTab];

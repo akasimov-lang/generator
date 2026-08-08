@@ -25,10 +25,17 @@
   --danger-border: #fda29b;
   --button-border: #9fb0c1;
   --focus-ring: rgba(22, 101, 52, 0.12);
-  --login-input-border: #9aabba;
-  --login-input-shadow: 0 3px 9px rgba(22, 32, 42, 0.1), inset 0 1px 2px rgba(22, 32, 42, 0.04);
-  --login-input-shadow-hover: 0 5px 13px rgba(22, 32, 42, 0.13), inset 0 1px 2px rgba(22, 32, 42, 0.04);
-  --login-input-shadow-focus: 0 0 0 4px rgba(37, 165, 95, 0.14), 0 7px 16px rgba(22, 101, 52, 0.14);
+  --field-label: #536475;
+  --field-background: var(--surface-3);
+  --field-border-color: #9aabba;
+  --field-border-width: 1.5px;
+  --field-border-radius: 10px;
+  --field-shadow: 0 3px 9px rgba(22, 32, 42, 0.1), inset 0 1px 2px rgba(22, 32, 42, 0.04);
+  --field-shadow-hover: 0 5px 13px rgba(22, 32, 42, 0.13), inset 0 1px 2px rgba(22, 32, 42, 0.04);
+  --field-focus-border: var(--primary);
+  --field-focus-shadow: 0 0 0 4px rgba(37, 165, 95, 0.14), 0 7px 16px rgba(22, 101, 52, 0.14);
+  --field-focus-transform: translateY(-1px);
+  --field-backdrop: none;
   --auth-overlay: rgba(244, 246, 248, 0.48);
   --radius: 8px;
   --shadow: 0 10px 30px rgba(22, 32, 42, 0.08);
@@ -63,12 +70,134 @@
   --danger-border: #7f1d1d;
   --button-border: #4e6276;
   --focus-ring: rgba(74, 222, 128, 0.16);
-  --login-input-border: #596d80;
-  --login-input-shadow: 0 4px 11px rgba(0, 0, 0, 0.28), inset 0 1px 2px rgba(255, 255, 255, 0.035);
-  --login-input-shadow-hover: 0 6px 15px rgba(0, 0, 0, 0.34), inset 0 1px 2px rgba(255, 255, 255, 0.04);
-  --login-input-shadow-focus: 0 0 0 4px rgba(74, 222, 128, 0.17), 0 8px 18px rgba(0, 0, 0, 0.32);
+  --field-label: #c9d4de;
+  --field-background: #111b25;
+  --field-border-color: #596d80;
+  --field-shadow: 0 4px 11px rgba(0, 0, 0, 0.28), inset 0 1px 2px rgba(255, 255, 255, 0.035);
+  --field-shadow-hover: 0 6px 15px rgba(0, 0, 0, 0.34), inset 0 1px 2px rgba(255, 255, 255, 0.04);
+  --field-focus-shadow: 0 0 0 4px rgba(74, 222, 128, 0.17), 0 8px 18px rgba(0, 0, 0, 0.32);
   --auth-overlay: rgba(15, 20, 25, 0.54);
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.32);
+}
+
+:root[data-input-style="classic"],
+[data-preview-style="classic"] {
+  --field-background: var(--input-bg);
+  --field-border-color: var(--button-border);
+  --field-border-width: 1px;
+  --field-border-radius: 7px;
+  --field-shadow: none;
+  --field-shadow-hover: none;
+  --field-focus-shadow: 0 0 0 3px var(--focus-ring);
+  --field-focus-transform: none;
+}
+
+[data-preview-style="balanced"] {
+  --field-background: var(--surface-3);
+  --field-border-color: var(--button-border);
+  --field-border-width: 1.5px;
+  --field-border-radius: 10px;
+  --field-shadow: 0 3px 9px rgba(22, 32, 42, 0.12), inset 0 1px 2px rgba(22, 32, 42, 0.04);
+  --field-shadow-hover: 0 5px 13px rgba(22, 32, 42, 0.15), inset 0 1px 2px rgba(22, 32, 42, 0.04);
+  --field-focus-shadow: 0 0 0 4px var(--focus-ring), 0 7px 16px rgba(22, 101, 52, 0.14);
+  --field-focus-transform: translateY(-1px);
+}
+
+:root[data-input-style="soft"],
+[data-preview-style="soft"] {
+  --field-background: var(--surface-2);
+  --field-border-color: transparent;
+  --field-border-width: 1px;
+  --field-border-radius: 11px;
+  --field-shadow: 0 3px 10px rgba(22, 32, 42, 0.08);
+  --field-shadow-hover: 0 5px 14px rgba(22, 32, 42, 0.12);
+  --field-focus-shadow: 0 0 0 3px var(--focus-ring), 0 6px 15px rgba(22, 32, 42, 0.1);
+  --field-focus-transform: none;
+}
+
+:root[data-input-style="inset"],
+[data-preview-style="inset"] {
+  --field-background: var(--surface-3);
+  --field-border-color: var(--border);
+  --field-border-width: 1px;
+  --field-border-radius: 9px;
+  --field-shadow: inset 0 2px 5px rgba(22, 32, 42, 0.14);
+  --field-shadow-hover: inset 0 2px 5px rgba(22, 32, 42, 0.18);
+  --field-focus-shadow: 0 0 0 3px var(--focus-ring), inset 0 2px 5px rgba(22, 32, 42, 0.1);
+  --field-focus-transform: none;
+}
+
+:root[data-input-style="underline"],
+[data-preview-style="underline"] {
+  --field-background: transparent;
+  --field-border-color: var(--button-border);
+  --field-border-width: 0 0 2px;
+  --field-border-radius: 0;
+  --field-shadow: none;
+  --field-shadow-hover: none;
+  --field-focus-shadow: 0 3px 0 -1px var(--primary);
+  --field-focus-transform: none;
+}
+
+:root[data-input-style="emerald"],
+[data-preview-style="emerald"] {
+  --field-background: color-mix(in srgb, var(--primary-soft) 34%, var(--input-bg));
+  --field-border-color: color-mix(in srgb, var(--primary) 58%, var(--border));
+  --field-border-width: 1.5px;
+  --field-border-radius: 10px;
+  --field-shadow: 0 3px 10px color-mix(in srgb, var(--primary) 14%, transparent);
+  --field-shadow-hover: 0 5px 15px color-mix(in srgb, var(--primary) 20%, transparent);
+  --field-focus-shadow: 0 0 0 4px var(--focus-ring), 0 7px 18px color-mix(in srgb, var(--primary) 22%, transparent);
+  --field-focus-transform: translateY(-1px);
+}
+
+:root[data-input-style="graphite"],
+[data-preview-style="graphite"] {
+  --field-background: color-mix(in srgb, var(--surface-2) 82%, #344353);
+  --field-border-color: #647586;
+  --field-border-width: 1px;
+  --field-border-radius: 8px;
+  --field-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.1), 0 3px 9px rgba(9, 16, 23, 0.16);
+  --field-shadow-hover: inset 0 1px 1px rgba(255, 255, 255, 0.12), 0 5px 12px rgba(9, 16, 23, 0.2);
+  --field-focus-shadow: 0 0 0 3px var(--focus-ring), 0 6px 15px rgba(9, 16, 23, 0.22);
+  --field-focus-transform: none;
+}
+
+:root[data-input-style="rounded"],
+[data-preview-style="rounded"] {
+  --field-background: var(--input-bg);
+  --field-border-color: var(--button-border);
+  --field-border-width: 1px;
+  --field-border-radius: 18px;
+  --field-shadow: 0 4px 12px rgba(22, 32, 42, 0.1);
+  --field-shadow-hover: 0 6px 16px rgba(22, 32, 42, 0.14);
+  --field-focus-shadow: 0 0 0 4px var(--focus-ring), 0 7px 18px rgba(22, 32, 42, 0.13);
+  --field-focus-transform: translateY(-1px);
+}
+
+:root[data-input-style="contrast"],
+[data-preview-style="contrast"] {
+  --field-background: var(--input-bg);
+  --field-border-color: var(--text);
+  --field-border-width: 2px;
+  --field-border-radius: 8px;
+  --field-shadow: none;
+  --field-shadow-hover: 0 3px 0 color-mix(in srgb, var(--text) 18%, transparent);
+  --field-focus-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 26%, transparent);
+  --field-focus-transform: none;
+}
+
+:root[data-input-style="glass"],
+[data-preview-style="glass"] {
+  --field-background: color-mix(in srgb, var(--surface) 68%, transparent);
+  --field-border-color: color-mix(in srgb, var(--button-border) 65%, transparent);
+  --field-border-width: 1px;
+  --field-border-radius: 12px;
+  --field-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 5px 15px rgba(22, 32, 42, 0.11);
+  --field-shadow-hover: inset 0 1px 0 rgba(255, 255, 255, 0.42), 0 7px 18px rgba(22, 32, 42, 0.15);
+  --field-focus-shadow: 0 0 0 3px var(--focus-ring), 0 8px 20px rgba(22, 32, 42, 0.16);
+  --field-focus-transform: translateY(-1px);
+  --field-backdrop: blur(10px);
 }
 
 * {
@@ -88,7 +217,7 @@ body {
 }
 
 button,
-input,
+input:not([type="checkbox"]):not([type="radio"]),
 select,
 textarea {
   font: inherit;
@@ -1344,6 +1473,33 @@ td {
   padding: 10px;
 }
 
+.projectContentBulkToolbar {
+  align-items: stretch;
+}
+
+.projectContentBulkToolbar .bulkSelectAll,
+.projectContentBulkToolbar .fieldHint,
+.projectContentBulkToolbar .button {
+  align-self: center;
+}
+
+.bulkMenuSelect {
+  flex: 1 1 280px;
+  min-width: 240px;
+  max-width: 420px;
+}
+
+.inlineMenuCreate {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  margin-bottom: 14px;
+  padding: 14px;
+}
+
 .projectSearchField {
   align-items: center;
   background: var(--surface);
@@ -1769,7 +1925,7 @@ td {
 label {
   display: grid;
   gap: 7px;
-  color: var(--muted);
+  color: var(--field-label);
   font-size: 13px;
   font-weight: 600;
 }
@@ -1787,6 +1943,12 @@ label {
   height: 18px;
 }
 
+input[type="checkbox"],
+input[type="radio"] {
+  box-shadow: none;
+  transform: none;
+}
+
 .promptDefaultRow {
   align-self: end;
 }
@@ -1795,12 +1957,17 @@ input,
 select,
 textarea {
   width: 100%;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--input-bg);
+  border-color: var(--field-border-color);
+  border-style: solid;
+  border-width: var(--field-border-width);
+  border-radius: var(--field-border-radius);
+  background: var(--field-background);
   color: var(--text);
   padding: 10px 12px;
   outline: none;
+  box-shadow: var(--field-shadow);
+  backdrop-filter: var(--field-backdrop);
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease, transform 150ms ease;
 }
 
 input::placeholder,
@@ -1820,11 +1987,18 @@ textarea {
   line-height: 1.5;
 }
 
-input:focus,
+input:not([type="checkbox"]):not([type="radio"]):hover:not(:disabled),
+select:hover:not(:disabled),
+textarea:hover:not(:disabled) {
+  box-shadow: var(--field-shadow-hover);
+}
+
+input:not([type="checkbox"]):not([type="radio"]):focus,
 select:focus,
 textarea:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--focus-ring);
+  border-color: var(--field-focus-border);
+  box-shadow: var(--field-focus-shadow);
+  transform: var(--field-focus-transform);
 }
 
 .searchableSelect {
@@ -1835,9 +2009,13 @@ textarea:focus {
 
 .searchableSelectControl {
   align-items: center;
-  background: var(--input-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  background: var(--field-background);
+  border-color: var(--field-border-color);
+  border-style: solid;
+  border-width: var(--field-border-width);
+  border-radius: var(--field-border-radius);
+  box-shadow: var(--field-shadow);
+  backdrop-filter: var(--field-backdrop);
   color: var(--text);
   display: flex;
   gap: 10px;
@@ -1846,6 +2024,11 @@ textarea:focus {
   padding: 10px 12px;
   text-align: left;
   width: 100%;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease, transform 150ms ease;
+}
+
+.searchableSelectControl:hover:not(:disabled) {
+  box-shadow: var(--field-shadow-hover);
 }
 
 .searchableSelectControl span {
@@ -1863,9 +2046,10 @@ textarea:focus {
 
 .searchableSelect.isOpen .searchableSelectControl,
 .searchableSelectControl:focus-visible {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--focus-ring);
+  border-color: var(--field-focus-border);
+  box-shadow: var(--field-focus-shadow);
   outline: none;
+  transform: var(--field-focus-transform);
 }
 
 .searchableSelect.isOpen .searchableSelectControl svg {
@@ -1982,6 +2166,121 @@ textarea:focus {
   border-radius: var(--radius);
   padding: 28px;
   text-align: center;
+}
+
+.inputStyleHeader {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.inputStyleHeader p,
+.inputStyleFootnote {
+  color: var(--muted);
+  margin: 0;
+}
+
+.inputStyleHeader p {
+  line-height: 1.5;
+}
+
+.inputStyleHeader > span {
+  background: var(--primary-soft);
+  border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border));
+  border-radius: 999px;
+  color: var(--primary);
+  flex: 0 0 auto;
+  font-size: 12px;
+  padding: 7px 11px;
+}
+
+.inputStyleGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.inputStyleCard {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 14px;
+  text-align: left;
+  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.inputStyleCard:not([data-preview-style="glass"]) {
+  --field-backdrop: none;
+}
+
+.inputStyleCard:hover {
+  border-color: var(--button-border);
+  box-shadow: 0 7px 18px rgba(22, 32, 42, 0.1);
+  transform: translateY(-1px);
+}
+
+.inputStyleCard.isSelected {
+  background: color-mix(in srgb, var(--primary-soft) 44%, var(--surface));
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+.inputStyleCardTitle {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.inputStyleCardTitle svg {
+  color: var(--primary);
+  flex: 0 0 auto;
+}
+
+.inputStyleCard > small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  min-height: 30px;
+}
+
+.inputStylePreview {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.inputStylePreviewField {
+  background: var(--field-background);
+  border-color: var(--field-border-color);
+  border-style: solid;
+  border-width: var(--field-border-width);
+  border-radius: var(--field-border-radius);
+  box-shadow: var(--field-shadow);
+  color: var(--muted);
+  display: block;
+  font-size: 11px;
+  overflow: hidden;
+  padding: 9px 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inputStylePreviewField.isFocused {
+  border-color: var(--field-focus-border);
+  box-shadow: var(--field-focus-shadow);
+}
+
+.inputStyleFootnote {
+  font-size: 12px;
+  margin-top: 14px;
 }
 
 .settingsList {
@@ -2335,23 +2634,7 @@ a {
 }
 
 .loginPanel input {
-  border: 1.5px solid var(--login-input-border);
-  background: var(--surface-3);
-  box-shadow: var(--login-input-shadow);
-  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease, transform 150ms ease;
-}
-
-.loginPanel input:hover:not(:disabled) {
-  border-color: var(--button-border);
-  box-shadow: var(--login-input-shadow-hover);
-}
-
-.loginPanel input:focus {
-  border-color: var(--primary);
-  background: var(--input-bg);
-  box-shadow: var(--login-input-shadow-focus);
-  outline: none;
-  transform: translateY(-1px);
+  min-height: 48px;
 }
 
 .loginLoadingBar {
@@ -2408,6 +2691,10 @@ a {
     grid-template-columns: 1fr;
     align-items: stretch;
   }
+
+  .inputStyleGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 900px) {
@@ -2462,6 +2749,14 @@ a {
 
   .researchActions {
     justify-content: flex-start;
+  }
+
+  .inlineMenuCreate {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .inputStyleGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -2545,6 +2840,25 @@ a {
 
   .permissionActions {
     flex-direction: column-reverse;
+  }
+
+  .inputStyleHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .inputStyleGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .bulkMenuSelect {
+    max-width: none;
+    min-width: 100%;
+    width: 100%;
+  }
+
+  .inlineMenuCreate {
+    grid-template-columns: 1fr;
   }
 
   table,
