@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 720" role="img" aria-labelledby="title desc">
+  <title id="title">Варианты логотипа AI Content panel</title>
+  <desc id="desc">Три варианта: монограмма AI, документ с искрой и нейросеть с потоком контента.</desc>
+  <rect width="1500" height="720" fill="#F4F6F8"/>
+  <text x="70" y="82" fill="#17202A" font-family="Inter,Arial,sans-serif" font-size="40" font-weight="750">AI Content panel — варианты логотипа</text>
+  <text x="70" y="124" fill="#617080" font-family="Inter,Arial,sans-serif" font-size="21">Лаконичные SVG-знаки для панели, favicon и мобильного интерфейса</text>
+
+  <g transform="translate(55 165)">
+    <rect width="430" height="490" rx="24" fill="#FFF" stroke="#D8E0E8" stroke-width="2"/>
+    <circle cx="58" cy="56" r="24" fill="#DCFCE7"/><text x="58" y="64" text-anchor="middle" fill="#166534" font-family="Arial,sans-serif" font-size="23" font-weight="700">1</text>
+    <g transform="translate(119 82) scale(1.5)">
+      <rect width="128" height="128" rx="30" fill="#25A55F"/>
+      <path d="M27 91 53 36c2-4 8-4 10 0l25 55" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M40 72h35" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round"/>
+      <circle cx="99" cy="38" r="6" fill="#C8F7D9"/>
+      <path d="M99 55v36" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round"/>
+    </g>
+    <text x="215" y="325" text-anchor="middle" fill="#17202A" font-family="Inter,Arial,sans-serif" font-size="28" font-weight="750">AI-монограмма</text>
+    <text x="215" y="363" text-anchor="middle" fill="#617080" font-family="Inter,Arial,sans-serif" font-size="17">Технологичный и узнаваемый знак</text>
+    <g transform="translate(66 397)"><rect width="298" height="66" rx="14" fill="#101820"/><g transform="translate(13 13) scale(.3125)"><rect width="128" height="128" rx="30" fill="#25A55F"/><path d="M27 91 53 36c2-4 8-4 10 0l25 55M40 72h35" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round"/><circle cx="99" cy="38" r="6" fill="#C8F7D9"/><path d="M99 55v36" stroke="#fff" stroke-width="9" stroke-linecap="round"/></g><text x="68" y="42" fill="#FFF" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="700">AI Content panel</text></g>
+  </g>
+
+  <g transform="translate(535 165)">
+    <rect width="430" height="490" rx="24" fill="#FFF" stroke="#D8E0E8" stroke-width="2"/>
+    <circle cx="58" cy="56" r="24" fill="#DCFCE7"/><text x="58" y="64" text-anchor="middle" fill="#166534" font-family="Arial,sans-serif" font-size="23" font-weight="700">2</text>
+    <g transform="translate(119 82) scale(1.5)"><rect width="128" height="128" rx="30" fill="#25A55F"/><path d="M35 28h39l19 19v49a7 7 0 0 1-7 7H35a7 7 0 0 1-7-7V35a7 7 0 0 1 7-7Z" fill="none" stroke="#fff" stroke-width="8" stroke-linejoin="round"/><path d="M73 29v20h19M45 65h31M45 80h24" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round"/><path d="m99 18 3.5 8.5L111 30l-8.5 3.5L99 42l-3.5-8.5L87 30l8.5-3.5Z" fill="#C8F7D9" stroke="#25A55F" stroke-width="3"/></g>
+    <text x="215" y="325" text-anchor="middle" fill="#17202A" font-family="Inter,Arial,sans-serif" font-size="28" font-weight="750">Контент + искра</text>
+    <text x="215" y="363" text-anchor="middle" fill="#617080" font-family="Inter,Arial,sans-serif" font-size="17">Сразу объясняет назначение сервиса</text>
+    <g transform="translate(66 397)"><rect width="298" height="66" rx="14" fill="#101820"/><g transform="translate(13 13) scale(.3125)"><rect width="128" height="128" rx="30" fill="#25A55F"/><path d="M35 28h39l19 19v49a7 7 0 0 1-7 7H35a7 7 0 0 1-7-7V35a7 7 0 0 1 7-7Z" fill="none" stroke="#fff" stroke-width="8"/><path d="M45 65h31M45 80h24" stroke="#fff" stroke-width="7" stroke-linecap="round"/></g><text x="68" y="42" fill="#FFF" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="700">AI Content panel</text></g>
+  </g>
+
+  <g transform="translate(1015 165)">
+    <rect width="430" height="490" rx="24" fill="#FFF" stroke="#D8E0E8" stroke-width="2"/>
+    <circle cx="58" cy="56" r="24" fill="#DCFCE7"/><text x="58" y="64" text-anchor="middle" fill="#166534" font-family="Arial,sans-serif" font-size="23" font-weight="700">3</text>
+    <g transform="translate(119 82) scale(1.5)"><rect width="128" height="128" rx="30" fill="#101820"/><path d="M34 39 55 64 34 89M55 64h20" fill="none" stroke="#25A55F" stroke-width="7" stroke-linecap="round"/><circle cx="29" cy="35" r="8" fill="#C8F7D9"/><circle cx="29" cy="93" r="8" fill="#C8F7D9"/><circle cx="58" cy="64" r="8" fill="#25A55F"/><path d="M79 38h20M79 55h14M79 73h20M79 90h12" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round"/></g>
+    <text x="215" y="325" text-anchor="middle" fill="#17202A" font-family="Inter,Arial,sans-serif" font-size="28" font-weight="750">Нейро-поток</text>
+    <text x="215" y="363" text-anchor="middle" fill="#617080" font-family="Inter,Arial,sans-serif" font-size="17">AI-конвейер и структурированный текст</text>
+    <g transform="translate(66 397)"><rect width="298" height="66" rx="14" fill="#101820" stroke="#2B3743"/><g transform="translate(13 13) scale(.3125)"><rect width="128" height="128" rx="30" fill="#101820"/><path d="M34 39 55 64 34 89M55 64h20" fill="none" stroke="#25A55F" stroke-width="7" stroke-linecap="round"/><circle cx="29" cy="35" r="8" fill="#C8F7D9"/><circle cx="29" cy="93" r="8" fill="#C8F7D9"/><path d="M79 38h20M79 55h14M79 73h20M79 90h12" stroke="#fff" stroke-width="7" stroke-linecap="round"/></g><text x="68" y="42" fill="#FFF" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="700">AI Content panel</text></g>
+  </g>
+</svg>

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+  <title id="title">AI Content panel — content spark</title>
+  <rect width="128" height="128" rx="30" fill="#25A55F"/>
+  <path d="M35 28h39l19 19v49a7 7 0 0 1-7 7H35a7 7 0 0 1-7-7V35a7 7 0 0 1 7-7Z" fill="none" stroke="#fff" stroke-width="8" stroke-linejoin="round"/>
+  <path d="M73 29v20h19M45 65h31M45 80h24" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="m99 18 3.5 8.5L111 30l-8.5 3.5L99 42l-3.5-8.5L87 30l8.5-3.5Z" fill="#C8F7D9" stroke="#25A55F" stroke-width="3" stroke-linejoin="round"/>
+</svg>
