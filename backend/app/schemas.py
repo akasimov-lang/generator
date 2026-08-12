@@ -96,9 +96,50 @@ class SiteResponse(BaseModel):
     default_banners: list[str]
     showcase_payload: dict[str, Any] | None
     default_prompt_template_id: str | None
+    external_project_id: str | None
+    cache_canon: str | None
+    homepage_title: str | None
+    internal_pages_count: int
+    domains_count: int
+    project_status: str
+    is_test_project: bool
+    has_menu: bool
+    cache_synced_at: datetime | None
     is_active: bool
     created_at: datetime
     updated_at: datetime
+
+
+class ProjectCacheItemResponse(BaseModel):
+    external_project_id: str
+    name: str
+    canon: str | None
+    homepage_title: str | None
+    internal_pages_count: int
+    domains_count: int
+    has_menu: bool
+    is_working_project: bool
+
+
+class ProjectCacheSyncResponse(BaseModel):
+    cache_count: int
+    matched_count: int
+    created_count: int
+    updated_count: int
+    projects: list[ProjectCacheItemResponse]
+
+
+class ProjectCacheSyncRequest(BaseModel):
+    names: list[str] = Field(default_factory=list, max_length=200)
+
+
+class SiteStatusUpdate(BaseModel):
+    project_status: Literal["test", "working", "not_in_focus", "duplicate"]
+
+
+class DuplicateSitesDeleteResponse(BaseModel):
+    deleted_count: int
+    skipped_count: int
 
 
 class SectionCreate(BaseModel):

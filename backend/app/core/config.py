@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     secret_key: str = Field(default="change-this-secret-before-production")
     admin_username: str = "admin"
     admin_password: str = "change-this-password"
+    project_cache_url: str = "https://o59s9a012jd.com"
+    project_cache_username: str = ""
+    project_cache_password: str = ""
 
     database_url: str = "postgresql+psycopg2://generator:generator@postgres:5432/generator"
     redis_url: str = "redis://redis:6379/0"
@@ -27,4 +30,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

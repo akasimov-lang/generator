@@ -32,6 +32,15 @@ ADMIN_USERNAME=admin
 ADMIN_PASSWORD=change-me
 ```
 
+Для синхронизации списка сайтов на странице `/sites` также задаются серверные
+реквизиты внешнего кеша. Они используются только backend и не передаются в UI:
+
+```env
+PROJECT_CACHE_URL=https://example.com
+PROJECT_CACHE_USERNAME=cache-user
+PROJECT_CACHE_PASSWORD=cache-password
+```
+
 ## Git deploy
 
 Проект рассчитан на push-деплой по SSH-ключу на сервер.

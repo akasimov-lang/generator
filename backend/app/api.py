@@ -15,6 +15,7 @@ from app.schemas import (
     CompetitorResearchResponse,
     ContentItemResponse,
     ContentUpdate,
+    DuplicateSitesDeleteResponse,
     GenerationTaskCreate,
     GenerationTaskResponse,
     LoginRequest,
@@ -25,6 +26,8 @@ from app.schemas import (
     PromptTemplateCreate,
     PromptTemplateResponse,
     PromptTemplateUpdate,
+    ProjectCacheSyncResponse,
+    ProjectCacheSyncRequest,
     PublicationCampaignCreate,
     SectionCreate,
     SectionResponse,
@@ -32,12 +35,14 @@ from app.schemas import (
     SiteOverviewResponse,
     SitePublicationCampaignCreate,
     SiteResponse,
+    SiteStatusUpdate,
     TaskDetailsResponse,
     TokenResponse,
     UserCreate,
     UserResponse,
     UserUpdate,
 )
+from app.project_cache import ProjectCacheError, fetch_project_cache, sync_project_cache
 from app.security import AdminUser, AuthUser, create_token, hash_password, verify_password
 from app.services import (
     BASE_PROMPT_TEMPLATE_NAME,
@@ -266,7 +271,20 @@ def validate_ai_provider(provider_id: str, _: AdminUser, db: Session = Depends(g
 
 @router.get("/sites", response_model=list[SiteResponse])
 def list_sites(_: AuthUser, db: Session = Depends(get_db)) -> Any:
-    return db.scalars(select(models.Site).order_by(models.Site.created_at.desc())).all()
+    return db.scalars(
+        select(models.Site).where(models.Site.project_status.in_(["test", "working"])).order_by(
+            models.Site.is_test_project.desc(),
+            models.Site.has_menu.desc(),
+            models.Site.name.asc(),
+        )
+    ).all()
+
+
+@router.get("/sites/cache/projects", response_model=list[SiteResponse])
+def list_cached_projects(_: AdminUser, db: Session = Depends(get_db)) -> Any:
+    status_order = {"test": 0, "working": 1, "not_in_focus": 2, "duplicate": 3}
+    sites = db.scalars(select(models.Site)).all()
+    return sorted(sites, key=lambda site: (status_order.get(site.project_status, 3), not site.has_menu, site.name.lower()))
 
 
 @router.post("/sites", response_model=SiteResponse)
@@ -276,6 +294,44 @@ def create_site(payload: SiteCreate, _: AdminUser, db: Session = Depends(get_db)
     db.commit()
     db.refresh(site)
     return site
+
+
+@router.post("/sites/cache/sync", response_model=ProjectCacheSyncResponse)
+def synchronize_project_cache(payload: ProjectCacheSyncRequest, _: AdminUser, db: Session = Depends(get_db)) -> dict[str, Any]:
+    try:
+        names = list(dict.fromkeys(name.strip() for name in payload.names if name.strip()))
+        return sync_project_cache(db, fetch_project_cache(names or None))
+    except ProjectCacheError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@router.patch("/sites/{site_id}/status", response_model=SiteResponse)
+def update_site_status(site_id: str, payload: SiteStatusUpdate, _: AdminUser, db: Session = Depends(get_db)) -> Any:
+    site = _get_site_or_404(db, site_id)
+    site.project_status = payload.project_status
+    site.is_test_project = payload.project_status == "test"
+    db.commit()
+    db.refresh(site)
+    return site
+
+
+@router.delete("/sites/cache/duplicates", response_model=DuplicateSitesDeleteResponse)
+def delete_duplicate_sites(_: AdminUser, db: Session = Depends(get_db)) -> dict[str, int]:
+    duplicate_sites = db.scalars(select(models.Site).where(models.Site.project_status == "duplicate")).all()
+    deleted_count = 0
+    skipped_count = 0
+    for site in duplicate_sites:
+        has_related_data = any(
+            db.scalar(select(func.count()).select_from(model).where(model.site_id == site.id))
+            for model in (models.PromptTemplate, models.GenerationTask, models.ContentItem, models.PublicationCampaign)
+        )
+        if has_related_data:
+            skipped_count += 1
+            continue
+        db.delete(site)
+        deleted_count += 1
+    db.commit()
+    return {"deleted_count": deleted_count, "skipped_count": skipped_count}
 
 
 @router.get("/sites/{site_id}/overview", response_model=SiteOverviewResponse)

@@ -43,6 +43,15 @@ def apply_lightweight_migrations() -> None:
             "default_banners": "JSON DEFAULT '[]'",
             "showcase_payload": "JSON",
             "default_prompt_template_id": "VARCHAR(36)",
+            "external_project_id": "VARCHAR(200)",
+            "cache_canon": "TEXT",
+            "homepage_title": "TEXT",
+            "internal_pages_count": "INTEGER DEFAULT 0 NOT NULL",
+            "domains_count": "INTEGER DEFAULT 0 NOT NULL",
+            "project_status": "VARCHAR(32) DEFAULT 'working' NOT NULL",
+            "is_test_project": "BOOLEAN DEFAULT FALSE NOT NULL",
+            "has_menu": "BOOLEAN DEFAULT FALSE NOT NULL",
+            "cache_synced_at": "TIMESTAMP WITH TIME ZONE",
         }
         _add_missing_columns("sites", columns, site_columns)
 

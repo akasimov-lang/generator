@@ -1116,6 +1116,423 @@ h2 {
   min-width: 0;
 }
 
+.siteCacheToolbar {
+  align-items: center;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+}
+
+.siteCacheStats {
+  display: grid;
+  flex: 1;
+  gap: 10px;
+  grid-template-columns: repeat(6, minmax(105px, 1fr));
+}
+
+.siteCacheStats > div {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+}
+
+.siteCacheStats span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.siteCacheStats strong {
+  font-size: 22px;
+}
+
+.siteCacheSyncButton {
+  flex: 0 0 auto;
+}
+
+.siteCacheSyncButton .spin {
+  animation: cacheSyncSpin 900ms linear infinite;
+}
+
+.siteCacheResult {
+  background: var(--primary-soft);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius);
+  color: var(--primary-strong);
+  font-size: 13px;
+  font-weight: 700;
+  margin-top: 14px;
+  padding: 11px 13px;
+}
+
+.siteCacheUpdatedAt {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 13px;
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.siteCacheUpdatedAt > svg {
+  color: var(--primary);
+}
+
+.siteCacheUpdatedAt strong {
+  color: var(--text);
+}
+
+.siteCacheError {
+  display: block;
+  margin-top: 14px;
+}
+
+.siteCacheSearch {
+  align-items: center;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto minmax(180px, 1fr) minmax(190px, auto) auto;
+  margin-bottom: 14px;
+  padding: 6px 10px;
+}
+
+.siteCacheSearch > svg,
+.siteCacheSearch > span {
+  color: var(--muted);
+}
+
+.siteCacheSearch > span {
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.siteCacheSearch input {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  min-height: 36px;
+  outline: 0;
+  width: 100%;
+}
+
+.siteCacheSearch select {
+  min-height: 36px;
+}
+
+.siteSortResetButton {
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+.siteActiveFilters {
+  align-items: center;
+  background: var(--primary-soft);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 9px 11px;
+}
+
+.siteActiveFilters > strong {
+  align-items: center;
+  color: var(--primary);
+  display: inline-flex;
+  font-size: 12px;
+  gap: 6px;
+}
+
+.siteActiveFilters button {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  gap: 5px;
+  padding: 5px 8px;
+}
+
+.siteActiveFilters button:hover {
+  border-color: var(--primary);
+}
+
+.siteActiveFilters .siteResetFilters {
+  background: transparent;
+  border: 0;
+  color: var(--primary);
+  margin-left: auto;
+}
+
+.siteDomainRow.test td {
+  background: var(--warning-soft);
+}
+
+.siteDomainRow.menu td {
+  background: var(--primary-soft);
+}
+
+.siteDomainRow.working td {
+  background: var(--surface-2);
+}
+
+.siteDomainRow.unfocused td {
+  color: var(--muted);
+}
+
+.siteDomainRow.duplicate td {
+  background: var(--danger-soft);
+}
+
+.siteDomainRow.hasMenu td:first-child {
+  box-shadow: inset 4px 0 0 var(--primary);
+}
+
+.siteDomainRow td {
+  font-size: 12px;
+  line-height: 1.25;
+  padding-bottom: 7px;
+  padding-top: 7px;
+}
+
+.siteTypeBadge,
+.siteMenuBadge,
+.siteMenuTypeBadge {
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 800;
+  gap: 5px;
+  padding: 3px 6px;
+  white-space: nowrap;
+}
+
+.siteTypeBadge.test {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.siteTypeBadge.working,
+.siteMenuBadge,
+.siteMenuTypeBadge {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.siteMenuDetailsButton {
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.siteMenuDetailsButton:hover {
+  background: var(--primary-soft);
+}
+
+.siteMenuModal {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.siteMenuPreviewGrid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-height: 0;
+  overflow: auto;
+}
+
+.siteMenuPreviewSection {
+  align-self: start;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-width: 0;
+  padding: 14px;
+}
+
+.siteMenuPreviewSection h3 {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.siteMenuPreviewSection h3 span {
+  background: var(--primary-soft);
+  border-radius: 999px;
+  color: var(--primary);
+  font-size: 11px;
+  padding: 3px 7px;
+}
+
+.siteMenuPreviewSection ol {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding-left: 28px;
+}
+
+.siteMenuPreviewSection li {
+  border-bottom: 1px solid var(--border);
+  padding: 9px 4px;
+}
+
+.siteMenuPreviewSection li:last-child {
+  border-bottom: 0;
+}
+
+.siteMenuPreviewSection li strong,
+.siteMenuPreviewSection li code {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.siteMenuPreviewSection li code {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 3px;
+}
+
+.siteMenuPreviewEmpty {
+  color: var(--muted);
+  padding: 12px 0;
+}
+
+.siteTypeBadge.cache {
+  color: var(--muted);
+}
+
+.siteStatusSelect {
+  border-radius: 999px;
+  font-size: 7px;
+  font-weight: 800;
+  min-height: 22px;
+  min-width: 0;
+  padding: 0 16px 0 5px;
+  width: 100%;
+}
+
+.siteStatusSelect.test {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.siteStatusSelect.working {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.siteStatusSelect.not_in_focus {
+  color: var(--muted);
+}
+
+.siteStatusSelect.duplicate {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.siteDomainsTable code {
+  font-size: 11px;
+}
+
+.siteDomainsTable table {
+  min-width: 0;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.siteDomainsTable {
+  overflow-x: hidden;
+}
+
+.siteDomainsTable th,
+.siteDomainsTable td {
+  overflow-wrap: anywhere;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+.siteDomainsTable th {
+  font-size: 10px;
+  line-height: 1.05;
+  white-space: normal;
+}
+
+.siteDomainsTable td {
+  font-size: 10px;
+  padding-bottom: 5px;
+  padding-top: 5px;
+}
+
+.siteDomainsTable th:nth-child(1) { width: 4%; }
+.siteDomainsTable th:nth-child(2) { width: 18%; }
+.siteDomainsTable th:nth-child(3) { width: 11%; }
+.siteDomainsTable th:nth-child(4) { width: 22%; }
+.siteDomainsTable th:nth-child(5) { width: 11%; }
+.siteDomainsTable th:nth-child(6) { width: 8%; }
+.siteDomainsTable th:nth-child(7) { width: 10%; }
+.siteDomainsTable th:nth-child(8) { width: 6%; }
+.siteDomainsTable th:nth-child(9) { width: 10%; }
+
+.siteDomainsTable th:nth-child(1),
+.siteDomainsTable td:nth-child(1),
+.siteDomainsTable th:nth-child(6),
+.siteDomainsTable td:nth-child(6),
+.siteDomainsTable th:nth-child(8),
+.siteDomainsTable td:nth-child(8),
+.siteDomainsTable th:nth-child(9),
+.siteDomainsTable td:nth-child(9) {
+  text-align: center;
+}
+
+.siteDomainsTable .siteMenuBadge,
+.siteDomainsTable .siteMenuTypeBadge {
+  font-size: 8px;
+  padding: 2px 4px;
+}
+
+.siteHomepageTitle {
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  display: -webkit-box;
+  font-size: 7px;
+  line-height: 1.05;
+  max-width: 520px;
+  overflow: hidden;
+}
+
+.siteDomainsTable input[type="checkbox"] {
+  accent-color: var(--primary);
+  cursor: pointer;
+  height: 15px;
+  width: 15px;
+}
+
+.siteDomainsTable input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+@keyframes cacheSyncSpin {
+  to { transform: rotate(360deg); }
+}
+
 .createTaskPanel {
   align-self: start;
   padding: 0;
@@ -1275,6 +1692,163 @@ th {
   color: var(--muted);
   font-size: 13px;
   font-weight: 600;
+}
+
+.tableSortButton {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  gap: 5px;
+  padding: 0;
+  text-align: left;
+}
+
+.tableSortButton svg {
+  color: var(--muted);
+  opacity: 0.35;
+}
+
+.tableSortButton:hover,
+.tableSortButton.active {
+  color: var(--primary);
+}
+
+.tableSortButton.active svg {
+  color: var(--primary);
+  opacity: 1;
+}
+
+.tableFilterButton {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  gap: 5px;
+  padding: 0;
+}
+
+.tableSelectAllButton {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  gap: 7px;
+  padding: 0;
+}
+
+.tableSelectAllButton:hover:not(.disabled) {
+  color: var(--primary);
+}
+
+.tableSelectAllButton.disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.tableSelectAllButton input {
+  accent-color: var(--primary);
+}
+
+.tableFilterButton:hover,
+.tableFilterButton.active {
+  color: var(--primary);
+}
+
+.tableFilterButton small {
+  align-items: center;
+  background: var(--primary);
+  border-radius: 999px;
+  color: white;
+  display: inline-flex;
+  font-size: 9px;
+  height: 17px;
+  justify-content: center;
+  min-width: 17px;
+  padding: 0 4px;
+}
+
+.tableFilterDismiss {
+  background: transparent;
+  border: 0;
+  inset: 0;
+  padding: 0;
+  position: fixed;
+  z-index: 89;
+}
+
+.tableFilterPopover {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 11px;
+  padding: 14px;
+  position: fixed;
+  width: 270px;
+  z-index: 90;
+}
+
+.tableFilterOptions {
+  display: grid;
+  gap: 5px;
+}
+
+.tableFilterOptions label {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 8px;
+  padding: 5px 0;
+}
+
+.tableFilterOptions input {
+  accent-color: var(--primary);
+  height: 16px;
+  width: 16px;
+}
+
+.tableFilterSelectAll,
+.tableFilterSortActions button {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 7px 9px;
+}
+
+.tableFilterSortActions {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 6px;
+  padding-top: 10px;
+}
+
+.tableFilterSortActions button {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.tableFilterSelectAll:hover,
+.tableFilterSortActions button:hover,
+.tableFilterSortActions button.active {
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 td {
@@ -2185,6 +2759,10 @@ textarea:focus {
   width: 100%;
 }
 
+.searchableSelectOption:has(.searchableSelectOptionContent small) {
+  min-height: 54px;
+}
+
 .searchableSelectOption:hover,
 .searchableSelectOption.active {
   background: var(--surface-2);
@@ -2196,8 +2774,47 @@ textarea:focus {
   font-weight: 750;
 }
 
-.searchableSelectOption span {
+.searchableSelectOption.test {
+  box-shadow: inset 3px 0 0 var(--warning);
+}
+
+.searchableSelectOption.menu:not(.selected) {
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.searchableSelectOptionContent,
+.searchableSelectOptionLabel {
   overflow-wrap: anywhere;
+}
+
+.searchableSelectOptionContent {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.searchableSelectOptionContent small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.searchableSelectOptionAside {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 7px;
+}
+
+.searchableSelectOptionBadge {
+  background: var(--warning-soft);
+  border: 1px solid var(--warning);
+  border-radius: 999px;
+  color: var(--warning);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 6px;
+  white-space: nowrap;
 }
 
 .searchableSelectOption svg {
@@ -2821,6 +3438,15 @@ a {
 }
 
 @media (max-width: 900px) {
+  .siteCacheToolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .siteCacheStats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .appShell {
     grid-template-columns: 1fr;
   }
@@ -2884,6 +3510,22 @@ a {
 }
 
 @media (max-width: 640px) {
+  .siteMenuPreviewGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .siteCacheStats {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .siteCacheSearch {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .siteCacheSearch > span {
+    grid-column: 1 / -1;
+  }
+
   .topbar {
     align-items: flex-start;
     flex-direction: column;

@@ -176,6 +176,39 @@ type Site = {
   default_menu: Record<string, unknown>;
   default_banners: string[];
   showcase_payload: Record<string, unknown> | null;
+  external_project_id: string | null;
+  cache_canon: string | null;
+  homepage_title: string | null;
+  internal_pages_count: number;
+  domains_count: number;
+  project_status: "test" | "working" | "not_in_focus" | "duplicate";
+  is_test_project: boolean;
+  has_menu: boolean;
+  cache_synced_at: string | null;
+};
+
+type ProjectCacheItem = {
+  external_project_id: string;
+  name: string;
+  canon: string | null;
+  homepage_title: string | null;
+  internal_pages_count: number;
+  domains_count: number;
+  has_menu: boolean;
+  is_working_project: boolean;
+};
+
+type ProjectCacheSyncResult = {
+  cache_count: number;
+  matched_count: number;
+  created_count: number;
+  updated_count: number;
+  projects: ProjectCacheItem[];
+};
+
+type DuplicateSitesDeleteResult = {
+  deleted_count: number;
+  skipped_count: number;
 };
 
 type Section = {
@@ -800,7 +833,7 @@ function App() {
         {isAdmin && activeView === "content" && <ContentView api={api} sites={sites} content={content} onChanged={loadAll} />}
         {isAdmin && activeView === "publications" && <PublicationsView api={api} sites={sites} content={content} onChanged={loadAll} />}
         {isAdmin && activeView === "providers" && <ProvidersView api={api} providers={providers} onChanged={loadAll} />}
-        {isAdmin && activeView === "sites" && <SitesView api={api} sites={sites} onChanged={loadAll} />}
+        {isAdmin && activeView === "sites" && <SitesView api={api} sites={sites} currentUsername={currentUser.username} onChanged={loadAll} />}
         {activeView === "settings" && <SettingsView api={api} currentUser={currentUser} users={users} inputStyle={inputStyle} onInputStyleChange={setInputStyle} onChanged={loadAll} />}
       </main>
       {notificationPromptVisible ? (
@@ -1371,7 +1404,21 @@ function ProjectWorkspaceView({
             <SearchableSelect
               value={selectedSiteId}
               onChange={setSelectedSiteId}
-              options={sites.map((site) => ({ value: site.id, label: site.name }))}
+              options={sites.map((site) => {
+                const headerCount = Array.isArray(site.default_menu.header) ? site.default_menu.header.length : 0;
+                const footerCount = Array.isArray(site.default_menu.footer) ? site.default_menu.footer.length : 0;
+                const menuCount = headerCount + footerCount;
+                return {
+                  value: site.id,
+                  label: site.name,
+                  keywords: `${site.cache_canon || ""} ${site.is_test_project ? "тестовый проект" : ""}`,
+                  description: menuCount
+                    ? `Пунктов меню: ${menuCount} · Header: ${headerCount} · Footer: ${footerCount}`
+                    : "Пункты меню отсутствуют",
+                  badge: site.is_test_project ? "Тестовый проект" : undefined,
+                  tone: site.is_test_project ? "test" as const : site.has_menu ? "menu" as const : undefined
+                };
+              })}
               searchPlaceholder="Найти проект"
             />
           </label>
@@ -2426,8 +2473,8 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
       </DataPanel>
 
       {selectedItem ? (
-        <DataPanel title={`Редактирование: ${selectedItem.topic}`}>
-          <form className="formGrid" onSubmit={saveContent}>
+        <Modal title={`Редактирование: ${selectedItem.topic}`} onClose={() => setSelectedItem(null)} wide>
+          <form className="formGrid modalForm" onSubmit={saveContent}>
             <label>
               Пункт меню
               <SearchableSelect
@@ -2450,7 +2497,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
               <button className="button primary" type="submit">Сохранить</button>
             </div>
           </form>
-        </DataPanel>
+        </Modal>
       ) : null}
     </section>
   );
@@ -4200,109 +4247,474 @@ function ProvidersView({ api, providers, onChanged }: ViewProps & { providers: A
   );
 }
 
-function SitesView({ api, sites, onChanged }: ViewProps & { sites: Site[] }) {
-  const [name, setName] = React.useState("");
-  const [baseUrl, setBaseUrl] = React.useState("");
-  const [publicationEndpoint, setPublicationEndpoint] = React.useState("");
-  const [apiToken, setApiToken] = React.useState("");
-  const [payloadMode, setPayloadMode] = React.useState<"simple_page" | "full_site">("simple_page");
-  const [editorVersion, setEditorVersion] = React.useState("2.31.0");
-  const [defaultMenuJson, setDefaultMenuJson] = React.useState('{\n  "header": [],\n  "footer": []\n}');
-  const [banners, setBanners] = React.useState("");
-  const [showcaseJson, setShowcaseJson] = React.useState("");
-  const [formError, setFormError] = React.useState("");
-
-  async function createSite(event: React.FormEvent) {
-    event.preventDefault();
-    setFormError("");
-    let defaultMenu: Record<string, unknown>;
-    let showcasePayload: Record<string, unknown> | null = null;
+function SitesView({ api, sites, currentUsername, onChanged }: ViewProps & { sites: Site[]; currentUsername: string }) {
+  const preferencesKey = `sites-table-preferences:${currentUsername}`;
+  const storedPreferences = React.useMemo(() => {
     try {
-      defaultMenu = JSON.parse(defaultMenuJson);
-      if (showcaseJson.trim()) {
-        showcasePayload = JSON.parse(showcaseJson);
-      }
+      return JSON.parse(localStorage.getItem(preferencesKey) || "{}") as {
+        statusFilters?: Site["project_status"][];
+        menuTypeFilters?: string[];
+        siteSort?: { key: string; direction: "asc" | "desc" } | null;
+      };
     } catch {
-      setFormError("Проверь JSON в меню или showcase/casinos.");
-      return;
+      return {};
     }
-    await api("/sites", {
-      method: "POST",
-      body: JSON.stringify({
-        name,
-        base_url: baseUrl,
-        publication_endpoint: publicationEndpoint,
-        api_token: apiToken || null,
-        payload_mode: payloadMode,
-        editor_version: editorVersion,
-        default_menu: defaultMenu,
-        default_banners: banners.split(",").map((item: string) => item.trim()).filter(Boolean),
-        showcase_payload: showcasePayload
-      })
+  }, [preferencesKey]);
+  const [managedSites, setManagedSites] = React.useState<Site[]>(sites);
+  const [cacheResult, setCacheResult] = React.useState<ProjectCacheSyncResult | null>(null);
+  const [searchQuery, setSearchQuery] = React.useState("");
+  const [syncing, setSyncing] = React.useState(false);
+  const [syncError, setSyncError] = React.useState("");
+  const [selectedProjectNames, setSelectedProjectNames] = React.useState<string[]>([]);
+  const [syncMessage, setSyncMessage] = React.useState("");
+  const [siteSort, setSiteSort] = React.useState<{ key: string; direction: "asc" | "desc" } | null>(storedPreferences.siteSort || null);
+  const [deletingDuplicates, setDeletingDuplicates] = React.useState(false);
+  const [menuPreview, setMenuPreview] = React.useState<{ name: string; header: unknown[]; footer: unknown[] } | null>(null);
+  const statusFilterOptions: Array<{ value: Site["project_status"]; label: string }> = [
+    { value: "test", label: "Тестовый" },
+    { value: "working", label: "Рабочий" },
+    { value: "not_in_focus", label: "Не в фокусе" },
+    { value: "duplicate", label: "Дубликат" }
+  ];
+  const menuTypeFilterOptions = [
+    { value: "header_footer", label: "Header + Footer" },
+    { value: "header", label: "Только Header" },
+    { value: "footer", label: "Только Footer" },
+    { value: "none", label: "Без меню" }
+  ];
+  const allStatusFilters = statusFilterOptions.map((option) => option.value);
+  const allMenuTypeFilters = menuTypeFilterOptions.map((option) => option.value);
+  const [statusFilters, setStatusFilters] = React.useState<Site["project_status"][]>(() => {
+    const stored = storedPreferences.statusFilters;
+    return Array.isArray(stored) && stored.every((value) => allStatusFilters.includes(value)) ? stored : allStatusFilters;
+  });
+  const [menuTypeFilters, setMenuTypeFilters] = React.useState<string[]>(() => {
+    const stored = storedPreferences.menuTypeFilters;
+    return Array.isArray(stored) && stored.every((value) => allMenuTypeFilters.includes(value)) ? stored : allMenuTypeFilters;
+  });
+
+  React.useEffect(() => {
+    localStorage.setItem(preferencesKey, JSON.stringify({ statusFilters, menuTypeFilters, siteSort }));
+  }, [menuTypeFilters, preferencesKey, siteSort, statusFilters]);
+
+  const loadManagedSites = React.useCallback(async () => {
+    setManagedSites(await api<Site[]>("/sites/cache/projects"));
+  }, [api]);
+
+  React.useEffect(() => {
+    loadManagedSites().catch((error: unknown) => setSyncError(error instanceof Error ? error.message : "Не удалось загрузить проекты"));
+  }, [loadManagedSites]);
+
+  async function syncCache(names: string[] = []) {
+    setSyncing(true);
+    setSyncError("");
+    setSyncMessage("");
+    try {
+      const result = await api<ProjectCacheSyncResult>("/sites/cache/sync", {
+        method: "POST",
+        body: JSON.stringify({ names })
+      });
+      setCacheResult((current) => {
+        if (!names.length || !current) return result;
+        const updatedById = new Map(result.projects.map((project) => [project.external_project_id, project]));
+        const mergedProjects = current.projects.map((project) => updatedById.get(project.external_project_id) || project);
+        return { ...result, cache_count: current.cache_count, matched_count: current.matched_count, projects: mergedProjects };
+      });
+      setSyncMessage(names.length
+        ? `Обновлено выбранных проектов: ${result.updated_count + result.created_count}.`
+        : `Кеш получен: ${formatNumber(result.cache_count)} сайтов. Рабочих проектов: ${result.matched_count}; добавлено: ${result.created_count}; обновлено: ${result.updated_count}.`);
+      if (names.length) setSelectedProjectNames([]);
+      onChanged();
+      await loadManagedSites();
+    } catch (error) {
+      setSyncError(error instanceof Error ? error.message : "Не удалось получить кеш проектов");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  const statusPriority = (status: Site["project_status"]) => {
+    if (status === "test") return 0;
+    if (status === "working") return 1;
+    if (status === "not_in_focus") return 2;
+    return 3;
+  };
+  const domainRows = managedSites.map((site) => {
+    const headerMenuCount = Array.isArray(site.default_menu.header) ? site.default_menu.header.length : 0;
+    const footerMenuCount = Array.isArray(site.default_menu.footer) ? site.default_menu.footer.length : 0;
+    return {
+      key: `site:${site.id}`,
+      id: site.id,
+      name: site.name,
+      canon: site.cache_canon || site.base_url.replace(/^https?:\/\//, "").replace(/\/$/, ""),
+      homepageTitle: site.homepage_title,
+      externalProjectId: site.external_project_id,
+      isTest: site.is_test_project,
+      isWorking: site.project_status === "working",
+      projectStatus: site.project_status,
+      hasMenu: site.has_menu,
+      headerMenuCount,
+      footerMenuCount,
+      headerMenu: Array.isArray(site.default_menu.header) ? site.default_menu.header : [],
+      footerMenu: Array.isArray(site.default_menu.footer) ? site.default_menu.footer : [],
+      menuTypeKey: headerMenuCount && footerMenuCount ? "header_footer" : headerMenuCount ? "header" : footerMenuCount ? "footer" : "none",
+      menuType: headerMenuCount && footerMenuCount ? "Header + Footer" : headerMenuCount ? "Header" : footerMenuCount ? "Footer" : "",
+      menuCount: headerMenuCount + footerMenuCount,
+      internalPagesCount: site.internal_pages_count,
+      domainsCount: site.domains_count,
+      syncedAt: site.cache_synced_at
+    };
+  }).sort((left, right) => {
+    if (!siteSort) {
+      return statusPriority(left.projectStatus) - statusPriority(right.projectStatus)
+        || Number(right.hasMenu) - Number(left.hasMenu)
+        || left.name.localeCompare(right.name);
+    }
+    const values: Record<string, [string | number, string | number]> = {
+      name: [left.name, right.name],
+      title: [left.homepageTitle || "", right.homepageTitle || ""],
+      canon: [left.canon, right.canon],
+      status: [statusPriority(left.projectStatus), statusPriority(right.projectStatus)],
+      internalPages: [left.internalPagesCount, right.internalPagesCount],
+      menuType: [left.menuType, right.menuType],
+      menuCount: [left.menuCount, right.menuCount],
+      domainsCount: [left.domainsCount, right.domainsCount]
+    };
+    const [leftValue, rightValue] = values[siteSort.key];
+    const comparison = typeof leftValue === "number" && typeof rightValue === "number"
+      ? leftValue - rightValue
+      : String(leftValue).localeCompare(String(rightValue), "ru", { numeric: true, sensitivity: "base" });
+    return comparison * (siteSort.direction === "asc" ? 1 : -1) || left.name.localeCompare(right.name);
+  });
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredRows = domainRows.filter((row) => (
+    statusFilters.includes(row.projectStatus)
+    && menuTypeFilters.includes(row.menuTypeKey)
+    && (!normalizedQuery || [row.name, row.homepageTitle || "", row.canon, row.externalProjectId || "", row.projectStatus].some((value) => value.toLowerCase().includes(normalizedQuery)))
+  ));
+  const workingCount = managedSites.filter((site) => site.project_status === "working").length;
+  const menuCount = managedSites.filter((site) => site.has_menu).length;
+  const duplicateCount = managedSites.filter((site) => site.project_status === "duplicate").length;
+  const latestCacheSync = managedSites
+    .map((site) => site.cache_synced_at)
+    .filter((value): value is string => Boolean(value))
+    .sort((left, right) => Date.parse(right) - Date.parse(left))[0] || null;
+  const selectedNames = new Set(selectedProjectNames);
+  const selectableFilteredNames = filteredRows.filter((row) => row.externalProjectId).map((row) => row.name);
+  const allFilteredSelected = Boolean(selectableFilteredNames.length) && selectableFilteredNames.every((name) => selectedNames.has(name));
+  const statusFilterActive = statusFilters.length !== statusFilterOptions.length;
+  const menuTypeFilterActive = menuTypeFilters.length !== menuTypeFilterOptions.length;
+
+  function toggleSelectedProject(name: string) {
+    setSelectedProjectNames((current) => current.includes(name) ? current.filter((item) => item !== name) : [...current, name]);
+  }
+
+  function toggleAllFilteredProjects() {
+    setSelectedProjectNames((current) => {
+      const visibleNames = new Set(selectableFilteredNames);
+      if (allFilteredSelected) return current.filter((name) => !visibleNames.has(name));
+      return [...new Set([...current, ...selectableFilteredNames])];
     });
-    setName("");
-    setBaseUrl("");
-    setPublicationEndpoint("");
-    setApiToken("");
-    setPayloadMode("simple_page");
-    setEditorVersion("2.31.0");
-    setDefaultMenuJson('{\n  "header": [],\n  "footer": []\n}');
-    setBanners("");
-    setShowcaseJson("");
-    onChanged();
+  }
+
+  const siteSortKeys = [null, "name", "title", "canon", "status", "internalPages", "menuType", "menuCount", "domainsCount"];
+
+  function sortSitesByColumn(columnIndex: number) {
+    const key = siteSortKeys[columnIndex];
+    if (!key) return;
+    setSiteSort((current) => {
+      if (!current || current.key !== key) return { key, direction: "asc" };
+      if (current.direction === "asc") return { key, direction: "desc" };
+      return null;
+    });
+  }
+
+  function toggleFilterValue<T extends string>(value: T, setValues: React.Dispatch<React.SetStateAction<T[]>>) {
+    setValues((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
+  }
+
+  async function updateProjectStatus(siteId: string, projectStatus: Site["project_status"]) {
+    setSyncError("");
+    try {
+      await api<Site>(`/sites/${siteId}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ project_status: projectStatus })
+      });
+      await loadManagedSites();
+      onChanged();
+    } catch (error) {
+      setSyncError(error instanceof Error ? error.message : "Не удалось изменить статус проекта");
+    }
+  }
+
+  async function deleteDuplicates() {
+    if (!duplicateCount) return;
+    if (!window.confirm(`Удалить дубликаты из нашей системы: ${duplicateCount}? Внешний кеш изменён не будет.`)) return;
+    setDeletingDuplicates(true);
+    setSyncError("");
+    setSyncMessage("");
+    try {
+      const result = await api<DuplicateSitesDeleteResult>("/sites/cache/duplicates", { method: "DELETE" });
+      setSelectedProjectNames([]);
+      setSyncMessage(`Удалено дубликатов: ${result.deleted_count}.${result.skipped_count ? ` Пропущено связанных проектов: ${result.skipped_count}.` : ""}`);
+      await loadManagedSites();
+      onChanged();
+    } catch (error) {
+      setSyncError(error instanceof Error ? error.message : "Не удалось удалить дубликаты");
+    } finally {
+      setDeletingDuplicates(false);
+    }
   }
 
   return (
-    <section className="viewStack">
-      <DataPanel title="Подключить сайт">
-        <form className="formGrid" onSubmit={createSite}>
-          <label>
-            Название
-            <input value={name} onChange={(event) => setName(event.target.value)} required placeholder="Main site" />
-          </label>
-          <label>
-            Base URL
-            <input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} required placeholder="https://site.com" />
-          </label>
-          <label className="wide">
-            Endpoint публикации
-            <input value={publicationEndpoint} onChange={(event) => setPublicationEndpoint(event.target.value)} required placeholder="https://site.com/api/pages/create" />
-          </label>
-          <label>
-            API token
-            <input value={apiToken} onChange={(event) => setApiToken(event.target.value)} type="password" />
-          </label>
-          <label>
-            Формат публикации
-            <select value={payloadMode} onChange={(event) => setPayloadMode(event.target.value as "simple_page" | "full_site")}>
-              <option value="simple_page">Simple: menu + pages</option>
-              <option value="full_site">Full: menu + pages + casinos</option>
-            </select>
-          </label>
-          <label>
-            Editor.js version
-            <input value={editorVersion} onChange={(event) => setEditorVersion(event.target.value)} />
-          </label>
-          <label className="wide">
-            Menu JSON
-            <textarea value={defaultMenuJson} onChange={(event) => setDefaultMenuJson(event.target.value)} rows={5} />
-          </label>
-          <label>
-            Banners
-            <input value={banners} onChange={(event) => setBanners(event.target.value)} placeholder="banner, top-banner" />
-          </label>
-          <label className="wide">
-            Casinos / showcase JSON для full site
-            <textarea value={showcaseJson} onChange={(event) => setShowcaseJson(event.target.value)} rows={6} placeholder='{"basic": [], "standard": []}' />
-          </label>
-          {formError ? <span className="formError wide">{formError}</span> : null}
-          <div className="formActions wide"><button className="button primary" type="submit"><Plus size={18} /> Сохранить сайт</button></div>
-        </form>
+    <section className="viewStack sitesManagementView">
+      <DataPanel title="Панель управления сайтами">
+        <div className="siteCacheToolbar">
+          <div className="siteCacheStats">
+            <div><span>В кеше</span><strong>{formatNumber(cacheResult?.cache_count || managedSites.filter((site) => site.external_project_id).length)}</strong></div>
+            <div><span>Рабочие</span><strong>{formatNumber(workingCount)}</strong></div>
+            <div><span>С меню</span><strong>{formatNumber(menuCount)}</strong></div>
+            <div><span>Тестовые</span><strong>{formatNumber(managedSites.filter((site) => site.project_status === "test").length)}</strong></div>
+            <div><span>Дубликаты</span><strong>{formatNumber(duplicateCount)}</strong></div>
+            <div><span>Всего сайтов</span><strong>{formatNumber(managedSites.length)}</strong></div>
+          </div>
+          <button className="button primary siteCacheSyncButton" type="button" onClick={() => syncCache()} disabled={syncing}>
+            <RefreshCcw size={18} className={syncing ? "spin" : ""} />
+            {syncing ? "Получаем кеш" : cacheResult ? "Обновить список доменов" : "Получить кеш"}
+          </button>
+          <button className="button secondary siteCacheSyncButton" type="button" onClick={() => syncCache(selectedProjectNames)} disabled={syncing || !selectedProjectNames.length}>
+            <RefreshCcw size={18} /> Обновить выбранные ({selectedProjectNames.length})
+          </button>
+          <button className="button danger siteCacheSyncButton" type="button" onClick={deleteDuplicates} disabled={syncing || deletingDuplicates || !duplicateCount}>
+            <Trash2 size={18} /> {deletingDuplicates ? "Удаляем" : `Удалить дубликаты (${duplicateCount})`}
+          </button>
+        </div>
+        <div className="siteCacheUpdatedAt">
+          <CalendarClock size={17} />
+          <span>Последнее обновление кеша</span>
+          <strong>{latestCacheSync ? formatDate(latestCacheSync) : "Кеш еще не обновлялся"}</strong>
+        </div>
+        {syncMessage ? <div className="siteCacheResult">{syncMessage}</div> : null}
+        {syncError ? <div className="formError siteCacheError">{syncError}</div> : null}
       </DataPanel>
-      <DataPanel title="Сайты">
-        <ResponsiveTable columns={["Название", "Формат", "Editor", "Base URL", "Endpoint"]} rows={sites.map((site) => [site.name, humanPayloadMode(site.payload_mode), site.editor_version || "2.31.0", site.base_url, site.publication_endpoint])} />
+      <DataPanel title="Домены">
+        <div className="siteCacheSearch">
+          <Search size={18} />
+          <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Поиск по name, canon или ID проекта" />
+          <button className="button secondary siteSortResetButton" type="button" onClick={() => setSiteSort(null)} disabled={!siteSort}>Сбросить сортировку</button>
+          <span>{formatNumber(filteredRows.length)} из {formatNumber(domainRows.length)}</span>
+        </div>
+        {statusFilterActive || menuTypeFilterActive ? (
+          <div className="siteActiveFilters" role="status">
+            <strong><ListChecks size={16} /> Включены фильтры</strong>
+            {statusFilterActive ? (
+              <button type="button" onClick={() => setStatusFilters(allStatusFilters)}>
+                Статус: {statusFilters.length ? statusFilterOptions.filter((option) => statusFilters.includes(option.value)).map((option) => option.label).join(", ") : "ничего не выбрано"}
+                <X size={13} />
+              </button>
+            ) : null}
+            {menuTypeFilterActive ? (
+              <button type="button" onClick={() => setMenuTypeFilters(allMenuTypeFilters)}>
+                Тип меню: {menuTypeFilters.length ? menuTypeFilterOptions.filter((option) => menuTypeFilters.includes(option.value)).map((option) => option.label).join(", ") : "ничего не выбрано"}
+                <X size={13} />
+              </button>
+            ) : null}
+            <button className="siteResetFilters" type="button" onClick={() => { setStatusFilters(allStatusFilters); setMenuTypeFilters(allMenuTypeFilters); }}>Сбросить все</button>
+          </div>
+        ) : null}
+        <ResponsiveTable
+          columns={["Выбор", "Name", "Title главной", "Canon", "Статус", "Внутренние страницы", "Тип меню", "Пункты меню", "Доменов в сетке"]}
+          columnHeaders={{
+            0: (
+              <label className={`tableSelectAllButton ${selectableFilteredNames.length ? "" : "disabled"}`} title="Выбрать все домены в текущем списке">
+                <input type="checkbox" checked={allFilteredSelected} disabled={!selectableFilteredNames.length} onChange={toggleAllFilteredProjects} />
+                <span>Выбор</span>
+              </label>
+            ),
+            4: (
+              <TableFilterHeader
+                label="Статус"
+                options={statusFilterOptions}
+                selectedValues={statusFilters}
+                onToggle={(value) => toggleFilterValue(value as Site["project_status"], setStatusFilters)}
+                onSelectAll={() => setStatusFilters(statusFilterOptions.map((option) => option.value))}
+                onSort={(direction) => setSiteSort({ key: "status", direction })}
+                onResetSort={() => setSiteSort(null)}
+                sortDirection={siteSort?.key === "status" ? siteSort.direction : undefined}
+              />
+            ),
+            6: (
+              <TableFilterHeader
+                label="Тип меню"
+                options={menuTypeFilterOptions}
+                selectedValues={menuTypeFilters}
+                onToggle={(value) => toggleFilterValue(value, setMenuTypeFilters)}
+                onSelectAll={() => setMenuTypeFilters(menuTypeFilterOptions.map((option) => option.value))}
+                onSort={(direction) => setSiteSort({ key: "menuType", direction })}
+                onResetSort={() => setSiteSort(null)}
+                sortDirection={siteSort?.key === "menuType" ? siteSort.direction : undefined}
+              />
+            )
+          }}
+          rows={filteredRows.map((row) => [
+            <input
+              type="checkbox"
+              checked={selectedNames.has(row.name)}
+              disabled={!row.externalProjectId}
+              onChange={() => toggleSelectedProject(row.name)}
+              aria-label={`Выбрать проект ${row.name}`}
+            />,
+            <strong>{row.name}</strong>,
+            <strong className="siteHomepageTitle">{row.homepageTitle || "—"}</strong>,
+            row.canon,
+            <select className={`siteStatusSelect ${row.projectStatus}`} value={row.projectStatus} onChange={(event) => updateProjectStatus(row.id, event.target.value as Site["project_status"])}>
+              <option value="test">Тестовый</option>
+              <option value="working">Рабочий</option>
+              <option value="not_in_focus">Не в фокусе</option>
+              <option value="duplicate">Дубликат</option>
+            </select>,
+            formatNumber(row.internalPagesCount),
+            row.headerMenuCount && row.footerMenuCount
+              ? <span className="siteMenuTypeBadge">Header + Footer</span>
+              : row.headerMenuCount
+                ? <span className="siteMenuTypeBadge">Header</span>
+                : row.footerMenuCount
+                  ? <span className="siteMenuTypeBadge">Footer</span>
+                  : "—",
+            row.menuCount ? (
+              <button
+                className="siteMenuBadge siteMenuDetailsButton"
+                type="button"
+                onClick={() => setMenuPreview({ name: row.name, header: row.headerMenu, footer: row.footerMenu })}
+                aria-label={`Показать пункты меню проекта ${row.name}`}
+              >
+                {formatNumber(row.menuCount)}
+              </button>
+            ) : "0",
+            formatNumber(row.domainsCount)
+          ])}
+          rowClassNames={filteredRows.map((row) => {
+            const statusClass = row.projectStatus === "duplicate" ? "duplicate" : row.isTest ? "test" : row.isWorking ? "working" : "unfocused";
+            return `siteDomainRow ${statusClass} ${row.hasMenu ? "hasMenu" : ""}`.trim();
+          })}
+          wrapperClassName="siteDomainsTable"
+          sortableColumnIndexes={[1, 2, 3, 5, 7, 8]}
+          sortColumnIndex={siteSort ? siteSortKeys.indexOf(siteSort.key) : null}
+          sortDirection={siteSort?.direction}
+          onSortColumn={sortSitesByColumn}
+        />
       </DataPanel>
+      {menuPreview ? (
+        <Modal
+          title={`Пункты меню: ${menuPreview.name}`}
+          subtitle={`Header: ${menuPreview.header.length} · Footer: ${menuPreview.footer.length}`}
+          onClose={() => setMenuPreview(null)}
+          wide
+          className="siteMenuModal"
+        >
+          <div className="siteMenuPreviewGrid">
+            <SiteMenuPreviewSection title="Header" items={menuPreview.header} />
+            <SiteMenuPreviewSection title="Footer" items={menuPreview.footer} />
+          </div>
+        </Modal>
+      ) : null}
     </section>
+  );
+}
+
+function SiteMenuPreviewSection({ title, items }: { title: string; items: unknown[] }) {
+  const menuItemText = (item: unknown, index: number) => {
+    if (typeof item === "string") return { title: item, path: "" };
+    if (!item || typeof item !== "object" || Array.isArray(item)) return { title: `Пункт ${index + 1}`, path: String(item ?? "") };
+    const value = item as Record<string, unknown>;
+    const itemTitle = [value.title, value.name, value.label, value.text].find((entry) => typeof entry === "string" && entry.trim());
+    const itemPath = [value.path, value.url, value.href, value.slug].find((entry) => typeof entry === "string" && entry.trim());
+    return {
+      title: typeof itemTitle === "string" ? itemTitle : `Пункт ${index + 1}`,
+      path: typeof itemPath === "string" ? itemPath : ""
+    };
+  };
+
+  return (
+    <section className="siteMenuPreviewSection">
+      <h3>{title} <span>{items.length}</span></h3>
+      {items.length ? (
+        <ol>
+          {items.map((item, index) => {
+            const display = menuItemText(item, index);
+            return <li key={`${display.title}:${display.path}:${index}`}><strong>{display.title}</strong>{display.path ? <code>{display.path}</code> : null}</li>;
+          })}
+        </ol>
+      ) : <div className="siteMenuPreviewEmpty">Пунктов нет</div>}
+    </section>
+  );
+}
+
+function TableFilterHeader({ label, options, selectedValues, onToggle, onSelectAll, onSort, onResetSort, sortDirection }: {
+  label: string;
+  options: Array<{ value: string; label: string }>;
+  selectedValues: string[];
+  onToggle: (value: string) => void;
+  onSelectAll: () => void;
+  onSort: (direction: "asc" | "desc") => void;
+  onResetSort: () => void;
+  sortDirection?: "asc" | "desc";
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [position, setPosition] = React.useState({ left: 0, top: 0 });
+  const buttonRef = React.useRef<HTMLButtonElement>(null);
+  const filterActive = selectedValues.length !== options.length;
+
+  function toggleOpen() {
+    if (!open && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setPosition({ left: Math.min(rect.left, window.innerWidth - 280), top: rect.bottom + 6 });
+    }
+    setOpen((current) => !current);
+  }
+
+  React.useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <button ref={buttonRef} className={`tableFilterButton ${filterActive ? "active" : ""}`} type="button" onClick={toggleOpen} aria-expanded={open}>
+        <span>{label}</span>
+        {filterActive ? <small>{selectedValues.length}</small> : null}
+        <ChevronDown size={15} />
+      </button>
+      {open ? createPortal(
+        <>
+          <button className="tableFilterDismiss" type="button" onClick={() => setOpen(false)} aria-label="Закрыть фильтр" />
+          <div className="tableFilterPopover" style={position} onClick={(event) => event.stopPropagation()}>
+            <strong>Фильтр: {label}</strong>
+            <div className="tableFilterOptions">
+              {options.map((option) => (
+                <label key={option.value}>
+                  <input type="checkbox" checked={selectedValues.includes(option.value)} onChange={() => onToggle(option.value)} />
+                  <span>{option.label}</span>
+                </label>
+              ))}
+            </div>
+            <button className="tableFilterSelectAll" type="button" onClick={onSelectAll}>Показать все</button>
+            <div className="tableFilterSortActions">
+              <button className={sortDirection === "asc" ? "active" : ""} type="button" onClick={() => onSort("asc")}><ChevronUp size={14} /> По возрастанию</button>
+              <button className={sortDirection === "desc" ? "active" : ""} type="button" onClick={() => onSort("desc")}><ChevronDown size={14} /> По убыванию</button>
+              {sortDirection ? <button type="button" onClick={onResetSort}>Сбросить сортировку</button> : null}
+            </div>
+          </div>
+        </>,
+        document.body
+      ) : null}
+    </>
   );
 }
 
@@ -4579,6 +4991,9 @@ type SearchableSelectOption = {
   value: string;
   label: string;
   keywords?: string;
+  description?: string;
+  badge?: string;
+  tone?: "test" | "menu";
 };
 
 function SearchableSelect({
@@ -4722,7 +5137,7 @@ function SearchableSelect({
           <div className="searchableSelectOptions" id={listboxId} role="listbox">
             {filteredOptions.length ? filteredOptions.map((option, index) => (
               <button
-                className={`searchableSelectOption ${option.value === value ? "selected" : ""} ${index === activeIndex ? "active" : ""}`}
+                className={`searchableSelectOption ${option.value === value ? "selected" : ""} ${index === activeIndex ? "active" : ""} ${option.tone || ""}`}
                 type="button"
                 role="option"
                 aria-selected={option.value === value}
@@ -4730,8 +5145,14 @@ function SearchableSelect({
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => chooseOption(option)}
               >
-                <span>{option.label}</span>
-                {option.value === value ? <CheckCircle2 size={16} /> : null}
+                <span className="searchableSelectOptionContent">
+                  <span className="searchableSelectOptionLabel">{option.label}</span>
+                  {option.description ? <small>{option.description}</small> : null}
+                </span>
+                <span className="searchableSelectOptionAside">
+                  {option.badge ? <small className="searchableSelectOptionBadge">{option.badge}</small> : null}
+                  {option.value === value ? <CheckCircle2 size={16} /> : null}
+                </span>
               </button>
             )) : <div className="searchableSelectEmpty">Ничего не найдено</div>}
           </div>
@@ -4746,12 +5167,21 @@ function DataPanel({ title, children }: { title: string; children: React.ReactNo
   return <section className="dataPanel"><div className="panelHeader"><h2>{title}</h2></div>{children}</section>;
 }
 
-function ResponsiveTable({ columns, rows, rowClassNames, wrapperClassName = "" }: { columns: string[]; rows: React.ReactNode[][]; rowClassNames?: string[]; wrapperClassName?: string }) {
+function ResponsiveTable({ columns, rows, rowClassNames, wrapperClassName = "", sortableColumnIndexes = [], sortColumnIndex = null, sortDirection, onSortColumn, columnHeaders = {} }: { columns: string[]; rows: React.ReactNode[][]; rowClassNames?: string[]; wrapperClassName?: string; sortableColumnIndexes?: number[]; sortColumnIndex?: number | null; sortDirection?: "asc" | "desc"; onSortColumn?: (columnIndex: number) => void; columnHeaders?: Record<number, React.ReactNode> }) {
   if (!rows.length) return <EmptyState text="Данных пока нет." />;
   return (
     <div className={`tableWrap ${wrapperClassName}`.trim()}>
       <table>
-        <thead><tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr></thead>
+        <thead><tr>{columns.map((column, columnIndex) => (
+          <th key={column}>
+            {columnHeaders[columnIndex] || (sortableColumnIndexes.includes(columnIndex) ? (
+              <button className={`tableSortButton ${sortColumnIndex === columnIndex ? "active" : ""}`} type="button" onClick={() => onSortColumn?.(columnIndex)}>
+                <span>{column}</span>
+                {sortColumnIndex === columnIndex && sortDirection === "desc" ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
+              </button>
+            ) : column)}
+          </th>
+        ))}</tr></thead>
         <tbody>{rows.map((row, rowIndex) => <tr className={rowClassNames?.[rowIndex] || undefined} key={rowIndex}>{row.map((cell, cellIndex) => <td data-label={columns[cellIndex]} key={cellIndex}>{cell}</td>)}</tr>)}</tbody>
       </table>
     </div>
