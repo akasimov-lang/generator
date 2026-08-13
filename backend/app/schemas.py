@@ -462,7 +462,7 @@ class PublicationCampaignCreate(BaseModel):
     site_id: str
     content_item_ids: list[str] = Field(min_length=1)
     start_at: datetime
-    interval_minutes: int = Field(default=1440, ge=1)
+    interval_minutes: Literal[420, 720, 1440] = 1440
     items_per_run: int = Field(default=1, ge=1, le=100)
 
 
@@ -488,7 +488,7 @@ class SitePublicationCampaignCreate(BaseModel):
     name: str
     content_item_ids: list[str]
     start_at: datetime
-    items_per_day: int = Field(default=1, ge=1, le=24)
+    items_per_day: Literal[1, 2, 3] = 1
 
 
 class PublicationLogResponse(BaseModel):

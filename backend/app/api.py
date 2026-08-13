@@ -68,6 +68,8 @@ from app.services import (
     ensure_competitor_queries,
     fetch_competitor_pages_for_item,
     get_dashboard,
+    publish_item,
+    refresh_campaign_status,
     regenerate_competitor_queries,
     replace_competitor_queries,
     schedule_campaign,
@@ -961,7 +963,7 @@ def create_site_campaign(site_id: str, payload: SitePublicationCampaignCreate, _
     ) or 0
     if approved_count != len(payload.content_item_ids):
         raise HTTPException(status_code=400, detail="Campaign can include only approved content from the selected site")
-    interval_minutes = max(1, 1440 // payload.items_per_day)
+    interval_minutes = {1: 1440, 2: 720, 3: 420}[payload.items_per_day]
     campaign_payload = PublicationCampaignCreate(
         name=payload.name,
         site_id=site_id,
@@ -1374,6 +1376,32 @@ def publish_content_now(content_id: str, _: AdminUser, db: Session = Depends(get
         raise HTTPException(status_code=404, detail="Content item not found")
     try:
         return approve_and_schedule_item(db, item)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/content/{content_id}/publish-immediately", response_model=ContentItemResponse)
+async def publish_content_immediately(content_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    item = db.get(models.ContentItem, content_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Content item not found")
+    if not item.site_id:
+        raise HTTPException(status_code=400, detail="Select a project before publication")
+    if not item.section_id:
+        raise HTTPException(status_code=400, detail="Select a menu item before publication")
+    site = _get_site_or_404(db, item.site_id)
+    campaign_id = item.publication_campaign_id
+    try:
+        validate_content_for_publication(item)
+        await publish_item(db, item, site)
+        if item.status == "published":
+            item.scheduled_at = None
+            db.commit()
+            refresh_campaign_status(db, campaign_id)
+            db.commit()
+        db.refresh(item)
+        return item
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc

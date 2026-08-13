@@ -2241,6 +2241,25 @@ def schedule_campaign(db: Session, payload: PublicationCampaignCreate) -> models
             raise ValueError("Campaign can include only approved content")
         validate_content_for_publication(item)
 
+    task_ids = {item.task_id for item in items}
+    task_created_rows = db.execute(
+        select(models.GenerationTask.id, models.GenerationTask.created_at)
+        .where(models.GenerationTask.id.in_(task_ids))
+    ).all()
+    task_created_at = {task_id: created_at for task_id, created_at in task_created_rows}
+    ordered_items = sorted(
+        items,
+        key=lambda item: (task_created_at.get(item.task_id, item.created_at), item.created_at, item.id),
+    )
+    section_queues: dict[str, list[models.ContentItem]] = {}
+    for item in ordered_items:
+        section_queues.setdefault(item.section_id or "__without_section__", []).append(item)
+    publication_order: list[models.ContentItem] = []
+    while any(section_queues.values()):
+        for section_items in section_queues.values():
+            if section_items:
+                publication_order.append(section_items.pop(0))
+
     campaign = models.PublicationCampaign(
         name=payload.name,
         site_id=payload.site_id,
@@ -2251,11 +2270,11 @@ def schedule_campaign(db: Session, payload: PublicationCampaignCreate) -> models
     )
     db.add(campaign)
     db.flush()
-    for index, item_id in enumerate(item_ids):
-        item = items_by_id[item_id]
+    for index, item in enumerate(publication_order):
         item.publication_campaign_id = campaign.id
         item.status = "scheduled"
-        item.scheduled_at = payload.start_at + timedelta(minutes=payload.interval_minutes * index)
+        publication_slot = index // payload.items_per_run
+        item.scheduled_at = payload.start_at + timedelta(minutes=payload.interval_minutes * publication_slot)
     db.commit()
     db.refresh(campaign)
     return campaign

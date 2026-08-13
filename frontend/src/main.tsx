@@ -2973,10 +2973,17 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, mode
   const [launchExpanded, setLaunchExpanded] = React.useState(false);
   const [name, setName] = React.useState("Daily publication");
   const [itemsPerDay, setItemsPerDay] = React.useState(1);
-  const [sectionId, setSectionId] = React.useState("");
+  const [selectedPublicationSectionIds, setSelectedPublicationSectionIds] = React.useState<string[]>([]);
   const [startAt, setStartAt] = React.useState(() => toDateTimeInputValue(new Date()));
   const [formError, setFormError] = React.useState("");
-  const approved = content.filter((item) => item.status === "approved" && (!sectionId || item.section_id === sectionId));
+  const [publishingNowId, setPublishingNowId] = React.useState("");
+  const approved = content.filter((item) => item.status === "approved" && (!selectedPublicationSectionIds.length || (item.section_id && selectedPublicationSectionIds.includes(item.section_id))));
+  const publicationSections = sections
+    .map((section) => ({ section, count: content.filter((item) => item.status === "approved" && item.section_id === section.id).length }))
+    .filter(({ count }) => count > 0);
+  const publicationQueue = content
+    .filter((item) => ["scheduled", "retry_scheduled", "publication_paused", "publishing"].includes(item.status))
+    .sort((left, right) => new Date(left.scheduled_at || 0).getTime() - new Date(right.scheduled_at || 0).getTime());
 
   async function createCampaign(event: React.FormEvent) {
     event.preventDefault();
@@ -3014,6 +3021,26 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, mode
     }
   }
 
+  async function publishImmediately(item: ContentItem) {
+    if (!window.confirm(`Опубликовать текст «${item.topic}» сейчас, без ожидания очереди?`)) return;
+    setPublishingNowId(item.id);
+    setFormError("");
+    try {
+      await api<ContentItem>(`/content/${item.id}/publish-immediately`, { method: "POST" });
+      await onChanged();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось опубликовать текст.");
+    } finally {
+      setPublishingNowId("");
+    }
+  }
+
+  function togglePublicationSection(sectionId: string) {
+    setSelectedPublicationSectionIds((current) => current.includes(sectionId)
+      ? current.filter((id) => id !== sectionId)
+      : [...current, sectionId]);
+  }
+
   return (
     <section className="viewStack">
       {mode === "launch" ? <section className={`dataPanel publicationLaunchPanel ${launchExpanded ? "expanded" : ""}`}>
@@ -3032,17 +3059,25 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, mode
               <input value={name} onChange={(event) => setName(event.target.value)} required />
             </label>
             <label>
-              Пункт меню
-              <SearchableSelect
-                value={sectionId}
-                onChange={setSectionId}
-                options={[{ value: "", label: "Все approved" }, ...sections.map((section) => ({ value: section.id, label: `${section.name} · ${section.path}` }))]}
-                searchPlaceholder="Найти пункт меню"
-              />
+              Пункты меню
+              <span className="publicationSectionPicker">
+                <button className={!selectedPublicationSectionIds.length ? "active" : ""} type="button" onClick={() => setSelectedPublicationSectionIds([])}>
+                  Все approved <small>{content.filter((item) => item.status === "approved").length}</small>
+                </button>
+                {publicationSections.map(({ section, count }) => (
+                  <button className={selectedPublicationSectionIds.includes(section.id) ? "active" : ""} type="button" key={section.id} onClick={() => togglePublicationSection(section.id)}>
+                    <span>{section.name}</span><small>{count}</small>
+                  </button>
+                ))}
+              </span>
             </label>
             <label>
-              Текстов в день
-              <input type="number" value={itemsPerDay} onChange={(event) => setItemsPerDay(Number(event.target.value))} min={1} max={24} />
+              Режим публикации
+              <select value={itemsPerDay} onChange={(event) => setItemsPerDay(Number(event.target.value))}>
+                <option value={1}>1 текст в день · каждые 24 часа</option>
+                <option value={2}>2 текста в день · каждые 12 часов</option>
+                <option value={3}>3 текста в день · каждые 7 часов</option>
+              </select>
             </label>
             <label>
               Старт
@@ -3061,7 +3096,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, mode
           rows={campaigns.map((campaign) => [
             campaign.name,
             formatDate(campaign.start_at),
-            `${campaign.interval_minutes} мин.`,
+            publicationIntervalLabel(campaign.interval_minutes),
             <StatusBadge status={campaign.status} />,
             <div className="userActions">
               {campaign.status === "active" ? (
@@ -3079,9 +3114,34 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, mode
       </DataPanel> : null}
       {mode === "details" ? <DataPanel title="Процесс публикации">
         <ResponsiveTable
-          columns={["Тема", "Меню", "Slug"]}
-          rows={approved.map((item) => [<TopicMetaCell item={item} />, sectionLabel(item.section_id, sections), item.slug])}
+          columns={["Тема", "Меню", "Slug", "Действия"]}
+          rows={approved.map((item) => [
+            <div className="compactContentTopic" title={item.topic}>{item.topic}</div>,
+            sectionLabel(item.section_id, sections),
+            item.slug,
+            <button className="button compact primary publishImmediatelyButton" type="button" onClick={() => void publishImmediately(item)} disabled={publishingNowId === item.id}>
+              <Send size={14} /> {publishingNowId === item.id ? "Публикуем…" : "Опубликовать сейчас"}
+            </button>
+          ])}
         />
+      </DataPanel> : null}
+      {mode === "details" ? <DataPanel title={`Очередь публикации · ${publicationQueue.length}`}>
+        <div className="publicationQueueHint">Очередь чередуется по пунктам меню и сохраняет исходный порядок добавления тем.</div>
+        <ResponsiveTable
+          columns={["№", "Тема", "Меню", "Публикация", "Статус", "Действия"]}
+          rows={publicationQueue.map((item, index) => [
+            index + 1,
+            <div className="compactContentTopic" title={item.topic}>{item.topic}</div>,
+            sectionLabel(item.section_id, sections),
+            item.scheduled_at ? formatDate(item.scheduled_at) : "—",
+            <StatusBadge status={item.status} />,
+            <button className="button compact primary publishImmediatelyButton" type="button" onClick={() => void publishImmediately(item)} disabled={publishingNowId === item.id || item.status === "publishing"}>
+              <Send size={14} /> {publishingNowId === item.id ? "Публикуем…" : "Без очереди"}
+            </button>
+          ])}
+          wrapperClassName="projectPublicationQueueTable"
+        />
+        {formError ? <span className="formError">{formError}</span> : null}
       </DataPanel> : null}
     </section>
   );
@@ -5012,7 +5072,7 @@ function ContentView({ api, sites, content, onChanged }: ViewProps & { sites: Si
 function PublicationsView({ api, sites, content, onChanged }: ViewProps & { sites: Site[]; content: ContentItem[] }) {
   const [name, setName] = React.useState("Daily publication");
   const [siteId, setSiteId] = React.useState("");
-  const [interval, setIntervalValue] = React.useState(1440);
+  const [interval, setIntervalValue] = React.useState<1440 | 720 | 420>(1440);
   const [campaigns, setCampaigns] = React.useState<PublicationCampaign[]>([]);
   const [publicationContent, setPublicationContent] = React.useState<PublicationContentItem[]>([]);
   const [expandedProjectIds, setExpandedProjectIds] = React.useState<string[]>([]);
@@ -5094,8 +5154,12 @@ function PublicationsView({ api, sites, content, onChanged }: ViewProps & { site
             />
           </label>
           <label>
-            Интервал, минут
-            <input type="number" value={interval} onChange={(event) => setIntervalValue(Number(event.target.value))} min={5} />
+            Режим публикации
+            <select value={interval} onChange={(event) => setIntervalValue(Number(event.target.value) as 1440 | 720 | 420)}>
+              <option value={1440}>1 текст в день · каждые 24 часа</option>
+              <option value={720}>2 текста в день · каждые 12 часов</option>
+              <option value={420}>3 текста в день · каждые 7 часов</option>
+            </select>
           </label>
           <div className="formActions wide">
             <button className="button primary" type="submit" disabled={!approved.length || !siteId}><Play size={18} /> Запланировать approved ({approved.length})</button>
@@ -5110,7 +5174,7 @@ function PublicationsView({ api, sites, content, onChanged }: ViewProps & { site
             campaign.name,
             sites.find((site) => site.id === campaign.site_id)?.name || campaign.site_id,
             formatDate(campaign.start_at),
-            `${campaign.interval_minutes} мин.`,
+            publicationIntervalLabel(campaign.interval_minutes),
             <StatusBadge status={campaign.status} />,
             <div className="userActions">
               {campaign.status === "active" ? <button className="button compact" type="button" onClick={() => changeCampaign(campaign, "pause")}>Pause</button> : null}
@@ -6941,6 +7005,13 @@ function viewTitle(view: AppView, workspaceTab: WorkspaceTab) {
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+}
+
+function publicationIntervalLabel(intervalMinutes: number) {
+  if (intervalMinutes === 1440) return "1 текст/день · 24 ч";
+  if (intervalMinutes === 720) return "2 текста/день · 12 ч";
+  if (intervalMinutes === 420) return "3 текста/день · 7 ч";
+  return `${intervalMinutes} мин.`;
 }
 
 function latestPromptTemplate(prompts: PromptTemplate[]): PromptTemplate | null {

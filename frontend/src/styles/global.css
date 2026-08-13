@@ -3956,6 +3956,73 @@ td {
   overflow-wrap: anywhere;
 }
 
+.publicationQueueHint {
+  color: var(--muted);
+  font-size: 11px;
+  margin: -3px 0 8px;
+}
+
+.projectPublicationQueueTable th,
+.projectPublicationQueueTable td {
+  padding: 7px 8px;
+}
+
+.projectPublicationQueueTable th:first-child,
+.projectPublicationQueueTable td:first-child {
+  text-align: center;
+  width: 42px;
+}
+
+.publishImmediatelyButton {
+  font-size: 11px;
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+
+.publicationSectionPicker {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-height: 112px;
+  overflow: auto;
+  padding: 6px;
+}
+
+.publicationSectionPicker button {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--button-border);
+  border-radius: 7px;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 11px;
+  gap: 6px;
+  padding: 6px 8px;
+}
+
+.publicationSectionPicker button.active {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 750;
+}
+
+.publicationSectionPicker small {
+  align-items: center;
+  background: color-mix(in srgb, var(--muted) 12%, transparent);
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 9px;
+  justify-content: center;
+  min-width: 18px;
+  padding: 2px 5px;
+}
+
 .projectSelectionRow {
   align-items: center;
   display: flex;

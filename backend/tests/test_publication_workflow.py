@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import create_engine, func, select
@@ -89,7 +89,7 @@ def test_campaign_pause_resume_and_stop_updates_queued_content(db: Session) -> N
             site_id=site.id,
             content_item_ids=[item.id],
             start_at=datetime.now(timezone.utc),
-            interval_minutes=60,
+            interval_minutes=720,
             items_per_run=1,
         ),
     )
@@ -110,6 +110,51 @@ def test_campaign_pause_resume_and_stop_updates_queued_content(db: Session) -> N
     assert campaign.status == "stopped"
     assert item.status == "approved"
     assert item.scheduled_at is None
+
+
+def test_campaign_preserves_topic_order_and_alternates_menu_sections(db: Session) -> None:
+    site = models.Site(
+        name="Round robin site",
+        base_url="https://round-robin.test",
+        publication_endpoint="https://round-robin.test/api/pages",
+        payload_mode="simple_page",
+    )
+    db.add(site)
+    db.flush()
+    task = models.GenerationTask(title="Ordered topics", site_id=site.id, geo="DK", language="da", topics_count=4)
+    first_section = models.Section(site=site, external_id="casino", name="Casino", path="/casino/")
+    second_section = models.Section(site=site, external_id="bonus", name="Bonus", path="/bonus/")
+    db.add_all([task, first_section, second_section])
+    db.flush()
+    created_at = datetime(2026, 8, 13, 10, 0, tzinfo=timezone.utc)
+    items = [
+        models.ContentItem(task=task, site_id=site.id, section_id=first_section.id, topic="Casino 1", slug="/casino-1/", generated_json=valid_payload(), status="approved", idempotency_key="casino-1", created_at=created_at),
+        models.ContentItem(task=task, site_id=site.id, section_id=first_section.id, topic="Casino 2", slug="/casino-2/", generated_json=valid_payload(), status="approved", idempotency_key="casino-2", created_at=created_at + timedelta(seconds=1)),
+        models.ContentItem(task=task, site_id=site.id, section_id=second_section.id, topic="Bonus 1", slug="/bonus-1/", generated_json=valid_payload(), status="approved", idempotency_key="bonus-1", created_at=created_at + timedelta(seconds=2)),
+        models.ContentItem(task=task, site_id=site.id, section_id=second_section.id, topic="Bonus 2", slug="/bonus-2/", generated_json=valid_payload(), status="approved", idempotency_key="bonus-2", created_at=created_at + timedelta(seconds=3)),
+    ]
+    db.add_all(items)
+    db.commit()
+    start_at = datetime(2026, 8, 14, 9, 0, tzinfo=timezone.utc)
+
+    campaign = schedule_campaign(
+        db,
+        PublicationCampaignCreate(
+            name="Alternating menu sections",
+            site_id=site.id,
+            content_item_ids=[item.id for item in reversed(items)],
+            start_at=start_at,
+            interval_minutes=1440,
+            items_per_run=1,
+        ),
+    )
+
+    queued = db.scalars(
+        select(models.ContentItem)
+        .where(models.ContentItem.publication_campaign_id == campaign.id)
+        .order_by(models.ContentItem.scheduled_at.asc())
+    ).all()
+    assert [item.topic for item in queued] == ["Casino 1", "Bonus 1", "Casino 2", "Bonus 2"]
 
 
 def test_approve_and_schedule_item_creates_immediate_campaign(db: Session) -> None:
