@@ -103,13 +103,13 @@ def test_cached_menu_item_can_be_adopted_and_used_as_parent() -> None:
         assert child.sync_status == "pending"
 
 
-def test_menu_items_can_be_nested_at_any_depth() -> None:
+def test_menu_items_can_be_nested_at_any_depth_before_template_check() -> None:
     with make_session() as db:
         site = models.Site(
             name="review.example",
             base_url="https://review.example",
             publication_endpoint="https://review.example/api/content",
-            header_menu_nested=True,
+            header_menu_nested=False,
         )
         db.add(site)
         db.commit()

@@ -525,9 +525,6 @@ def create_section(site_id: str, payload: SectionCreate, _: AuthUser, db: Sessio
         parent = _get_section_for_site(db, site_id, payload.parent_id)
         if parent.menu_type != payload.menu_type:
             raise HTTPException(status_code=400, detail="Parent menu item must use the same menu type")
-        nesting_supported = site.header_menu_nested if payload.menu_type == "header" else site.footer_menu_nested
-        if nesting_supported is not True:
-            raise HTTPException(status_code=400, detail="This project template does not support nested menu items")
         parent.is_temporary_parent = False
     _add_site_menu_library_item(
         site,
