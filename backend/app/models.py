@@ -95,6 +95,7 @@ class Section(Base, TimestampMixin):
     path: Mapped[str] = mapped_column(String(240), nullable=False)
     menu_type: Mapped[str] = mapped_column(String(20), nullable=False, default="header", server_default="header")
     parent_id: Mapped[str | None] = mapped_column(ForeignKey("sections.id"), nullable=True)
+    is_temporary_parent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     sync_status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
     synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

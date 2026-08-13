@@ -245,6 +245,7 @@ type Section = {
   path: string;
   menu_type: "header" | "footer";
   parent_id: string | null;
+  is_temporary_parent: boolean;
   sync_status: "pending" | "synced";
   synced_at: string | null;
   updated_at: string;
@@ -2956,6 +2957,8 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
   const [savingSectionEdit, setSavingSectionEdit] = React.useState(false);
   const [deletingSectionId, setDeletingSectionId] = React.useState<string | null>(null);
   const [adoptingParentKey, setAdoptingParentKey] = React.useState<string | null>(null);
+  const [temporaryParentId, setTemporaryParentId] = React.useState<string | null>(null);
+  const [releasingTemporaryParent, setReleasingTemporaryParent] = React.useState(false);
   const cachedHeader = Array.isArray(site.default_menu.header) ? site.default_menu.header : [];
   const cachedFooter = Array.isArray(site.default_menu.footer) ? site.default_menu.footer : [];
   const menuLibrary = React.useMemo(() => {
@@ -2975,6 +2978,7 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
     setName("");
     setPath("");
     setParentId("");
+    setTemporaryParentId(null);
     setInlineMenuType(null);
     setLibraryFormExpanded(false);
     setLibraryName("");
@@ -3004,7 +3008,7 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
     setAdoptingParentKey(parentKey);
     setFormError("");
     try {
-      const parent = await api<Section>(`/sites/${site.id}/sections/adopt`, {
+      const adopted = await api<{ section: Section; created: boolean }>(`/sites/${site.id}/sections/adopt`, {
         method: "POST",
         body: JSON.stringify({
           external_id: item.externalId,
@@ -3017,7 +3021,8 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
       setName("");
       setPath("");
       setMenuType(targetMenuType);
-      setParentId(parent.id);
+      setParentId(adopted.section.id);
+      setTemporaryParentId(adopted.created ? adopted.section.id : null);
       setInlineMenuType(targetMenuType);
       setAddExpanded(false);
       await onChanged();
@@ -3025,6 +3030,26 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
       setFormError(error instanceof Error ? error.message : "Не удалось выбрать родительский пункт");
     } finally {
       setAdoptingParentKey(null);
+    }
+  }
+
+  async function cancelInlineMenuForm() {
+    const sectionId = temporaryParentId;
+    setInlineMenuType(null);
+    setName("");
+    setPath("");
+    setParentId("");
+    setTemporaryParentId(null);
+    if (!sectionId) return;
+    setReleasingTemporaryParent(true);
+    setFormError("");
+    try {
+      await api(`/sites/${site.id}/sections/${sectionId}/adopt`, { method: "DELETE" });
+      await onChanged();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось удалить временный родительский пункт");
+    } finally {
+      setReleasingTemporaryParent(false);
     }
   }
 
@@ -3100,6 +3125,7 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
       setName("");
       setPath("");
       setParentId("");
+      setTemporaryParentId(null);
       setInlineMenuType(null);
       setUpdatedAt(created.updated_at || new Date().toISOString());
       await onChanged();
@@ -3204,7 +3230,7 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
         </label> : null}
         {targetMenuType ? (
           <div className="siteMenuInlineActions">
-            <button className="button siteMenuCancelButton" type="button" onClick={() => { setInlineMenuType(null); setName(""); setPath(""); setParentId(""); }} disabled={Boolean(addingMenuItemId)}>Отменить</button>
+            <button className="button siteMenuCancelButton" type="button" onClick={cancelInlineMenuForm} disabled={Boolean(addingMenuItemId) || releasingTemporaryParent}>{releasingTemporaryParent ? "Отменяем" : "Отменить"}</button>
             <button className="button primary" type="submit" disabled={Boolean(addingMenuItemId)}>{addingMenuItemId ? "Сохраняем" : "Сохранить"}</button>
           </div>
         ) : <button className="button primary" type="submit" disabled={Boolean(addingMenuItemId)}>{addingMenuItemId ? "Сохраняем" : "Сохранить"}</button>}

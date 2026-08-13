@@ -36,6 +36,7 @@ from app.schemas import (
     ProjectCacheSyncRequest,
     PublicationCampaignCreate,
     SectionCreate,
+    SectionAdoptResponse,
     SectionResponse,
     SectionUpdate,
     SectionsBulkCreate,
@@ -519,6 +520,7 @@ def get_site_menu_capabilities(site_id: str, _: AuthUser, db: Session = Depends(
 @router.post("/sites/{site_id}/sections", response_model=SectionResponse)
 def create_section(site_id: str, payload: SectionCreate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     site = _get_site_or_404(db, site_id)
+    parent = None
     if payload.parent_id:
         parent = _get_section_for_site(db, site_id, payload.parent_id)
         if parent.menu_type != payload.menu_type:
@@ -528,6 +530,7 @@ def create_section(site_id: str, payload: SectionCreate, _: AuthUser, db: Sessio
         nesting_supported = site.header_menu_nested if payload.menu_type == "header" else site.footer_menu_nested
         if nesting_supported is not True:
             raise HTTPException(status_code=400, detail="This project template does not support nested menu items")
+        parent.is_temporary_parent = False
     _add_site_menu_library_item(
         site,
         MenuLibraryItemCreate(
@@ -552,7 +555,7 @@ def create_section(site_id: str, payload: SectionCreate, _: AuthUser, db: Sessio
     return section
 
 
-@router.post("/sites/{site_id}/sections/adopt", response_model=SectionResponse)
+@router.post("/sites/{site_id}/sections/adopt", response_model=SectionAdoptResponse)
 def adopt_cached_section(site_id: str, payload: SectionCreate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     """Create a local synchronized reference for a menu item that already exists in the project cache."""
     site = _get_site_or_404(db, site_id)
@@ -575,7 +578,7 @@ def adopt_cached_section(site_id: str, payload: SectionCreate, _: AuthUser, db: 
         None,
     )
     if existing:
-        return existing
+        return {"section": existing, "created": False}
 
     section = models.Section(
         site_id=site_id,
@@ -583,13 +586,29 @@ def adopt_cached_section(site_id: str, payload: SectionCreate, _: AuthUser, db: 
         name=payload.name.strip(),
         path=normalized_path,
         menu_type=payload.menu_type,
+        is_temporary_parent=True,
         sync_status="synced",
         synced_at=site.cache_synced_at or datetime.now(timezone.utc),
     )
     db.add(section)
     db.commit()
     db.refresh(section)
-    return section
+    return {"section": section, "created": True}
+
+
+@router.delete("/sites/{site_id}/sections/{section_id}/adopt")
+def release_adopted_section(site_id: str, section_id: str, _: AuthUser, db: Session = Depends(get_db)) -> dict[str, bool]:
+    """Remove an unused local reference created only to prepare a nested menu item form."""
+    _get_site_or_404(db, site_id)
+    section = _get_section_for_site(db, site_id, section_id)
+    task_count = db.scalar(select(func.count(models.GenerationTask.id)).where(models.GenerationTask.section_id == section.id)) or 0
+    content_count = db.scalar(select(func.count(models.ContentItem.id)).where(models.ContentItem.section_id == section.id)) or 0
+    child_count = db.scalar(select(func.count(models.Section.id)).where(models.Section.parent_id == section.id)) or 0
+    if not section.is_temporary_parent or task_count or content_count or child_count:
+        raise HTTPException(status_code=409, detail="Временный родительский пункт уже используется и не может быть удалён")
+    db.delete(section)
+    db.commit()
+    return {"deleted": True}
 
 
 @router.patch("/sites/{site_id}/sections/{section_id}", response_model=SectionResponse)

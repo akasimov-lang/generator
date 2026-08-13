@@ -75,6 +75,7 @@ def apply_lightweight_migrations() -> None:
                 "sync_status": "VARCHAR(20) DEFAULT 'pending' NOT NULL",
                 "synced_at": "TIMESTAMP WITH TIME ZONE",
                 "parent_id": "VARCHAR(36)",
+                "is_temporary_parent": "BOOLEAN DEFAULT FALSE NOT NULL",
             },
         )
 

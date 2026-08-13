@@ -204,10 +204,16 @@ class SectionResponse(BaseModel):
     path: str
     menu_type: str
     parent_id: str | None
+    is_temporary_parent: bool
     sync_status: str
     synced_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+class SectionAdoptResponse(BaseModel):
+    section: SectionResponse
+    created: bool
 
 
 class SectionsBulkCreateResponse(BaseModel):
