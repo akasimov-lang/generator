@@ -103,6 +103,39 @@ def test_cached_menu_item_can_be_adopted_and_used_as_parent() -> None:
         assert child.sync_status == "pending"
 
 
+def test_menu_items_can_be_nested_at_any_depth() -> None:
+    with make_session() as db:
+        site = models.Site(
+            name="review.example",
+            base_url="https://review.example",
+            publication_endpoint="https://review.example/api/content",
+            header_menu_nested=True,
+        )
+        db.add(site)
+        db.commit()
+
+        root = create_section(
+            site.id,
+            SectionCreate(external_id="casino", name="Casino", path="/casino/", menu_type="header"),
+            None,  # type: ignore[arg-type]
+            db,
+        )
+        child = create_section(
+            site.id,
+            SectionCreate(external_id="live", name="Live", path="/casino/live/", menu_type="header", parent_id=root.id),
+            None,  # type: ignore[arg-type]
+            db,
+        )
+        grandchild = create_section(
+            site.id,
+            SectionCreate(external_id="roulette", name="Roulette", path="/casino/live/roulette/", menu_type="header", parent_id=child.id),
+            None,  # type: ignore[arg-type]
+            db,
+        )
+
+        assert grandchild.parent_id == child.id
+
+
 def test_canceling_child_form_removes_only_new_temporary_parent() -> None:
     with make_session() as db:
         site = models.Site(

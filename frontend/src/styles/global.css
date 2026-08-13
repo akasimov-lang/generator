@@ -2096,27 +2096,84 @@ h2 {
   padding: 3px 7px;
 }
 
-.siteMenuPreviewSection ol {
-  display: grid;
-  gap: 0;
-  margin: 0;
-  padding-left: 28px;
+.siteMenuTreeViewport {
+  max-height: 620px;
+  overflow: auto;
+  padding-right: 3px;
 }
 
-.siteMenuPreviewSection li {
+.siteMenuTree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.siteMenuTree .siteMenuTree {
+  border-left: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border));
+  margin-left: 14px;
+  padding-left: 14px;
+}
+
+.siteMenuTreeNode {
+  list-style: none;
+  min-width: 0;
+  position: relative;
+}
+
+.siteMenuTree .siteMenuTree > .siteMenuTreeNode::before {
+  border-top: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border));
+  content: "";
+  left: -14px;
+  position: absolute;
+  top: 27px;
+  width: 12px;
+}
+
+.siteMenuTreeRow {
   align-items: center;
   border-bottom: 1px solid var(--border);
   display: flex;
-  gap: 10px;
-  justify-content: space-between;
-  padding: 9px 4px;
+  gap: 7px;
+  min-height: 54px;
+  padding: 7px 4px 7px 0;
 }
 
-.siteMenuPreviewSection li:last-child {
-  border-bottom: 0;
+.siteMenuTreeToggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  display: inline-flex;
+  flex: 0 0 26px;
+  height: 28px;
+  justify-content: center;
+  padding: 0;
+  width: 26px;
+}
+
+.siteMenuTreeToggle.hasChildren {
+  color: var(--primary);
+  cursor: pointer;
+}
+
+.siteMenuTreeToggle.hasChildren:hover {
+  background: var(--primary-soft);
+}
+
+.siteMenuTreeToggle:disabled {
+  opacity: 1;
+}
+
+.siteMenuTreeToggle > span {
+  background: color-mix(in srgb, var(--muted) 45%, transparent);
+  border-radius: 50%;
+  height: 4px;
+  width: 4px;
 }
 
 .siteMenuPreviewItemText {
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -2147,6 +2204,7 @@ h2 {
   gap: 5px;
   min-height: 30px;
   padding: 5px 8px;
+  white-space: nowrap;
 }
 
 .siteMenuAddChildButton:hover:not(:disabled) {

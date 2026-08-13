@@ -485,9 +485,9 @@ def list_sections(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> A
 
 
 @router.get("/sites/{site_id}/menu-capabilities")
-def get_site_menu_capabilities(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> dict[str, Any]:
+def get_site_menu_capabilities(site_id: str, _: AuthUser, db: Session = Depends(get_db), refresh: bool = False) -> dict[str, Any]:
     site = _get_site_or_404(db, site_id)
-    if site.menu_capabilities_checked_at is None:
+    if site.menu_capabilities_checked_at is None or refresh:
         if not site.cache_server_ip:
             try:
                 projects = fetch_project_cache([site.name])
@@ -498,7 +498,7 @@ def get_site_menu_capabilities(site_id: str, _: AuthUser, db: Session = Depends(
             except ProjectCacheError as error:
                 raise HTTPException(status_code=502, detail=str(error)) from error
         try:
-            capabilities = fetch_project_menu_capabilities(site)
+            capabilities = fetch_project_menu_capabilities(site, force=True) if refresh else fetch_project_menu_capabilities(site)
         except ProjectCacheError as error:
             raise HTTPException(status_code=502, detail=str(error)) from error
         site.header_menu_rendered = capabilities["header_menu_rendered"]
@@ -525,8 +525,6 @@ def create_section(site_id: str, payload: SectionCreate, _: AuthUser, db: Sessio
         parent = _get_section_for_site(db, site_id, payload.parent_id)
         if parent.menu_type != payload.menu_type:
             raise HTTPException(status_code=400, detail="Parent menu item must use the same menu type")
-        if parent.parent_id:
-            raise HTTPException(status_code=400, detail="Only top-level menu items can contain nested items")
         nesting_supported = site.header_menu_nested if payload.menu_type == "header" else site.footer_menu_nested
         if nesting_supported is not True:
             raise HTTPException(status_code=400, detail="This project template does not support nested menu items")

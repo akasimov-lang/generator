@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -76,6 +78,17 @@ def test_menu_capabilities_are_detected_per_template() -> None:
     }
 
 
+def test_scripted_multilevel_menu_is_detected() -> None:
+    capabilities = analyze_menu_templates([
+        {"name": "header.hbs", "data": "<script>const menu = source; menu.forEach(renderDropdown)</script>"},
+        {"name": "footer.hbs", "data": "<footer>Static footer</footer>"},
+    ])
+
+    assert capabilities["header_menu_rendered"] is True
+    assert capabilities["header_menu_nested"] is True
+    assert capabilities["footer_menu_rendered"] is False
+
+
 def test_menu_capabilities_are_fetched_only_once(monkeypatch) -> None:
     calls: list[str] = []
 
@@ -105,6 +118,39 @@ def test_menu_capabilities_are_fetched_only_once(monkeypatch) -> None:
         assert calls == [site.id]
         assert first["header_menu_rendered"] is True
         assert second["footer_menu_nested"] is True
+
+
+def test_menu_capabilities_can_be_refreshed(monkeypatch) -> None:
+    calls: list[bool] = []
+
+    def fake_fetch(site: models.Site, force: bool = False) -> dict[str, bool]:
+        calls.append(force)
+        return {
+            "header_menu_rendered": True,
+            "header_menu_nested": True,
+            "footer_menu_rendered": False,
+            "footer_menu_nested": False,
+        }
+
+    monkeypatch.setattr("app.api.fetch_project_menu_capabilities", fake_fetch)
+    with make_session() as db:
+        site = models.Site(
+            name="refresh-menu.example",
+            base_url="https://refresh-menu.example",
+            publication_endpoint="https://refresh-menu.example/api/content",
+            cache_server_ip="cobra",
+            menu_capabilities_checked_at=datetime.now(timezone.utc),
+            header_menu_rendered=False,
+            footer_menu_rendered=False,
+        )
+        db.add(site)
+        db.commit()
+
+        result = get_site_menu_capabilities(site.id, None, db, refresh=True)  # type: ignore[arg-type]
+
+        assert calls == [True]
+        assert result["header_menu_rendered"] is True
+        assert result["header_menu_nested"] is True
 
 
 def test_sync_updates_existing_project_without_duplicate() -> None:

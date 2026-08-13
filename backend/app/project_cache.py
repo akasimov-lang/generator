@@ -17,8 +17,8 @@ class ProjectCacheError(RuntimeError):
     pass
 
 
-def fetch_project_menu_capabilities(site: models.Site) -> dict[str, Any]:
-    if site.menu_capabilities_checked_at is not None:
+def fetch_project_menu_capabilities(site: models.Site, force: bool = False) -> dict[str, Any]:
+    if site.menu_capabilities_checked_at is not None and not force:
         return _site_menu_capabilities(site)
     if not site.cache_server_ip or not site.name:
         raise ProjectCacheError("Project server is not available in cache")
@@ -56,11 +56,28 @@ def analyze_menu_templates(shortcodes: Any) -> dict[str, bool]:
     } if isinstance(shortcodes, list) else {}
     header_template = templates.get("header.hbs", "")
     footer_template = templates.get("footer.hbs", "")
+    def renders_menu(template: str, menu_name: str) -> bool:
+        handlebars_loop = bool(re.search(rf"{{{{#each\s+{menu_name}\b[^}}]*}}}}", template, re.IGNORECASE))
+        scripted_menu = bool(
+            re.search(r"\bmenu\b", template, re.IGNORECASE)
+            and re.search(r"forEach\s*\(|\.map\s*\(|\bfor\s*\(", template)
+        )
+        html_menu = bool(re.search(r"<(?:nav|ul)\b", template, re.IGNORECASE) and re.search(r"\bmenu\b", template, re.IGNORECASE))
+        return handlebars_loop or scripted_menu or html_menu
+
+    def renders_nested_menu(template: str) -> bool:
+        return bool(
+            re.search(r"{{#if\s+this\.children\b", template, re.IGNORECASE)
+            or re.search(r"children|sub[-_ ]?menu|dropdown|recursive|nested", template, re.IGNORECASE)
+        )
+
+    header_rendered = renders_menu(header_template, "headerMenu")
+    footer_rendered = renders_menu(footer_template, "footerMenu")
     return {
-        "header_menu_rendered": bool(re.search(r"{{#each\s+headerMenu}}", header_template)),
-        "header_menu_nested": bool(re.search(r"{{#if\s+this\.children}}", header_template)),
-        "footer_menu_rendered": bool(re.search(r"{{#each\s+footerMenu}}", footer_template)),
-        "footer_menu_nested": bool(re.search(r"{{#if\s+this\.children}}", footer_template)),
+        "header_menu_rendered": header_rendered,
+        "header_menu_nested": header_rendered and renders_nested_menu(header_template),
+        "footer_menu_rendered": footer_rendered,
+        "footer_menu_nested": footer_rendered and renders_nested_menu(footer_template),
     }
 
 
