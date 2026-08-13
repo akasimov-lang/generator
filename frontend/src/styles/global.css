@@ -2187,6 +2187,20 @@ h2 {
   width: auto;
 }
 
+.siteMenuTreeToggle > .siteMenuTreeNestedCount {
+  align-items: center;
+  background: color-mix(in srgb, var(--primary) 12%, white);
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border));
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 9px;
+  height: 18px;
+  justify-content: center;
+  min-width: 18px;
+  padding: 0 5px;
+  width: auto;
+}
+
 .siteMenuPreviewItemText {
   flex: 1 1 auto;
   min-width: 0;

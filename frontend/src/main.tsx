@@ -5897,12 +5897,13 @@ function SiteMenuPreviewSection({ title, items, sections = [], icon, action, chi
       {nodes.map((node) => {
         const parentKey = `${menuType}:${node.item.externalId}`;
         const hasChildren = node.children.length > 0;
+        const nestedCount = countMenuTree(node.children);
         const collapsed = collapsedKeys.has(node.key);
         return (
           <li className="siteMenuTreeNode" key={node.key} role="treeitem" aria-expanded={hasChildren ? !collapsed : undefined}>
             <div className="siteMenuTreeRow">
               <button className={`siteMenuTreeToggle ${hasChildren ? "hasChildren" : ""}`} type="button" onClick={() => hasChildren && toggleNode(node.key)} disabled={!hasChildren} aria-label={hasChildren ? `${collapsed ? "Развернуть" : "Свернуть"} ${node.item.title}` : undefined}>
-                {hasChildren ? <>{collapsed ? <ChevronRight size={17} /> : <ChevronDown size={17} />}<span className="siteMenuTreeToggleLabel">{collapsed ? "Показать все" : "Свернуть"}</span></> : <span />}
+                {hasChildren ? <>{collapsed ? <ChevronRight size={17} /> : <ChevronDown size={17} />}<span className="siteMenuTreeToggleLabel">{collapsed ? "Показать все" : "Свернуть"}</span><span className="siteMenuTreeNestedCount">{nestedCount}</span></> : <span />}
               </button>
               <div className="siteMenuPreviewItemText"><strong>{node.item.title}</strong>{node.item.path ? <code>{node.item.path}</code> : null}</div>
               {canAddNestedItems && onAddChild ? <button className="siteMenuAddChildButton" type="button" onClick={() => onAddChild(node.item, node.section)} disabled={Boolean(adoptingParentKey)} title={`Добавить дочерний пункт в «${node.item.title}»`}><Plus size={15} /> {adoptingParentKey === parentKey ? "Открываем…" : "Добавить"}</button> : null}
