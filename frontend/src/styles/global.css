@@ -3612,6 +3612,64 @@ td {
   align-self: center;
 }
 
+.projectContentTable {
+  overflow-x: hidden;
+}
+
+.projectContentTable th,
+.projectContentTable td {
+  padding: 7px 6px;
+}
+
+.projectContentTable .column-select {
+  width: 46px;
+  text-align: center;
+}
+
+.projectContentTable .column-topic {
+  width: 34%;
+}
+
+.projectContentTable .column-menu {
+  width: 18%;
+}
+
+.projectContentTable .column-words {
+  width: 64px;
+  white-space: nowrap;
+}
+
+.projectContentTable .column-status,
+.projectContentTable .column-published {
+  width: 105px;
+  white-space: nowrap;
+}
+
+.projectContentTable .column-actions {
+  width: 310px;
+}
+
+.compactContentTopic {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.projectContentActions {
+  flex-wrap: nowrap;
+  gap: 5px;
+}
+
+.projectContentActions .button {
+  padding: 7px 9px;
+  white-space: nowrap;
+}
+
 .bulkMenuSelect {
   flex: 1 1 280px;
   min-width: 240px;
@@ -4397,6 +4455,13 @@ textarea:focus {
   font-weight: 800;
   padding: 3px 6px;
   white-space: nowrap;
+}
+
+.searchableSelectOptionBadge.neutral {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--muted);
+  font-weight: 700;
 }
 
 .searchableSelectOption svg {

@@ -2660,6 +2660,13 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
   const selectedItems = content.filter((item) => selectedIds.includes(item.id));
   const bulkApproveItems = selectedItems.filter((item) => Boolean(item.section_id) && canApproveContent(item));
   const bulkPublishItems = selectedItems.filter((item) => Boolean(item.section_id) && ["generated", "rejected", "approved"].includes(item.status));
+  const sectionContentCounts = React.useMemo(() => {
+    const counts = new Map<string, number>();
+    content.forEach((item) => {
+      if (item.section_id) counts.set(item.section_id, (counts.get(item.section_id) || 0) + 1);
+    });
+    return counts;
+  }, [content]);
 
   React.useEffect(() => {
     setSelectedIds((current) => current.filter((id) => selectableIds.includes(id)));
@@ -2806,7 +2813,15 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
             <SearchableSelect
               value={bulkSectionId}
               onChange={setBulkSectionId}
-              options={[{ value: "", label: "Выберите пункт меню" }, ...sections.map((section) => ({ value: section.id, label: `${section.name} · ${section.path}` }))]}
+              options={[
+                { value: "", label: "Выберите пункт меню" },
+                ...sections.map((section) => ({
+                  value: section.id,
+                  label: `${section.name} · ${section.path}`,
+                  badge: String(sectionContentCounts.get(section.id) || 0),
+                  badgeTone: "neutral" as const
+                }))
+              ]}
               searchPlaceholder="Найти пункт меню"
               disabled={bulkBusy}
             />
@@ -2853,6 +2868,8 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
         ) : null}
         <ResponsiveTable
           columns={["Выбор", "Тема", "Меню", "Слова", "Статус", "Опубликовано", "Действия"]}
+          columnKeys={["select", "topic", "menu", "words", "status", "published", "actions"]}
+          wrapperClassName="projectContentTable"
           rows={content.map((item) => [
             <input
               className="rowCheckbox"
@@ -2863,15 +2880,15 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
               aria-label={`Выбрать ${item.topic}`}
               title={isPublicationLocked(item) ? "Пункт меню опубликованного или запланированного текста изменять нельзя" : undefined}
             />,
-            <TopicMetaCell item={item} />,
+            <div className="compactContentTopic" title={item.topic}>{item.topic}</div>,
             sectionLabel(item.section_id, sections),
             item.word_count,
             <StatusBadge status={item.status} />,
             item.published_url ? <a href={item.published_url} target="_blank" rel="noreferrer"><ExternalLink size={15} /> URL</a> : item.published_at ? formatDate(item.published_at) : "-",
-            <div className="userActions">
+            <div className="userActions projectContentActions">
               <button className="button compact" type="button" onClick={() => openEditor(item)} disabled={isPublicationLocked(item)} title="Открыть и редактировать JSON payload"><Database size={15} /> JSON</button>
-              <button className="button compact" type="button" onClick={() => setPreviewItem(item)} title="Посмотреть готовый текст, Title и Meta Description"><Eye size={15} /> Текст + Meta</button>
-              <button className="button compact approve" type="button" onClick={() => approve(item)} disabled={!canApproveContent(item)}>Approve</button>
+              <button className="button compact" type="button" onClick={() => setPreviewItem(item)} title="Посмотреть готовый текст, Title и Meta Description"><Eye size={15} /> Просмотр</button>
+              <button className="button compact approve" type="button" onClick={() => approve(item)} disabled={!canApproveContent(item)} title="Согласовать текст"><CheckCircle2 size={15} /> Approve</button>
             </div>
           ])}
         />
@@ -6435,6 +6452,7 @@ type SearchableSelectOption = {
   keywords?: string;
   description?: string;
   badge?: string;
+  badgeTone?: "warning" | "neutral";
   tone?: "test" | "menu";
 };
 
@@ -6616,7 +6634,7 @@ function SearchableSelect({
                   {option.description ? <small>{option.description}</small> : null}
                 </span>
                 <span className="searchableSelectOptionAside">
-                  {option.badge ? <small className="searchableSelectOptionBadge">{option.badge}</small> : null}
+                  {option.badge !== undefined ? <small className={`searchableSelectOptionBadge ${option.badgeTone === "neutral" ? "neutral" : ""}`}>{option.badge}</small> : null}
                   {option.value === value ? <CheckCircle2 size={16} /> : null}
                   {renderOptionAction ? (
                     <span onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
