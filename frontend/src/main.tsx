@@ -2663,7 +2663,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
   const sectionContentCounts = React.useMemo(() => {
     const counts = new Map<string, number>();
     content.forEach((item) => {
-      if (item.section_id) counts.set(item.section_id, (counts.get(item.section_id) || 0) + 1);
+      if (item.section_id && item.generated_at) counts.set(item.section_id, (counts.get(item.section_id) || 0) + 1);
     });
     return counts;
   }, [content]);
