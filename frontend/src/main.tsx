@@ -5866,11 +5866,16 @@ function countMenuTree(nodes: MenuTreeNode[]): number {
   return nodes.reduce((count, node) => count + 1 + countMenuTree(node.children), 0);
 }
 
+function hasNestedMenuItems(nodes: MenuTreeNode[]): boolean {
+  return nodes.some((node) => node.children.length > 0 || hasNestedMenuItems(node.children));
+}
+
 function SiteMenuPreviewSection({ title, items, sections = [], icon, action, children, allowChildren = false, adoptingParentKey, onAddChild }: { title: string; items: unknown[]; sections?: Section[]; icon?: React.ReactNode; action?: React.ReactNode; children?: React.ReactNode; allowChildren?: boolean; adoptingParentKey?: string | null; onAddChild?: (item: MenuPreviewItem, section?: Section) => void }) {
   const menuType = title.includes("Footer") ? "footer" : "header";
   const [collapsedKeys, setCollapsedKeys] = React.useState<Set<string>>(() => new Set());
   const tree = React.useMemo(() => buildMenuTree(items, sections), [items, sections]);
   const itemCount = countMenuTree(tree);
+  const canAddNestedItems = allowChildren || hasNestedMenuItems(tree);
   const toggleNode = (key: string) => setCollapsedKeys((current) => {
     const next = new Set(current);
     if (next.has(key)) next.delete(key);
@@ -5890,7 +5895,7 @@ function SiteMenuPreviewSection({ title, items, sections = [], icon, action, chi
                 {hasChildren ? (collapsed ? <ChevronRight size={17} /> : <ChevronDown size={17} />) : <span />}
               </button>
               <div className="siteMenuPreviewItemText"><strong>{node.item.title}</strong>{node.item.path ? <code>{node.item.path}</code> : null}</div>
-              {allowChildren && onAddChild ? <button className="siteMenuAddChildButton" type="button" onClick={() => onAddChild(node.item, node.section)} disabled={Boolean(adoptingParentKey)} title={`Добавить пункт внутрь «${node.item.title}»`}><Plus size={15} /> {adoptingParentKey === parentKey ? "Открываем…" : "Добавить внутрь"}</button> : null}
+              {canAddNestedItems && onAddChild ? <button className="siteMenuAddChildButton" type="button" onClick={() => onAddChild(node.item, node.section)} disabled={Boolean(adoptingParentKey)} title={`Добавить дочерний пункт в «${node.item.title}»`}><Plus size={15} /> {adoptingParentKey === parentKey ? "Открываем…" : "Добавить"}</button> : null}
             </div>
             {hasChildren && !collapsed ? renderNodes(node.children, depth + 1) : null}
           </li>
