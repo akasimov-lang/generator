@@ -5173,6 +5173,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, onChang
       isWorking: site.project_status === "working",
       projectStatus: site.project_status,
       hasMenu: site.has_menu,
+      hasHeaderMedal: Boolean(site.menu_capabilities_checked_at && site.header_menu_rendered === true),
       headerMenuCount,
       footerMenuCount,
       headerMenu: Array.isArray(site.default_menu.header) ? site.default_menu.header : [],
@@ -5468,6 +5469,13 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, onChang
                   <span className="siteNameWithFlag">
                     {localeFlag(localeCountryCode(row.geo || row.language || "")) ? <span aria-hidden="true">{localeFlag(localeCountryCode(row.geo || row.language || ""))}</span> : null}
                     <strong>{row.name}</strong>
+                    <span
+                      className={`siteNameVerificationMedal ${row.hasHeaderMedal ? "isVerified" : "isPending"}`}
+                      title={row.hasHeaderMedal ? "Проверка Header пройдена" : "Проверка Header не пройдена"}
+                      aria-label={row.hasHeaderMedal ? "Проверка Header пройдена" : "Проверка Header не пройдена"}
+                    >
+                      <MenuReadyMedal />
+                    </span>
                   </span>
                   <span className="siteNameActions">
                     <button
