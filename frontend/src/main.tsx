@@ -380,6 +380,23 @@ type PublicationCampaign = {
   updated_at: string;
 };
 
+type PublicationQueueItem = {
+  id: string;
+  topic: string;
+  slug: string;
+  section_id: string | null;
+  section_name: string | null;
+  status: string;
+  word_count: number;
+  scheduled_at: string | null;
+  published_at: string | null;
+};
+
+type PublicationCampaignQueue = {
+  campaign: PublicationCampaign;
+  items: PublicationQueueItem[];
+};
+
 type ThemeMode = "light" | "dark";
 type InputStyle = "balanced" | "classic" | "soft" | "inset" | "underline" | "emerald" | "graphite" | "rounded" | "contrast" | "glass";
 type AppView = "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "favorites" | "settings";
@@ -5074,6 +5091,10 @@ function PublicationsView({ api, sites, content, onChanged }: ViewProps & { site
   const [siteId, setSiteId] = React.useState("");
   const [interval, setIntervalValue] = React.useState<1440 | 720 | 420>(1440);
   const [campaigns, setCampaigns] = React.useState<PublicationCampaign[]>([]);
+  const [campaignQueue, setCampaignQueue] = React.useState<PublicationCampaignQueue | null>(null);
+  const [campaignQueueLoadingId, setCampaignQueueLoadingId] = React.useState("");
+  const [publishingQueueItemId, setPublishingQueueItemId] = React.useState("");
+  const [publishingQueueItemId, setPublishingQueueItemId] = React.useState("");
   const [publicationContent, setPublicationContent] = React.useState<PublicationContentItem[]>([]);
   const [expandedProjectIds, setExpandedProjectIds] = React.useState<string[]>([]);
   const [formError, setFormError] = React.useState("");
@@ -5136,8 +5157,41 @@ function PublicationsView({ api, sites, content, onChanged }: ViewProps & { site
     }
   }
 
+  async function openCampaignQueue(campaign: PublicationCampaign) {
+    setCampaignQueueLoadingId(campaign.id);
+    setFormError("");
+    try {
+      setCampaignQueue(await api<PublicationCampaignQueue>(`/publication-campaigns/${campaign.id}/queue`));
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось загрузить очередь задания.");
+    } finally {
+      setCampaignQueueLoadingId("");
+    }
+  }
+
+  async function publishCampaignQueueItem(item: PublicationQueueItem) {
+    if (!window.confirm(`Опубликовать текст «${item.topic}» сейчас, без ожидания очереди?`)) return;
+    setPublishingQueueItemId(item.id);
+    setFormError("");
+    try {
+      await api<ContentItem>(`/content/${item.id}/publish-immediately`, { method: "POST" });
+      if (campaignQueue) {
+        setCampaignQueue(await api<PublicationCampaignQueue>(`/publication-campaigns/${campaignQueue.campaign.id}/queue`));
+      }
+      await Promise.all([onChanged(), loadCampaigns(), loadPublicationContent()]);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось опубликовать текст.");
+    } finally {
+      setPublishingQueueItemId("");
+    }
+  }
+
   return (
     <section className="viewStack">
+      <div className="publicationProjectsInfo publicationPageInfo" role="note">
+        <ListChecks size={17} />
+        <span>На этой странице отображаются только проекты, для которых добавлена хотя бы одна тема и/или существует сгенерированный контент.</span>
+      </div>
       <DataPanel title="Создать кампанию публикации">
         <form className="formGrid" onSubmit={createCampaign}>
           <label>
@@ -5177,6 +5231,9 @@ function PublicationsView({ api, sites, content, onChanged }: ViewProps & { site
             publicationIntervalLabel(campaign.interval_minutes),
             <StatusBadge status={campaign.status} />,
             <div className="userActions">
+              <button className="button compact" type="button" onClick={() => void openCampaignQueue(campaign)} disabled={campaignQueueLoadingId === campaign.id}>
+                <ListChecks size={15} /> {campaignQueueLoadingId === campaign.id ? "Загрузка…" : "Очередь"}
+              </button>
               {campaign.status === "active" ? <button className="button compact" type="button" onClick={() => changeCampaign(campaign, "pause")}>Pause</button> : null}
               {campaign.status === "paused" ? <button className="button compact" type="button" onClick={() => changeCampaign(campaign, "resume")}><Play size={15} /> Resume</button> : null}
               {["active", "paused"].includes(campaign.status) ? <button className="button compact danger" type="button" onClick={() => changeCampaign(campaign, "stop")}><X size={15} /> Stop</button> : null}
@@ -5184,11 +5241,33 @@ function PublicationsView({ api, sites, content, onChanged }: ViewProps & { site
           ])}
         />
       </DataPanel>
+      {campaignQueue ? (
+        <Modal
+          title={`Очередь: ${campaignQueue.campaign.name}`}
+          subtitle={`${publicationIntervalLabel(campaignQueue.campaign.interval_minutes)} · элементов: ${campaignQueue.items.length}`}
+          onClose={() => setCampaignQueue(null)}
+          wide
+          className="campaignQueueModal"
+        >
+          <ResponsiveTable
+            columns={["№", "Тема", "Пункт меню", "Время", "Статус", "Действия"]}
+            rows={campaignQueue.items.map((item, index) => [
+              index + 1,
+              <div className="compactContentTopic" title={item.topic}>{item.topic}</div>,
+              item.section_name || "Не выбран",
+              item.published_at ? `Опубликовано ${formatDate(item.published_at)}` : item.scheduled_at ? formatDate(item.scheduled_at) : "—",
+              <StatusBadge status={item.status} />,
+              ["scheduled", "retry_scheduled", "publication_paused", "approved"].includes(item.status) ? (
+                <button className="button compact primary publishImmediatelyButton" type="button" onClick={() => void publishCampaignQueueItem(item)} disabled={publishingQueueItemId === item.id}>
+                  <Send size={14} /> {publishingQueueItemId === item.id ? "Публикуем…" : "Без очереди"}
+                </button>
+              ) : "—"
+            ])}
+            wrapperClassName="campaignQueueTable"
+          />
+        </Modal>
+      ) : null}
       <DataPanel title={`Проекты и контент · ${publicationProjectGroups.length}`}>
-        <div className="publicationProjectsInfo" role="note">
-          <ListChecks size={17} />
-          <span>На этой странице отображаются только проекты, для которых добавлена хотя бы одна тема и/или существует сгенерированный контент.</span>
-        </div>
         <div className="publicationProjectTree">
           {publicationProjectGroups.map(({ site, items }) => {
             const expanded = expandedProjectIds.includes(site.id);

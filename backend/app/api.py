@@ -37,6 +37,7 @@ from app.schemas import (
     ProjectCacheSyncResponse,
     ProjectCacheSyncRequest,
     PublicationCampaignCreate,
+    PublicationCampaignQueueResponse,
     SectionCreate,
     SectionAdoptResponse,
     SectionResponse,
@@ -1431,6 +1432,36 @@ def create_campaign(payload: PublicationCampaignCreate, _: AdminUser, db: Sessio
 @router.get("/publication-campaigns", response_model=list[PublicationCampaignResponse])
 def list_campaigns(_: AdminUser, db: Session = Depends(get_db)) -> Any:
     return db.scalars(select(models.PublicationCampaign).order_by(models.PublicationCampaign.created_at.desc())).all()
+
+
+@router.get("/publication-campaigns/{campaign_id}/queue", response_model=PublicationCampaignQueueResponse)
+def get_campaign_queue(campaign_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    campaign = db.get(models.PublicationCampaign, campaign_id)
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Publication campaign not found")
+    rows = db.execute(
+        select(models.ContentItem, models.Section.name)
+        .outerjoin(models.Section, models.Section.id == models.ContentItem.section_id)
+        .where(models.ContentItem.publication_campaign_id == campaign_id)
+        .order_by(models.ContentItem.scheduled_at.asc().nullslast(), models.ContentItem.created_at.asc())
+    ).all()
+    return {
+        "campaign": campaign,
+        "items": [
+            {
+                "id": item.id,
+                "topic": item.topic,
+                "slug": item.slug,
+                "section_id": item.section_id,
+                "section_name": section_name,
+                "status": item.status,
+                "word_count": item.word_count,
+                "scheduled_at": item.scheduled_at,
+                "published_at": item.published_at,
+            }
+            for item, section_name in rows
+        ],
+    }
 
 
 @router.patch("/publication-campaigns/{campaign_id}", response_model=PublicationCampaignResponse)

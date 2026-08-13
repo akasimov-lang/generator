@@ -3855,6 +3855,10 @@ td {
   flex: 0 0 auto;
 }
 
+.publicationPageInfo {
+  margin-bottom: 0;
+}
+
 .publicationProjectTree {
   display: grid;
   gap: 6px;
@@ -3969,6 +3973,27 @@ td {
 
 .projectPublicationQueueTable th:first-child,
 .projectPublicationQueueTable td:first-child {
+  text-align: center;
+  width: 42px;
+}
+
+.modalDialog.campaignQueueModal {
+  grid-template-rows: auto minmax(0, 1fr);
+  height: min(760px, calc(100vh - 40px));
+  max-height: calc(100vh - 40px);
+}
+
+.campaignQueueTable {
+  overflow: auto;
+}
+
+.campaignQueueTable th,
+.campaignQueueTable td {
+  padding: 7px 8px;
+}
+
+.campaignQueueTable th:first-child,
+.campaignQueueTable td:first-child {
   text-align: center;
   width: 42px;
 }

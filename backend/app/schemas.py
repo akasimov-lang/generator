@@ -484,6 +484,23 @@ class PublicationCampaignResponse(BaseModel):
     updated_at: datetime
 
 
+class PublicationQueueItemResponse(BaseModel):
+    id: str
+    topic: str
+    slug: str
+    section_id: str | None
+    section_name: str | None
+    status: str
+    word_count: int
+    scheduled_at: datetime | None
+    published_at: datetime | None
+
+
+class PublicationCampaignQueueResponse(BaseModel):
+    campaign: PublicationCampaignResponse
+    items: list[PublicationQueueItemResponse]
+
+
 class SitePublicationCampaignCreate(BaseModel):
     name: str
     content_item_ids: list[str]
