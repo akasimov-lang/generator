@@ -3957,7 +3957,7 @@ textarea:focus {
   white-space: nowrap;
 }
 
-.searchableSelectControl svg {
+.searchableSelectControl > .searchableSelectChevron {
   color: var(--muted);
   flex: 0 0 auto;
   transition: transform 0.15s ease;
@@ -3971,7 +3971,7 @@ textarea:focus {
   transform: var(--field-focus-transform);
 }
 
-.searchableSelect.isOpen .searchableSelectControl svg {
+.searchableSelect.isOpen .searchableSelectControl > .searchableSelectChevron {
   transform: rotate(180deg);
 }
 

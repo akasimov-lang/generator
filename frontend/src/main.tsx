@@ -6250,7 +6250,7 @@ function SearchableSelect({
           <span className="searchableSelectControlLabel">{selected?.label || "Выберите значение"}</span>
           {selected?.indicator ? <span className="searchableSelectOptionIndicator">{selected.indicator}</span> : null}
         </span>
-        <ChevronDown size={17} />
+        <ChevronDown className="searchableSelectChevron" size={17} />
       </button>
       {open ? createPortal(
         <div ref={dropdownRef} className="searchableSelectDropdown" style={dropdownStyle}>
