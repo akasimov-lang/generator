@@ -1349,6 +1349,10 @@ h2 {
   filter: hue-rotate(235deg) saturate(1.55);
 }
 
+.menuReadyMedal.isGold {
+  filter: hue-rotate(285deg) saturate(1.65) brightness(1.05);
+}
+
 .taskMenuSectionSelect {
   background: #fff8e9;
   border: 1px solid #e7bd65;

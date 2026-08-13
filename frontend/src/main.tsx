@@ -1450,8 +1450,8 @@ function ProjectWorkspaceView({
   const routeProjectName = workspaceProjectNameFromPath(window.location.pathname);
   const pendingSectionsCount = sections.filter((section) => section.sync_status !== "synced").length;
   const selectedProjectMedalStatus = menuCapabilities?.checked_at
-    ? headerMedalStatus(menuCapabilities.checked_at, menuCapabilities.header_menu_rendered)
-    : selectedSite ? projectHeaderMedalStatus(selectedSite) : "unchecked";
+    ? menuMedalStatus(menuCapabilities.checked_at, menuCapabilities.header_menu_rendered, menuCapabilities.footer_menu_rendered)
+    : selectedSite ? projectMenuMedalStatus(selectedSite) : "unchecked";
 
   const loadProject = React.useCallback(async () => {
     if (!selectedSiteId) return;
@@ -1756,9 +1756,9 @@ function MenuCapabilityCard({ label, rendered, nested, icon }: { label: string; 
   );
 }
 
-function MenuReadyMedal({ tone = "green" }: { tone?: "green" | "red" }) {
+function MenuReadyMedal({ tone = "green" }: { tone?: "green" | "red" | "gold" }) {
   return (
-    <svg className={`menuReadyMedal ${tone === "red" ? "isRed" : ""}`} viewBox="0 0 48 52" aria-hidden="true">
+    <svg className={`menuReadyMedal ${tone === "red" ? "isRed" : tone === "gold" ? "isGold" : ""}`} viewBox="0 0 48 52" aria-hidden="true">
       <defs>
         <linearGradient id="menuReadyRibbon" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#2eaa61" /><stop offset="1" stopColor="#09612e" /></linearGradient>
         <linearGradient id="menuReadyFace" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#f2fff6" /><stop offset="1" stopColor="#aee9c4" /></linearGradient>
@@ -4558,7 +4558,7 @@ function ContentView({ api, sites, content, onChanged }: ViewProps & { sites: Si
         id: site.id,
         name: site.name,
         baseUrl: site.base_url,
-        medalStatus: projectHeaderMedalStatus(site),
+        medalStatus: projectMenuMedalStatus(site),
         items: content.filter((item) => item.site_id === site.id)
       }))
       .sort((first, second) => first.name.localeCompare(second.name, "ru"));
@@ -5065,24 +5065,26 @@ function localeFlag(countryCode: string | null): string {
   return String.fromCodePoint(...countryCode.split("").map((character) => 127397 + character.charCodeAt(0)));
 }
 
-type ProjectMedalStatus = "verified" | "missing" | "unchecked";
+type ProjectMedalStatus = "gold" | "verified" | "missing" | "unchecked";
 
-function headerMedalStatus(checkedAt: string | null, rendered: boolean | null): ProjectMedalStatus {
-  if (!checkedAt || rendered == null) return "unchecked";
-  return rendered ? "verified" : "missing";
+function menuMedalStatus(checkedAt: string | null, headerRendered: boolean | null, footerRendered: boolean | null): ProjectMedalStatus {
+  if (!checkedAt || headerRendered == null) return "unchecked";
+  if (!headerRendered) return "missing";
+  return footerRendered === true ? "gold" : "verified";
 }
 
-function projectHeaderMedalStatus(site: Site): ProjectMedalStatus {
-  return headerMedalStatus(site.menu_capabilities_checked_at, site.header_menu_rendered);
+function projectMenuMedalStatus(site: Site): ProjectMedalStatus {
+  return menuMedalStatus(site.menu_capabilities_checked_at, site.header_menu_rendered, site.footer_menu_rendered);
 }
 
 function ProjectVerificationMedal({ status }: { status: ProjectMedalStatus }) {
-  const statusText = status === "verified"
-    ? "Проверка Header пройдена"
+  const statusText = status === "gold"
+    ? "Проверка пройдена: рендеринг Header и Footer реализован"
+    : status === "verified" ? "Проверка Header пройдена"
     : status === "missing" ? "Проверено: рендеринг Header-меню не реализован" : "Проверка Header ещё не выполнена";
   return (
     <span className={`projectVerificationMedal is${status[0].toUpperCase()}${status.slice(1)}`} title={statusText} aria-label={statusText}>
-      <MenuReadyMedal tone={status === "missing" ? "red" : "green"} />
+      <MenuReadyMedal tone={status === "missing" ? "red" : status === "gold" ? "gold" : "green"} />
     </span>
   );
 }
@@ -5093,7 +5095,7 @@ function projectSearchOption(site: Site): SearchableSelectOption {
     value: site.id,
     label: site.name,
     leading: flag ? <span className="projectSelectFlag" aria-hidden="true">{flag}</span> : undefined,
-    indicator: <ProjectVerificationMedal status={projectHeaderMedalStatus(site)} />,
+    indicator: <ProjectVerificationMedal status={projectMenuMedalStatus(site)} />,
     keywords: `${site.cache_canon || ""} ${site.base_url}`
   };
 }
@@ -5245,7 +5247,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, onChang
       isWorking: site.project_status === "working",
       projectStatus: site.project_status,
       hasMenu: site.has_menu,
-      medalStatus: projectHeaderMedalStatus(site),
+      medalStatus: projectMenuMedalStatus(site),
       headerMenuCount,
       footerMenuCount,
       headerMenu: Array.isArray(site.default_menu.header) ? site.default_menu.header : [],
