@@ -4270,6 +4270,7 @@ function AdminTasksAccordion({
             <th>Гео</th>
             <th>Язык</th>
             <th>Пункт меню</th>
+            <th>Промпт</th>
             <th>Тем</th>
             <th>Статус</th>
             <th>Действия</th>
@@ -4311,6 +4312,7 @@ function AdminTasksAccordion({
                       {sections.map((section) => <option value={section.id} key={section.id}>{section.name} · {section.path}</option>)}
                     </select>
                   </td>
+                  <td data-label="Промпт"><PromptBadge name={task.prompt_template_name} /></td>
                   <td data-label="Тем">{task.topics_count}</td>
                   <td data-label="Статус"><StatusBadge status={task.status} /></td>
                   <td data-label="Действия">
@@ -4343,7 +4345,7 @@ function AdminTasksAccordion({
                 </tr>
                 {expanded ? (
                   <tr className="expandedRow">
-                    <td colSpan={8}>
+                    <td colSpan={9}>
                       {loadingId === task.id && !expandedDetails ? (
                         <EmptyState text="Загружаю детали задачи." />
                       ) : expandedTask ? (
