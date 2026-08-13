@@ -1614,6 +1614,7 @@ function ProjectWorkspaceView({
                   tone: site.is_test_project ? "test" as const : site.has_menu ? "menu" as const : undefined
                 };
               })}
+              showSelectedIndicator={false}
               searchPlaceholder="Найти проект"
               optionPredicate={(option) => !favoritesOnly || favoriteSiteIds.includes(option.value)}
               dropdownToolbar={(
@@ -6160,6 +6161,7 @@ function SearchableSelect({
   searchPlaceholder = "Начните вводить для поиска",
   disabled = false,
   ariaLabel,
+  showSelectedIndicator = true,
   optionPredicate,
   dropdownToolbar,
   renderOptionAction
@@ -6170,6 +6172,7 @@ function SearchableSelect({
   searchPlaceholder?: string;
   disabled?: boolean;
   ariaLabel?: string;
+  showSelectedIndicator?: boolean;
   optionPredicate?: (option: SearchableSelectOption) => boolean;
   dropdownToolbar?: React.ReactNode;
   renderOptionAction?: (option: SearchableSelectOption) => React.ReactNode;
@@ -6269,7 +6272,7 @@ function SearchableSelect({
         <span className="searchableSelectControlValue">
           {selected?.leading}
           <span className="searchableSelectControlLabel">{selected?.label || "Выберите значение"}</span>
-          {selected?.indicator ? <span className="searchableSelectOptionIndicator">{selected.indicator}</span> : null}
+          {showSelectedIndicator && selected?.indicator ? <span className="searchableSelectOptionIndicator">{selected.indicator}</span> : null}
         </span>
         <ChevronDown className="searchableSelectChevron" size={17} />
       </button>
