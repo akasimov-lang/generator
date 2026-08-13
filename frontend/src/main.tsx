@@ -1576,11 +1576,8 @@ function ProjectWorkspaceView({
                 const headerCount = Array.isArray(site.default_menu.header) ? site.default_menu.header.length : 0;
                 const footerCount = Array.isArray(site.default_menu.footer) ? site.default_menu.footer.length : 0;
                 const menuCount = headerCount + footerCount;
-                const flag = localeFlag(localeCountryCode(site.cache_geo || ""));
                 return {
-                  value: site.id,
-                  label: site.name,
-                  leading: flag ? <span className="projectSelectFlag" aria-hidden="true">{flag}</span> : undefined,
+                  ...projectSearchOption(site),
                   keywords: `${site.cache_canon || ""} ${site.is_test_project ? "тестовый проект" : ""}`,
                   description: menuCount
                     ? `Пунктов меню: ${menuCount} · Header: ${headerCount} · Footer: ${footerCount}`
@@ -2277,7 +2274,7 @@ function PromptsView({ api, sites, isAdmin, onChanged }: ViewProps & { sites: Si
             <SearchableSelect
               value={selectedSiteId}
               onChange={setSelectedSiteId}
-              options={sites.map((site) => ({ value: site.id, label: site.name }))}
+              options={sites.map(projectSearchOption)}
               searchPlaceholder="Найти проект"
             />
           </label>
@@ -3805,7 +3802,7 @@ function TasksView({
               }}
               options={[
                 ...(fixedSite ? [] : [{ value: "", label: "Проект не выбран" }]),
-                ...sites.map((site) => ({ value: site.id, label: site.name }))
+                ...sites.map(projectSearchOption)
               ]}
               searchPlaceholder="Введите название проекта"
             />
@@ -4523,12 +4520,13 @@ function ContentView({ api, sites, content, onChanged }: ViewProps & { sites: Si
         id: site.id,
         name: site.name,
         baseUrl: site.base_url,
+        hasHeaderMedal: projectHasHeaderMedal(site),
         items: content.filter((item) => item.site_id === site.id)
       }))
       .sort((first, second) => first.name.localeCompare(second.name, "ru"));
     const unassigned = content.filter((item) => !item.site_id || !knownSiteIds.has(item.site_id));
     if (unassigned.length) {
-      groups.push({ id: "__unassigned__", name: "Без проекта", baseUrl: "", items: unassigned });
+      groups.push({ id: "__unassigned__", name: "Без проекта", baseUrl: "", hasHeaderMedal: false, items: unassigned });
     }
     return groups;
   }, [content, sites]);
@@ -4686,7 +4684,10 @@ function ContentView({ api, sites, content, onChanged }: ViewProps & { sites: Si
                 <button className="contentProjectHeader" type="button" onClick={() => toggleProject(group.id)} aria-expanded={expanded}>
                   <span className="contentProjectChevron">{expanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}</span>
                   <span className="contentProjectIdentity">
-                    <strong>{group.name}</strong>
+                    <span className="contentProjectName">
+                      <strong>{group.name}</strong>
+                      {group.id !== "__unassigned__" ? <ProjectVerificationMedal verified={group.hasHeaderMedal} /> : null}
+                    </span>
                     <span>{group.baseUrl || "Проект не назначен"}</span>
                   </span>
                   <span className="contentProjectStats">
@@ -4813,7 +4814,7 @@ function PublicationsView({ api, sites, content, onChanged }: ViewProps & { site
             <SearchableSelect
               value={siteId}
               onChange={setSiteId}
-              options={[{ value: "", label: "Выберите сайт" }, ...sites.map((site) => ({ value: site.id, label: site.name }))]}
+              options={[{ value: "", label: "Выберите сайт" }, ...sites.map(projectSearchOption)]}
               searchPlaceholder="Найти сайт"
             />
           </label>
@@ -5026,6 +5027,30 @@ function localeFlag(countryCode: string | null): string {
   return String.fromCodePoint(...countryCode.split("").map((character) => 127397 + character.charCodeAt(0)));
 }
 
+function projectHasHeaderMedal(site: Site): boolean {
+  return Boolean(site.menu_capabilities_checked_at && site.header_menu_rendered === true);
+}
+
+function ProjectVerificationMedal({ verified }: { verified: boolean }) {
+  const status = verified ? "Проверка Header пройдена" : "Проверка Header не пройдена";
+  return (
+    <span className={`projectVerificationMedal ${verified ? "isVerified" : "isPending"}`} title={status} aria-label={status}>
+      <MenuReadyMedal />
+    </span>
+  );
+}
+
+function projectSearchOption(site: Site): SearchableSelectOption {
+  const flag = localeFlag(localeCountryCode(site.cache_geo || site.cache_language || ""));
+  return {
+    value: site.id,
+    label: site.name,
+    leading: flag ? <span className="projectSelectFlag" aria-hidden="true">{flag}</span> : undefined,
+    indicator: <ProjectVerificationMedal verified={projectHasHeaderMedal(site)} />,
+    keywords: `${site.cache_canon || ""} ${site.base_url}`
+  };
+}
+
 function LocaleCode({ value }: { value: string | null }) {
   if (!value) return <>—</>;
   const flag = localeFlag(localeCountryCode(value));
@@ -5173,7 +5198,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, onChang
       isWorking: site.project_status === "working",
       projectStatus: site.project_status,
       hasMenu: site.has_menu,
-      hasHeaderMedal: Boolean(site.menu_capabilities_checked_at && site.header_menu_rendered === true),
+      hasHeaderMedal: projectHasHeaderMedal(site),
       headerMenuCount,
       footerMenuCount,
       headerMenu: Array.isArray(site.default_menu.header) ? site.default_menu.header : [],
@@ -5469,13 +5494,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, onChang
                   <span className="siteNameWithFlag">
                     {localeFlag(localeCountryCode(row.geo || row.language || "")) ? <span aria-hidden="true">{localeFlag(localeCountryCode(row.geo || row.language || ""))}</span> : null}
                     <strong>{row.name}</strong>
-                    <span
-                      className={`siteNameVerificationMedal ${row.hasHeaderMedal ? "isVerified" : "isPending"}`}
-                      title={row.hasHeaderMedal ? "Проверка Header пройдена" : "Проверка Header не пройдена"}
-                      aria-label={row.hasHeaderMedal ? "Проверка Header пройдена" : "Проверка Header не пройдена"}
-                    >
-                      <MenuReadyMedal />
-                    </span>
+                    <ProjectVerificationMedal verified={row.hasHeaderMedal} />
                   </span>
                   <span className="siteNameActions">
                     <button
@@ -6078,6 +6097,7 @@ type SearchableSelectOption = {
   value: string;
   label: string;
   leading?: React.ReactNode;
+  indicator?: React.ReactNode;
   keywords?: string;
   description?: string;
   badge?: string;
@@ -6199,7 +6219,8 @@ function SearchableSelect({
       >
         <span className="searchableSelectControlValue">
           {selected?.leading}
-          <span>{selected?.label || "Выберите значение"}</span>
+          <span className="searchableSelectControlLabel">{selected?.label || "Выберите значение"}</span>
+          {selected?.indicator ? <span className="searchableSelectOptionIndicator">{selected.indicator}</span> : null}
         </span>
         <ChevronDown size={17} />
       </button>
@@ -6254,6 +6275,7 @@ function SearchableSelect({
                   <span className="searchableSelectOptionHeading">
                     {option.leading}
                     <span className="searchableSelectOptionLabel">{option.label}</span>
+                    {option.indicator ? <span className="searchableSelectOptionIndicator">{option.indicator}</span> : null}
                   </span>
                   {option.description ? <small>{option.description}</small> : null}
                 </span>
