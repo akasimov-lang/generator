@@ -2971,6 +2971,7 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
     return Array.from(itemsById.values());
   }, [site.cache_language, site.menu_library]);
   const existingSectionIds = React.useMemo(() => new Set(sections.map((section) => section.external_id)), [sections]);
+  const persistedSections = React.useMemo(() => sections.filter((section) => !section.is_temporary_parent), [sections]);
   const pendingSections = React.useMemo(() => sections.filter((section) => section.sync_status !== "synced"), [sections]);
   const latestPendingChange = React.useMemo(() => pendingSections.reduce<string | null>((latest, section) => {
     if (!latest || new Date(section.updated_at).getTime() > new Date(latest).getTime()) return section.updated_at;
@@ -3305,10 +3306,10 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
             {inlineMenuType === "footer" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "footer")}>{menuFields("footer")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
           </SiteMenuPreviewSection>
         </div>
-        {sections.length ? <ResponsiveTable
+        {persistedSections.length ? <ResponsiveTable
           wrapperClassName="pendingMenuChangesTable"
           columns={["Название", "Тип меню", "URL", "Изменено", "Состояние", "Действия"]}
-          rows={sections.map((section) => {
+          rows={persistedSections.map((section) => {
             const editing = editingSectionId === section.id;
             return [
               editing ? <input className="menuSectionEditInput" value={editingSectionName} onChange={(event) => setEditingSectionName(event.target.value)} aria-label="Название пункта меню" /> : section.name,
