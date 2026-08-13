@@ -5094,7 +5094,6 @@ function PublicationsView({ api, sites, content, onChanged }: ViewProps & { site
   const [campaignQueue, setCampaignQueue] = React.useState<PublicationCampaignQueue | null>(null);
   const [campaignQueueLoadingId, setCampaignQueueLoadingId] = React.useState("");
   const [publishingQueueItemId, setPublishingQueueItemId] = React.useState("");
-  const [publishingQueueItemId, setPublishingQueueItemId] = React.useState("");
   const [publicationContent, setPublicationContent] = React.useState<PublicationContentItem[]>([]);
   const [expandedProjectIds, setExpandedProjectIds] = React.useState<string[]>([]);
   const [formError, setFormError] = React.useState("");
