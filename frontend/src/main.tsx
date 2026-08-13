@@ -679,14 +679,28 @@ function App() {
 
   const api = React.useCallback(
     async <T,>(path: string, options: RequestInit = {}): Promise<T> => {
-      const response = await fetch(`${API_BASE}${path}`, {
-        ...options,
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          ...(options.headers || {})
+      const method = (options.method || "GET").toUpperCase();
+      const attempts = method === "GET" ? 3 : 1;
+      let response: Response | null = null;
+      let networkError: unknown = null;
+      for (let attempt = 0; attempt < attempts; attempt += 1) {
+        try {
+          response = await fetch(`${API_BASE}${path}`, {
+            ...options,
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              ...(options.headers || {})
+            }
+          });
+          if (![502, 503, 504].includes(response.status) || attempt === attempts - 1) break;
+        } catch (error) {
+          networkError = error;
+          if (attempt === attempts - 1) throw error;
         }
-      });
+        await new Promise((resolve) => window.setTimeout(resolve, 250 * (attempt + 1)));
+      }
+      if (!response) throw networkError instanceof Error ? networkError : new Error("Failed to fetch");
       if (response.status === 401) {
         localStorage.removeItem("admin_token");
         setToken("");
@@ -1431,31 +1445,41 @@ function ProjectWorkspaceView({
   const [favoriteSiteIds, setFavoriteSiteIds] = React.useState<string[]>([]);
   const [favoritesOnly, setFavoritesOnly] = React.useState(false);
   const [menuCapabilities, setMenuCapabilities] = React.useState<MenuCapabilities | null>(null);
+  const projectLoadRequestRef = React.useRef(0);
   const selectedSite = sites.find((site) => site.id === selectedSiteId) || null;
   const routeProjectName = workspaceProjectNameFromPath(window.location.pathname);
   const pendingSectionsCount = sections.filter((section) => section.sync_status !== "synced").length;
 
   const loadProject = React.useCallback(async () => {
     if (!selectedSiteId) return;
+    const requestId = projectLoadRequestRef.current + 1;
+    projectLoadRequestRef.current = requestId;
     setWorkspaceError("");
-    const [nextOverview, nextTasks, nextContent, nextSections, nextPrompts, nextLogs, nextCampaigns, nextMenuCapabilities] = await Promise.all([
-      api<SiteOverview>(`/sites/${selectedSiteId}/overview`),
-      api<Task[]>(`/sites/${selectedSiteId}/tasks`),
-      api<ContentItem[]>(`/sites/${selectedSiteId}/content`),
-      api<Section[]>(`/sites/${selectedSiteId}/sections`),
-      api<PromptTemplate[]>(`/sites/${selectedSiteId}/prompt-templates`),
-      api<PublicationLog[]>(`/sites/${selectedSiteId}/publication-logs`),
-      api<PublicationCampaign[]>(`/sites/${selectedSiteId}/publication-campaigns`),
-      api<MenuCapabilities>(`/sites/${selectedSiteId}/menu-capabilities`).catch(() => null)
-    ]);
-    setOverview(nextOverview);
-    setSiteTasks(nextTasks);
-    setSiteContent(nextContent);
-    setSections(nextSections);
-    setPromptTemplates(nextPrompts);
-    setLogs(nextLogs);
-    setCampaigns(nextCampaigns);
-    setMenuCapabilities(nextMenuCapabilities);
+    try {
+      const [nextOverview, nextTasks, nextContent, nextSections, nextPrompts, nextLogs, nextCampaigns, nextMenuCapabilities] = await Promise.all([
+        api<SiteOverview>(`/sites/${selectedSiteId}/overview`),
+        api<Task[]>(`/sites/${selectedSiteId}/tasks`),
+        api<ContentItem[]>(`/sites/${selectedSiteId}/content`),
+        api<Section[]>(`/sites/${selectedSiteId}/sections`),
+        api<PromptTemplate[]>(`/sites/${selectedSiteId}/prompt-templates`),
+        api<PublicationLog[]>(`/sites/${selectedSiteId}/publication-logs`),
+        api<PublicationCampaign[]>(`/sites/${selectedSiteId}/publication-campaigns`),
+        api<MenuCapabilities>(`/sites/${selectedSiteId}/menu-capabilities`).catch(() => null)
+      ]);
+      if (requestId !== projectLoadRequestRef.current) return;
+      setOverview(nextOverview);
+      setSiteTasks(nextTasks);
+      setSiteContent(nextContent);
+      setSections(nextSections);
+      setPromptTemplates(nextPrompts);
+      setLogs(nextLogs);
+      setCampaigns(nextCampaigns);
+      setMenuCapabilities(nextMenuCapabilities);
+      setWorkspaceError("");
+    } catch (error) {
+      if (requestId !== projectLoadRequestRef.current) return;
+      setWorkspaceError(error instanceof Error ? error.message : "Не удалось загрузить проект");
+    }
   }, [api, selectedSiteId]);
 
   React.useEffect(() => {
@@ -1499,7 +1523,7 @@ function ProjectWorkspaceView({
       setCampaigns([]);
       setMenuCapabilities(null);
       setWorkspaceError("");
-      loadProject().catch((error: unknown) => setWorkspaceError(error instanceof Error ? error.message : "Не удалось загрузить проект"));
+      void loadProject();
     }
   }, [loadProject, selectedSiteId, workspaceSiteStorageKey]);
 
@@ -1565,6 +1589,7 @@ function ProjectWorkspaceView({
             </button>
           ) : null}
           <strong>{selectedSite?.name || "Выберите проект"}</strong>
+          {selectedSite ? <ProjectVerificationMedal verified={projectHasHeaderMedal(selectedSite)} /> : null}
         </span>
       )}>
         <div className="projectHeader">
@@ -5519,7 +5544,10 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, onChang
                     <a
                       className="siteRowActionButton"
                       href={pathForRoute("workspace", "topics", row.name)}
-                      onClick={() => localStorage.setItem("workspace_site_id", row.id)}
+                      onClick={() => {
+                        localStorage.setItem(`workspace_site_id:${currentUsername}`, row.id);
+                        localStorage.removeItem("workspace_site_id");
+                      }}
                       title="Открыть задачи проекта"
                       aria-label={`Открыть задачи проекта ${row.name}`}
                     >

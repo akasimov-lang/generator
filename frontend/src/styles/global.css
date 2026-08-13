@@ -1079,6 +1079,17 @@ h2 {
   min-width: 0;
 }
 
+.workspaceProjectTitle .projectVerificationMedal {
+  height: 34px;
+  margin-left: 2px;
+  width: 30px;
+}
+
+.workspaceProjectTitle .projectVerificationMedal .menuReadyMedal {
+  height: 34px;
+  width: 30px;
+}
+
 .workspaceProjectTitle strong {
   font: inherit;
   font-weight: 800;
