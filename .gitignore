@@ -16,3 +16,4 @@ __pycache__/
 frontend/node_modules/
 frontend/dist/
 backend/.venv/
+курс/

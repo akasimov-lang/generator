@@ -41,6 +41,10 @@ class PasswordChange(BaseModel):
     new_password: str = Field(min_length=8)
 
 
+class FavoriteSitesResponse(BaseModel):
+    site_ids: list[str]
+
+
 class AiProviderCreate(BaseModel):
     name: str
     endpoint_url: str
@@ -93,18 +97,28 @@ class SiteResponse(BaseModel):
     payload_mode: str
     editor_version: str
     default_menu: dict[str, Any]
+    menu_library: list[dict[str, Any]]
     default_banners: list[str]
     showcase_payload: dict[str, Any] | None
     default_prompt_template_id: str | None
     external_project_id: str | None
     cache_canon: str | None
+    cache_language: str | None
+    cache_geo: str | None
     homepage_title: str | None
     internal_pages_count: int
     domains_count: int
+    cache_domains: list[str]
+    cache_server_ip: str | None
     project_status: str
     is_test_project: bool
     has_menu: bool
     cache_synced_at: datetime | None
+    menu_capabilities_checked_at: datetime | None
+    header_menu_rendered: bool | None
+    header_menu_nested: bool | None
+    footer_menu_rendered: bool | None
+    footer_menu_nested: bool | None
     is_active: bool
     created_at: datetime
     updated_at: datetime
@@ -114,9 +128,12 @@ class ProjectCacheItemResponse(BaseModel):
     external_project_id: str
     name: str
     canon: str | None
+    language: str | None
+    geo: str | None
     homepage_title: str | None
     internal_pages_count: int
     domains_count: int
+    domains: list[str]
     has_menu: bool
     is_working_project: bool
 
@@ -126,6 +143,7 @@ class ProjectCacheSyncResponse(BaseModel):
     matched_count: int
     created_count: int
     updated_count: int
+    confirmed_sections_count: int = 0
     projects: list[ProjectCacheItemResponse]
 
 
@@ -147,6 +165,33 @@ class SectionCreate(BaseModel):
     name: str
     path: str
     menu_type: Literal["header", "footer"] = "header"
+    parent_id: str | None = None
+
+
+class SectionUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    path: str = Field(min_length=1, max_length=240)
+
+
+class MenuLibraryItemCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    path: str = Field(min_length=1, max_length=240)
+    external_id: str = Field(min_length=1, max_length=160)
+    russian_name: str = Field(default="", max_length=160)
+
+
+class MenuLibraryItemResponse(MenuLibraryItemCreate):
+    pass
+
+
+class MenuLibraryItemUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    path: str = Field(min_length=1, max_length=240)
+    russian_name: str = Field(default="", max_length=160)
+
+
+class SectionsBulkCreate(BaseModel):
+    items: list[SectionCreate] = Field(min_length=1, max_length=10)
 
 
 class SectionResponse(BaseModel):
@@ -158,8 +203,17 @@ class SectionResponse(BaseModel):
     name: str
     path: str
     menu_type: str
+    parent_id: str | None
+    sync_status: str
+    synced_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+class SectionsBulkCreateResponse(BaseModel):
+    created_count: int
+    skipped_count: int
+    sections: list[SectionResponse]
 
 
 class PromptTemplateCreate(BaseModel):
@@ -204,6 +258,11 @@ class GenerationTaskCreate(BaseModel):
     include_toc: bool = True
     include_faq: bool = True
     collect_competitors: bool = False
+    save_as_draft: bool = False
+
+
+class GenerationTaskSectionUpdate(BaseModel):
+    section_id: str | None = None
 
 
 class GenerationTaskResponse(BaseModel):
@@ -410,3 +469,14 @@ class PublicationLogResponse(BaseModel):
     error_message: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class AdminRequestLogResponse(BaseModel):
+    id: str
+    created_at: datetime
+    project_name: str
+    action: str
+    item_name: str | None
+    method: str
+    destination: str
+    result: str

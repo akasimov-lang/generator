@@ -24,6 +24,7 @@ jobs:
             --exclude '.ssh' \
             --exclude 'PROJECT_MEMORY.local.md' \
             --exclude '.env' \
+            --exclude 'курс' \
             -e "ssh -i ~/.ssh/deploy_key" \
             ./ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
           ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" \

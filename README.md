@@ -39,7 +39,10 @@ ADMIN_PASSWORD=change-me
 PROJECT_CACHE_URL=https://example.com
 PROJECT_CACHE_USERNAME=cache-user
 PROJECT_CACHE_PASSWORD=cache-password
+ALFAN_URL=slf-hostesting.com
 ```
+
+`ALFAN_URL` — адрес внешней системы «Альфан».
 
 ## Git deploy
 

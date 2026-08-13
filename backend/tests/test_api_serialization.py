@@ -20,13 +20,14 @@ def make_client() -> tuple[TestClient, sessionmaker[Session]]:
     Base.metadata.create_all(bind=engine)
 
     with TestingSession() as db:
+        user = models.User(id="admin-id", username="admin", password_hash="test", is_admin=True, is_active=True)
         site = models.Site(
             name="DE обзорник",
             base_url="http://example.test",
             publication_endpoint="http://example.test/api/pages",
             payload_mode="simple_page",
         )
-        db.add(site)
+        db.add_all([user, site])
         db.commit()
 
     app = FastAPI()
@@ -90,3 +91,20 @@ def test_approve_rejects_invalid_payload() -> None:
 
     assert response.status_code == 400
     assert "Content validation failed" in response.json()["detail"]
+
+
+def test_user_can_manage_personal_favorite_sites() -> None:
+    client, TestingSession = make_client()
+    with TestingSession() as db:
+        site_id = db.query(models.Site.id).scalar()
+
+    assert client.get("/api/me/favorite-sites").json() == {"site_ids": []}
+
+    added_response = client.put(f"/api/me/favorite-sites/{site_id}")
+    assert added_response.status_code == 200
+    assert added_response.json() == {"site_ids": [site_id]}
+    assert client.get("/api/me/favorite-sites").json() == {"site_ids": [site_id]}
+
+    removed_response = client.delete(f"/api/me/favorite-sites/{site_id}")
+    assert removed_response.status_code == 200
+    assert removed_response.json() == {"site_ids": []}

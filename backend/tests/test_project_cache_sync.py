@@ -3,8 +3,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app import models
+from app.api import get_site_menu_capabilities
 from app.db import Base
-from app.project_cache import sync_project_cache
+from app.project_cache import analyze_menu_templates, sync_project_cache
 
 
 def make_session() -> Session:
@@ -19,7 +20,8 @@ def test_sync_imports_working_project_and_preserves_external_id() -> None:
             {
                 "id": "cache-project-1",
                 "name": "asyl-bilim.kz",
-                "settings": {"canon": "pin-kz.pinup-2026.it.com", "domains": ["one.test", "two.test"]},
+                "serverIp": "cobra",
+                "settings": {"canon": "pin-kz.pinup-2026.it.com", "lang": "ru_RU", "geo": "ru-KZ", "domains": ["one.test", "two.test"]},
                 "data": {
                     "menu": {"header": [{"title": "App"}], "footer": [{"title": "About"}]},
                     "pages": [
@@ -46,14 +48,63 @@ def test_sync_imports_working_project_and_preserves_external_id() -> None:
         assert site is not None
         assert site.external_project_id == "cache-project-1"
         assert site.cache_canon == "pin-kz.pinup-2026.it.com"
+        assert site.cache_language == "ru_RU"
+        assert site.cache_geo == "ru-KZ"
         assert site.has_menu is True
         assert site.homepage_title == "Pin Up Kazakhstan"
         assert site.internal_pages_count == 1
         assert site.domains_count == 2
+        assert site.cache_domains == ["one.test", "two.test"]
+        assert site.cache_server_ip == "cobra"
         assert site.default_menu["header"][0]["title"] == "App"
         assert site.project_status == "working"
         assert unrelated_site is not None
         assert unrelated_site.project_status == "not_in_focus"
+
+
+def test_menu_capabilities_are_detected_per_template() -> None:
+    capabilities = analyze_menu_templates([
+        {"name": "header.hbs", "data": "{{#each headerMenu}}<a>{{title}}</a>{{#if this.children}}{{/if}}{{/each}}"},
+        {"name": "footer.hbs", "data": "<footer>Static footer</footer>"},
+    ])
+
+    assert capabilities == {
+        "header_menu_rendered": True,
+        "header_menu_nested": True,
+        "footer_menu_rendered": False,
+        "footer_menu_nested": False,
+    }
+
+
+def test_menu_capabilities_are_fetched_only_once(monkeypatch) -> None:
+    calls: list[str] = []
+
+    def fake_fetch(site: models.Site) -> dict[str, bool]:
+        calls.append(site.id)
+        return {
+            "header_menu_rendered": True,
+            "header_menu_nested": False,
+            "footer_menu_rendered": True,
+            "footer_menu_nested": True,
+        }
+
+    monkeypatch.setattr("app.api.fetch_project_menu_capabilities", fake_fetch)
+    with make_session() as db:
+        site = models.Site(
+            name="menu-capabilities.example",
+            base_url="https://menu-capabilities.example",
+            publication_endpoint="https://menu-capabilities.example/api/content",
+            cache_server_ip="cobra",
+        )
+        db.add(site)
+        db.commit()
+
+        first = get_site_menu_capabilities(site.id, None, db)  # type: ignore[arg-type]
+        second = get_site_menu_capabilities(site.id, None, db)  # type: ignore[arg-type]
+
+        assert calls == [site.id]
+        assert first["header_menu_rendered"] is True
+        assert second["footer_menu_nested"] is True
 
 
 def test_sync_updates_existing_project_without_duplicate() -> None:
@@ -101,3 +152,51 @@ def test_sync_marks_project_with_header_only_as_having_menu() -> None:
         sync_project_cache(db, [project])
 
         assert db.scalar(select(models.Site)).has_menu is True
+
+
+def test_sync_confirms_pending_menu_item_found_in_external_menu() -> None:
+    with make_session() as db:
+        project = {
+            "id": "menu-project",
+            "name": "menu.example",
+            "settings": {"canon": "menu.example"},
+            "data": {"menu": {"header": [], "footer": []}, "pages": []},
+        }
+        sync_project_cache(db, [project])
+        site = db.scalar(select(models.Site).where(models.Site.external_project_id == "menu-project"))
+        db.add(models.Section(site_id=site.id, external_id="casino-bonuses", name="Casino Bonuses", path="/bonuses/", menu_type="header"))
+        db.commit()
+
+        project["data"]["menu"]["header"] = [{"title": "Casino Bonuses", "path": "bonuses"}]
+        result = sync_project_cache(db, [project])
+
+        assert result["confirmed_sections_count"] == 1
+        section = db.scalar(select(models.Section).where(models.Section.site_id == site.id))
+        assert section is not None
+        assert section.sync_status == "synced"
+        assert section.synced_at is not None
+        log = db.scalar(select(models.PublicationLog).where(models.PublicationLog.response_status == 200))
+        assert log is not None
+        assert log.request_payload["action"] == "menu_item_sync_confirmed"
+
+
+def test_sync_keeps_pending_menu_item_missing_from_external_menu() -> None:
+    with make_session() as db:
+        project = {
+            "id": "pending-project",
+            "name": "pending.example",
+            "settings": {"canon": "pending.example"},
+            "data": {"menu": {"header": [], "footer": []}, "pages": []},
+        }
+        sync_project_cache(db, [project])
+        site = db.scalar(select(models.Site).where(models.Site.external_project_id == "pending-project"))
+        db.add(models.Section(site_id=site.id, external_id="casino-bonuses", name="Casino Bonuses", path="/bonuses/", menu_type="header"))
+        db.commit()
+
+        result = sync_project_cache(db, [project])
+
+        assert result["confirmed_sections_count"] == 0
+        section = db.scalar(select(models.Section).where(models.Section.site_id == site.id))
+        assert section is not None
+        assert section.sync_status == "pending"
+        assert section.synced_at is None

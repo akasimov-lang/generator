@@ -5,8 +5,10 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app import models
-from app.api import archive_task, collect_content_competitors, generate_content, get_task, list_archived_tasks, list_tasks, restore_task
+from app.api import archive_task, collect_content_competitors, generate_content, get_task, list_archived_tasks, list_tasks, restore_task, start_task_pipeline, update_task_section
 from app.db import Base
+from app.schemas import GenerationTaskCreate, GenerationTaskSectionUpdate
+from app.services import create_generation_task, run_task_pipeline
 
 
 def test_task_archive_is_admin_only_and_reversible() -> None:
@@ -99,3 +101,105 @@ def test_content_generation_is_queued_with_initial_progress(monkeypatch: pytest.
         assert queued_ids == [item.id]
         assert response.status == "generation_queued"
         assert response.generation_progress == 1
+
+
+def test_task_pipeline_is_queued_for_all_mutable_items(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+    queued_ids: list[str] = []
+    monkeypatch.setattr("app.api.run_task_pipeline_job.delay", queued_ids.append)
+
+    with TestingSession() as db:
+        task = models.GenerationTask(title="Pipeline", geo="DE", language="de", topics_count=1, collect_competitors=True)
+        item = models.ContentItem(task=task, topic="Test topic", slug="/test/", generated_json={}, idempotency_key="pipeline-item")
+        db.add(item)
+        db.commit()
+
+        response = start_task_pipeline(task.id, {"id": "admin-id", "username": "admin", "is_admin": True}, db)
+
+        assert queued_ids == [task.id]
+        assert response.status == "generating"
+        assert item.status == "generation_queued"
+
+
+def test_generation_task_can_be_saved_as_draft() -> None:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    with TestingSession() as db:
+        task = create_generation_task(
+            db,
+            GenerationTaskCreate(
+                title="Draft task",
+                geo="DK",
+                language="da",
+                topics=["Danske casinoer"],
+                collect_competitors=True,
+                save_as_draft=True,
+            ),
+        )
+
+        assert task.status == "draft"
+        assert task.items[0].status == "draft"
+        assert task.items[0].competitor_research_status == "queries_ready"
+
+
+def test_task_menu_section_updates_all_mutable_items() -> None:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    with TestingSession() as db:
+        site = models.Site(name="menu.example", base_url="https://menu.example", publication_endpoint="https://menu.example/api/content")
+        db.add(site)
+        db.flush()
+        section = models.Section(site=site, external_id="games", name="Games", path="/games/", menu_type="header")
+        task = models.GenerationTask(title="Menu task", site_id=site.id, geo="DK", language="da", topics_count=1)
+        item = models.ContentItem(task=task, site_id=site.id, topic="Games", slug="/games-guide/", generated_json={}, idempotency_key="task-menu-section")
+        db.add_all([section, task, item])
+        db.commit()
+
+        updated = update_task_section(task.id, GenerationTaskSectionUpdate(section_id=section.id), None, db)  # type: ignore[arg-type]
+
+        assert updated.section_id == section.id
+        assert item.section_id == section.id
+
+
+def test_task_pipeline_retries_competitor_failure_before_generation(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+    attempts: list[str] = []
+    generated: list[str] = []
+
+    async def fake_collect(db, item):
+        attempts.append(item.id)
+        if len(attempts) == 1:
+            raise RuntimeError("temporary competitor error")
+        item.competitor_brief = {"competitor_urls": ["https://example.test"]}
+        item.competitor_research_status = "brief_ready"
+        db.commit()
+        return item
+
+    def fake_generate(db, item):
+        generated.append(item.id)
+        item.status = "generated"
+        db.commit()
+        return item
+
+    monkeypatch.setattr("app.services.collect_competitor_research_for_item", fake_collect)
+    monkeypatch.setattr("app.services.generate_content_item", fake_generate)
+
+    with TestingSession() as db:
+        task = models.GenerationTask(title="Retry pipeline", geo="DE", language="de", topics_count=1, collect_competitors=True)
+        item = models.ContentItem(task=task, topic="Retry topic", slug="/retry/", generated_json={}, idempotency_key="retry-pipeline-item", competitor_research_status="research_failed")
+        db.add(item)
+        db.commit()
+
+        result = run_task_pipeline(db, task)
+
+        assert attempts == [item.id, item.id]
+        assert generated == [item.id]
+        assert result.status == "generated"

@@ -1,7 +1,9 @@
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
+import re
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 from sqlalchemy import select
@@ -13,6 +15,63 @@ from app.core.config import get_settings
 
 class ProjectCacheError(RuntimeError):
     pass
+
+
+def fetch_project_menu_capabilities(site: models.Site) -> dict[str, Any]:
+    if site.menu_capabilities_checked_at is not None:
+        return _site_menu_capabilities(site)
+    if not site.cache_server_ip or not site.name:
+        raise ProjectCacheError("Project server is not available in cache")
+    if not re.fullmatch(r"[A-Za-z0-9-]+", site.cache_server_ip):
+        raise ProjectCacheError("Project server name is invalid")
+
+    settings = get_settings()
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            login_response = client.post(
+                f"{settings.project_cache_url.rstrip('/')}/auth/login",
+                json={"username": settings.project_cache_username, "pass": settings.project_cache_password},
+            )
+            login_response.raise_for_status()
+            token = login_response.json().get("token")
+            if not token:
+                raise ProjectCacheError("Project cache login did not return a token")
+            response = client.get(
+                f"https://{site.cache_server_ip}.{settings.alfan_url}/projects/one/{quote(site.name, safe='')}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            response.raise_for_status()
+            project = response.json()
+    except (httpx.HTTPError, ValueError) as error:
+        raise ProjectCacheError(f"Project menu capability request failed: {error}") from error
+
+    shortcodes = project.get("shortcodes") if isinstance(project, dict) else []
+    return analyze_menu_templates(shortcodes)
+
+
+def analyze_menu_templates(shortcodes: Any) -> dict[str, bool]:
+    templates = {
+        str(item.get("name") or "").strip(): str(item.get("data") or "")
+        for item in shortcodes if isinstance(item, dict)
+    } if isinstance(shortcodes, list) else {}
+    header_template = templates.get("header.hbs", "")
+    footer_template = templates.get("footer.hbs", "")
+    return {
+        "header_menu_rendered": bool(re.search(r"{{#each\s+headerMenu}}", header_template)),
+        "header_menu_nested": bool(re.search(r"{{#if\s+this\.children}}", header_template)),
+        "footer_menu_rendered": bool(re.search(r"{{#each\s+footerMenu}}", footer_template)),
+        "footer_menu_nested": bool(re.search(r"{{#if\s+this\.children}}", footer_template)),
+    }
+
+
+def _site_menu_capabilities(site: models.Site) -> dict[str, Any]:
+    return {
+        "checked_at": site.menu_capabilities_checked_at,
+        "header_menu_rendered": site.header_menu_rendered,
+        "header_menu_nested": site.header_menu_nested,
+        "footer_menu_rendered": site.footer_menu_rendered,
+        "footer_menu_nested": site.footer_menu_nested,
+    }
 
 
 def _normalize_domain(value: str | None) -> str:
@@ -94,10 +153,73 @@ def _internal_pages_count(project: dict[str, Any]) -> int:
     )
 
 
-def _domains_count(project: dict[str, Any]) -> int:
+def _project_domains(project: dict[str, Any]) -> list[str]:
     settings = project.get("settings") if isinstance(project.get("settings"), dict) else {}
     domains = settings.get("domains") if isinstance(settings.get("domains"), list) else []
-    return len(domains)
+    normalized_domains: list[str] = []
+    for item in domains:
+        value = item
+        if isinstance(item, dict):
+            value = item.get("domain") or item.get("url") or item.get("name")
+        domain = _normalize_domain(str(value or ""))
+        if domain and domain not in normalized_domains:
+            normalized_domains.append(domain)
+    return normalized_domains
+
+
+def _normalize_menu_path(value: Any) -> str:
+    path = str(value or "").strip().lower()
+    if not path:
+        return ""
+    path = "/" + path.strip("/")
+    return path if path == "/" else f"{path}/"
+
+
+def _menu_item_matches_section(item: Any, section: models.Section) -> bool:
+    if isinstance(item, str):
+        return item.strip().casefold() == section.name.strip().casefold()
+    if not isinstance(item, dict):
+        return False
+
+    item_path = _normalize_menu_path(item.get("path") or item.get("url") or item.get("href") or item.get("slug"))
+    if item_path and item_path == _normalize_menu_path(section.path):
+        return True
+
+    item_external_id = str(item.get("external_id") or item.get("externalId") or item.get("id") or "").strip().casefold()
+    if item_external_id and item_external_id == section.external_id.strip().casefold():
+        return True
+
+    item_name = str(item.get("title") or item.get("name") or item.get("label") or item.get("text") or "").strip().casefold()
+    return bool(item_name and item_name == section.name.strip().casefold())
+
+
+def _confirm_synchronized_sections(db: Session, site: models.Site, menu: dict[str, list[Any]]) -> int:
+    sections = db.scalars(
+        select(models.Section).where(models.Section.site_id == site.id, models.Section.sync_status == "pending")
+    ).all()
+    confirmed_count = 0
+    for section in sections:
+        menu_items = menu.get(section.menu_type, [])
+        if not any(_menu_item_matches_section(item, section) for item in menu_items):
+            continue
+        db.add(
+            models.PublicationLog(
+                endpoint_url=site.base_url,
+                request_payload={
+                    "action": "menu_item_sync_confirmed",
+                    "project_name": site.name,
+                    "name": section.name,
+                    "path": section.path,
+                    "menu_type": section.menu_type,
+                },
+                response_status=200,
+                response_body={"synchronized": True},
+            )
+        )
+        section.sync_status = "synced"
+        section.synced_at = datetime.now(timezone.utc)
+        confirmed_count += 1
+    return confirmed_count
 
 
 def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str, Any]:
@@ -107,6 +229,7 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
     now = datetime.now(timezone.utc)
     created_count = 0
     updated_count = 0
+    confirmed_sections_count = 0
     matched_external_ids: set[str] = set()
     processed_external_ids: set[str] = set()
     name_occurrences: dict[str, int] = {}
@@ -117,6 +240,9 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
         name = str(project.get("name") or "").strip()
         settings = project.get("settings") if isinstance(project.get("settings"), dict) else {}
         canon = _normalize_domain(settings.get("canon"))
+        language = str(settings.get("lang") or "").strip() or None
+        geo = str(settings.get("geo") or "").strip() or None
+        server_ip = str(project.get("serverIp") or project.get("server_ip") or "").strip() or None
         if not name:
             continue
         raw_external_id = project.get("id") or project.get("_id")
@@ -129,7 +255,8 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
         menu = _project_menu(project)
         homepage_title = _homepage_title(project)
         internal_pages_count = _internal_pages_count(project)
-        domains_count = _domains_count(project)
+        domains = _project_domains(project)
+        domains_count = len(domains)
         is_duplicate = name_counts[name] > 1
         has_menu = bool(menu["header"] or menu["footer"])
         is_working_project = canon in working_canons
@@ -138,9 +265,12 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
                 "external_project_id": external_project_id,
                 "name": name,
                 "canon": canon or None,
+                "language": language,
+                "geo": geo,
                 "homepage_title": homepage_title,
                 "internal_pages_count": internal_pages_count,
                 "domains_count": domains_count,
+                "domains": domains,
                 "has_menu": has_menu,
                 "is_working_project": is_working_project,
             }
@@ -171,12 +301,17 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
         site.name = name
         site.base_url = f"https://{canon}"
         site.cache_canon = canon
+        site.cache_language = language
+        site.cache_geo = geo
+        site.cache_server_ip = server_ip
         site.homepage_title = homepage_title
         site.internal_pages_count = internal_pages_count
         site.domains_count = domains_count
+        site.cache_domains = domains
         if is_duplicate:
             site.project_status = "duplicate"
         site.default_menu = menu
+        confirmed_sections_count += _confirm_synchronized_sections(db, site, menu)
         site.has_menu = has_menu
         site.cache_synced_at = now
         site.is_active = True
@@ -188,5 +323,6 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
         "matched_count": len(matched_external_ids),
         "created_count": created_count,
         "updated_count": updated_count,
+        "confirmed_sections_count": confirmed_sections_count,
         "projects": cache_projects,
     }

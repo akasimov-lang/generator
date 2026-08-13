@@ -24,6 +24,7 @@ class User(Base, TimestampMixin):
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    favorite_site_ids: Mapped[list] = mapped_column(JSON, default=list)
 
 
 class AiProvider(Base, TimestampMixin):
@@ -57,18 +58,28 @@ class Site(Base, TimestampMixin):
     payload_mode: Mapped[str] = mapped_column(String(40), default="simple_page")
     editor_version: Mapped[str] = mapped_column(String(40), default="2.31.0")
     default_menu: Mapped[dict] = mapped_column(JSON, default=lambda: {"header": [], "footer": []})
+    menu_library: Mapped[list] = mapped_column(JSON, default=list)
     default_banners: Mapped[list] = mapped_column(JSON, default=list)
     showcase_payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     default_prompt_template_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     external_project_id: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
     cache_canon: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cache_language: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    cache_geo: Mapped[str | None] = mapped_column(String(40), nullable=True)
     homepage_title: Mapped[str | None] = mapped_column(Text, nullable=True)
     internal_pages_count: Mapped[int] = mapped_column(Integer, default=0)
     domains_count: Mapped[int] = mapped_column(Integer, default=0)
+    cache_domains: Mapped[list] = mapped_column(JSON, default=list)
+    cache_server_ip: Mapped[str | None] = mapped_column(String(120), nullable=True)
     project_status: Mapped[str] = mapped_column(String(32), default="working", index=True)
     is_test_project: Mapped[bool] = mapped_column(Boolean, default=False)
     has_menu: Mapped[bool] = mapped_column(Boolean, default=False)
     cache_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    menu_capabilities_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    header_menu_rendered: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    header_menu_nested: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    footer_menu_rendered: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    footer_menu_nested: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     sections: Mapped[list["Section"]] = relationship(back_populates="site", cascade="all, delete-orphan")
@@ -83,6 +94,9 @@ class Section(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     path: Mapped[str] = mapped_column(String(240), nullable=False)
     menu_type: Mapped[str] = mapped_column(String(20), nullable=False, default="header", server_default="header")
+    parent_id: Mapped[str | None] = mapped_column(ForeignKey("sections.id"), nullable=True)
+    sync_status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
+    synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     site: Mapped[Site] = relationship(back_populates="sections")
 

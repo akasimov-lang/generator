@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="180" viewBox="0 0 160 180" role="img" aria-labelledby="title description">
+  <title id="title">Меню реализовано</title>
+  <desc id="description">Объёмный зелёный знак готовности меню проекта</desc>
+  <defs>
+    <linearGradient id="ribbon" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#249653"/>
+      <stop offset="1" stop-color="#0c6634"/>
+    </linearGradient>
+    <linearGradient id="medal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ecfff3"/>
+      <stop offset="1" stop-color="#bcefcf"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="7" stdDeviation="6" flood-color="#063d21" flood-opacity=".24"/>
+    </filter>
+  </defs>
+  <path d="M43 99 31 170l47-25 2-42z" fill="url(#ribbon)"/>
+  <path d="m117 99 12 71-47-25-2-42z" fill="url(#ribbon)"/>
+  <g filter="url(#shadow)">
+    <circle cx="80" cy="75" r="59" fill="#16713c"/>
+    <circle cx="80" cy="75" r="49" fill="url(#medal)" stroke="#58b87b" stroke-width="3"/>
+    <path d="m54 76 17 17 36-39" fill="none" stroke="#126d38" stroke-linecap="round" stroke-linejoin="round" stroke-width="12"/>
+  </g>
+</svg>

@@ -2012,7 +2012,7 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
         prompt_template_name=payload.prompt_template_name,
         prompt_template=prompt_template,
         collect_competitors=payload.collect_competitors,
-        status="research_queries_ready" if payload.collect_competitors else "created",
+        status="draft" if payload.save_as_draft else ("research_queries_ready" if payload.collect_competitors else "created"),
     )
     db.add(task)
     db.flush()
@@ -2102,6 +2102,64 @@ def generate_task_items(db: Session, task: models.GenerationTask) -> models.Gene
         task.status = "generation_failed"
         db.commit()
         raise
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+def run_task_pipeline(db: Session, task: models.GenerationTask, competitor_attempts: int = 2) -> models.GenerationTask:
+    locked_statuses = {"scheduled", "retry_scheduled", "publication_paused", "publishing", "published"}
+    item_ids = [item.id for item in task.items if item.status not in locked_statuses]
+    if not item_ids:
+        raise ValueError("Task has no content that can be generated")
+
+    task.status = "generating"
+    db.commit()
+    failed_items = 0
+
+    for item_id in item_ids:
+        item = db.get(models.ContentItem, item_id)
+        if not item:
+            continue
+
+        if task.collect_competitors and not item.competitor_brief:
+            research_error: Exception | None = None
+            for _ in range(max(1, competitor_attempts)):
+                try:
+                    asyncio.run(collect_competitor_research_for_item(db, item))
+                    research_error = None
+                    break
+                except Exception as exc:
+                    research_error = exc
+                    db.rollback()
+                    item = db.get(models.ContentItem, item_id)
+                    if not item:
+                        break
+                    item.competitor_research_status = "research_failed"
+                    item.competitor_research_error = f"{type(exc).__name__}: {exc}"[:500]
+                    db.commit()
+
+            if research_error is not None:
+                item = db.get(models.ContentItem, item_id)
+                if item:
+                    item.status = "generation_failed"
+                    item.generation_error = f"Не удалось собрать конкурентов: {type(research_error).__name__}: {research_error}"[:500]
+                    db.commit()
+                failed_items += 1
+                continue
+
+        item = db.get(models.ContentItem, item_id)
+        if not item:
+            continue
+        try:
+            generate_content_item(db, item)
+        except Exception:
+            failed_items += 1
+
+    task = db.get(models.GenerationTask, task.id)
+    if not task:
+        raise ValueError("Generation task not found")
+    task.status = "generation_failed" if failed_items else "generated"
     db.commit()
     db.refresh(task)
     return task

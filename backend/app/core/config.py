@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     project_cache_url: str = "https://o59s9a012jd.com"
     project_cache_username: str = ""
     project_cache_password: str = ""
+    alfan_url: str = "slf-hostesting.com"
 
     database_url: str = "postgresql+psycopg2://generator:generator@postgres:5432/generator"
     redis_url: str = "redis://redis:6379/0"

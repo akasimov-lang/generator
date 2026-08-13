@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -11,14 +11,20 @@ from app.db import get_db
 from app.schemas import (
     AiProviderCreate,
     AiProviderResponse,
+    AdminRequestLogResponse,
     CompetitorQueriesUpdate,
     CompetitorResearchResponse,
     ContentItemResponse,
     ContentUpdate,
     DuplicateSitesDeleteResponse,
+    FavoriteSitesResponse,
     GenerationTaskCreate,
     GenerationTaskResponse,
+    GenerationTaskSectionUpdate,
     LoginRequest,
+    MenuLibraryItemCreate,
+    MenuLibraryItemResponse,
+    MenuLibraryItemUpdate,
     PasswordChange,
     PublicationCampaignResponse,
     PublicationCampaignUpdate,
@@ -31,6 +37,9 @@ from app.schemas import (
     PublicationCampaignCreate,
     SectionCreate,
     SectionResponse,
+    SectionUpdate,
+    SectionsBulkCreate,
+    SectionsBulkCreateResponse,
     SiteCreate,
     SiteOverviewResponse,
     SitePublicationCampaignCreate,
@@ -42,7 +51,7 @@ from app.schemas import (
     UserResponse,
     UserUpdate,
 )
-from app.project_cache import ProjectCacheError, fetch_project_cache, sync_project_cache
+from app.project_cache import ProjectCacheError, fetch_project_cache, fetch_project_menu_capabilities, sync_project_cache
 from app.security import AdminUser, AuthUser, create_token, hash_password, verify_password
 from app.services import (
     BASE_PROMPT_TEMPLATE_NAME,
@@ -63,7 +72,7 @@ from app.services import (
     validate_content_for_publication,
     validate_ai_provider_key,
 )
-from app.worker import collect_competitor_research_job, generate_content_item_job, generate_task_content_job
+from app.worker import collect_competitor_research_job, generate_content_item_job, generate_task_content_job, run_task_pipeline_job
 
 router = APIRouter()
 
@@ -84,6 +93,24 @@ def _get_section_for_site(db: Session, site_id: str, section_id: str) -> models.
     if not section or section.site_id != site_id:
         raise HTTPException(status_code=400, detail="Menu item does not belong to this site")
     return section
+
+
+def _add_site_menu_library_item(site: models.Site, payload: MenuLibraryItemCreate) -> dict[str, str]:
+    item = payload.model_dump()
+    current = site.menu_library if isinstance(site.menu_library, list) else []
+    existing = next(
+        (
+            entry
+            for entry in current
+            if isinstance(entry, dict)
+            and (entry.get("external_id") == item["external_id"] or entry.get("path") == item["path"])
+        ),
+        None,
+    )
+    if existing:
+        return existing
+    site.menu_library = [*current, item]
+    return item
 
 
 def _validate_task_topics(payload: GenerationTaskCreate) -> None:
@@ -180,6 +207,40 @@ def change_password(payload: PasswordChange, user: AuthUser, db: Session = Depen
     db_user.password_hash = hash_password(payload.new_password)
     db.commit()
     return {"status": "ok"}
+
+
+@router.get("/me/favorite-sites", response_model=FavoriteSitesResponse)
+def get_favorite_sites(user: AuthUser, db: Session = Depends(get_db)) -> dict[str, list[str]]:
+    db_user = db.get(models.User, user["id"])
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"site_ids": list(db_user.favorite_site_ids or [])}
+
+
+@router.put("/me/favorite-sites/{site_id}", response_model=FavoriteSitesResponse)
+def add_favorite_site(site_id: str, user: AuthUser, db: Session = Depends(get_db)) -> dict[str, list[str]]:
+    db_user = db.get(models.User, user["id"])
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not db.get(models.Site, site_id):
+        raise HTTPException(status_code=404, detail="Site not found")
+    favorite_site_ids = list(db_user.favorite_site_ids or [])
+    if site_id not in favorite_site_ids:
+        favorite_site_ids.append(site_id)
+        db_user.favorite_site_ids = favorite_site_ids
+        db.commit()
+    return {"site_ids": favorite_site_ids}
+
+
+@router.delete("/me/favorite-sites/{site_id}", response_model=FavoriteSitesResponse)
+def remove_favorite_site(site_id: str, user: AuthUser, db: Session = Depends(get_db)) -> dict[str, list[str]]:
+    db_user = db.get(models.User, user["id"])
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    favorite_site_ids = [favorite_id for favorite_id in (db_user.favorite_site_ids or []) if favorite_id != site_id]
+    db_user.favorite_site_ids = favorite_site_ids
+    db.commit()
+    return {"site_ids": favorite_site_ids}
 
 
 @router.get("/users", response_model=list[UserResponse])
@@ -396,14 +457,214 @@ def list_sections(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> A
     return db.scalars(select(models.Section).where(models.Section.site_id == site_id).order_by(models.Section.name.asc())).all()
 
 
+@router.get("/sites/{site_id}/menu-capabilities")
+def get_site_menu_capabilities(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> dict[str, Any]:
+    site = _get_site_or_404(db, site_id)
+    if site.menu_capabilities_checked_at is None:
+        if not site.cache_server_ip:
+            try:
+                projects = fetch_project_cache([site.name])
+                project = next((item for item in projects if str(item.get("name") or "").strip() == site.name), None)
+                if project:
+                    site.cache_server_ip = str(project.get("serverIp") or project.get("server_ip") or "").strip() or None
+                    db.commit()
+            except ProjectCacheError as error:
+                raise HTTPException(status_code=502, detail=str(error)) from error
+        try:
+            capabilities = fetch_project_menu_capabilities(site)
+        except ProjectCacheError as error:
+            raise HTTPException(status_code=502, detail=str(error)) from error
+        site.header_menu_rendered = capabilities["header_menu_rendered"]
+        site.header_menu_nested = capabilities["header_menu_nested"]
+        site.footer_menu_rendered = capabilities["footer_menu_rendered"]
+        site.footer_menu_nested = capabilities["footer_menu_nested"]
+        site.menu_capabilities_checked_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(site)
+    return {
+        "checked_at": site.menu_capabilities_checked_at,
+        "header_menu_rendered": site.header_menu_rendered,
+        "header_menu_nested": site.header_menu_nested,
+        "footer_menu_rendered": site.footer_menu_rendered,
+        "footer_menu_nested": site.footer_menu_nested,
+    }
+
+
 @router.post("/sites/{site_id}/sections", response_model=SectionResponse)
 def create_section(site_id: str, payload: SectionCreate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
-    _get_site_or_404(db, site_id)
+    site = _get_site_or_404(db, site_id)
+    if payload.parent_id:
+        parent = _get_section_for_site(db, site_id, payload.parent_id)
+        if parent.menu_type != payload.menu_type:
+            raise HTTPException(status_code=400, detail="Parent menu item must use the same menu type")
+        nesting_supported = site.header_menu_nested if payload.menu_type == "header" else site.footer_menu_nested
+        if nesting_supported is not True:
+            raise HTTPException(status_code=400, detail="This project template does not support nested menu items")
+    _add_site_menu_library_item(
+        site,
+        MenuLibraryItemCreate(
+            name=payload.name,
+            path=payload.path,
+            external_id=payload.external_id,
+        ),
+    )
     section = models.Section(site_id=site_id, **payload.model_dump())
     db.add(section)
+    db.flush()
+    db.add(
+        models.PublicationLog(
+            endpoint_url=site.sections_endpoint or site.base_url,
+            request_payload={"action": "menu_item_create", "project_name": site.name, **payload.model_dump()},
+            response_status=None,
+            response_body={"section_id": section.id, "synchronized": False},
+        )
+    )
     db.commit()
     db.refresh(section)
     return section
+
+
+@router.patch("/sites/{site_id}/sections/{section_id}", response_model=SectionResponse)
+def update_section(site_id: str, section_id: str, payload: SectionUpdate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    site = _get_site_or_404(db, site_id)
+    section = _get_section_for_site(db, site_id, section_id)
+    old_name = section.name
+    old_path = section.path
+    section.name = payload.name.strip()
+    path = payload.path.strip().strip("/")
+    section.path = f"/{path}/" if path else "/"
+    section.sync_status = "pending"
+    section.synced_at = None
+    current_library = site.menu_library if isinstance(site.menu_library, list) else []
+    site.menu_library = [
+        {
+            **item,
+            "name": section.name,
+            "path": section.path,
+        } if isinstance(item, dict) and item.get("external_id") == section.external_id else item
+        for item in current_library
+    ]
+    db.add(
+        models.PublicationLog(
+            endpoint_url=site.sections_endpoint or site.base_url,
+            request_payload={
+                "action": "menu_item_update",
+                "project_name": site.name,
+                "name": section.name,
+                "path": section.path,
+                "menu_type": section.menu_type,
+                "previous_name": old_name,
+                "previous_path": old_path,
+            },
+            response_status=None,
+            response_body={"section_id": section.id, "synchronized": False},
+        )
+    )
+    db.commit()
+    db.refresh(section)
+    return section
+
+
+@router.delete("/sites/{site_id}/sections/{section_id}")
+def delete_section(site_id: str, section_id: str, _: AuthUser, db: Session = Depends(get_db)) -> dict[str, bool]:
+    site = _get_site_or_404(db, site_id)
+    section = _get_section_for_site(db, site_id, section_id)
+    task_count = db.scalar(select(func.count(models.GenerationTask.id)).where(models.GenerationTask.section_id == section.id)) or 0
+    content_count = db.scalar(select(func.count(models.ContentItem.id)).where(models.ContentItem.section_id == section.id)) or 0
+    if task_count or content_count:
+        raise HTTPException(status_code=409, detail="Пункт используется в задачах или контенте и не может быть удалён")
+    db.delete(section)
+    db.add(
+        models.PublicationLog(
+            endpoint_url=site.sections_endpoint or site.base_url,
+            request_payload={
+                "action": "menu_item_delete",
+                "project_name": site.name,
+                "name": section.name,
+                "path": section.path,
+                "menu_type": section.menu_type,
+            },
+            response_status=None,
+            response_body={"section_id": section.id, "deleted_from_system": True},
+        )
+    )
+    db.commit()
+    return {"deleted": True}
+
+
+@router.post("/sites/{site_id}/menu-library", response_model=MenuLibraryItemResponse)
+def create_menu_library_item(site_id: str, payload: MenuLibraryItemCreate, _: AuthUser, db: Session = Depends(get_db)) -> dict[str, str]:
+    site = _get_site_or_404(db, site_id)
+    item = _add_site_menu_library_item(site, payload)
+    db.commit()
+    return item
+
+
+@router.patch("/sites/{site_id}/menu-library/{external_id}", response_model=MenuLibraryItemResponse)
+def update_menu_library_item(
+    site_id: str,
+    external_id: str,
+    payload: MenuLibraryItemUpdate,
+    _: AuthUser,
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    site = _get_site_or_404(db, site_id)
+    raw_path = payload.path.strip()
+    path_without_edge_slashes = raw_path.strip("/")
+    normalized_path = f"/{path_without_edge_slashes}/" if path_without_edge_slashes else "/"
+    updated_item = {
+        "name": payload.name.strip(),
+        "path": normalized_path,
+        "external_id": external_id,
+        "russian_name": payload.russian_name.strip(),
+    }
+    current = [entry for entry in (site.menu_library or []) if isinstance(entry, dict)]
+    conflicting = next(
+        (
+            entry
+            for entry in current
+            if entry.get("external_id") != external_id and entry.get("path") == normalized_path
+        ),
+        None,
+    )
+    if conflicting:
+        raise HTTPException(status_code=409, detail="A menu library item with this URL already exists")
+    replaced = False
+    updated_library: list[dict[str, Any]] = []
+    for entry in current:
+        if entry.get("external_id") == external_id:
+            if not replaced:
+                updated_library.append(updated_item)
+                replaced = True
+            continue
+        updated_library.append(entry)
+    if not replaced:
+        updated_library.append(updated_item)
+    site.menu_library = updated_library
+    db.commit()
+    return updated_item
+
+
+@router.post("/sites/{site_id}/sections/bulk", response_model=SectionsBulkCreateResponse)
+def create_sections_bulk(site_id: str, payload: SectionsBulkCreate, _: AuthUser, db: Session = Depends(get_db)) -> dict[str, Any]:
+    _get_site_or_404(db, site_id)
+    existing_ids = set(
+        db.scalars(select(models.Section.external_id).where(models.Section.site_id == site_id)).all()
+    )
+    created: list[models.Section] = []
+    skipped_count = 0
+    for item in payload.items:
+        if item.external_id in existing_ids:
+            skipped_count += 1
+            continue
+        section = models.Section(site_id=site_id, **item.model_dump())
+        db.add(section)
+        created.append(section)
+        existing_ids.add(item.external_id)
+    db.commit()
+    for section in created:
+        db.refresh(section)
+    return {"created_count": len(created), "skipped_count": skipped_count, "sections": created}
 
 
 @router.get("/sites/{site_id}/prompt-templates", response_model=list[PromptTemplateResponse])
@@ -633,6 +894,24 @@ def restore_task(task_id: str, _: AdminUser, db: Session = Depends(get_db)) -> A
     return task
 
 
+@router.patch("/tasks/{task_id}/section", response_model=GenerationTaskResponse)
+def update_task_section(task_id: str, payload: GenerationTaskSectionUpdate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    task = db.get(models.GenerationTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if payload.section_id:
+        if not task.site_id:
+            raise HTTPException(status_code=400, detail="Task does not have a project")
+        _get_section_for_site(db, task.site_id, payload.section_id)
+    task.section_id = payload.section_id
+    for item in task.items:
+        if item.status not in {"scheduled", "retry_scheduled", "publishing", "published"}:
+            item.section_id = payload.section_id
+    db.commit()
+    db.refresh(task)
+    return task
+
+
 @router.get("/tasks/{task_id}", response_model=TaskDetailsResponse)
 def get_task(task_id: str, user: AuthUser, db: Session = Depends(get_db)) -> dict:
     task = db.get(models.GenerationTask, task_id)
@@ -676,6 +955,38 @@ def generate_task(task_id: str, _: AuthUser, db: Session = Depends(get_db)) -> A
             item.generation_error = f"{type(exc).__name__}: {exc}"[:500]
         db.commit()
         raise HTTPException(status_code=502, detail="Failed to queue content generation") from exc
+    db.refresh(task)
+    return task
+
+
+@router.post("/tasks/{task_id}/start", response_model=GenerationTaskResponse)
+def start_task_pipeline(task_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    task = db.get(models.GenerationTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task.archived_at is not None:
+        raise HTTPException(status_code=400, detail="Archived task must be restored before generation")
+    mutable_items = [item for item in task.items if item.status not in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "published"}]
+    if not mutable_items:
+        raise HTTPException(status_code=400, detail="Task has no content that can be generated")
+    if any(item.status in {"generation_queued", "generating"} for item in mutable_items):
+        return task
+
+    task.status = "generating"
+    for item in mutable_items:
+        item.status = "generation_queued"
+        item.generation_progress = 1
+        item.generation_error = None
+    db.commit()
+    try:
+        run_task_pipeline_job.delay(task.id)
+    except Exception as exc:
+        task.status = "generation_failed"
+        for item in mutable_items:
+            item.status = "generation_failed"
+            item.generation_error = f"{type(exc).__name__}: {exc}"[:500]
+        db.commit()
+        raise HTTPException(status_code=502, detail="Failed to queue task pipeline") from exc
     db.refresh(task)
     return task
 
@@ -947,6 +1258,43 @@ def update_campaign(campaign_id: str, payload: PublicationCampaignUpdate, _: Aut
 @router.get("/publication-logs", response_model=list[PublicationLogResponse])
 def list_logs(_: AdminUser, db: Session = Depends(get_db)) -> Any:
     return db.scalars(select(models.PublicationLog).order_by(models.PublicationLog.created_at.desc()).limit(200)).all()
+
+
+@router.get("/admin/request-logs", response_model=list[AdminRequestLogResponse])
+def list_admin_request_logs(_: AdminUser, db: Session = Depends(get_db)) -> list[dict[str, Any]]:
+    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+    db.execute(delete(models.PublicationLog).where(models.PublicationLog.created_at < cutoff))
+    db.commit()
+    rows = db.execute(
+        select(models.PublicationLog, models.ContentItem.topic, models.Site.name)
+        .outerjoin(models.ContentItem, models.ContentItem.id == models.PublicationLog.content_item_id)
+        .outerjoin(models.Site, models.Site.id == models.ContentItem.site_id)
+        .where(models.PublicationLog.created_at >= cutoff)
+        .order_by(models.PublicationLog.created_at.desc())
+        .limit(200)
+    ).all()
+    result: list[dict[str, Any]] = []
+    for log, topic, site_name in rows:
+        payload = log.request_payload if isinstance(log.request_payload, dict) else {}
+        action = payload.get("action")
+        is_menu_create = action == "menu_item_create"
+        is_menu_update = action == "menu_item_update"
+        is_menu_delete = action == "menu_item_delete"
+        is_menu_confirmation = action == "menu_item_sync_confirmed"
+        successful = log.response_status is not None and 200 <= log.response_status < 300 and not log.error_message
+        result.append(
+            {
+                "id": log.id,
+                "created_at": log.created_at,
+                "project_name": str(payload.get("project_name") or site_name or "Не определён"),
+                "action": "Добавление пункта меню" if is_menu_create else "Изменение пункта меню" if is_menu_update else "Удаление пункта меню" if is_menu_delete else "Синхронизация пункта меню" if is_menu_confirmation else "Публикация контента",
+                "item_name": str(payload.get("name") or topic or "").strip() or None,
+                "method": "POST",
+                "destination": log.endpoint_url,
+                "result": "Успешно" if successful else "Ошибка" if log.error_message or (log.response_status or 0) >= 400 else "Ожидает ответа",
+            }
+        )
+    return result
 
 
 @router.post("/publication/run-due")

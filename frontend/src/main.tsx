@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { createPortal } from "react-dom";
 import { LANGUAGE_OPTIONS, type LanguageOption } from "./languageOptions";
+import { getMenuLibrary, type MenuLibraryItem } from "./menuLibrary";
 import {
   Activity,
   AlertTriangle,
@@ -10,6 +11,7 @@ import {
   Bot,
   CalendarClock,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   ChevronUp,
   CheckCircle2,
@@ -34,6 +36,7 @@ import {
   Send,
   Settings,
   ShieldCheck,
+  Star,
   Sun,
   Trash2,
   UserPlus,
@@ -174,26 +177,47 @@ type Site = {
   payload_mode: "simple_page" | "full_site";
   editor_version: string;
   default_menu: Record<string, unknown>;
+  menu_library: MenuLibraryItem[];
   default_banners: string[];
   showcase_payload: Record<string, unknown> | null;
   external_project_id: string | null;
   cache_canon: string | null;
+  cache_language: string | null;
+  cache_geo: string | null;
   homepage_title: string | null;
   internal_pages_count: number;
   domains_count: number;
+  cache_domains: string[];
+  cache_server_ip: string | null;
   project_status: "test" | "working" | "not_in_focus" | "duplicate";
   is_test_project: boolean;
   has_menu: boolean;
   cache_synced_at: string | null;
+  menu_capabilities_checked_at: string | null;
+  header_menu_rendered: boolean | null;
+  header_menu_nested: boolean | null;
+  footer_menu_rendered: boolean | null;
+  footer_menu_nested: boolean | null;
+};
+
+type MenuCapabilities = {
+  checked_at: string | null;
+  header_menu_rendered: boolean | null;
+  header_menu_nested: boolean | null;
+  footer_menu_rendered: boolean | null;
+  footer_menu_nested: boolean | null;
 };
 
 type ProjectCacheItem = {
   external_project_id: string;
   name: string;
   canon: string | null;
+  language: string | null;
+  geo: string | null;
   homepage_title: string | null;
   internal_pages_count: number;
   domains_count: number;
+  domains: string[];
   has_menu: boolean;
   is_working_project: boolean;
 };
@@ -203,6 +227,7 @@ type ProjectCacheSyncResult = {
   matched_count: number;
   created_count: number;
   updated_count: number;
+  confirmed_sections_count: number;
   projects: ProjectCacheItem[];
 };
 
@@ -218,6 +243,10 @@ type Section = {
   name: string;
   path: string;
   menu_type: "header" | "footer";
+  parent_id: string | null;
+  sync_status: "pending" | "synced";
+  synced_at: string | null;
+  updated_at: string;
 };
 
 type AiProvider = {
@@ -298,6 +327,17 @@ type PublicationLog = {
   created_at: string;
 };
 
+type AdminRequestLog = {
+  id: string;
+  created_at: string;
+  project_name: string;
+  action: string;
+  item_name: string | null;
+  method: string;
+  destination: string;
+  result: "Успешно" | "Ошибка" | "Ожидает ответа";
+};
+
 type PublicationCampaign = {
   id: string;
   name: string;
@@ -312,7 +352,7 @@ type PublicationCampaign = {
 
 type ThemeMode = "light" | "dark";
 type InputStyle = "balanced" | "classic" | "soft" | "inset" | "underline" | "emerald" | "graphite" | "rounded" | "contrast" | "glass";
-type AppView = "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "settings";
+type AppView = "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "favorites" | "settings";
 type WorkspaceTab = "overview" | "topics" | "content" | "publication" | "menu";
 
 type AppRoute = {
@@ -374,6 +414,7 @@ const MAIN_VIEW_PATHS: Record<Exclude<AppView, "workspace">, string> = {
   publications: "/publications",
   providers: "/ai-providers",
   sites: "/sites",
+  favorites: "/favorites",
   settings: "/settings"
 };
 
@@ -396,7 +437,7 @@ function routeFromPath(pathname: string): AppRoute {
   if (path === "/tasks") {
     return { view: "workspace", workspaceTab: "topics" };
   }
-  const workspaceEntry = Object.entries(WORKSPACE_TAB_PATHS).find(([, routePath]) => routePath === path);
+  const workspaceEntry = Object.entries(WORKSPACE_TAB_PATHS).find(([, routePath]) => path === routePath || path.startsWith(`${routePath}/`));
   if (workspaceEntry) {
     return { view: "workspace", workspaceTab: workspaceEntry[0] as WorkspaceTab };
   }
@@ -413,8 +454,24 @@ function routeFromPath(pathname: string): AppRoute {
   return DEFAULT_ROUTE;
 }
 
-function pathForRoute(view: AppView, workspaceTab: WorkspaceTab = DEFAULT_WORKSPACE_TAB) {
-  if (view === "workspace") return WORKSPACE_TAB_PATHS[workspaceTab];
+function workspaceProjectNameFromPath(pathname: string): string | null {
+  const path = pathname.replace(/\/+$/, "") || "/";
+  const routePath = Object.values(WORKSPACE_TAB_PATHS).find((candidate) => path.startsWith(`${candidate}/`));
+  if (!routePath) return null;
+  const encodedName = path.slice(routePath.length + 1).split("/")[0];
+  if (!encodedName) return null;
+  try {
+    return decodeURIComponent(encodedName);
+  } catch {
+    return encodedName;
+  }
+}
+
+function pathForRoute(view: AppView, workspaceTab: WorkspaceTab = DEFAULT_WORKSPACE_TAB, projectName?: string | null) {
+  if (view === "workspace") {
+    const basePath = WORKSPACE_TAB_PATHS[workspaceTab];
+    return projectName ? `${basePath}/${encodeURIComponent(projectName)}/` : basePath;
+  }
   return MAIN_VIEW_PATHS[view];
 }
 
@@ -568,6 +625,25 @@ const COUNTRIES = COUNTRY_CODES.map((code) => ({
   flag: countryFlag(code)
 })).sort((first, second) => first.name.localeCompare(second.name, "ru"));
 
+function projectLanguageCode(site?: Site): string {
+  const supportedLanguages = new Set(LANGUAGE_OPTIONS.map((option) => option.code));
+  for (const value of [site?.cache_language, site?.cache_geo]) {
+    const languageCode = (value || "").trim().toLowerCase().split(/[-_]/)[0];
+    if (supportedLanguages.has(languageCode)) return languageCode;
+  }
+  return "en";
+}
+
+function projectGeoCode(site?: Site): string {
+  const supportedCountries = new Set<string>(COUNTRY_CODES);
+  for (const value of [site?.cache_geo, site?.cache_language]) {
+    const countryCode = localeCountryCode(value || "");
+    if (countryCode && supportedCountries.has(countryCode)) return countryCode;
+  }
+  const domainZone = (site?.cache_canon || "").split(".").pop()?.toUpperCase() || "";
+  return supportedCountries.has(domainZone) ? domainZone : "DE";
+}
+
 function App() {
   const initialRoute = React.useMemo(() => routeFromPath(window.location.pathname), []);
   const [token, setToken] = React.useState(() => localStorage.getItem("admin_token") || "");
@@ -575,6 +651,7 @@ function App() {
   const [inputStyle, setInputStyle] = React.useState<InputStyle>(storedInputStyle);
   const [activeView, setActiveView] = React.useState<AppView>(initialRoute.view);
   const [workspaceTab, setWorkspaceTab] = React.useState<WorkspaceTab>(initialRoute.workspaceTab);
+  const [, setRouteVersion] = React.useState(0);
   const [dashboard, setDashboard] = React.useState<Dashboard | null>(null);
   const [tasks, setTasks] = React.useState<Task[]>([]);
   const [archivedTasks, setArchivedTasks] = React.useState<Task[]>([]);
@@ -586,9 +663,9 @@ function App() {
   const [message, setMessage] = React.useState("");
   const [notificationPromptVisible, setNotificationPromptVisible] = React.useState(false);
 
-  const navigateTo = React.useCallback((view: AppView, nextWorkspaceTab: WorkspaceTab = workspaceTab, replace = false) => {
+  const navigateTo = React.useCallback((view: AppView, nextWorkspaceTab: WorkspaceTab = workspaceTab, replace = false, projectName?: string | null) => {
     const normalizedWorkspaceTab = view === "workspace" ? nextWorkspaceTab : workspaceTab;
-    const nextPath = pathForRoute(view, normalizedWorkspaceTab);
+    const nextPath = pathForRoute(view, normalizedWorkspaceTab, projectName);
     setActiveView(view);
     if (view === "workspace") {
       setWorkspaceTab(normalizedWorkspaceTab);
@@ -692,6 +769,7 @@ function App() {
       const nextRoute = routeFromPath(window.location.pathname);
       setActiveView(nextRoute.view);
       setWorkspaceTab(nextRoute.workspaceTab);
+      setRouteVersion((version) => version + 1);
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
@@ -726,7 +804,8 @@ function App() {
       navigateTo("workspace", DEFAULT_WORKSPACE_TAB, true);
       return;
     }
-    const nextPath = pathForRoute(activeView, activeView === "workspace" ? workspaceTab : DEFAULT_WORKSPACE_TAB);
+    const projectName = activeView === "workspace" ? workspaceProjectNameFromPath(window.location.pathname) : null;
+    const nextPath = pathForRoute(activeView, activeView === "workspace" ? workspaceTab : DEFAULT_WORKSPACE_TAB, projectName);
     if (window.location.pathname !== nextPath) {
       window.history.replaceState(null, "", nextPath);
     }
@@ -772,6 +851,7 @@ function App() {
               <NavButton href={pathForRoute("publications")} icon={<Send />} label="Публикации" active={activeView === "publications"} onClick={() => navigateTo("publications")} />
               <NavButton href={pathForRoute("providers")} icon={<Bot />} label="API Providers" active={activeView === "providers"} onClick={() => navigateTo("providers")} />
               <NavButton href={pathForRoute("sites")} icon={<Globe2 />} label="Сайты" active={activeView === "sites"} onClick={() => navigateTo("sites")} />
+              <NavButton href={pathForRoute("favorites")} icon={<Star className="favoriteNavIcon" fill="currentColor" />} label="Избранное" active={activeView === "favorites"} onClick={() => navigateTo("favorites")} />
             </>
           ) : (
             <>
@@ -825,7 +905,7 @@ function App() {
 
         {message ? <div className="notice">{message}</div> : null}
 
-        {activeView === "workspace" && <ProjectWorkspaceView api={api} sites={sites} providers={providers} activeTab={workspaceTab} onTabChange={(tab) => navigateTo("workspace", tab)} onChanged={loadAll} />}
+        {activeView === "workspace" && <ProjectWorkspaceView api={api} sites={sites} providers={providers} currentUsername={currentUser.username} activeTab={workspaceTab} onTabChange={(tab, projectName) => navigateTo("workspace", tab, false, projectName)} onChanged={loadAll} />}
         {activeView === "prompts" && <PromptsView api={api} sites={sites} isAdmin={isAdmin} onChanged={loadAll} />}
         {isAdmin && activeView === "dashboard" && dashboard && <DashboardView api={api} dashboard={dashboard} tasks={tasks} content={content} sites={sites} onChanged={loadAll} />}
         {isAdmin && activeView === "tasks" && <TasksView api={api} sites={sites} providers={providers} tasks={tasks} onChanged={loadAll} />}
@@ -834,6 +914,7 @@ function App() {
         {isAdmin && activeView === "publications" && <PublicationsView api={api} sites={sites} content={content} onChanged={loadAll} />}
         {isAdmin && activeView === "providers" && <ProvidersView api={api} providers={providers} onChanged={loadAll} />}
         {isAdmin && activeView === "sites" && <SitesView api={api} sites={sites} currentUsername={currentUser.username} onChanged={loadAll} />}
+        {isAdmin && activeView === "favorites" && <SitesView api={api} sites={sites} currentUsername={currentUser.username} favoritesOnly onChanged={loadAll} />}
         {activeView === "settings" && <SettingsView api={api} currentUser={currentUser} users={users} inputStyle={inputStyle} onInputStyleChange={setInputStyle} onChanged={loadAll} />}
       </main>
       {notificationPromptVisible ? (
@@ -1324,16 +1405,19 @@ function ProjectWorkspaceView({
   api,
   sites,
   providers,
+  currentUsername,
   activeTab,
   onTabChange,
   onChanged
 }: ViewProps & {
   sites: Site[];
   providers: AiProvider[];
+  currentUsername: string;
   activeTab: WorkspaceTab;
-  onTabChange: (tab: WorkspaceTab) => void;
+  onTabChange: (tab: WorkspaceTab, projectName?: string) => void;
 }) {
-  const [selectedSiteId, setSelectedSiteId] = React.useState(() => localStorage.getItem("workspace_site_id") || "");
+  const workspaceSiteStorageKey = `workspace_site_id:${currentUsername}`;
+  const [selectedSiteId, setSelectedSiteId] = React.useState(() => localStorage.getItem(workspaceSiteStorageKey) || localStorage.getItem("workspace_site_id") || "");
   const [overview, setOverview] = React.useState<SiteOverview | null>(null);
   const [siteTasks, setSiteTasks] = React.useState<Task[]>([]);
   const [siteContent, setSiteContent] = React.useState<ContentItem[]>([]);
@@ -1342,19 +1426,26 @@ function ProjectWorkspaceView({
   const [logs, setLogs] = React.useState<PublicationLog[]>([]);
   const [campaigns, setCampaigns] = React.useState<PublicationCampaign[]>([]);
   const [workspaceError, setWorkspaceError] = React.useState("");
+  const [canonCopied, setCanonCopied] = React.useState(false);
+  const [favoriteSiteIds, setFavoriteSiteIds] = React.useState<string[]>([]);
+  const [favoritesOnly, setFavoritesOnly] = React.useState(false);
+  const [menuCapabilities, setMenuCapabilities] = React.useState<MenuCapabilities | null>(null);
   const selectedSite = sites.find((site) => site.id === selectedSiteId) || null;
+  const routeProjectName = workspaceProjectNameFromPath(window.location.pathname);
+  const pendingSectionsCount = sections.filter((section) => section.sync_status !== "synced").length;
 
   const loadProject = React.useCallback(async () => {
     if (!selectedSiteId) return;
     setWorkspaceError("");
-    const [nextOverview, nextTasks, nextContent, nextSections, nextPrompts, nextLogs, nextCampaigns] = await Promise.all([
+    const [nextOverview, nextTasks, nextContent, nextSections, nextPrompts, nextLogs, nextCampaigns, nextMenuCapabilities] = await Promise.all([
       api<SiteOverview>(`/sites/${selectedSiteId}/overview`),
       api<Task[]>(`/sites/${selectedSiteId}/tasks`),
       api<ContentItem[]>(`/sites/${selectedSiteId}/content`),
       api<Section[]>(`/sites/${selectedSiteId}/sections`),
       api<PromptTemplate[]>(`/sites/${selectedSiteId}/prompt-templates`),
       api<PublicationLog[]>(`/sites/${selectedSiteId}/publication-logs`),
-      api<PublicationCampaign[]>(`/sites/${selectedSiteId}/publication-campaigns`)
+      api<PublicationCampaign[]>(`/sites/${selectedSiteId}/publication-campaigns`),
+      api<MenuCapabilities>(`/sites/${selectedSiteId}/menu-capabilities`).catch(() => null)
     ]);
     setOverview(nextOverview);
     setSiteTasks(nextTasks);
@@ -1363,17 +1454,41 @@ function ProjectWorkspaceView({
     setPromptTemplates(nextPrompts);
     setLogs(nextLogs);
     setCampaigns(nextCampaigns);
+    setMenuCapabilities(nextMenuCapabilities);
   }, [api, selectedSiteId]);
 
   React.useEffect(() => {
-    if (sites.length && (!selectedSiteId || !sites.some((site) => site.id === selectedSiteId))) {
-      setSelectedSiteId(sites[0].id);
+    api<{ site_ids: string[] }>("/me/favorite-sites")
+      .then((result) => setFavoriteSiteIds(result.site_ids))
+      .catch((error: unknown) => setWorkspaceError(error instanceof Error ? error.message : "Не удалось загрузить избранное"));
+  }, [api]);
+
+  React.useEffect(() => {
+    const routeSite = routeProjectName ? sites.find((site) => site.name === routeProjectName) : null;
+    if (routeSite && routeSite.id !== selectedSiteId) {
+      setSelectedSiteId(routeSite.id);
+      return;
     }
-  }, [selectedSiteId, sites]);
+    if (routeProjectName && !routeSite) {
+      setSelectedSiteId("");
+      return;
+    }
+    if (selectedSiteId && !sites.some((site) => site.id === selectedSiteId)) {
+      localStorage.removeItem(workspaceSiteStorageKey);
+      setSelectedSiteId("");
+    }
+  }, [routeProjectName, selectedSiteId, sites, workspaceSiteStorageKey]);
+
+  React.useEffect(() => {
+    if (!selectedSite) return;
+    const projectPath = pathForRoute("workspace", activeTab, selectedSite.name);
+    if (window.location.pathname !== projectPath) window.history.replaceState(null, "", projectPath);
+  }, [activeTab, selectedSite]);
 
   React.useEffect(() => {
     if (selectedSiteId) {
-      localStorage.setItem("workspace_site_id", selectedSiteId);
+      localStorage.setItem(workspaceSiteStorageKey, selectedSiteId);
+      localStorage.removeItem("workspace_site_id");
       setOverview(null);
       setSiteTasks([]);
       setSiteContent([]);
@@ -1381,14 +1496,52 @@ function ProjectWorkspaceView({
       setPromptTemplates([]);
       setLogs([]);
       setCampaigns([]);
+      setMenuCapabilities(null);
       setWorkspaceError("");
       loadProject().catch((error: unknown) => setWorkspaceError(error instanceof Error ? error.message : "Не удалось загрузить проект"));
     }
-  }, [loadProject, selectedSiteId]);
+  }, [loadProject, selectedSiteId, workspaceSiteStorageKey]);
 
-  async function refreshProject() {
-    await loadProject();
+  async function refreshProject(syncExternal = false) {
+    if (syncExternal && selectedSite) {
+      await api<ProjectCacheSyncResult>("/sites/cache/sync", {
+        method: "POST",
+        body: JSON.stringify({ names: [selectedSite.name] })
+      });
+    }
     await onChanged();
+    await loadProject();
+  }
+
+  async function copyCanon() {
+    if (!selectedSite) return;
+    await copyTextToClipboard(selectedSite.cache_canon || selectedSite.base_url);
+    setCanonCopied(true);
+    window.setTimeout(() => setCanonCopied(false), 1600);
+  }
+
+  function selectWorkspaceSite(siteId: string) {
+    const site = sites.find((candidate) => candidate.id === siteId);
+    if (site) {
+      const projectPath = pathForRoute("workspace", activeTab, site.name);
+      if (window.location.pathname !== projectPath) window.history.pushState(null, "", projectPath);
+    }
+    setSelectedSiteId(siteId);
+  }
+
+  async function toggleSiteFavorite(siteId: string) {
+    try {
+      const result = await api<{ site_ids: string[] }>(`/me/favorite-sites/${siteId}`, {
+        method: favoriteSiteIds.includes(siteId) ? "DELETE" : "PUT"
+      });
+      setFavoriteSiteIds(result.site_ids);
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не удалось изменить избранное");
+    }
+  }
+
+  async function toggleWorkspaceFavorite() {
+    if (selectedSite) await toggleSiteFavorite(selectedSite.id);
   }
 
   if (!sites.length) {
@@ -1397,20 +1550,36 @@ function ProjectWorkspaceView({
 
   return (
     <section className="viewStack">
-      <DataPanel title="Рабочий проект">
+      <DataPanel title={(
+        <span className="workspaceProjectTitle">
+          {selectedSite ? (
+            <button
+              className={`workspaceFavoriteButton ${favoriteSiteIds.includes(selectedSite.id) ? "active" : ""}`}
+              type="button"
+              onClick={toggleWorkspaceFavorite}
+              title={favoriteSiteIds.includes(selectedSite.id) ? "Убрать из избранного" : "Добавить в избранное"}
+              aria-label={favoriteSiteIds.includes(selectedSite.id) ? "Убрать проект из избранного" : "Добавить проект в избранное"}
+            >
+              <Star size={22} />
+            </button>
+          ) : null}
+          <strong>{selectedSite?.name || "Выберите проект"}</strong>
+        </span>
+      )}>
         <div className="projectHeader">
-          <label>
-            Проект
+          <div className="projectPicker">
             <SearchableSelect
               value={selectedSiteId}
-              onChange={setSelectedSiteId}
+              onChange={selectWorkspaceSite}
               options={sites.map((site) => {
                 const headerCount = Array.isArray(site.default_menu.header) ? site.default_menu.header.length : 0;
                 const footerCount = Array.isArray(site.default_menu.footer) ? site.default_menu.footer.length : 0;
                 const menuCount = headerCount + footerCount;
+                const flag = localeFlag(localeCountryCode(site.cache_geo || ""));
                 return {
                   value: site.id,
                   label: site.name,
+                  leading: flag ? <span className="projectSelectFlag" aria-hidden="true">{flag}</span> : undefined,
                   keywords: `${site.cache_canon || ""} ${site.is_test_project ? "тестовый проект" : ""}`,
                   description: menuCount
                     ? `Пунктов меню: ${menuCount} · Header: ${headerCount} · Footer: ${footerCount}`
@@ -1420,22 +1589,89 @@ function ProjectWorkspaceView({
                 };
               })}
               searchPlaceholder="Найти проект"
+              optionPredicate={(option) => !favoritesOnly || favoriteSiteIds.includes(option.value)}
+              dropdownToolbar={(
+                <button
+                  className={`searchableSelectFavoritesFilter ${favoritesOnly ? "active" : ""}`}
+                  type="button"
+                  onClick={() => setFavoritesOnly((current) => !current)}
+                  aria-pressed={favoritesOnly}
+                >
+                  <Star size={16} fill={favoritesOnly ? "currentColor" : "none"} />
+                  {favoritesOnly ? "Показаны избранные" : "Только избранные"}
+                  <span>{favoriteSiteIds.length}</span>
+                </button>
+              )}
+              renderOptionAction={(option) => {
+                const favorite = favoriteSiteIds.includes(option.value);
+                return (
+                  <button
+                    className={`searchableSelectFavoriteButton ${favorite ? "active" : ""}`}
+                    type="button"
+                    onClick={() => toggleSiteFavorite(option.value)}
+                    title={favorite ? "Убрать из избранного" : "Добавить в избранное"}
+                    aria-label={favorite ? `Убрать ${option.label} из избранного` : `Добавить ${option.label} в избранное`}
+                  >
+                    <Star size={17} fill={favorite ? "currentColor" : "none"} />
+                  </button>
+                );
+              }}
             />
-          </label>
-          <div className="projectMeta">
-            <strong>{selectedSite?.base_url || "..."}</strong>
-            <span>{selectedSite ? humanPayloadMode(selectedSite.payload_mode) : ""}</span>
           </div>
-          <button className="button secondary" type="button" onClick={() => refreshProject()}><RefreshCcw size={18} /> Обновить проект</button>
+          <div className="projectMeta">
+            {selectedSite ? (
+              <>
+                <div className="projectTopDetails">
+                  <span>
+                    <small>Canon</small>
+                    <span className="projectCanonValue">
+                      <a className="projectCanonLink" href={selectedSite.base_url} target="_blank" rel="noreferrer" title={`Открыть ${selectedSite.cache_canon || selectedSite.base_url}`}>
+                        <b>{selectedSite.cache_canon || selectedSite.base_url}</b><ExternalLink size={14} />
+                      </a>
+                      <button className="projectCanonCopyButton" type="button" onClick={copyCanon} title={canonCopied ? "Скопировано" : "Скопировать canon"} aria-label="Скопировать canon">
+                        {canonCopied ? <CheckCircle2 size={14} /> : <Copy size={14} />}
+                      </button>
+                    </span>
+                  </span>
+                  <span><small>Title</small><b title={selectedSite.homepage_title || "Title не указан"}>{selectedSite.homepage_title || "—"}</b></span>
+                  <span className="projectMetricCard"><small>Доменов в сетке</small><b>{formatNumber(selectedSite.domains_count)}</b></span>
+                  <span className="projectMetricCard"><small>Страниц</small><b>{formatNumber(selectedSite.internal_pages_count)}</b></span>
+                  <MenuCapabilityCard label="Header" rendered={menuCapabilities?.header_menu_rendered} nested={menuCapabilities?.header_menu_nested} icon="header" />
+                  <MenuCapabilityCard label="Footer" rendered={menuCapabilities?.footer_menu_rendered} nested={menuCapabilities?.footer_menu_nested} icon="footer" />
+                </div>
+              </>
+            ) : null}
+          </div>
+          <button className="button secondary" type="button" onClick={() => refreshProject(true)} disabled={!selectedSite}><RefreshCcw size={18} /> Обновить проект</button>
         </div>
+        {selectedSite ? (
+          <div className="projectUpdatedAt">
+            <CalendarClock size={20} />
+            <span>Последнее обновление</span>
+            <strong>{selectedSite.cache_synced_at ? formatDate(selectedSite.cache_synced_at) : "не выполнялось"}</strong>
+            <b className={pendingSectionsCount ? "pending" : "synced"}>
+              {pendingSectionsCount ? `Не синхронизировано: ${pendingSectionsCount}` : "Синхронизировано"}
+            </b>
+          </div>
+        ) : null}
         <div className="workspaceTabs">
-          <TabButton href={pathForRoute("workspace", "overview")} label="Обзор" active={activeTab === "overview"} onClick={() => onTabChange("overview")} />
-          <TabButton href={pathForRoute("workspace", "topics")} label="Задачи" active={activeTab === "topics"} onClick={() => onTabChange("topics")} />
-          <TabButton href={pathForRoute("workspace", "content")} label="Контент и публикация" active={activeTab === "content" || activeTab === "publication"} onClick={() => onTabChange("content")} />
-          <TabButton href={pathForRoute("workspace", "menu")} label="Меню" active={activeTab === "menu"} onClick={() => onTabChange("menu")} />
+          <TabButton href={pathForRoute("workspace", "overview", selectedSite?.name)} label="Обзор" active={activeTab === "overview"} onClick={() => onTabChange("overview", selectedSite?.name)} />
+          <TabButton href={pathForRoute("workspace", "topics", selectedSite?.name)} label="Задачи" active={activeTab === "topics"} onClick={() => onTabChange("topics", selectedSite?.name)} />
+          <TabButton href={pathForRoute("workspace", "content", selectedSite?.name)} label="Контент и публикация" active={activeTab === "content" || activeTab === "publication"} onClick={() => onTabChange("content", selectedSite?.name)} />
+          <TabButton href={pathForRoute("workspace", "menu", selectedSite?.name)} label="Меню" active={activeTab === "menu"} onClick={() => onTabChange("menu", selectedSite?.name)} />
         </div>
         {workspaceError ? <div className="notice">{workspaceError}</div> : null}
       </DataPanel>
+
+      {!selectedSite ? (
+        <div className="workspaceProjectEmpty">
+          <span className="workspaceProjectEmptyIcon"><FolderKanban size={34} /></span>
+          <div>
+            <h2>Выберите проект</h2>
+            <p>Выберите проект в поле выше, чтобы открыть рабочий экран. Последний активный проект сохранится для вашего пользователя.</p>
+          </div>
+        </div>
+      ) : null}
 
       {selectedSite && activeTab === "overview" && overview ? (
         <ProjectOverviewPanel key={selectedSite.id} overview={overview} content={siteContent} sections={sections} logs={logs} />
@@ -1464,9 +1700,37 @@ function ProjectWorkspaceView({
         <ProjectPublicationPanel key={`${selectedSite.id}:publication-details`} mode="details" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} onChanged={refreshProject} />
       ) : null}
       {selectedSite && activeTab === "menu" ? (
-        <ProjectMenuPanel api={api} site={selectedSite} sections={sections} onChanged={refreshProject} />
+        <ProjectMenuPanel api={api} site={selectedSite} sections={sections} menuCapabilities={menuCapabilities} onChanged={refreshProject} />
       ) : null}
     </section>
+  );
+}
+
+function MenuCapabilityCard({ label, rendered, nested, icon }: { label: string; rendered: boolean | null | undefined; nested: boolean | null | undefined; icon: "header" | "footer" }) {
+  const statusText = rendered == null ? "Проверяем" : rendered ? "Меню реализовано" : "Меню не реализовано";
+  return (
+    <span className={`projectMenuCapability ${rendered === true ? "isReady" : rendered === false ? "isMissing" : "isChecking"}`} title={`${label}: ${statusText}${rendered ? nested ? ". Вложенность поддерживается" : ". Только один уровень" : ""}`}>
+      <small>{label}</small>
+      <span className="projectMenuCapabilityValue">
+        {rendered === true ? <MenuReadyMedal /> : icon === "header" ? <HeaderMenuIcon /> : <FooterMenuIcon />}
+        <b>{statusText}</b>
+      </span>
+      {rendered ? <em>{nested ? "Есть вложенность" : "Один уровень"}</em> : null}
+    </span>
+  );
+}
+
+function MenuReadyMedal() {
+  return (
+    <svg className="menuReadyMedal" viewBox="0 0 48 52" aria-hidden="true">
+      <defs>
+        <linearGradient id="menuReadyRibbon" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#2eaa61" /><stop offset="1" stopColor="#09612e" /></linearGradient>
+        <linearGradient id="menuReadyFace" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#f2fff6" /><stop offset="1" stopColor="#aee9c4" /></linearGradient>
+        <filter id="menuReadyShadow" x="-40%" y="-40%" width="180%" height="200%"><feDropShadow dx="0" dy="3" stdDeviation="2.5" floodColor="#063d21" floodOpacity=".28" /></filter>
+      </defs>
+      <path d="m13 31-3 18 14-8V30zM35 31l3 18-14-8V30z" fill="url(#menuReadyRibbon)" />
+      <g filter="url(#menuReadyShadow)"><circle cx="24" cy="22" r="18" fill="#15713b" /><circle cx="24" cy="22" r="14" fill="url(#menuReadyFace)" stroke="#63bd82" /><path d="m16 22 5 5 11-12" fill="none" stroke="#126d38" strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" /></g>
+    </svg>
   );
 }
 
@@ -1510,8 +1774,8 @@ function ProjectOverviewPanel({ overview, content, sections, logs }: { overview:
 
 function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, tasks, onChanged }: ViewProps & { site: Site; providers: AiProvider[]; sections: Section[]; promptTemplates: PromptTemplate[]; tasks: Task[] }) {
   const [title, setTitle] = React.useState("");
-  const [geo, setGeo] = React.useState("DE");
-  const [language, setLanguage] = React.useState("de");
+  const [geo, setGeo] = React.useState(() => projectGeoCode(site));
+  const [language, setLanguage] = React.useState(() => projectLanguageCode(site));
   const [targetWords, setTargetWords] = React.useState(DEFAULT_TARGET_WORDS);
   const [topics, setTopics] = React.useState("");
   const [providerId, setProviderId] = React.useState("");
@@ -1528,6 +1792,11 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
   const [researchAction, setResearchAction] = React.useState("");
   const topicCount = topics.split("\n").map((line) => line.trim()).filter(Boolean).length;
   const selectedPrompt = promptTemplates.find((prompt) => prompt.id === promptTemplateId) || promptTemplates.find((prompt) => prompt.is_default) || promptTemplates[0];
+
+  React.useEffect(() => {
+    setGeo(projectGeoCode(site));
+    setLanguage(projectLanguageCode(site));
+  }, [site.id, site.cache_geo, site.cache_language, site.cache_canon]);
 
   React.useEffect(() => {
     const generationProviders = providers.filter(isGenerationProvider);
@@ -2239,6 +2508,7 @@ function ProjectPromptsPanel({ api, site, promptTemplates, basePrompt, isAdmin, 
 
 function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewProps & { site: Site; content: ContentItem[]; sections: Section[] }) {
   const [selectedItem, setSelectedItem] = React.useState<ContentItem | null>(null);
+  const [previewItem, setPreviewItem] = React.useState<ContentItem | null>(null);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [bulkSectionId, setBulkSectionId] = React.useState("");
   const [bulkBusy, setBulkBusy] = React.useState(false);
@@ -2464,7 +2734,8 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
             <StatusBadge status={item.status} />,
             item.published_url ? <a href={item.published_url} target="_blank" rel="noreferrer"><ExternalLink size={15} /> URL</a> : item.published_at ? formatDate(item.published_at) : "-",
             <div className="userActions">
-              <button className="button compact" type="button" onClick={() => openEditor(item)} disabled={isPublicationLocked(item)}><Edit3 size={15} /> Открыть</button>
+              <button className="button compact" type="button" onClick={() => openEditor(item)} disabled={isPublicationLocked(item)} title="Открыть и редактировать JSON payload"><Database size={15} /> JSON</button>
+              <button className="button compact" type="button" onClick={() => setPreviewItem(item)} title="Посмотреть готовый текст, Title и Meta Description"><Eye size={15} /> Текст + Meta</button>
               <button className="button compact approve" type="button" onClick={() => approve(item)} disabled={!canApproveContent(item)}>Approve</button>
             </div>
           ])}
@@ -2473,7 +2744,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
       </DataPanel>
 
       {selectedItem ? (
-        <Modal title={`Редактирование: ${selectedItem.topic}`} onClose={() => setSelectedItem(null)} wide>
+        <Modal title={`JSON: ${selectedItem.topic}`} subtitle="Редактирование полного JSON payload" onClose={() => setSelectedItem(null)} wide>
           <form className="formGrid modalForm" onSubmit={saveContent}>
             <label>
               Пункт меню
@@ -2498,6 +2769,9 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
             </div>
           </form>
         </Modal>
+      ) : null}
+      {previewItem ? (
+        <ContentPreviewModal item={previewItem} onClose={() => setPreviewItem(null)} />
       ) : null}
     </section>
   );
@@ -2621,66 +2895,398 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, mode
   );
 }
 
-function ProjectMenuPanel({ api, site, sections, onChanged }: ViewProps & { site: Site; sections: Section[] }) {
+function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: ViewProps & { site: Site; sections: Section[]; menuCapabilities: MenuCapabilities | null }) {
   const [name, setName] = React.useState("");
-  const [externalId, setExternalId] = React.useState("");
   const [path, setPath] = React.useState("");
   const [menuType, setMenuType] = React.useState<"header" | "footer">("header");
+  const [parentId, setParentId] = React.useState("");
   const [formError, setFormError] = React.useState("");
+  const [addExpanded, setAddExpanded] = React.useState(false);
+  const [inlineMenuType, setInlineMenuType] = React.useState<"header" | "footer" | null>(null);
+  const [addingMenuItemId, setAddingMenuItemId] = React.useState<string | null>(null);
+  const [libraryFormExpanded, setLibraryFormExpanded] = React.useState(false);
+  const [libraryName, setLibraryName] = React.useState("");
+  const [libraryPath, setLibraryPath] = React.useState("");
+  const [savingLibraryItem, setSavingLibraryItem] = React.useState(false);
+  const [editingLibraryItem, setEditingLibraryItem] = React.useState<MenuLibraryItem | null>(null);
+  const [editingLibraryName, setEditingLibraryName] = React.useState("");
+  const [editingLibraryPath, setEditingLibraryPath] = React.useState("");
+  const [editingLibraryRussianName, setEditingLibraryRussianName] = React.useState("");
+  const [savingLibraryEdit, setSavingLibraryEdit] = React.useState(false);
+  const [updatedAt, setUpdatedAt] = React.useState<string | null>(null);
+  const [editingSectionId, setEditingSectionId] = React.useState<string | null>(null);
+  const [editingSectionName, setEditingSectionName] = React.useState("");
+  const [editingSectionPath, setEditingSectionPath] = React.useState("");
+  const [savingSectionEdit, setSavingSectionEdit] = React.useState(false);
+  const [deletingSectionId, setDeletingSectionId] = React.useState<string | null>(null);
+  const cachedHeader = Array.isArray(site.default_menu.header) ? site.default_menu.header : [];
+  const cachedFooter = Array.isArray(site.default_menu.footer) ? site.default_menu.footer : [];
+  const menuLibrary = React.useMemo(() => {
+    const itemsById = new Map(getMenuLibrary(site.cache_language).map((item) => [item.external_id, item]));
+    for (const item of Array.isArray(site.menu_library) ? site.menu_library : []) itemsById.set(item.external_id, item);
+    return Array.from(itemsById.values());
+  }, [site.cache_language, site.menu_library]);
+  const existingSectionIds = React.useMemo(() => new Set(sections.map((section) => section.external_id)), [sections]);
+  const pendingSections = React.useMemo(() => sections.filter((section) => section.sync_status !== "synced"), [sections]);
+  const latestPendingChange = React.useMemo(() => pendingSections.reduce<string | null>((latest, section) => {
+    if (!latest || new Date(section.updated_at).getTime() > new Date(latest).getTime()) return section.updated_at;
+    return latest;
+  }, null), [pendingSections]);
+  const menuLibraryListId = React.useId();
 
-  async function createSection(event: React.FormEvent) {
-    event.preventDefault();
-    setFormError("");
-    await api(`/sites/${site.id}/sections`, {
-      method: "POST",
-      body: JSON.stringify({
-        name,
-        external_id: externalId || slugFromText(name),
-        path: path || "/",
-        menu_type: menuType
-      })
-    });
+  React.useEffect(() => {
     setName("");
-    setExternalId("");
     setPath("");
-    setMenuType("header");
-    await onChanged();
+    setParentId("");
+    setInlineMenuType(null);
+    setLibraryFormExpanded(false);
+    setLibraryName("");
+    setLibraryPath("");
+    setEditingLibraryItem(null);
+    setUpdatedAt(null);
+  }, [site.id]);
+
+  function updateMenuName(value: string) {
+    setName(value);
+    const libraryItem = menuLibrary.find((item) => item.name === value);
+    if (libraryItem) setPath(libraryItem.path);
+  }
+
+  function openInlineForm(targetMenuType: "header" | "footer") {
+    setName("");
+    setPath("");
+    setMenuType(targetMenuType);
+    setParentId("");
+    setInlineMenuType((current) => current === targetMenuType ? null : targetMenuType);
+    setAddExpanded(false);
+    setFormError("");
+  }
+
+  function startSectionEdit(section: Section) {
+    setEditingSectionId(section.id);
+    setEditingSectionName(section.name);
+    setEditingSectionPath(section.path);
+    setFormError("");
+  }
+
+  function cancelSectionEdit() {
+    setEditingSectionId(null);
+    setEditingSectionName("");
+    setEditingSectionPath("");
+  }
+
+  async function saveSectionEdit(section: Section) {
+    if (!editingSectionName.trim() || !editingSectionPath.trim()) return;
+    setSavingSectionEdit(true);
+    setFormError("");
+    try {
+      const updated = await api<Section>(`/sites/${site.id}/sections/${section.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name: editingSectionName.trim(), path: editingSectionPath.trim() })
+      });
+      setUpdatedAt(updated.updated_at);
+      cancelSectionEdit();
+      await onChanged();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось изменить пункт меню");
+    } finally {
+      setSavingSectionEdit(false);
+    }
+  }
+
+  async function deleteSection(section: Section) {
+    if (!window.confirm(`Удалить пункт меню «${section.name}» из нашей системы?`)) return;
+    setDeletingSectionId(section.id);
+    setFormError("");
+    try {
+      await api(`/sites/${site.id}/sections/${section.id}`, { method: "DELETE" });
+      if (editingSectionId === section.id) cancelSectionEdit();
+      setUpdatedAt(new Date().toISOString());
+      await onChanged();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось удалить пункт меню");
+    } finally {
+      setDeletingSectionId(null);
+    }
+  }
+
+  async function saveMenuItem(targetMenuType: "header" | "footer", item?: MenuLibraryItem) {
+    const itemName = (item?.name || name).trim();
+    const itemPath = (item?.path || path).trim();
+    if (!itemName || !itemPath) return;
+    setFormError("");
+    const pathWithoutEdgeSlashes = itemPath.replace(/^\/+|\/+$/g, "");
+    const normalizedPath = pathWithoutEdgeSlashes ? `/${pathWithoutEdgeSlashes}/` : "/";
+    const libraryItem = item || menuLibrary.find((candidate) => candidate.name === itemName);
+    const actionId = `${libraryItem?.external_id || slugFromText(itemName)}:${targetMenuType}`;
+    setAddingMenuItemId(actionId);
+    try {
+      const created = await api<Section>(`/sites/${site.id}/sections`, {
+        method: "POST",
+        body: JSON.stringify({
+          name: itemName,
+          external_id: libraryItem?.external_id || slugFromText(itemName),
+          path: normalizedPath,
+          menu_type: targetMenuType,
+          parent_id: parentId || null
+        })
+      });
+      setName("");
+      setPath("");
+      setParentId("");
+      setInlineMenuType(null);
+      setUpdatedAt(created.updated_at || new Date().toISOString());
+      await onChanged();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось добавить пункт меню");
+    } finally {
+      setAddingMenuItemId(null);
+    }
+  }
+
+  async function createSection(event: React.FormEvent, targetMenuType = menuType) {
+    event.preventDefault();
+    await saveMenuItem(targetMenuType);
+  }
+
+  async function addLibraryItem(event: React.FormEvent) {
+    event.preventDefault();
+    const itemName = libraryName.trim();
+    const rawPath = libraryPath.trim();
+    if (!itemName || !rawPath) return;
+    const pathWithoutEdgeSlashes = rawPath.replace(/^\/+|\/+$/g, "");
+    const normalizedPath = pathWithoutEdgeSlashes ? `/${pathWithoutEdgeSlashes}/` : "/";
+    setSavingLibraryItem(true);
+    setFormError("");
+    try {
+      await api<MenuLibraryItem>(`/sites/${site.id}/menu-library`, {
+        method: "POST",
+        body: JSON.stringify({
+          name: itemName,
+          path: normalizedPath,
+          external_id: slugFromText(itemName),
+          russian_name: ""
+        })
+      });
+      setLibraryName("");
+      setLibraryPath("");
+      setLibraryFormExpanded(false);
+      setUpdatedAt(new Date().toISOString());
+      await onChanged();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось добавить пункт в библиотеку");
+    } finally {
+      setSavingLibraryItem(false);
+    }
+  }
+
+  function openLibraryEdit(item: MenuLibraryItem) {
+    setEditingLibraryItem(item);
+    setEditingLibraryName(item.name);
+    setEditingLibraryPath(item.path);
+    setEditingLibraryRussianName(item.russian_name || "");
+    setFormError("");
+  }
+
+  async function saveLibraryEdit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!editingLibraryItem || !editingLibraryName.trim() || !editingLibraryPath.trim()) return;
+    setSavingLibraryEdit(true);
+    setFormError("");
+    try {
+      await api<MenuLibraryItem>(`/sites/${site.id}/menu-library/${encodeURIComponent(editingLibraryItem.external_id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: editingLibraryName.trim(),
+          path: editingLibraryPath.trim(),
+          russian_name: editingLibraryRussianName.trim()
+        })
+      });
+      setEditingLibraryItem(null);
+      setUpdatedAt(new Date().toISOString());
+      await onChanged();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось изменить пункт библиотеки");
+    } finally {
+      setSavingLibraryEdit(false);
+    }
+  }
+
+  function menuFields(targetMenuType?: "header" | "footer") {
+    const effectiveMenuType = targetMenuType || menuType;
+    const nestingSupported = effectiveMenuType === "header" ? menuCapabilities?.header_menu_nested : menuCapabilities?.footer_menu_nested;
+    const possibleParents = sections.filter((section) => section.menu_type === effectiveMenuType && !section.parent_id);
+    return (
+      <>
+        <label>
+          Пункт меню
+          <input list={menuLibraryListId} value={name} onChange={(event) => updateMenuName(event.target.value)} placeholder="Выберите или введите свой" required />
+          <datalist id={menuLibraryListId}>
+            {menuLibrary.map((item) => <option value={item.name} label={`* ${item.russian_name} · ${item.path}`} key={item.external_id} />)}
+          </datalist>
+        </label>
+        <label>
+          URL
+          <input value={path} onChange={(event) => setPath(event.target.value)} placeholder="casino-bonuses" required />
+        </label>
+        {nestingSupported && possibleParents.length ? <label>
+          Родительский пункт
+          <select value={parentId} onChange={(event) => setParentId(event.target.value)}>
+            <option value="">Без вложенности</option>
+            {possibleParents.map((section) => <option value={section.id} key={section.id}>{section.name}</option>)}
+          </select>
+        </label> : null}
+        {targetMenuType ? (
+          <div className="siteMenuInlineActions">
+            <button className="button siteMenuCancelButton" type="button" onClick={() => { setInlineMenuType(null); setName(""); setPath(""); setParentId(""); }} disabled={Boolean(addingMenuItemId)}>Отменить</button>
+            <button className="button primary" type="submit" disabled={Boolean(addingMenuItemId)}>{addingMenuItemId ? "Сохраняем" : "Сохранить"}</button>
+          </div>
+        ) : <button className="button primary" type="submit" disabled={Boolean(addingMenuItemId)}>{addingMenuItemId ? "Сохраняем" : "Сохранить"}</button>}
+      </>
+    );
   }
 
   return (
     <section className="viewStack">
-      <DataPanel title="Добавить пункт меню">
-        <form className="formGrid" onSubmit={createSection}>
-          <label>
-            Название
-            <input value={name} onChange={(event) => setName(event.target.value)} required />
-          </label>
-          <label>
-            External ID
-            <input value={externalId} onChange={(event) => setExternalId(event.target.value)} placeholder="casino-bonuses" />
-          </label>
-          <label className="wide">
-            Path
-            <input value={path} onChange={(event) => setPath(event.target.value)} placeholder="/casino-bonuses/" />
-          </label>
-          <label>
-            Тип меню
-            <select value={menuType} onChange={(event) => setMenuType(event.target.value as "header" | "footer")}>
-              <option value="header">Header</option>
-              <option value="footer">Footer</option>
-            </select>
-          </label>
-          {formError ? <span className="formError wide">{formError}</span> : null}
-          <div className="formActions wide"><button className="button primary" type="submit"><Plus size={18} /> Добавить</button></div>
-        </form>
+      <DataPanel title="Структура меню проекта">
+        <div className={`projectMenuSyncState ${pendingSections.length ? "isPending" : "isSynced"}`}>
+          {pendingSections.length ? <AlertTriangle size={18} /> : <CheckCircle2 size={18} />}
+          <div>
+            <strong>{pendingSections.length ? `Не синхронизировано изменений: ${pendingSections.length}` : "Данные синхронизированы"}</strong>
+            <span>Последняя синхронизация с проектом: {site.cache_synced_at ? formatDate(site.cache_synced_at) : "ещё не выполнялась"}</span>
+            {latestPendingChange ? <small>Последнее изменение в нашей системе: {formatDate(latestPendingChange)}</small> : null}
+          </div>
+        </div>
+        <section className={`menuAddPanel embeddedMenuAddPanel ${addExpanded ? "expanded" : ""}`}>
+          <button className="menuAddToggle" type="button" onClick={() => { setInlineMenuType(null); setAddExpanded((current) => !current); }} aria-expanded={addExpanded}>
+            <span className="menuAddToggleIcon"><Plus size={18} /></span>
+            <span><strong>Добавить пункт меню</strong><small>{addExpanded ? "Нажмите, чтобы свернуть" : "Добавить новый пункт в существующую структуру"}</small></span>
+            {addExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+          </button>
+          {addExpanded ? <form className="menuAddForm simplifiedMenuForm" onSubmit={createSection}>
+            <label>
+              Тип меню
+              <select value={menuType} onChange={(event) => setMenuType(event.target.value as "header" | "footer")}>
+                <option value="header">Header</option>
+                <option value="footer">Footer</option>
+              </select>
+            </label>
+            {menuFields()}
+            {formError ? <span className="formError simplifiedMenuFormError">{formError}</span> : null}
+            {updatedAt ? <span className="formSuccess simplifiedMenuFormError">Информация обновлена: {formatDate(updatedAt)}</span> : null}
+          </form> : null}
+        </section>
+        <div className="projectMenuStructureGrid">
+          <SiteMenuPreviewSection title="Меню Header" icon={<HeaderMenuIcon />} items={cachedHeader} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("header")}><Plus size={15} /> Добавить пункт в Header</button>}>
+            {inlineMenuType === "header" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "header")}>{menuFields("header")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
+          </SiteMenuPreviewSection>
+          <SiteMenuPreviewSection title="Меню Footer" icon={<FooterMenuIcon />} items={cachedFooter} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("footer")}><Plus size={15} /> Добавить пункт в Footer</button>}>
+            {inlineMenuType === "footer" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "footer")}>{menuFields("footer")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
+          </SiteMenuPreviewSection>
+        </div>
+        {sections.length ? <ResponsiveTable
+          wrapperClassName="pendingMenuChangesTable"
+          columns={["Название", "Тип меню", "URL", "Изменено", "Состояние", "Действия"]}
+          rows={sections.map((section) => {
+            const editing = editingSectionId === section.id;
+            return [
+              editing ? <input className="menuSectionEditInput" value={editingSectionName} onChange={(event) => setEditingSectionName(event.target.value)} aria-label="Название пункта меню" /> : section.name,
+              section.menu_type === "footer" ? "Footer" : "Header",
+              editing ? <input className="menuSectionEditInput" value={editingSectionPath} onChange={(event) => setEditingSectionPath(event.target.value)} aria-label="URL пункта меню" /> : section.path,
+              formatDate(section.synced_at || section.updated_at),
+              section.sync_status === "synced" ? <span className="syncedBadge">Синхронизировано</span> : <span className="pendingSyncBadge">Не синхронизировано</span>,
+              editing ? <div className="menuSectionEditActions"><button className="button compact secondary" type="button" onClick={cancelSectionEdit} disabled={savingSectionEdit}>Отменить</button><button className="button compact primary" type="button" onClick={() => saveSectionEdit(section)} disabled={savingSectionEdit}>Сохранить</button></div> : <div className="menuSectionEditActions"><button className="button compact secondary" type="button" onClick={() => startSectionEdit(section)} disabled={deletingSectionId === section.id}><Edit3 size={14} /> Изменить</button><button className="button compact danger" type="button" onClick={() => deleteSection(section)} disabled={deletingSectionId === section.id}><Trash2 size={14} /> {deletingSectionId === section.id ? "Удаляем" : "Удалить"}</button></div>
+            ];
+          })}
+        /> : null}
       </DataPanel>
-      <DataPanel title="Пункты меню проекта">
-        <ResponsiveTable
-          columns={["Название", "Тип меню", "External ID", "Path"]}
-          rows={sections.map((section) => [section.name, section.menu_type === "footer" ? "Footer" : "Header", section.external_id, section.path])}
-        />
+      <DataPanel
+        title={`Библиотека пунктов меню · ${menuLibrary.length}`}
+        actions={<button className="button secondary compact" type="button" onClick={() => setLibraryFormExpanded((current) => !current)}><Plus size={15} /> Новый пункт</button>}
+      >
+          {libraryFormExpanded ? (
+            <form className="menuLibraryCreateForm" onSubmit={addLibraryItem}>
+              <label>Название<input value={libraryName} onChange={(event) => setLibraryName(event.target.value)} placeholder="Введите название" required /></label>
+              <label>URL<input value={libraryPath} onChange={(event) => setLibraryPath(event.target.value)} placeholder="new-section" required /></label>
+              <button className="button primary compact" type="submit" disabled={savingLibraryItem}><Plus size={15} /> {savingLibraryItem ? "Сохраняем" : "Добавить в библиотеку"}</button>
+            </form>
+          ) : null}
+          <div className="menuItemLibraryHeader">
+            <div>
+              <strong>Выберите отдельный пункт</strong>
+              <span>Быстрое добавление в Header или Footer</span>
+            </div>
+            <b>{site.cache_language}</b>
+          </div>
+          {updatedAt ? <div className="formSuccess">Информация обновлена: {formatDate(updatedAt)}</div> : null}
+          {formError ? <div className="formError">{formError}</div> : null}
+          <div className="menuItemLibraryGrid">
+            {menuLibrary.map((item) => {
+              const alreadyAdded = existingSectionIds.has(item.external_id);
+              const addingToHeader = addingMenuItemId === `${item.external_id}:header`;
+              const addingToFooter = addingMenuItemId === `${item.external_id}:footer`;
+              return (
+                <article className={`menuItemLibraryCard ${alreadyAdded ? "isAdded" : ""}`} key={item.external_id}>
+                  <div className="menuItemLibraryText">
+                    <strong>{item.name}</strong>
+                    <code>{item.path}</code>
+                    {item.russian_name ? <small>* {item.russian_name}</small> : null}
+                  </div>
+                  <div className="menuItemLibraryActions">
+                    <button className="button compact menuLibraryEditButton" type="button" data-tooltip="Редактировать" aria-label={`Редактировать ${item.name}`} onClick={() => openLibraryEdit(item)}>
+                      <Edit3 size={14} />
+                    </button>
+                    {alreadyAdded ? <span>Уже добавлен</span> : (
+                      <>
+                        <button className="button compact menuPlacementButton" type="button" data-tooltip="Добавить в Header" aria-label={`Добавить ${item.name} в Header`} onClick={() => saveMenuItem("header", item)} disabled={Boolean(addingMenuItemId)}>
+                          <HeaderMenuIcon /> {addingToHeader ? "Добавляем" : "Header"}
+                        </button>
+                        <button className="button compact menuPlacementButton" type="button" data-tooltip="Добавить в Footer" aria-label={`Добавить ${item.name} в Footer`} onClick={() => saveMenuItem("footer", item)} disabled={Boolean(addingMenuItemId)}>
+                          <FooterMenuIcon /> {addingToFooter ? "Добавляем" : "Footer"}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
       </DataPanel>
+      {editingLibraryItem ? (
+        <Modal title="Редактировать пункт библиотеки" subtitle="Изменения сохранятся только для выбранного проекта" onClose={() => setEditingLibraryItem(null)}>
+          <form className="menuLibraryEditForm" onSubmit={saveLibraryEdit}>
+            <label>Название<input value={editingLibraryName} onChange={(event) => setEditingLibraryName(event.target.value)} required autoFocus /></label>
+            <label>URL<input value={editingLibraryPath} onChange={(event) => setEditingLibraryPath(event.target.value)} required /></label>
+            <label>Перевод на русский<input value={editingLibraryRussianName} onChange={(event) => setEditingLibraryRussianName(event.target.value)} /></label>
+            {formError ? <span className="formError">{formError}</span> : null}
+            <div className="modalActions">
+              <button className="button secondary" type="button" onClick={() => setEditingLibraryItem(null)} disabled={savingLibraryEdit}>Отменить</button>
+              <button className="button primary" type="submit" disabled={savingLibraryEdit}>{savingLibraryEdit ? "Сохраняем" : "Сохранить"}</button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
     </section>
+  );
+}
+
+function HeaderMenuIcon() {
+  return (
+    <svg className="menuPlacementIcon" viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="2.5" y="3.5" width="19" height="17" rx="3" />
+      <path className="menuPlacementIconAccent" d="M3 7.5h18" />
+      <path d="M6.5 5.6h3M11 5.6h2" />
+    </svg>
+  );
+}
+
+function FooterMenuIcon() {
+  return (
+    <svg className="menuPlacementIcon" viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="2.5" y="3.5" width="19" height="17" rx="3" />
+      <path className="menuPlacementIconAccent" d="M3 16.5h18" />
+      <path d="M6.5 18.4h3M11 18.4h2" />
+    </svg>
   );
 }
 
@@ -2703,8 +3309,8 @@ function TasksView({
   sections?: Section[];
   promptTemplates?: PromptTemplate[];
 }) {
-  const [geo, setGeo] = React.useState("DE");
-  const [language, setLanguage] = React.useState("en");
+  const [geo, setGeo] = React.useState(() => projectGeoCode(fixedSite));
+  const [language, setLanguage] = React.useState(() => projectLanguageCode(fixedSite));
   const [topics, setTopics] = React.useState("");
   const [siteId, setSiteId] = React.useState(fixedSite?.id || "");
   const [providerId, setProviderId] = React.useState("");
@@ -2713,10 +3319,18 @@ function TasksView({
   const [targetWords, setTargetWords] = React.useState(DEFAULT_TARGET_WORDS);
   const [payloadMode, setPayloadMode] = React.useState("site_default");
   const [shortcode, setShortcode] = React.useState("");
-  const [includeToc, setIncludeToc] = React.useState(true);
-  const [includeFaq, setIncludeFaq] = React.useState(true);
-  const [collectCompetitors, setCollectCompetitors] = React.useState(false);
+  const taskCheckboxPreferences = React.useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem("task_create_checkbox_preferences") || "{}") as Partial<Record<"includeToc" | "includeFaq" | "collectCompetitors", boolean>>;
+    } catch {
+      return {};
+    }
+  }, []);
+  const [includeToc, setIncludeToc] = React.useState(taskCheckboxPreferences.includeToc ?? true);
+  const [includeFaq, setIncludeFaq] = React.useState(taskCheckboxPreferences.includeFaq ?? true);
+  const [collectCompetitors, setCollectCompetitors] = React.useState(taskCheckboxPreferences.collectCompetitors ?? false);
   const [createFormExpanded, setCreateFormExpanded] = React.useState(false);
+  const [creatingTaskAction, setCreatingTaskAction] = React.useState<"draft" | "start" | "">("");
   const [expandedTaskId, setExpandedTaskId] = React.useState("");
   const [expandedDetails, setExpandedDetails] = React.useState<TaskDetails | null>(null);
   const [expandedResearch, setExpandedResearch] = React.useState<CompetitorResearch[]>([]);
@@ -2746,6 +3360,12 @@ function TasksView({
   }, [fixedSite, siteId]);
 
   React.useEffect(() => {
+    if (!selectedSite) return;
+    setGeo(projectGeoCode(selectedSite));
+    setLanguage(projectLanguageCode(selectedSite));
+  }, [selectedSite?.id, selectedSite?.cache_geo, selectedSite?.cache_language, selectedSite?.cache_canon]);
+
+  React.useEffect(() => {
     const generationProviders = providers.filter(isGenerationProvider);
     if (!providerId || !generationProviders.some((provider) => provider.id === providerId)) {
       const geminiProvider = generationProviders.find((provider) => provider.provider_type === "gemini" && provider.is_active);
@@ -2758,6 +3378,10 @@ function TasksView({
       setPromptTemplateId((promptTemplates.find((prompt) => prompt.is_default) || promptTemplates[0]).id);
     }
   }, [promptTemplateId, promptTemplates]);
+
+  React.useEffect(() => {
+    localStorage.setItem("task_create_checkbox_preferences", JSON.stringify({ includeToc, includeFaq, collectCompetitors }));
+  }, [includeToc, includeFaq, collectCompetitors]);
 
   React.useEffect(() => {
     if (!expandedTaskId || (!hasResearchInProgress && !hasGenerationInProgress)) return;
@@ -2789,6 +3413,8 @@ function TasksView({
 
   async function createTask(event: React.FormEvent) {
     event.preventDefault();
+    const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+    const action = submitter?.value === "draft" ? "draft" : "start";
     setTaskError("");
     if (!siteId) {
       setTaskError("Выберите проект для создания задачи.");
@@ -2808,12 +3434,14 @@ function TasksView({
       include_toc: includeToc,
       include_faq: includeFaq,
       collect_competitors: collectCompetitors,
+      save_as_draft: action === "draft",
       topics: cleanTopics
     };
+    setCreatingTaskAction(action);
     try {
       const task = await api<Task>("/tasks", { method: "POST", body: JSON.stringify(payload) });
-      if (!collectCompetitors) {
-        await api(`/tasks/${task.id}/generate`, { method: "POST" });
+      if (action === "start") {
+        await api(`/tasks/${task.id}/start`, { method: "POST" });
       }
       setTopics("");
       setShortcode("");
@@ -2821,6 +3449,8 @@ function TasksView({
       await onChanged();
     } catch (error) {
       setTaskError(error instanceof Error ? error.message : "Не удалось создать задачу.");
+    } finally {
+      setCreatingTaskAction("");
     }
   }
 
@@ -2874,6 +3504,37 @@ function TasksView({
       await onChanged();
     } catch (error) {
       setTaskError(error instanceof Error ? error.message : "Не удалось переместить задачу в архив.");
+    } finally {
+      setTaskActionId("");
+    }
+  }
+
+  async function startTaskPipeline(task: Task) {
+    setTaskError("");
+    setTaskActionId(`${task.id}:start`);
+    try {
+      await api(`/tasks/${task.id}/start`, { method: "POST" });
+      if (expandedTaskId === task.id) await loadTaskDetails(task.id);
+      await onChanged();
+    } catch (error) {
+      setTaskError(error instanceof Error ? error.message : "Не удалось запустить задачу.");
+    } finally {
+      setTaskActionId("");
+    }
+  }
+
+  async function changeTaskSection(task: Task, nextSectionId: string) {
+    setTaskError("");
+    setTaskActionId(`${task.id}:section`);
+    try {
+      await api<Task>(`/tasks/${task.id}/section`, {
+        method: "PATCH",
+        body: JSON.stringify({ section_id: nextSectionId || null })
+      });
+      if (expandedTaskId === task.id) await loadTaskDetails(task.id);
+      await onChanged();
+    } catch (error) {
+      setTaskError(error instanceof Error ? error.message : "Не удалось выбрать пункт меню.");
     } finally {
       setTaskActionId("");
     }
@@ -3206,8 +3867,11 @@ function TasksView({
             <span className="fieldHint">Тем в задаче: {cleanTopics.length}</span>
           </label>
           <div className="formActions wide">
-            <button className="button primary" type="submit">
-              <Plus size={18} /> {collectCompetitors ? "Создать без автогенерации" : "Создать и сгенерировать"}
+            <button className="button secondary" type="submit" name="taskAction" value="draft" disabled={Boolean(creatingTaskAction)}>
+              <FileText size={18} /> {creatingTaskAction === "draft" ? "Сохраняем" : "Сохранить как черновик"}
+            </button>
+            <button className="button primary" type="submit" name="taskAction" value="start" disabled={Boolean(creatingTaskAction)}>
+              <Play size={18} /> {creatingTaskAction === "start" ? "Запускаем" : "Запустить"}
             </button>
           </div>
         </form> : null}
@@ -3215,12 +3879,15 @@ function TasksView({
       <DataPanel title="Все задачи">
         <AdminTasksAccordion
           tasks={tasks}
+          sections={sections}
           expandedTaskId={expandedTaskId}
           expandedDetails={expandedDetails}
           research={expandedResearch}
           loadingId={detailsLoadingId}
           actionId={taskActionId}
           onToggle={toggleTask}
+          onStart={startTaskPipeline}
+          onSectionChange={changeTaskSection}
           onArchive={archiveTask}
           onEditQueries={openQueryEditor}
           onRegenerateQueries={regenerateCompetitorQueries}
@@ -3316,12 +3983,15 @@ function TaskArchiveView({ api, tasks, onChanged }: ViewProps & { tasks: Task[] 
 
 function AdminTasksAccordion({
   tasks,
+  sections,
   expandedTaskId,
   expandedDetails,
   research,
   loadingId,
   actionId,
   onToggle,
+  onStart,
+  onSectionChange,
   onArchive,
   onEditQueries,
   onRegenerateQueries,
@@ -3337,12 +4007,15 @@ function AdminTasksAccordion({
   onShowPrompt
 }: {
   tasks: Task[];
+  sections: Section[];
   expandedTaskId: string;
   expandedDetails: TaskDetails | null;
   research: CompetitorResearch[];
   loadingId: string;
   actionId: string;
   onToggle: (task: Task) => Promise<void>;
+  onStart: (task: Task) => Promise<void>;
+  onSectionChange: (task: Task, sectionId: string) => Promise<void>;
   onArchive: (task: Task) => Promise<void>;
   onEditQueries: (item: ContentItem) => Promise<void>;
   onRegenerateQueries: (item: ContentItem) => Promise<void>;
@@ -3458,7 +4131,7 @@ function AdminTasksAccordion({
             <th>Создана</th>
             <th>Гео</th>
             <th>Язык</th>
-            <th>Формат</th>
+            <th>Пункт меню</th>
             <th>Тем</th>
             <th>Статус</th>
             <th>Действия</th>
@@ -3488,21 +4161,46 @@ function AdminTasksAccordion({
                   <td data-label="Создана">{formatDate(task.created_at)}</td>
                   <td data-label="Гео">{countryLabel(task.geo)}</td>
                   <td data-label="Язык">{languageLabel(task.language)}</td>
-                  <td data-label="Формат">{humanPayloadMode(task.payload_mode)}</td>
+                  <td data-label="Пункт меню" onClick={(event) => event.stopPropagation()}>
+                    <select
+                      className={`taskMenuSectionSelect ${task.section_id ? "hasValue" : ""}`}
+                      value={task.section_id || ""}
+                      onChange={(event) => onSectionChange(task, event.target.value)}
+                      disabled={actionId === `${task.id}:section` || !sections.length}
+                      aria-label={`Пункт меню задачи ${task.title}`}
+                    >
+                      <option value="">Не выбран</option>
+                      {sections.map((section) => <option value={section.id} key={section.id}>{section.name} · {section.path}</option>)}
+                    </select>
+                  </td>
                   <td data-label="Тем">{task.topics_count}</td>
                   <td data-label="Статус"><StatusBadge status={task.status} /></td>
                   <td data-label="Действия">
-                    <button
-                      className="button compact danger"
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onArchive(task);
-                      }}
-                      disabled={loading || actionId === `${task.id}:archive`}
-                    >
-                      <Archive size={15} /> {actionId === `${task.id}:archive` ? "Переношу" : "Удалить"}
-                    </button>
+                    <span className="taskRowActions">
+                      <button
+                        className="button compact primary"
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onStart(task);
+                        }}
+                        disabled={loading || actionId === `${task.id}:start` || ["generation_queued", "generating"].includes(task.status)}
+                        title="Собрать или повторно собрать конкурентов и запустить генерацию всех незавершённых тем"
+                      >
+                        <Play size={15} /> {actionId === `${task.id}:start` ? "Запускаю" : "Запустить"}
+                      </button>
+                      <button
+                        className="button compact danger"
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onArchive(task);
+                        }}
+                        disabled={loading || actionId === `${task.id}:archive`}
+                      >
+                        <Archive size={15} /> {actionId === `${task.id}:archive` ? "Переношу" : "Удалить"}
+                      </button>
+                    </span>
                   </td>
                 </tr>
                 {expanded ? (
@@ -4247,7 +4945,63 @@ function ProvidersView({ api, providers, onChanged }: ViewProps & { providers: A
   );
 }
 
-function SitesView({ api, sites, currentUsername, onChanged }: ViewProps & { sites: Site[]; currentUsername: string }) {
+type SiteTableColumn = "rowNumber" | "select" | "name" | "title" | "canon" | "language" | "status" | "internalPages" | "menuType" | "menuCount" | "domainsCount";
+type SiteSummaryFilter = "projects" | "working" | "menu" | "test" | "duplicate" | "all";
+
+const DEFAULT_SITE_COLUMN_ORDER: SiteTableColumn[] = ["rowNumber", "select", "name", "title", "canon", "language", "status", "internalPages", "menuType", "menuCount", "domainsCount"];
+const SITE_COLUMN_LABELS: Record<SiteTableColumn, string> = {
+  rowNumber: "№",
+  select: "",
+  name: "Name",
+  title: "Title главной",
+  canon: "Canon",
+  language: "Язык",
+  status: "Статус",
+  internalPages: "Внутренние страницы",
+  menuType: "Тип меню",
+  menuCount: "Пункты меню",
+  domainsCount: "Доменов в сетке"
+};
+const SITE_COLUMN_SORT_KEYS: Record<SiteTableColumn, string | null> = {
+  rowNumber: null,
+  select: null,
+  name: "name",
+  title: "title",
+  canon: "canon",
+  language: "language",
+  status: "status",
+  internalPages: "internalPages",
+  menuType: "menuType",
+  menuCount: "menuCount",
+  domainsCount: "domainsCount"
+};
+
+const LANGUAGE_COUNTRIES: Record<string, string> = {
+  ar: "AE", bg: "BG", cs: "CZ", da: "DK", de: "DE", en: "GB", es: "ES", et: "EE", fi: "FI",
+  fr: "FR", hu: "HU", it: "IT", lt: "LT", nl: "NL", pl: "PL", pt: "PT", ro: "RO", ru: "RU",
+  sk: "SK", sr: "RS", sv: "SE", tr: "TR", uk: "UA"
+};
+
+function localeCountryCode(value: string): string | null {
+  const parts = value.trim().split(/[-_]/).filter(Boolean);
+  const explicitCountry = [...parts].reverse().find((part, index) => part.length === 2 && (parts.length > 1 || index > 0));
+  if (explicitCountry) return explicitCountry.toUpperCase();
+  const normalized = parts[0]?.toLowerCase() || "";
+  return LANGUAGE_COUNTRIES[normalized] || (normalized.length === 2 ? normalized.toUpperCase() : null);
+}
+
+function localeFlag(countryCode: string | null): string {
+  if (!countryCode || !/^[A-Z]{2}$/.test(countryCode)) return "";
+  return String.fromCodePoint(...countryCode.split("").map((character) => 127397 + character.charCodeAt(0)));
+}
+
+function LocaleCode({ value }: { value: string | null }) {
+  if (!value) return <>—</>;
+  const flag = localeFlag(localeCountryCode(value));
+  return <span className="siteLocaleCode">{flag ? <span aria-hidden="true">{flag}</span> : null}<b>{value.replace(/_/g, "-")}</b></span>;
+}
+
+function SitesView({ api, sites, currentUsername, favoritesOnly = false, onChanged }: ViewProps & { sites: Site[]; currentUsername: string; favoritesOnly?: boolean }) {
   const preferencesKey = `sites-table-preferences:${currentUsername}`;
   const storedPreferences = React.useMemo(() => {
     try {
@@ -4255,6 +5009,10 @@ function SitesView({ api, sites, currentUsername, onChanged }: ViewProps & { sit
         statusFilters?: Site["project_status"][];
         menuTypeFilters?: string[];
         siteSort?: { key: string; direction: "asc" | "desc" } | null;
+        columnOrder?: SiteTableColumn[];
+        hiddenColumns?: SiteTableColumn[];
+        rowsPerPage?: number | "all";
+        summaryFilter?: SiteSummaryFilter | null;
       };
     } catch {
       return {};
@@ -4267,9 +5025,16 @@ function SitesView({ api, sites, currentUsername, onChanged }: ViewProps & { sit
   const [syncError, setSyncError] = React.useState("");
   const [selectedProjectNames, setSelectedProjectNames] = React.useState<string[]>([]);
   const [syncMessage, setSyncMessage] = React.useState("");
-  const [siteSort, setSiteSort] = React.useState<{ key: string; direction: "asc" | "desc" } | null>(storedPreferences.siteSort || null);
+  const [summaryFilter, setSummaryFilter] = React.useState<SiteSummaryFilter | null>(() => storedPreferences.summaryFilter || null);
+  const [siteSort, setSiteSort] = React.useState<{ key: string; direction: "asc" | "desc" } | null>(storedPreferences.siteSort?.key === "geo" ? null : storedPreferences.siteSort || null);
   const [deletingDuplicates, setDeletingDuplicates] = React.useState(false);
   const [menuPreview, setMenuPreview] = React.useState<{ name: string; header: unknown[]; footer: unknown[] } | null>(null);
+  const [columnsSettingsOpen, setColumnsSettingsOpen] = React.useState(false);
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [rowsPerPage, setRowsPerPage] = React.useState<number | "all">(() => {
+    const stored = storedPreferences.rowsPerPage;
+    return stored === "all" || [25, 50, 100, 250].includes(Number(stored)) ? stored as number | "all" : 50;
+  });
   const statusFilterOptions: Array<{ value: Site["project_status"]; label: string }> = [
     { value: "test", label: "Тестовый" },
     { value: "working", label: "Рабочий" },
@@ -4292,10 +5057,30 @@ function SitesView({ api, sites, currentUsername, onChanged }: ViewProps & { sit
     const stored = storedPreferences.menuTypeFilters;
     return Array.isArray(stored) && stored.every((value) => allMenuTypeFilters.includes(value)) ? stored : allMenuTypeFilters;
   });
+  const [columnOrder, setColumnOrder] = React.useState<SiteTableColumn[]>(() => {
+    const stored = storedPreferences.columnOrder;
+    return Array.isArray(stored)
+      && stored.length === DEFAULT_SITE_COLUMN_ORDER.length
+      && DEFAULT_SITE_COLUMN_ORDER.every((column) => stored.includes(column))
+      ? stored
+      : DEFAULT_SITE_COLUMN_ORDER;
+  });
+  const [hiddenColumns, setHiddenColumns] = React.useState<SiteTableColumn[]>(() => {
+    const stored = storedPreferences.hiddenColumns;
+    return Array.isArray(stored) && stored.every((column) => DEFAULT_SITE_COLUMN_ORDER.includes(column)) ? stored : [];
+  });
+  const [favoriteSiteIds, setFavoriteSiteIds] = React.useState<string[]>([]);
+  const visibleColumnOrder = columnOrder.filter((column) => !hiddenColumns.includes(column));
 
   React.useEffect(() => {
-    localStorage.setItem(preferencesKey, JSON.stringify({ statusFilters, menuTypeFilters, siteSort }));
-  }, [menuTypeFilters, preferencesKey, siteSort, statusFilters]);
+    localStorage.setItem(preferencesKey, JSON.stringify({ statusFilters, menuTypeFilters, siteSort, columnOrder, hiddenColumns, rowsPerPage, summaryFilter }));
+  }, [columnOrder, hiddenColumns, menuTypeFilters, preferencesKey, rowsPerPage, siteSort, statusFilters, summaryFilter]);
+
+  React.useEffect(() => {
+    api<{ site_ids: string[] }>("/me/favorite-sites")
+      .then((result) => setFavoriteSiteIds(result.site_ids))
+      .catch((error: unknown) => setSyncError(error instanceof Error ? error.message : "Не удалось загрузить избранное"));
+  }, [api]);
 
   const loadManagedSites = React.useCallback(async () => {
     setManagedSites(await api<Site[]>("/sites/cache/projects"));
@@ -4322,12 +5107,12 @@ function SitesView({ api, sites, currentUsername, onChanged }: ViewProps & { sit
       });
       setSyncMessage(names.length
         ? `Обновлено выбранных проектов: ${result.updated_count + result.created_count}.`
-        : `Кеш получен: ${formatNumber(result.cache_count)} сайтов. Рабочих проектов: ${result.matched_count}; добавлено: ${result.created_count}; обновлено: ${result.updated_count}.`);
+        : `Данные получены: ${formatNumber(result.cache_count)} сайтов. Рабочих проектов: ${result.matched_count}; добавлено: ${result.created_count}; обновлено: ${result.updated_count}.`);
       if (names.length) setSelectedProjectNames([]);
       onChanged();
       await loadManagedSites();
     } catch (error) {
-      setSyncError(error instanceof Error ? error.message : "Не удалось получить кеш проектов");
+      setSyncError(error instanceof Error ? error.message : "Не удалось получить данные проектов");
     } finally {
       setSyncing(false);
     }
@@ -4346,7 +5131,11 @@ function SitesView({ api, sites, currentUsername, onChanged }: ViewProps & { sit
       key: `site:${site.id}`,
       id: site.id,
       name: site.name,
+      baseUrl: site.base_url,
+      isFavorite: favoriteSiteIds.includes(site.id),
       canon: site.cache_canon || site.base_url.replace(/^https?:\/\//, "").replace(/\/$/, ""),
+      language: site.cache_language,
+      geo: site.cache_geo,
       homepageTitle: site.homepage_title,
       externalProjectId: site.external_project_id,
       isTest: site.is_test_project,
@@ -4362,9 +5151,12 @@ function SitesView({ api, sites, currentUsername, onChanged }: ViewProps & { sit
       menuCount: headerMenuCount + footerMenuCount,
       internalPagesCount: site.internal_pages_count,
       domainsCount: site.domains_count,
+      domains: Array.isArray(site.cache_domains) ? site.cache_domains : [],
       syncedAt: site.cache_synced_at
     };
   }).sort((left, right) => {
+    const favoriteComparison = Number(right.isFavorite) - Number(left.isFavorite);
+    if (favoriteComparison) return favoriteComparison;
     if (!siteSort) {
       return statusPriority(left.projectStatus) - statusPriority(right.projectStatus)
         || Number(right.hasMenu) - Number(left.hasMenu)
@@ -4374,6 +5166,8 @@ function SitesView({ api, sites, currentUsername, onChanged }: ViewProps & { sit
       name: [left.name, right.name],
       title: [left.homepageTitle || "", right.homepageTitle || ""],
       canon: [left.canon, right.canon],
+      language: [left.language || "", right.language || ""],
+      geo: [left.geo || "", right.geo || ""],
       status: [statusPriority(left.projectStatus), statusPriority(right.projectStatus)],
       internalPages: [left.internalPagesCount, right.internalPagesCount],
       menuType: [left.menuType, right.menuType],
@@ -4387,11 +5181,25 @@ function SitesView({ api, sites, currentUsername, onChanged }: ViewProps & { sit
     return comparison * (siteSort.direction === "asc" ? 1 : -1) || left.name.localeCompare(right.name);
   });
   const normalizedQuery = searchQuery.trim().toLowerCase();
+  const matchesSummaryFilter = (row: (typeof domainRows)[number]) => {
+    if (!summaryFilter || summaryFilter === "all") return true;
+    if (summaryFilter === "projects") return Boolean(row.externalProjectId);
+    if (summaryFilter === "working") return row.projectStatus === "working";
+    if (summaryFilter === "menu") return row.hasMenu;
+    if (summaryFilter === "test") return row.projectStatus === "test";
+    return row.projectStatus === "duplicate";
+  };
   const filteredRows = domainRows.filter((row) => (
-    statusFilters.includes(row.projectStatus)
+    (!favoritesOnly || row.isFavorite)
+    && matchesSummaryFilter(row)
+    && statusFilters.includes(row.projectStatus)
     && menuTypeFilters.includes(row.menuTypeKey)
-    && (!normalizedQuery || [row.name, row.homepageTitle || "", row.canon, row.externalProjectId || "", row.projectStatus].some((value) => value.toLowerCase().includes(normalizedQuery)))
+    && (!normalizedQuery || [row.name, row.homepageTitle || "", row.canon, row.externalProjectId || "", row.projectStatus, ...row.domains].some((value) => value.toLowerCase().includes(normalizedQuery)))
   ));
+  const totalPages = rowsPerPage === "all" ? 1 : Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
+  const activePage = Math.min(currentPage, totalPages);
+  const pageStart = rowsPerPage === "all" ? 0 : (activePage - 1) * rowsPerPage;
+  const visibleRows = rowsPerPage === "all" ? filteredRows : filteredRows.slice(pageStart, pageStart + rowsPerPage);
   const workingCount = managedSites.filter((site) => site.project_status === "working").length;
   const menuCount = managedSites.filter((site) => site.has_menu).length;
   const duplicateCount = managedSites.filter((site) => site.project_status === "duplicate").length;
@@ -4405,8 +5213,23 @@ function SitesView({ api, sites, currentUsername, onChanged }: ViewProps & { sit
   const statusFilterActive = statusFilters.length !== statusFilterOptions.length;
   const menuTypeFilterActive = menuTypeFilters.length !== menuTypeFilterOptions.length;
 
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [menuTypeFilters, rowsPerPage, searchQuery, siteSort, statusFilters, summaryFilter]);
+
+  function toggleSummaryFilter(filter: SiteSummaryFilter) {
+    setSummaryFilter((current) => current === filter ? null : filter);
+  }
+
   function toggleSelectedProject(name: string) {
     setSelectedProjectNames((current) => current.includes(name) ? current.filter((item) => item !== name) : [...current, name]);
+  }
+
+  async function toggleFavoriteSite(siteId: string) {
+    const result = await api<{ site_ids: string[] }>(`/me/favorite-sites/${siteId}`, {
+      method: favoriteSiteIds.includes(siteId) ? "DELETE" : "PUT"
+    });
+    setFavoriteSiteIds(result.site_ids);
   }
 
   function toggleAllFilteredProjects() {
@@ -4417,7 +5240,7 @@ function SitesView({ api, sites, currentUsername, onChanged }: ViewProps & { sit
     });
   }
 
-  const siteSortKeys = [null, "name", "title", "canon", "status", "internalPages", "menuType", "menuCount", "domainsCount"];
+  const siteSortKeys = visibleColumnOrder.map((column) => SITE_COLUMN_SORT_KEYS[column]);
 
   function sortSitesByColumn(columnIndex: number) {
     const key = siteSortKeys[columnIndex];
@@ -4431,6 +5254,26 @@ function SitesView({ api, sites, currentUsername, onChanged }: ViewProps & { sit
 
   function toggleFilterValue<T extends string>(value: T, setValues: React.Dispatch<React.SetStateAction<T[]>>) {
     setValues((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
+  }
+
+  function moveSiteColumn(column: SiteTableColumn, direction: -1 | 1) {
+    setColumnOrder((current) => {
+      const index = current.indexOf(column);
+      const nextIndex = index + direction;
+      if (column === "rowNumber" || index < 0 || nextIndex < 1 || nextIndex >= current.length) return current;
+      const next = [...current];
+      [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+      return next;
+    });
+  }
+
+  function toggleSiteColumn(column: SiteTableColumn) {
+    setHiddenColumns((current) => {
+      if (current.includes(column)) return current.filter((item) => item !== column);
+      if (visibleColumnOrder.length === 1) return current;
+      return [...current, column];
+    });
+    if (siteSort?.key === SITE_COLUMN_SORT_KEYS[column]) setSiteSort(null);
   }
 
   async function updateProjectStatus(siteId: string, projectStatus: Site["project_status"]) {
@@ -4449,7 +5292,7 @@ function SitesView({ api, sites, currentUsername, onChanged }: ViewProps & { sit
 
   async function deleteDuplicates() {
     if (!duplicateCount) return;
-    if (!window.confirm(`Удалить дубликаты из нашей системы: ${duplicateCount}? Внешний кеш изменён не будет.`)) return;
+    if (!window.confirm(`Удалить дубликаты из нашей системы: ${duplicateCount}? Внешние данные изменены не будут.`)) return;
     setDeletingDuplicates(true);
     setSyncError("");
     setSyncMessage("");
@@ -4471,16 +5314,16 @@ function SitesView({ api, sites, currentUsername, onChanged }: ViewProps & { sit
       <DataPanel title="Панель управления сайтами">
         <div className="siteCacheToolbar">
           <div className="siteCacheStats">
-            <div><span>В кеше</span><strong>{formatNumber(cacheResult?.cache_count || managedSites.filter((site) => site.external_project_id).length)}</strong></div>
-            <div><span>Рабочие</span><strong>{formatNumber(workingCount)}</strong></div>
-            <div><span>С меню</span><strong>{formatNumber(menuCount)}</strong></div>
-            <div><span>Тестовые</span><strong>{formatNumber(managedSites.filter((site) => site.project_status === "test").length)}</strong></div>
-            <div><span>Дубликаты</span><strong>{formatNumber(duplicateCount)}</strong></div>
-            <div><span>Всего сайтов</span><strong>{formatNumber(managedSites.length)}</strong></div>
+            <button className={summaryFilter === "projects" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("projects")} aria-pressed={summaryFilter === "projects"}><span>Проекты</span><strong>{formatNumber(cacheResult?.cache_count || managedSites.filter((site) => site.external_project_id).length)}</strong></button>
+            <button className={summaryFilter === "working" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("working")} aria-pressed={summaryFilter === "working"}><span>Рабочие</span><strong>{formatNumber(workingCount)}</strong></button>
+            <button className={summaryFilter === "menu" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("menu")} aria-pressed={summaryFilter === "menu"}><span>С меню</span><strong>{formatNumber(menuCount)}</strong></button>
+            <button className={summaryFilter === "test" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("test")} aria-pressed={summaryFilter === "test"}><span>Тестовые</span><strong>{formatNumber(managedSites.filter((site) => site.project_status === "test").length)}</strong></button>
+            <button className={summaryFilter === "duplicate" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("duplicate")} aria-pressed={summaryFilter === "duplicate"}><span>Дубликаты</span><strong>{formatNumber(duplicateCount)}</strong></button>
+            <button className={summaryFilter === "all" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("all")} aria-pressed={summaryFilter === "all"}><span>Всего сайтов</span><strong>{formatNumber(managedSites.length)}</strong></button>
           </div>
           <button className="button primary siteCacheSyncButton" type="button" onClick={() => syncCache()} disabled={syncing}>
             <RefreshCcw size={18} className={syncing ? "spin" : ""} />
-            {syncing ? "Получаем кеш" : cacheResult ? "Обновить список доменов" : "Получить кеш"}
+            {syncing ? "Обновляем данные" : "Обновить данные"}
           </button>
           <button className="button secondary siteCacheSyncButton" type="button" onClick={() => syncCache(selectedProjectNames)} disabled={syncing || !selectedProjectNames.length}>
             <RefreshCcw size={18} /> Обновить выбранные ({selectedProjectNames.length})
@@ -4491,22 +5334,51 @@ function SitesView({ api, sites, currentUsername, onChanged }: ViewProps & { sit
         </div>
         <div className="siteCacheUpdatedAt">
           <CalendarClock size={17} />
-          <span>Последнее обновление кеша</span>
-          <strong>{latestCacheSync ? formatDate(latestCacheSync) : "Кеш еще не обновлялся"}</strong>
+          <span>Последнее обновление</span>
+          <strong>{latestCacheSync ? formatDate(latestCacheSync) : "Данные еще не обновлялись"}</strong>
         </div>
         {syncMessage ? <div className="siteCacheResult">{syncMessage}</div> : null}
         {syncError ? <div className="formError siteCacheError">{syncError}</div> : null}
       </DataPanel>
-      <DataPanel title="Домены">
+      <DataPanel
+        title={(
+          <span className="siteDomainsTitle">
+            {favoritesOnly ? "Избранные проекты" : "Домены"}
+            <small>{filteredRows.length === domainRows.length ? formatNumber(domainRows.length) : `${formatNumber(filteredRows.length)} из ${formatNumber(domainRows.length)}`}</small>
+            <small className="siteVisibleRowsCount">На странице: {formatNumber(visibleRows.length)}</small>
+          </span>
+        )}
+        actions={(
+          <button className="iconButton siteColumnsSettingsButton" type="button" onClick={() => setColumnsSettingsOpen(true)} title="Настроить порядок столбцов" aria-label="Настроить порядок столбцов">
+            <Settings size={15} />
+          </button>
+        )}
+      >
         <div className="siteCacheSearch">
           <Search size={18} />
-          <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Поиск по name, canon или ID проекта" />
+          <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Поиск по домену" />
+          <label className="siteRowsPerPage">
+            <span>Строк</span>
+            <select value={rowsPerPage} onChange={(event) => setRowsPerPage(event.target.value === "all" ? "all" : Number(event.target.value))} aria-label="Количество строк на странице">
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="250">250</option>
+              <option value="all">Все</option>
+            </select>
+          </label>
           <button className="button secondary siteSortResetButton" type="button" onClick={() => setSiteSort(null)} disabled={!siteSort}>Сбросить сортировку</button>
-          <span>{formatNumber(filteredRows.length)} из {formatNumber(domainRows.length)}</span>
+          <span>{filteredRows.length ? `${formatNumber(pageStart + 1)}–${formatNumber(pageStart + visibleRows.length)} из ${formatNumber(filteredRows.length)}` : `0 из ${formatNumber(domainRows.length)}`}</span>
         </div>
-        {statusFilterActive || menuTypeFilterActive ? (
+        {summaryFilter || statusFilterActive || menuTypeFilterActive ? (
           <div className="siteActiveFilters" role="status">
             <strong><ListChecks size={16} /> Включены фильтры</strong>
+            {summaryFilter ? (
+              <button type="button" onClick={() => setSummaryFilter(null)}>
+                Панель: {{ projects: "Проекты", working: "Рабочие", menu: "С меню", test: "Тестовые", duplicate: "Дубликаты", all: "Все сайты" }[summaryFilter]}
+                <X size={13} />
+              </button>
+            ) : null}
             {statusFilterActive ? (
               <button type="button" onClick={() => setStatusFilters(allStatusFilters)}>
                 Статус: {statusFilters.length ? statusFilterOptions.filter((option) => statusFilters.includes(option.value)).map((option) => option.label).join(", ") : "ничего не выбрано"}
@@ -4519,19 +5391,19 @@ function SitesView({ api, sites, currentUsername, onChanged }: ViewProps & { sit
                 <X size={13} />
               </button>
             ) : null}
-            <button className="siteResetFilters" type="button" onClick={() => { setStatusFilters(allStatusFilters); setMenuTypeFilters(allMenuTypeFilters); }}>Сбросить все</button>
+            <button className="siteResetFilters" type="button" onClick={() => { setSummaryFilter(null); setStatusFilters(allStatusFilters); setMenuTypeFilters(allMenuTypeFilters); }}>Сбросить все</button>
           </div>
         ) : null}
         <ResponsiveTable
-          columns={["Выбор", "Name", "Title главной", "Canon", "Статус", "Внутренние страницы", "Тип меню", "Пункты меню", "Доменов в сетке"]}
+          columns={visibleColumnOrder.map((column) => SITE_COLUMN_LABELS[column])}
+          columnKeys={visibleColumnOrder}
           columnHeaders={{
-            0: (
+            [visibleColumnOrder.indexOf("select")]: (
               <label className={`tableSelectAllButton ${selectableFilteredNames.length ? "" : "disabled"}`} title="Выбрать все домены в текущем списке">
                 <input type="checkbox" checked={allFilteredSelected} disabled={!selectableFilteredNames.length} onChange={toggleAllFilteredProjects} />
-                <span>Выбор</span>
               </label>
             ),
-            4: (
+            [visibleColumnOrder.indexOf("status")]: (
               <TableFilterHeader
                 label="Статус"
                 options={statusFilterOptions}
@@ -4543,7 +5415,7 @@ function SitesView({ api, sites, currentUsername, onChanged }: ViewProps & { sit
                 sortDirection={siteSort?.key === "status" ? siteSort.direction : undefined}
               />
             ),
-            6: (
+            [visibleColumnOrder.indexOf("menuType")]: (
               <TableFilterHeader
                 label="Тип меню"
                 options={menuTypeFilterOptions}
@@ -4556,54 +5428,122 @@ function SitesView({ api, sites, currentUsername, onChanged }: ViewProps & { sit
               />
             )
           }}
-          rows={filteredRows.map((row) => [
-            <input
-              type="checkbox"
-              checked={selectedNames.has(row.name)}
-              disabled={!row.externalProjectId}
-              onChange={() => toggleSelectedProject(row.name)}
-              aria-label={`Выбрать проект ${row.name}`}
-            />,
-            <strong>{row.name}</strong>,
-            <strong className="siteHomepageTitle">{row.homepageTitle || "—"}</strong>,
-            row.canon,
-            <select className={`siteStatusSelect ${row.projectStatus}`} value={row.projectStatus} onChange={(event) => updateProjectStatus(row.id, event.target.value as Site["project_status"])}>
-              <option value="test">Тестовый</option>
-              <option value="working">Рабочий</option>
-              <option value="not_in_focus">Не в фокусе</option>
-              <option value="duplicate">Дубликат</option>
-            </select>,
-            formatNumber(row.internalPagesCount),
-            row.headerMenuCount && row.footerMenuCount
-              ? <span className="siteMenuTypeBadge">Header + Footer</span>
-              : row.headerMenuCount
-                ? <span className="siteMenuTypeBadge">Header</span>
-                : row.footerMenuCount
-                  ? <span className="siteMenuTypeBadge">Footer</span>
-                  : "—",
-            row.menuCount ? (
-              <button
-                className="siteMenuBadge siteMenuDetailsButton"
-                type="button"
-                onClick={() => setMenuPreview({ name: row.name, header: row.headerMenu, footer: row.footerMenu })}
-                aria-label={`Показать пункты меню проекта ${row.name}`}
-              >
-                {formatNumber(row.menuCount)}
-              </button>
-            ) : "0",
-            formatNumber(row.domainsCount)
-          ])}
-          rowClassNames={filteredRows.map((row) => {
+          rows={visibleRows.map((row, rowIndex) => {
+            const cells: Record<SiteTableColumn, React.ReactNode> = {
+              rowNumber: formatNumber(pageStart + rowIndex + 1),
+              select: <input type="checkbox" checked={selectedNames.has(row.name)} disabled={!row.externalProjectId} onChange={() => toggleSelectedProject(row.name)} aria-label={`Выбрать проект ${row.name}`} />,
+              name: (
+                <span className="siteNameCell">
+                  <span className="siteNameWithFlag">
+                    {localeFlag(localeCountryCode(row.geo || row.language || "")) ? <span aria-hidden="true">{localeFlag(localeCountryCode(row.geo || row.language || ""))}</span> : null}
+                    <strong>{row.name}</strong>
+                  </span>
+                  <span className="siteNameActions">
+                    <button
+                      className={`siteRowActionButton siteFavoriteButton ${row.isFavorite ? "active" : ""}`}
+                      type="button"
+                      onClick={() => toggleFavoriteSite(row.id)}
+                      title={row.isFavorite ? "Убрать из избранного" : "Добавить в избранное"}
+                      aria-label={`${row.isFavorite ? "Убрать из избранного" : "Добавить в избранное"}: ${row.name}`}
+                    >
+                      <Star size={15} />
+                    </button>
+                    <a
+                      className="siteRowActionButton"
+                      href={row.baseUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Открыть сайт"
+                      aria-label={`Открыть сайт ${row.name}`}
+                    >
+                      <Globe2 size={15} />
+                    </a>
+                    <a
+                      className="siteRowActionButton"
+                      href={pathForRoute("workspace", "topics", row.name)}
+                      onClick={() => localStorage.setItem("workspace_site_id", row.id)}
+                      title="Открыть задачи проекта"
+                      aria-label={`Открыть задачи проекта ${row.name}`}
+                    >
+                      <FolderKanban size={15} />
+                    </a>
+                  </span>
+                </span>
+              ),
+              title: row.homepageTitle ? (
+                <SiteTitleTooltip name={row.name} title={row.homepageTitle} />
+              ) : "—",
+              canon: row.canon,
+              language: <LocaleCode value={row.language} />,
+              status: (
+                <select className={`siteStatusSelect ${row.projectStatus}`} value={row.projectStatus} onChange={(event) => updateProjectStatus(row.id, event.target.value as Site["project_status"])}>
+                  <option value="test">Тестовый</option>
+                  <option value="working">Рабочий</option>
+                  <option value="not_in_focus">Не в фокусе</option>
+                  <option value="duplicate">Дубликат</option>
+                </select>
+              ),
+              internalPages: formatNumber(row.internalPagesCount),
+              menuType: row.headerMenuCount && row.footerMenuCount
+                ? <span className="siteMenuTypeBadge">Header + Footer</span>
+                : row.headerMenuCount
+                  ? <span className="siteMenuTypeBadge">Header</span>
+                  : row.footerMenuCount
+                    ? <span className="siteMenuTypeBadge">Footer</span>
+                    : "—",
+              menuCount: row.menuCount ? (
+                <button className="siteMenuBadge siteMenuDetailsButton" type="button" onClick={() => setMenuPreview({ name: row.name, header: row.headerMenu, footer: row.footerMenu })} aria-label={`Показать пункты меню проекта ${row.name}`}>
+                  {formatNumber(row.menuCount)}
+                </button>
+              ) : "0",
+              domainsCount: formatNumber(row.domainsCount)
+            };
+            return visibleColumnOrder.map((column) => cells[column]);
+          })}
+          rowClassNames={visibleRows.map((row) => {
             const statusClass = row.projectStatus === "duplicate" ? "duplicate" : row.isTest ? "test" : row.isWorking ? "working" : "unfocused";
-            return `siteDomainRow ${statusClass} ${row.hasMenu ? "hasMenu" : ""}`.trim();
+            return `siteDomainRow ${statusClass} ${row.hasMenu ? "hasMenu" : ""} ${row.isFavorite ? "favorite" : ""}`.trim();
           })}
           wrapperClassName="siteDomainsTable"
-          sortableColumnIndexes={[1, 2, 3, 5, 7, 8]}
+          sortableColumnIndexes={visibleColumnOrder.map((column, index) => SITE_COLUMN_SORT_KEYS[column] && !["status", "menuType"].includes(column) ? index : -1).filter((index) => index >= 0)}
           sortColumnIndex={siteSort ? siteSortKeys.indexOf(siteSort.key) : null}
           sortDirection={siteSort?.direction}
           onSortColumn={sortSitesByColumn}
         />
+        {totalPages > 1 ? (
+          <div className="siteTablePagination">
+            <button className="button secondary compact" type="button" onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} disabled={activePage === 1}><ChevronLeft size={15} /> Назад</button>
+            <span>Страница <strong>{formatNumber(activePage)}</strong> из {formatNumber(totalPages)}</span>
+            <button className="button secondary compact" type="button" onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))} disabled={activePage === totalPages}>Вперёд <ChevronRight size={15} /></button>
+          </div>
+        ) : null}
       </DataPanel>
+      {columnsSettingsOpen ? (
+        <Modal title="Порядок столбцов" subtitle="Настройка сохранится для текущего пользователя" onClose={() => setColumnsSettingsOpen(false)} className="siteColumnsModal">
+          <div className="siteColumnsOrderList">
+            {columnOrder.map((column) => {
+              const index = columnOrder.indexOf(column);
+              const visible = !hiddenColumns.includes(column);
+              return (
+              <div key={column}>
+                <label className="siteColumnVisibility">
+                  <input type="checkbox" checked={visible} onChange={() => toggleSiteColumn(column)} disabled={visible && visibleColumnOrder.length === 1} />
+                  <span>{SITE_COLUMN_LABELS[column] || "Чекбокс выбора"}</span>
+                </label>
+                <div>
+                  <button type="button" onClick={() => moveSiteColumn(column, -1)} disabled={column === "rowNumber" || index === 1} aria-label="Переместить столбец выше"><ChevronUp size={15} /></button>
+                  <button type="button" onClick={() => moveSiteColumn(column, 1)} disabled={column === "rowNumber" || index === columnOrder.length - 1} aria-label="Переместить столбец ниже"><ChevronDown size={15} /></button>
+                </div>
+              </div>
+              );
+            })}
+          </div>
+          <div className="formActions">
+            <button className="button secondary compact" type="button" onClick={() => { setColumnOrder(DEFAULT_SITE_COLUMN_ORDER); setHiddenColumns([]); }}>По умолчанию</button>
+            <button className="button primary compact" type="button" onClick={() => setColumnsSettingsOpen(false)}>Готово</button>
+          </div>
+        </Modal>
+      ) : null}
       {menuPreview ? (
         <Modal
           title={`Пункты меню: ${menuPreview.name}`}
@@ -4622,7 +5562,55 @@ function SitesView({ api, sites, currentUsername, onChanged }: ViewProps & { sit
   );
 }
 
-function SiteMenuPreviewSection({ title, items }: { title: string; items: unknown[] }) {
+function SiteTitleTooltip({ name, title }: { name: string; title: string }) {
+  const [open, setOpen] = React.useState(false);
+  const [position, setPosition] = React.useState({ left: 0, top: 0 });
+  const buttonRef = React.useRef<HTMLButtonElement>(null);
+
+  function toggleTooltip() {
+    if (!open && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const width = Math.min(480, window.innerWidth - 24);
+      setPosition({
+        left: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)),
+        top: Math.min(rect.bottom + 7, window.innerHeight - 180)
+      });
+    }
+    setOpen((current) => !current);
+  }
+
+  React.useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <button ref={buttonRef} className="siteHomepageTitleButton" type="button" onClick={toggleTooltip} aria-expanded={open} aria-label={`Показать полный title проекта ${name}`}>
+        <strong className="siteHomepageTitle">{title}</strong>
+      </button>
+      {open ? createPortal(
+        <>
+          <button className="siteTitleTooltipDismiss" type="button" onClick={() => setOpen(false)} aria-label="Закрыть подсказку" />
+          <div className="siteTitleTooltip" style={position} role="tooltip">
+            <small>{name}</small>
+            <strong>{title}</strong>
+            <button type="button" onClick={() => setOpen(false)} aria-label="Закрыть подсказку"><X size={16} /></button>
+          </div>
+        </>,
+        document.body
+      ) : null}
+    </>
+  );
+}
+
+function SiteMenuPreviewSection({ title, items, icon, action, children }: { title: string; items: unknown[]; icon?: React.ReactNode; action?: React.ReactNode; children?: React.ReactNode }) {
   const menuItemText = (item: unknown, index: number) => {
     if (typeof item === "string") return { title: item, path: "" };
     if (!item || typeof item !== "object" || Array.isArray(item)) return { title: `Пункт ${index + 1}`, path: String(item ?? "") };
@@ -4637,7 +5625,7 @@ function SiteMenuPreviewSection({ title, items }: { title: string; items: unknow
 
   return (
     <section className="siteMenuPreviewSection">
-      <h3>{title} <span>{items.length}</span></h3>
+      <h3><span className="siteMenuPreviewTitle">{icon}{title} <span>{items.length}</span></span></h3>
       {items.length ? (
         <ol>
           {items.map((item, index) => {
@@ -4646,6 +5634,8 @@ function SiteMenuPreviewSection({ title, items }: { title: string; items: unknow
           })}
         </ol>
       ) : <div className="siteMenuPreviewEmpty">Пунктов нет</div>}
+      {action ? <div className="siteMenuPreviewAction">{action}</div> : null}
+      {children}
     </section>
   );
 }
@@ -4740,7 +5730,10 @@ function SettingsView({ api, currentUser, users, inputStyle, onInputStyleChange,
       </DataPanel>
 
       {currentUser?.is_admin ? (
-        <UsersAdminPanel api={api} currentUser={currentUser} users={users} onChanged={onChanged} />
+        <>
+          <UsersAdminPanel api={api} currentUser={currentUser} users={users} onChanged={onChanged} />
+          <AdminRequestLogsPanel api={api} />
+        </>
       ) : null}
 
       <DataPanel title="Настройки проекта">
@@ -4797,6 +5790,50 @@ function SettingsView({ api, currentUser, users, inputStyle, onInputStyleChange,
         ) : null}
       </section>
     </section>
+  );
+}
+
+function AdminRequestLogsPanel({ api }: Pick<ViewProps, "api">) {
+  const [logs, setLogs] = React.useState<AdminRequestLog[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState("");
+
+  const loadLogs = React.useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      setLogs(await api<AdminRequestLog[]>("/admin/request-logs"));
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить логи запросов");
+    } finally {
+      setLoading(false);
+    }
+  }, [api]);
+
+  React.useEffect(() => {
+    loadLogs();
+  }, [loadLogs]);
+
+  return (
+    <DataPanel
+      title="Логи запросов"
+      actions={<button className="button secondary compact" type="button" onClick={loadLogs} disabled={loading}><RefreshCcw size={15} /> {loading ? "Обновляем" : "Обновить"}</button>}
+    >
+      {error ? <div className="formError">{error}</div> : null}
+      {!loading && !logs.length ? <EmptyState text="Запросов пока нет." /> : (
+        <ResponsiveTable
+          columns={["Дата и время", "Проект", "Что отправили", "Метод", "Куда", "Результат"]}
+          rows={logs.map((log) => [
+            formatDate(log.created_at),
+            <strong>{log.project_name}</strong>,
+            <span className="requestLogAction"><strong>{log.action}</strong>{log.item_name ? <small>{log.item_name}</small> : null}</span>,
+            <code className="requestLogMethod">{log.method}</code>,
+            <span className="requestLogDestination" title={log.destination}>{log.destination}</span>,
+            <span className={`requestLogResult ${log.result === "Успешно" ? "success" : log.result === "Ошибка" ? "error" : "pending"}`}>{log.result}</span>
+          ])}
+        />
+      )}
+    </DataPanel>
   );
 }
 
@@ -4990,6 +6027,7 @@ function KpiCard({ icon, label, value, danger, onClick, active }: { icon: React.
 type SearchableSelectOption = {
   value: string;
   label: string;
+  leading?: React.ReactNode;
   keywords?: string;
   description?: string;
   badge?: string;
@@ -5002,7 +6040,10 @@ function SearchableSelect({
   onChange,
   searchPlaceholder = "Начните вводить для поиска",
   disabled = false,
-  ariaLabel
+  ariaLabel,
+  optionPredicate,
+  dropdownToolbar,
+  renderOptionAction
 }: {
   value: string;
   options: SearchableSelectOption[];
@@ -5010,6 +6051,9 @@ function SearchableSelect({
   searchPlaceholder?: string;
   disabled?: boolean;
   ariaLabel?: string;
+  optionPredicate?: (option: SearchableSelectOption) => boolean;
+  dropdownToolbar?: React.ReactNode;
+  renderOptionAction?: (option: SearchableSelectOption) => React.ReactNode;
 }) {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
@@ -5021,9 +6065,10 @@ function SearchableSelect({
   const listboxId = React.useId();
   const selected = options.find((option) => option.value === value);
   const normalizedQuery = query.trim().toLocaleLowerCase("ru-RU");
+  const visibleOptions = optionPredicate ? options.filter(optionPredicate) : options;
   const filteredOptions = normalizedQuery
-    ? options.filter((option) => `${option.label} ${option.value} ${option.keywords || ""}`.toLocaleLowerCase("ru-RU").includes(normalizedQuery))
-    : options;
+    ? visibleOptions.filter((option) => `${option.label} ${option.value} ${option.keywords || ""}`.toLocaleLowerCase("ru-RU").includes(normalizedQuery))
+    : visibleOptions;
 
   const updateDropdownPosition = React.useCallback(() => {
     const control = controlRef.current;
@@ -5102,7 +6147,10 @@ function SearchableSelect({
           }
         }}
       >
-        <span>{selected?.label || "Выберите значение"}</span>
+        <span className="searchableSelectControlValue">
+          {selected?.leading}
+          <span>{selected?.label || "Выберите значение"}</span>
+        </span>
         <ChevronDown size={17} />
       </button>
       {open ? createPortal(
@@ -5134,27 +6182,42 @@ function SearchableSelect({
               autoComplete="off"
             />
           </div>
+          {dropdownToolbar ? <div className="searchableSelectToolbar">{dropdownToolbar}</div> : null}
           <div className="searchableSelectOptions" id={listboxId} role="listbox">
             {filteredOptions.length ? filteredOptions.map((option, index) => (
-              <button
+              <div
                 className={`searchableSelectOption ${option.value === value ? "selected" : ""} ${index === activeIndex ? "active" : ""} ${option.tone || ""}`}
-                type="button"
                 role="option"
+                tabIndex={0}
                 aria-selected={option.value === value}
                 key={`${option.value}:${option.label}`}
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => chooseOption(option)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    chooseOption(option);
+                  }
+                }}
               >
                 <span className="searchableSelectOptionContent">
-                  <span className="searchableSelectOptionLabel">{option.label}</span>
+                  <span className="searchableSelectOptionHeading">
+                    {option.leading}
+                    <span className="searchableSelectOptionLabel">{option.label}</span>
+                  </span>
                   {option.description ? <small>{option.description}</small> : null}
                 </span>
                 <span className="searchableSelectOptionAside">
                   {option.badge ? <small className="searchableSelectOptionBadge">{option.badge}</small> : null}
                   {option.value === value ? <CheckCircle2 size={16} /> : null}
+                  {renderOptionAction ? (
+                    <span onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+                      {renderOptionAction(option)}
+                    </span>
+                  ) : null}
                 </span>
-              </button>
-            )) : <div className="searchableSelectEmpty">Ничего не найдено</div>}
+              </div>
+            )) : <div className="searchableSelectEmpty">{optionPredicate && !normalizedQuery ? "В избранном пока нет проектов" : "Ничего не найдено"}</div>}
           </div>
         </div>,
         document.body
@@ -5163,17 +6226,17 @@ function SearchableSelect({
   );
 }
 
-function DataPanel({ title, children }: { title: string; children: React.ReactNode }) {
-  return <section className="dataPanel"><div className="panelHeader"><h2>{title}</h2></div>{children}</section>;
+function DataPanel({ title, actions, children }: { title: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode }) {
+  return <section className="dataPanel"><div className="panelHeader"><h2>{title}</h2>{actions}</div>{children}</section>;
 }
 
-function ResponsiveTable({ columns, rows, rowClassNames, wrapperClassName = "", sortableColumnIndexes = [], sortColumnIndex = null, sortDirection, onSortColumn, columnHeaders = {} }: { columns: string[]; rows: React.ReactNode[][]; rowClassNames?: string[]; wrapperClassName?: string; sortableColumnIndexes?: number[]; sortColumnIndex?: number | null; sortDirection?: "asc" | "desc"; onSortColumn?: (columnIndex: number) => void; columnHeaders?: Record<number, React.ReactNode> }) {
+function ResponsiveTable({ columns, columnKeys = [], rows, rowClassNames, wrapperClassName = "", sortableColumnIndexes = [], sortColumnIndex = null, sortDirection, onSortColumn, columnHeaders = {} }: { columns: string[]; columnKeys?: string[]; rows: React.ReactNode[][]; rowClassNames?: string[]; wrapperClassName?: string; sortableColumnIndexes?: number[]; sortColumnIndex?: number | null; sortDirection?: "asc" | "desc"; onSortColumn?: (columnIndex: number) => void; columnHeaders?: Record<number, React.ReactNode> }) {
   if (!rows.length) return <EmptyState text="Данных пока нет." />;
   return (
     <div className={`tableWrap ${wrapperClassName}`.trim()}>
       <table>
         <thead><tr>{columns.map((column, columnIndex) => (
-          <th key={column}>
+          <th className={columnKeys[columnIndex] ? `column-${columnKeys[columnIndex]}` : undefined} key={`${column}:${columnIndex}`}>
             {columnHeaders[columnIndex] || (sortableColumnIndexes.includes(columnIndex) ? (
               <button className={`tableSortButton ${sortColumnIndex === columnIndex ? "active" : ""}`} type="button" onClick={() => onSortColumn?.(columnIndex)}>
                 <span>{column}</span>
@@ -5182,7 +6245,7 @@ function ResponsiveTable({ columns, rows, rowClassNames, wrapperClassName = "", 
             ) : column)}
           </th>
         ))}</tr></thead>
-        <tbody>{rows.map((row, rowIndex) => <tr className={rowClassNames?.[rowIndex] || undefined} key={rowIndex}>{row.map((cell, cellIndex) => <td data-label={columns[cellIndex]} key={cellIndex}>{cell}</td>)}</tr>)}</tbody>
+        <tbody>{rows.map((row, rowIndex) => <tr className={rowClassNames?.[rowIndex] || undefined} key={rowIndex}>{row.map((cell, cellIndex) => <td className={columnKeys[cellIndex] ? `column-${columnKeys[cellIndex]}` : undefined} data-label={columns[cellIndex]} key={cellIndex}>{cell}</td>)}</tr>)}</tbody>
       </table>
     </div>
   );
@@ -5320,6 +6383,7 @@ function viewTitle(view: AppView, workspaceTab: WorkspaceTab) {
     publications: "Публикации",
     providers: "API Providers",
     sites: "Сайты",
+    favorites: "Избранное",
     settings: "Настройки"
   };
   return titles[view];

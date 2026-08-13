@@ -40,24 +40,43 @@ def apply_lightweight_migrations() -> None:
             "payload_mode": "VARCHAR(40) DEFAULT 'simple_page' NOT NULL",
             "editor_version": "VARCHAR(40) DEFAULT '2.31.0' NOT NULL",
             "default_menu": "JSON DEFAULT '{\"header\":[],\"footer\":[]}'",
+            "menu_library": "JSON DEFAULT '[]'",
             "default_banners": "JSON DEFAULT '[]'",
             "showcase_payload": "JSON",
             "default_prompt_template_id": "VARCHAR(36)",
             "external_project_id": "VARCHAR(200)",
             "cache_canon": "TEXT",
+            "cache_language": "VARCHAR(40)",
+            "cache_geo": "VARCHAR(40)",
             "homepage_title": "TEXT",
             "internal_pages_count": "INTEGER DEFAULT 0 NOT NULL",
             "domains_count": "INTEGER DEFAULT 0 NOT NULL",
+            "cache_domains": "JSON DEFAULT '[]'",
+            "cache_server_ip": "VARCHAR(120)",
             "project_status": "VARCHAR(32) DEFAULT 'working' NOT NULL",
             "is_test_project": "BOOLEAN DEFAULT FALSE NOT NULL",
             "has_menu": "BOOLEAN DEFAULT FALSE NOT NULL",
             "cache_synced_at": "TIMESTAMP WITH TIME ZONE",
+            "menu_capabilities_checked_at": "TIMESTAMP WITH TIME ZONE",
+            "header_menu_rendered": "BOOLEAN",
+            "header_menu_nested": "BOOLEAN",
+            "footer_menu_rendered": "BOOLEAN",
+            "footer_menu_nested": "BOOLEAN",
         }
         _add_missing_columns("sites", columns, site_columns)
 
     if "sections" in tables:
         columns = {column["name"] for column in inspector.get_columns("sections")}
-        _add_missing_columns("sections", columns, {"menu_type": "VARCHAR(20) DEFAULT 'header' NOT NULL"})
+        _add_missing_columns(
+            "sections",
+            columns,
+            {
+                "menu_type": "VARCHAR(20) DEFAULT 'header' NOT NULL",
+                "sync_status": "VARCHAR(20) DEFAULT 'pending' NOT NULL",
+                "synced_at": "TIMESTAMP WITH TIME ZONE",
+                "parent_id": "VARCHAR(36)",
+            },
+        )
 
     if "ai_providers" in tables:
         columns = {column["name"] for column in inspector.get_columns("ai_providers")}
