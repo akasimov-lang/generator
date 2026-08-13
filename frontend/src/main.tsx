@@ -2655,6 +2655,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
   const [jsonDraft, setJsonDraft] = React.useState("");
   const [sectionId, setSectionId] = React.useState("");
   const [editorError, setEditorError] = React.useState("");
+  const [contentSort, setContentSort] = React.useState<{ columnIndex: number; direction: "asc" | "desc" } | null>(null);
   const selectableIds = React.useMemo(() => content.filter((item) => !isPublicationLocked(item)).map((item) => item.id), [content]);
   const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.includes(id));
   const selectedItems = content.filter((item) => selectedIds.includes(item.id));
@@ -2667,6 +2668,28 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
     });
     return counts;
   }, [content]);
+  const sortedContent = React.useMemo(() => {
+    if (!contentSort) return content;
+    const direction = contentSort.direction === "asc" ? 1 : -1;
+    return content
+      .map((item, originalIndex) => ({ item, originalIndex }))
+      .sort((left, right) => {
+        let comparison = 0;
+        if (contentSort.columnIndex === 1) comparison = left.item.topic.localeCompare(right.item.topic, undefined, { sensitivity: "base" });
+        if (contentSort.columnIndex === 2) comparison = sectionLabel(left.item.section_id, sections).localeCompare(sectionLabel(right.item.section_id, sections), undefined, { sensitivity: "base" });
+        if (contentSort.columnIndex === 3) comparison = left.item.word_count - right.item.word_count;
+        if (contentSort.columnIndex === 4) comparison = left.item.status.localeCompare(right.item.status, undefined, { sensitivity: "base" });
+        if (contentSort.columnIndex === 5) comparison = new Date(left.item.published_at || 0).getTime() - new Date(right.item.published_at || 0).getTime();
+        return comparison ? comparison * direction : left.originalIndex - right.originalIndex;
+      })
+      .map(({ item }) => item);
+  }, [content, contentSort, sections]);
+
+  function sortContentByColumn(columnIndex: number) {
+    setContentSort((current) => current?.columnIndex === columnIndex
+      ? { columnIndex, direction: current.direction === "asc" ? "desc" : "asc" }
+      : { columnIndex, direction: "asc" });
+  }
 
   React.useEffect(() => {
     setSelectedIds((current) => current.filter((id) => selectableIds.includes(id)));
@@ -2870,7 +2893,11 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
           columns={["Выбор", "Тема", "Меню", "Слова", "Статус", "Опубликовано", "Действия"]}
           columnKeys={["select", "topic", "menu", "words", "status", "published", "actions"]}
           wrapperClassName="projectContentTable"
-          rows={content.map((item) => [
+          sortableColumnIndexes={[1, 2, 3, 4, 5]}
+          sortColumnIndex={contentSort?.columnIndex ?? null}
+          sortDirection={contentSort?.direction}
+          onSortColumn={sortContentByColumn}
+          rows={sortedContent.map((item) => [
             <input
               className="rowCheckbox"
               type="checkbox"
