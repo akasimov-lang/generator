@@ -2481,8 +2481,8 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site)
             item.published_at = datetime.now(timezone.utc)
             item.published_url = response_body.get("url")
         elif response.status_code in (429, 500, 502, 503):
-            item.status = "retry_scheduled"
-            item.scheduled_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+            item.status = "publication_failed"
+            item.scheduled_at = None
         else:
             item.status = "publication_failed"
         refresh_campaign_status(db, item.publication_campaign_id)
@@ -2496,8 +2496,9 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site)
                 error_message=str(exc),
             )
         )
-        item.status = "retry_scheduled"
-        item.scheduled_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+        item.status = "publication_failed"
+        item.scheduled_at = None
+        refresh_campaign_status(db, item.publication_campaign_id)
         db.commit()
 
 

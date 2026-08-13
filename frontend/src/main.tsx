@@ -1784,13 +1784,13 @@ function ProjectWorkspaceView({
         />
       ) : null}
       {selectedSite && (activeTab === "content" || activeTab === "publication") ? (
-        <ProjectPublicationPanel key={`${selectedSite.id}:publication-launch`} mode="launch" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} onChanged={refreshProject} />
+        <ProjectPublicationPanel key={`${selectedSite.id}:publication-launch`} mode="launch" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} onChanged={refreshProject} />
       ) : null}
       {selectedSite && (activeTab === "content" || activeTab === "publication") ? (
         <ProjectContentPanel key={`${selectedSite.id}:content`} api={api} site={selectedSite} content={siteContent} sections={sections} onChanged={refreshProject} />
       ) : null}
       {selectedSite && (activeTab === "content" || activeTab === "publication") ? (
-        <ProjectPublicationPanel key={`${selectedSite.id}:publication-details`} mode="details" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} onChanged={refreshProject} />
+        <ProjectPublicationPanel key={`${selectedSite.id}:publication-details`} mode="details" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} onChanged={refreshProject} />
       ) : null}
       {selectedSite && activeTab === "menu" ? (
         <ProjectMenuPanel api={api} site={selectedSite} sections={sections} menuCapabilities={menuCapabilities} onChanged={refreshProject} />
@@ -2986,7 +2986,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
   );
 }
 
-function ProjectPublicationPanel({ api, site, content, sections, campaigns, mode, onChanged }: ViewProps & { site: Site; content: ContentItem[]; sections: Section[]; campaigns: PublicationCampaign[]; mode: "launch" | "details" }) {
+function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs, mode, onChanged }: ViewProps & { site: Site; content: ContentItem[]; sections: Section[]; campaigns: PublicationCampaign[]; logs: PublicationLog[]; mode: "launch" | "details" }) {
   const [launchExpanded, setLaunchExpanded] = React.useState(false);
   const [name, setName] = React.useState("Daily publication");
   const [itemsPerDay, setItemsPerDay] = React.useState(1);
@@ -3001,6 +3001,16 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, mode
   const publicationQueue = content
     .filter((item) => ["scheduled", "retry_scheduled", "publication_paused", "publishing"].includes(item.status))
     .sort((left, right) => new Date(left.scheduled_at || 0).getTime() - new Date(right.scheduled_at || 0).getTime());
+  const publicationBacklog = content
+    .filter((item) => item.status === "publication_failed")
+    .sort((left, right) => new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime());
+  const latestErrorByContentId = React.useMemo(() => {
+    const result = new Map<string, PublicationLog>();
+    logs.forEach((log) => {
+      if (log.content_item_id && !result.has(log.content_item_id)) result.set(log.content_item_id, log);
+    });
+    return result;
+  }, [logs]);
 
   async function createCampaign(event: React.FormEvent) {
     event.preventDefault();
@@ -3160,6 +3170,25 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, mode
         />
         {formError ? <span className="formError">{formError}</span> : null}
       </DataPanel> : null}
+      {mode === "details" ? <section className="dataPanel publicationBacklogPanel">
+        <div className="panelHeader"><h2><AlertTriangle size={18} /> Беклог публикации · {publicationBacklog.length}</h2></div>
+        <div className="publicationBacklogHint">Сюда автоматически переносятся тексты, которые не удалось опубликовать из-за ошибки.</div>
+        <ResponsiveTable
+          columns={["Тема", "Меню", "Ошибка", "Время", "Статус"]}
+          rows={publicationBacklog.map((item) => {
+            const errorLog = latestErrorByContentId.get(item.id);
+            return [
+              <div className="compactContentTopic" title={item.topic}>{item.topic}</div>,
+              sectionLabel(item.section_id, sections),
+              <span className="publicationBacklogError">{errorLog?.error_message || (errorLog?.response_status ? `HTTP ${errorLog.response_status}` : "Ошибка публикации")}</span>,
+              errorLog ? formatDate(errorLog.created_at) : formatDate(item.updated_at),
+              <StatusBadge status={item.status} />
+            ];
+          })}
+          rowClassNames={publicationBacklog.map(() => "publicationBacklogRow")}
+          wrapperClassName="publicationBacklogTable"
+        />
+      </section> : null}
     </section>
   );
 }
