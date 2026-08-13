@@ -2233,6 +2233,27 @@ h2 {
   width: auto;
 }
 
+.dashboardTaskLink {
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+}
+
+.dashboardTaskLink:hover:not(:disabled) {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.dashboardTaskLink:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
 .siteMenuPreviewItemText {
   flex: 1 1 auto;
   min-width: 0;

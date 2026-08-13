@@ -923,7 +923,16 @@ function App() {
 
         {activeView === "workspace" && <ProjectWorkspaceView api={api} sites={sites} providers={providers} currentUsername={currentUser.username} activeTab={workspaceTab} onTabChange={(tab, projectName) => navigateTo("workspace", tab, false, projectName)} onChanged={loadAll} />}
         {activeView === "prompts" && <PromptsView api={api} sites={sites} isAdmin={isAdmin} onChanged={loadAll} />}
-        {isAdmin && activeView === "dashboard" && dashboard && <DashboardView api={api} dashboard={dashboard} tasks={tasks} content={content} sites={sites} onChanged={loadAll} />}
+        {isAdmin && activeView === "dashboard" && dashboard && <DashboardView api={api} dashboard={dashboard} tasks={tasks} content={content} sites={sites} onOpenTask={(task) => {
+          const site = sites.find((candidate) => candidate.id === task.site_id);
+          if (!site) {
+            setMessage("Для этой задачи проект не назначен.");
+            return;
+          }
+          sessionStorage.setItem("workspace_open_task_id", task.id);
+          localStorage.setItem(`workspace_site_id:${currentUser.username}`, site.id);
+          navigateTo("workspace", "topics", false, site.name);
+        }} onChanged={loadAll} />}
         {isAdmin && activeView === "tasks" && <TasksView api={api} sites={sites} providers={providers} tasks={tasks} onChanged={loadAll} />}
         {isAdmin && activeView === "taskArchive" && <TaskArchiveView api={api} tasks={archivedTasks} onChanged={loadAll} />}
         {isAdmin && activeView === "content" && <ContentView api={api} sites={sites} content={content} onChanged={loadAll} />}
@@ -1112,7 +1121,7 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
   );
 }
 
-function DashboardView({ api, dashboard, tasks, content, sites, onChanged }: ViewProps & { dashboard: Dashboard; tasks: Task[]; content: ContentItem[]; sites: Site[] }) {
+function DashboardView({ api, dashboard, tasks, content, sites, onOpenTask, onChanged }: ViewProps & { dashboard: Dashboard; tasks: Task[]; content: ContentItem[]; sites: Site[]; onOpenTask: (task: Task) => void }) {
   const [reviewExpanded, setReviewExpanded] = React.useState(false);
   const [selectedPreview, setSelectedPreview] = React.useState<ContentItem | null>(null);
   const [selectedReviewIds, setSelectedReviewIds] = React.useState<string[]>([]);
@@ -1373,7 +1382,7 @@ function DashboardView({ api, dashboard, tasks, content, sites, onChanged }: Vie
         <DataPanel title="Активные задачи">
           <ResponsiveTable
             columns={["Задача", "Гео", "Язык", "Тем", "Статус"]}
-            rows={tasks.slice(0, 8).map((task) => [task.title, countryLabel(task.geo), languageLabel(task.language), task.topics_count, <StatusBadge status={task.status} />])}
+            rows={tasks.slice(0, 8).map((task) => [<button className="dashboardTaskLink" type="button" onClick={() => onOpenTask(task)} disabled={!task.site_id} title={task.site_id ? "Открыть задачу в проекте" : "Проект не назначен"}>{task.title}</button>, countryLabel(task.geo), languageLabel(task.language), task.topics_count, <StatusBadge status={task.status} />])}
           />
         </DataPanel>
         <DataPanel title="Очередь публикаций">
@@ -3500,6 +3509,13 @@ function TasksView({
       setPromptTemplateId((promptTemplates.find((prompt) => prompt.is_default) || promptTemplates[0]).id);
     }
   }, [promptTemplateId, promptTemplates]);
+
+  React.useEffect(() => {
+    const taskId = sessionStorage.getItem("workspace_open_task_id");
+    if (!taskId || !tasks.some((task) => task.id === taskId)) return;
+    sessionStorage.removeItem("workspace_open_task_id");
+    void loadTaskDetails(taskId);
+  }, [fixedSite?.id, tasks]);
 
   React.useEffect(() => {
     localStorage.setItem("task_create_checkbox_preferences", JSON.stringify({ includeToc, includeFaq, collectCompetitors }));
