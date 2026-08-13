@@ -275,7 +275,22 @@ type PromptTemplate = {
   content: string;
   is_default: boolean;
   used_by_projects: number;
+  generated_texts_count: number;
   created_at: string;
+  updated_at: string;
+};
+
+type PromptGeneratedContent = {
+  id: string;
+  task_id: string;
+  site_id: string | null;
+  site_name: string | null;
+  topic: string;
+  slug: string;
+  status: string;
+  word_count: number;
+  generation_prompt_name: string | null;
+  generated_at: string | null;
   updated_at: string;
 };
 
@@ -1839,7 +1854,7 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
   const [detailsLoadingId, setDetailsLoadingId] = React.useState("");
   const [researchAction, setResearchAction] = React.useState("");
   const topicCount = topics.split("\n").map((line) => line.trim()).filter(Boolean).length;
-  const selectedPrompt = promptTemplates.find((prompt) => prompt.id === promptTemplateId) || promptTemplates.find((prompt) => prompt.is_default) || promptTemplates[0];
+  const selectedPrompt = promptTemplates.find((prompt) => prompt.id === promptTemplateId) || latestPromptTemplate(promptTemplates);
 
   React.useEffect(() => {
     setGeo(projectGeoCode(site));
@@ -1856,7 +1871,7 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
 
   React.useEffect(() => {
     if (!promptTemplateId && promptTemplates.length) {
-      setPromptTemplateId((promptTemplates.find((prompt) => prompt.is_default) || promptTemplates[0]).id);
+      setPromptTemplateId(latestPromptTemplate(promptTemplates)?.id || "");
     }
   }, [promptTemplateId, promptTemplates]);
 
@@ -2354,7 +2369,7 @@ function PromptsView({ api, sites, isAdmin, onChanged }: ViewProps & { sites: Si
 
 function ProjectPromptsPanel({ api, site, promptTemplates, basePrompt, isAdmin, onChanged }: ViewProps & { site: Site; promptTemplates: PromptTemplate[]; basePrompt: PromptTemplate | null; isAdmin: boolean }) {
   const [selectedId, setSelectedId] = React.useState("");
-  const selectedPrompt = promptTemplates.find((prompt) => prompt.id === selectedId) || promptTemplates[0] || null;
+  const selectedPrompt = promptTemplates.find((prompt) => prompt.id === selectedId) || latestPromptTemplate(promptTemplates);
   const [name, setName] = React.useState("");
   const [content, setContent] = React.useState("");
   const [isDefault, setIsDefault] = React.useState(true);
@@ -2364,6 +2379,12 @@ function ProjectPromptsPanel({ api, site, promptTemplates, basePrompt, isAdmin, 
   const [baseError, setBaseError] = React.useState("");
   const [baseSuccess, setBaseSuccess] = React.useState("");
   const [newPromptSeed, setNewPromptSeed] = React.useState<{ name: string; content: string } | null>(null);
+  const [generatedTexts, setGeneratedTexts] = React.useState<PromptGeneratedContent[] | null>(null);
+  const [generatedTextsPromptId, setGeneratedTextsPromptId] = React.useState("");
+  const [generatedTextsLoading, setGeneratedTextsLoading] = React.useState(false);
+  const [generatedTextsError, setGeneratedTextsError] = React.useState("");
+  const [previewItem, setPreviewItem] = React.useState<ContentItem | null>(null);
+  const [previewLoadingId, setPreviewLoadingId] = React.useState("");
   const isNewPrompt = selectedId === "__new__";
 
   React.useEffect(() => {
@@ -2374,7 +2395,7 @@ function ProjectPromptsPanel({ api, site, promptTemplates, basePrompt, isAdmin, 
 
   React.useEffect(() => {
     if (!selectedId && promptTemplates.length) {
-      setSelectedId((promptTemplates.find((prompt) => prompt.is_default) || promptTemplates[0]).id);
+      setSelectedId(latestPromptTemplate(promptTemplates)?.id || "");
     }
   }, [promptTemplates, selectedId]);
 
@@ -2467,6 +2488,36 @@ function ProjectPromptsPanel({ api, site, promptTemplates, basePrompt, isAdmin, 
     await onChanged();
   }
 
+  async function showGeneratedTexts() {
+    if (!selectedPrompt || isNewPrompt) return;
+    setGeneratedTextsPromptId(selectedPrompt.id);
+    setGeneratedTexts(null);
+    setGeneratedTextsError("");
+    setGeneratedTextsLoading(true);
+    try {
+      const rows = await api<PromptGeneratedContent[]>(`/prompt-templates/${selectedPrompt.id}/generated-content`);
+      setGeneratedTexts(rows);
+    } catch (error) {
+      setGeneratedTextsError(error instanceof Error ? error.message : "Не удалось загрузить тексты.");
+    } finally {
+      setGeneratedTextsLoading(false);
+    }
+  }
+
+  async function previewGeneratedText(contentId: string) {
+    setGeneratedTextsError("");
+    setPreviewLoadingId(contentId);
+    try {
+      setPreviewItem(await api<ContentItem>(`/content/${contentId}`));
+    } catch (error) {
+      setGeneratedTextsError(error instanceof Error ? error.message : "Не удалось открыть текст.");
+    } finally {
+      setPreviewLoadingId("");
+    }
+  }
+
+  const generatedTextsPrompt = promptTemplates.find((prompt) => prompt.id === generatedTextsPromptId) || null;
+
   return (
     <section className="viewStack">
       <DataPanel title="Базовый промпт">
@@ -2505,8 +2556,9 @@ function ProjectPromptsPanel({ api, site, promptTemplates, basePrompt, isAdmin, 
             {promptTemplates.map((prompt) => (
               <button key={prompt.id} className={`promptListButton ${selectedId === prompt.id ? "active" : ""}`} type="button" onClick={() => setSelectedId(prompt.id)}>
                 <strong>{prompt.name}</strong>
-                <span>{prompt.is_default ? "Default для проекта" : formatDate(prompt.updated_at)}</span>
+                <span>{latestPromptTemplate(promptTemplates)?.id === prompt.id ? "Последняя версия · по умолчанию" : formatDate(prompt.updated_at)}</span>
                 <span>Используется: {prompt.used_by_projects}</span>
+                <span>Сгенерировано текстов: {prompt.generated_texts_count}</span>
               </button>
             ))}
             <button className={`promptListButton ${isNewPrompt ? "active" : ""}`} type="button" onClick={createEmptyPrompt}>
@@ -2536,6 +2588,11 @@ function ProjectPromptsPanel({ api, site, promptTemplates, basePrompt, isAdmin, 
             {editorSuccess ? <span className="formSuccess">{editorSuccess}</span> : null}
             <div className="formActions">
               {selectedPrompt && !isNewPrompt ? (
+                <button className="button secondary" type="button" onClick={() => void showGeneratedTexts()}>
+                  <FileText size={18} /> Тексты ({selectedPrompt.generated_texts_count})
+                </button>
+              ) : null}
+              {selectedPrompt && !isNewPrompt ? (
                 <button className="button secondary" type="button" onClick={createPromptFromSelected}>
                   <Plus size={18} /> Создать на основе
                 </button>
@@ -2550,6 +2607,36 @@ function ProjectPromptsPanel({ api, site, promptTemplates, basePrompt, isAdmin, 
           </form>
         </div>
       </DataPanel>
+      {generatedTextsPromptId ? (
+        <Modal
+          title={`Тексты по промпту: ${generatedTextsPrompt?.name || "Промпт"}`}
+          subtitle={`Сгенерировано: ${generatedTextsPrompt?.generated_texts_count ?? generatedTexts?.length ?? 0}`}
+          onClose={() => setGeneratedTextsPromptId("")}
+          wide
+          className="promptGeneratedTextsModal"
+        >
+          {generatedTextsLoading ? <EmptyState text="Загружаем список текстов…" /> : null}
+          {generatedTextsError ? <span className="formError">{generatedTextsError}</span> : null}
+          {!generatedTextsLoading && generatedTexts ? (
+            <ResponsiveTable
+              columns={["Тема", "Проект", "URL", "Сгенерировано", "Слов", "Статус", "Действия"]}
+              rows={generatedTexts.map((item) => [
+                <strong>{item.topic}</strong>,
+                item.site_name || "—",
+                <code>{item.slug}</code>,
+                item.generated_at ? formatDate(item.generated_at) : "—",
+                item.word_count,
+                <StatusBadge status={item.status} />,
+                <button className="button compact" type="button" disabled={previewLoadingId === item.id} onClick={() => void previewGeneratedText(item.id)}>
+                  <Eye size={15} /> {previewLoadingId === item.id ? "Открываем…" : "Просмотр"}
+                </button>
+              ])}
+              wrapperClassName="promptGeneratedTextsTable"
+            />
+          ) : null}
+        </Modal>
+      ) : null}
+      {previewItem ? <ContentPreviewModal item={previewItem} promptName={generatedTextsPrompt?.name} onClose={() => setPreviewItem(null)} /> : null}
     </section>
   );
 }
@@ -3481,8 +3568,7 @@ function TasksView({
     ? `${selectedSite.name} · ${cleanTopics.length} тем · ${language.toUpperCase()}-${geo.toUpperCase()}`
     : "Выберите проект — название сформируется автоматически";
   const selectedPrompt = promptTemplates.find((prompt) => prompt.id === promptTemplateId)
-    || promptTemplates.find((prompt) => prompt.is_default)
-    || promptTemplates[0];
+    || latestPromptTemplate(promptTemplates);
 
   React.useEffect(() => {
     if (fixedSite && siteId !== fixedSite.id) {
@@ -3506,7 +3592,7 @@ function TasksView({
 
   React.useEffect(() => {
     if (!promptTemplateId && promptTemplates.length) {
-      setPromptTemplateId((promptTemplates.find((prompt) => prompt.is_default) || promptTemplates[0]).id);
+      setPromptTemplateId(latestPromptTemplate(promptTemplates)?.id || "");
     }
   }, [promptTemplateId, promptTemplates]);
 
@@ -6713,6 +6799,17 @@ function viewTitle(view: AppView, workspaceTab: WorkspaceTab) {
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+}
+
+function latestPromptTemplate(prompts: PromptTemplate[]): PromptTemplate | null {
+  return [...prompts].sort((left, right) => {
+    const createdDifference = new Date(right.created_at).getTime() - new Date(left.created_at).getTime();
+    if (createdDifference) return createdDifference;
+    const leftVersion = Number(left.name.match(/\bv\s*(\d+)\s*$/i)?.[1] || 0);
+    const rightVersion = Number(right.name.match(/\bv\s*(\d+)\s*$/i)?.[1] || 0);
+    if (rightVersion !== leftVersion) return rightVersion - leftVersion;
+    return new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime();
+  })[0] || null;
 }
 
 function humanPayloadMode(value: string) {

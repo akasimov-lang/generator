@@ -244,7 +244,22 @@ class PromptTemplateResponse(BaseModel):
     content: str
     is_default: bool
     used_by_projects: int = 0
+    generated_texts_count: int = 0
     created_at: datetime
+    updated_at: datetime
+
+
+class PromptGeneratedContentResponse(BaseModel):
+    id: str
+    task_id: str
+    site_id: str | None
+    site_name: str | None
+    topic: str
+    slug: str
+    status: str
+    word_count: int
+    generation_prompt_name: str | None
+    generated_at: datetime | None
     updated_at: datetime
 
 

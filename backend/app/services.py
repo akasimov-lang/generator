@@ -1050,7 +1050,7 @@ def ensure_default_prompt_template(db: Session, site: models.Site) -> models.Pro
     existing = db.scalar(
         select(models.PromptTemplate)
         .where(models.PromptTemplate.name != BASE_PROMPT_TEMPLATE_NAME)
-        .order_by(models.PromptTemplate.is_default.desc(), models.PromptTemplate.created_at.asc())
+        .order_by(models.PromptTemplate.created_at.desc(), models.PromptTemplate.updated_at.desc())
         .limit(1)
     )
     if existing:

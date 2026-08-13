@@ -636,6 +636,20 @@ h2 {
   min-width: 0;
 }
 
+.modalDialog.promptGeneratedTextsModal {
+  grid-template-rows: auto minmax(0, 1fr);
+  height: min(760px, calc(100vh - 40px));
+  max-height: calc(100vh - 40px);
+}
+
+.promptGeneratedTextsTable {
+  overflow: auto;
+}
+
+.promptGeneratedTextsTable td:first-child {
+  min-width: 240px;
+}
+
 .promptTextarea {
   min-height: 520px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;

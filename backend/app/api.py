@@ -30,6 +30,7 @@ from app.schemas import (
     PublicationCampaignUpdate,
     PublicationLogResponse,
     PromptTemplateCreate,
+    PromptGeneratedContentResponse,
     PromptTemplateResponse,
     PromptTemplateUpdate,
     ProjectCacheSyncResponse,
@@ -145,7 +146,12 @@ def _validate_task_topics(payload: GenerationTaskCreate) -> None:
         raise HTTPException(status_code=400, detail="A generation task can include up to 30 topics")
 
 
-def _prompt_template_response(prompt: models.PromptTemplate, site: models.Site | None, used_by_projects: int) -> dict:
+def _prompt_template_response(
+    prompt: models.PromptTemplate,
+    site: models.Site | None,
+    used_by_projects: int,
+    generated_texts_count: int = 0,
+) -> dict:
     return {
         "id": prompt.id,
         "site_id": prompt.site_id,
@@ -153,6 +159,7 @@ def _prompt_template_response(prompt: models.PromptTemplate, site: models.Site |
         "content": prompt.content,
         "is_default": bool(site and site.default_prompt_template_id == prompt.id),
         "used_by_projects": used_by_projects,
+        "generated_texts_count": generated_texts_count,
         "created_at": prompt.created_at,
         "updated_at": prompt.updated_at,
     }
@@ -170,7 +177,24 @@ def _list_global_prompt_templates(db: Session, site: models.Site | None = None) 
         .group_by(models.Site.default_prompt_template_id)
     ).all()
     used_counts = {prompt_id: count for prompt_id, count in used_rows}
-    rows = [_prompt_template_response(prompt, site, used_counts.get(prompt.id, 0)) for prompt in prompts]
+    generated_rows = db.execute(
+        select(models.ContentItem.generation_prompt_name, func.count(models.ContentItem.id))
+        .where(
+            models.ContentItem.generated_at.is_not(None),
+            models.ContentItem.generation_prompt_name.is_not(None),
+        )
+        .group_by(models.ContentItem.generation_prompt_name)
+    ).all()
+    generated_counts = {prompt_name: count for prompt_name, count in generated_rows}
+    rows = [
+        _prompt_template_response(
+            prompt,
+            site,
+            used_counts.get(prompt.id, 0),
+            generated_counts.get(prompt.name, 0),
+        )
+        for prompt in prompts
+    ]
     return sorted(rows, key=lambda row: (not row["is_default"], row["name"].lower()))
 
 
@@ -830,6 +854,38 @@ def update_prompt_template(prompt_id: str, payload: PromptTemplateUpdate, _: Aut
         db.refresh(site)
     used_count = db.scalar(select(func.count(models.Site.id)).where(models.Site.default_prompt_template_id == prompt.id)) or 0
     return _prompt_template_response(prompt, site, used_count)
+
+
+@router.get("/prompt-templates/{prompt_id}/generated-content", response_model=list[PromptGeneratedContentResponse])
+def list_prompt_generated_content(prompt_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    prompt = db.get(models.PromptTemplate, prompt_id)
+    if not prompt or prompt.name == BASE_PROMPT_TEMPLATE_NAME:
+        raise HTTPException(status_code=404, detail="Prompt template not found")
+    rows = db.execute(
+        select(models.ContentItem, models.Site.name)
+        .outerjoin(models.Site, models.Site.id == models.ContentItem.site_id)
+        .where(
+            models.ContentItem.generation_prompt_name == prompt.name,
+            models.ContentItem.generated_at.is_not(None),
+        )
+        .order_by(models.ContentItem.generated_at.desc(), models.ContentItem.updated_at.desc())
+    ).all()
+    return [
+        {
+            "id": item.id,
+            "task_id": item.task_id,
+            "site_id": item.site_id,
+            "site_name": site_name,
+            "topic": item.topic,
+            "slug": item.slug,
+            "status": item.status,
+            "word_count": item.word_count,
+            "generation_prompt_name": item.generation_prompt_name,
+            "generated_at": item.generated_at,
+            "updated_at": item.updated_at,
+        }
+        for item, site_name in rows
+    ]
 
 
 @router.delete("/prompt-templates/{prompt_id}")
