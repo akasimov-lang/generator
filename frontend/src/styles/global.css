@@ -1201,6 +1201,19 @@ h2 {
   white-space: nowrap;
 }
 
+.projectTopDetails > .projectTitleCard {
+  align-content: start;
+}
+
+.projectTitleCard b {
+  font-size: 12px;
+  line-height: 1.25;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
+}
+
 .projectCanonLink {
   align-items: center;
   color: var(--text);
