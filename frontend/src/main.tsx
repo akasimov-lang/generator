@@ -5650,6 +5650,25 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, onChang
         {syncMessage ? <div className="siteCacheResult">{syncMessage}</div> : null}
         {syncError ? <div className="formError siteCacheError">{syncError}</div> : null}
       </DataPanel>
+      <aside className="siteMedalLegend" aria-label="Обозначения статусов проверки меню">
+        <strong className="siteMedalLegendTitle">Статусы проверки меню</strong>
+        <span className="siteMedalLegendItem">
+          <ProjectVerificationMedal status="gold" />
+          <span><b>Золотая</b> — Header и Footer реализованы</span>
+        </span>
+        <span className="siteMedalLegendItem">
+          <ProjectVerificationMedal status="verified" />
+          <span><b>Зелёная</b> — Header реализован</span>
+        </span>
+        <span className="siteMedalLegendItem">
+          <ProjectVerificationMedal status="missing" />
+          <span><b>Красная</b> — рендеринг меню не реализован</span>
+        </span>
+        <span className="siteMedalLegendItem">
+          <ProjectVerificationMedal status="unchecked" />
+          <span><b>Серая</b> — проверка ещё не выполнена</span>
+        </span>
+      </aside>
       <DataPanel
         title={(
           <span className="siteDomainsTitle">

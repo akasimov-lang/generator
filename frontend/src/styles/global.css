@@ -2583,6 +2583,49 @@ h2 {
   opacity: 0.24;
 }
 
+.siteMedalLegend {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 22px;
+  min-height: 44px;
+  padding: 6px 16px;
+}
+
+.siteMedalLegendTitle {
+  color: var(--text);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.siteMedalLegendItem {
+  align-items: center;
+  display: inline-flex;
+  font-size: 11px;
+  gap: 5px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.siteMedalLegendItem .projectVerificationMedal {
+  height: 25px;
+  margin: 0;
+  width: 22px;
+}
+
+.siteMedalLegendItem .menuReadyMedal {
+  height: 25px;
+  width: 22px;
+}
+
+.siteMedalLegendItem b {
+  color: var(--text);
+}
+
 .searchableSelectOptionIndicator {
   align-items: center;
   display: inline-flex;
@@ -5225,6 +5268,14 @@ a {
   .contentPreviewActions {
     justify-content: flex-start;
     max-width: none;
+  }
+
+  .siteMedalLegend {
+    align-items: flex-start;
+  }
+
+  .siteMedalLegendTitle {
+    flex-basis: 100%;
   }
 
   .competitorCardHeader {
