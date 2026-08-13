@@ -294,6 +294,19 @@ type PromptGeneratedContent = {
   updated_at: string;
 };
 
+type PublicationContentItem = {
+  id: string;
+  task_id: string;
+  site_id: string;
+  topic: string;
+  slug: string;
+  status: string;
+  word_count: number;
+  generated_at: string | null;
+  published_at: string | null;
+  updated_at: string;
+};
+
 type TaskDetails = {
   task: Task;
   items: ContentItem[];
@@ -5001,16 +5014,36 @@ function PublicationsView({ api, sites, content, onChanged }: ViewProps & { site
   const [siteId, setSiteId] = React.useState("");
   const [interval, setIntervalValue] = React.useState(1440);
   const [campaigns, setCampaigns] = React.useState<PublicationCampaign[]>([]);
+  const [publicationContent, setPublicationContent] = React.useState<PublicationContentItem[]>([]);
+  const [expandedProjectIds, setExpandedProjectIds] = React.useState<string[]>([]);
   const [formError, setFormError] = React.useState("");
-  const approved = content.filter((item) => item.status === "approved" && (!siteId || item.site_id === siteId));
+  const approved = publicationContent.filter((item) => item.status === "approved" && (!siteId || item.site_id === siteId));
+  const publicationProjectGroups = React.useMemo(() => sites
+    .map((site) => ({
+      site,
+      items: publicationContent.filter((item) => item.site_id === site.id)
+    }))
+    .filter((group) => group.items.length > 0)
+    .sort((left, right) => left.site.name.localeCompare(right.site.name, undefined, { sensitivity: "base" })), [publicationContent, sites]);
 
   const loadCampaigns = React.useCallback(async () => {
     setCampaigns(await api<PublicationCampaign[]>("/publication-campaigns"));
   }, [api]);
 
+  const loadPublicationContent = React.useCallback(async () => {
+    setPublicationContent(await api<PublicationContentItem[]>("/publication-content"));
+  }, [api]);
+
   React.useEffect(() => {
-    loadCampaigns().catch((error: unknown) => setFormError(error instanceof Error ? error.message : "Не удалось загрузить кампании."));
-  }, [loadCampaigns]);
+    Promise.all([loadCampaigns(), loadPublicationContent()])
+      .catch((error: unknown) => setFormError(error instanceof Error ? error.message : "Не удалось загрузить данные публикаций."));
+  }, [loadCampaigns, loadPublicationContent]);
+
+  function togglePublicationProject(projectId: string) {
+    setExpandedProjectIds((current) => current.includes(projectId)
+      ? current.filter((id) => id !== projectId)
+      : [...current, projectId]);
+  }
 
   async function createCampaign(event: React.FormEvent) {
     event.preventDefault();
@@ -5027,7 +5060,7 @@ function PublicationsView({ api, sites, content, onChanged }: ViewProps & { site
           items_per_run: 1
         })
       });
-      await Promise.all([onChanged(), loadCampaigns()]);
+      await Promise.all([onChanged(), loadCampaigns(), loadPublicationContent()]);
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Не удалось создать кампанию.");
     }
@@ -5056,7 +5089,7 @@ function PublicationsView({ api, sites, content, onChanged }: ViewProps & { site
             <SearchableSelect
               value={siteId}
               onChange={setSiteId}
-              options={[{ value: "", label: "Выберите сайт" }, ...sites.map(projectSearchOption)]}
+              options={[{ value: "", label: "Выберите сайт" }, ...publicationProjectGroups.map((group) => projectSearchOption(group.site))]}
               searchPlaceholder="Найти сайт"
             />
           </label>
@@ -5087,8 +5120,53 @@ function PublicationsView({ api, sites, content, onChanged }: ViewProps & { site
           ])}
         />
       </DataPanel>
-      <DataPanel title="Готово к публикации">
-        <ResponsiveTable columns={["Тема", "Статус", "Slug"]} rows={approved.map((item) => [<TopicMetaCell item={item} />, <StatusBadge status={item.status} />, item.slug])} />
+      <DataPanel title={`Проекты и контент · ${publicationProjectGroups.length}`}>
+        <div className="publicationProjectsInfo" role="note">
+          <ListChecks size={17} />
+          <span>На этой странице отображаются только проекты, для которых добавлена хотя бы одна тема и/или существует сгенерированный контент.</span>
+        </div>
+        <div className="publicationProjectTree">
+          {publicationProjectGroups.map(({ site, items }) => {
+            const expanded = expandedProjectIds.includes(site.id);
+            const generatedCount = items.filter((item) => Boolean(item.generated_at)).length;
+            const approvedCount = items.filter((item) => item.status === "approved").length;
+            const publishedCount = items.filter((item) => item.status === "published").length;
+            return (
+              <article className={`publicationProject ${expanded ? "expanded" : ""}`} key={site.id}>
+                <button className="publicationProjectHeader" type="button" onClick={() => togglePublicationProject(site.id)} aria-expanded={expanded}>
+                  <span className="publicationProjectChevron">{expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}</span>
+                  <span className="publicationProjectIdentity">
+                    <strong>{site.name}</strong>
+                    <ProjectVerificationMedal status={projectMenuMedalStatus(site)} />
+                  </span>
+                  <span className="publicationProjectCounters">
+                    <span>Тем: <b>{items.length}</b></span>
+                    <span>Сгенерировано: <b>{generatedCount}</b></span>
+                    <span>Approved: <b>{approvedCount}</b></span>
+                    <span>Опубликовано: <b>{publishedCount}</b></span>
+                  </span>
+                </button>
+                {expanded ? (
+                  <div className="publicationProjectBody">
+                    <ResponsiveTable
+                      columns={["Тема", "Статус", "Slug", "Слова", "Сгенерировано", "Опубликовано"]}
+                      rows={items.map((item) => [
+                        <div className="compactContentTopic" title={item.topic}>{item.topic}</div>,
+                        <StatusBadge status={item.status} />,
+                        <code>{item.slug}</code>,
+                        item.word_count,
+                        item.generated_at ? formatDate(item.generated_at) : "—",
+                        item.published_at ? formatDate(item.published_at) : "—"
+                      ])}
+                      wrapperClassName="publicationContentTable"
+                    />
+                  </div>
+                ) : null}
+              </article>
+            );
+          })}
+          {!publicationProjectGroups.length ? <EmptyState text="Проектов с добавленными темами пока нет." /> : null}
+        </div>
       </DataPanel>
     </section>
   );

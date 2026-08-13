@@ -3837,6 +3837,125 @@ td {
   padding: 14px;
 }
 
+.publicationProjectsInfo {
+  align-items: center;
+  background: var(--primary-soft);
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border));
+  border-radius: var(--radius);
+  color: var(--primary);
+  display: flex;
+  font-size: 12px;
+  font-weight: 650;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 8px 11px;
+}
+
+.publicationProjectsInfo svg {
+  flex: 0 0 auto;
+}
+
+.publicationProjectTree {
+  display: grid;
+  gap: 6px;
+}
+
+.publicationProject {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+.publicationProject.expanded {
+  border-color: color-mix(in srgb, var(--primary) 42%, var(--border));
+}
+
+.publicationProjectHeader {
+  align-items: center;
+  background: var(--surface);
+  border: 0;
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 8px;
+  grid-template-columns: 22px minmax(220px, 1fr) auto;
+  min-height: 46px;
+  padding: 7px 12px;
+  text-align: left;
+  width: 100%;
+}
+
+.publicationProjectHeader:hover,
+.publicationProject.expanded .publicationProjectHeader {
+  background: var(--primary-soft);
+}
+
+.publicationProjectChevron {
+  align-items: center;
+  color: var(--primary);
+  display: inline-flex;
+  justify-content: center;
+}
+
+.publicationProjectIdentity {
+  align-items: center;
+  display: flex;
+  gap: 5px;
+  min-width: 0;
+}
+
+.publicationProjectIdentity strong {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.publicationProjectIdentity .projectVerificationMedal {
+  height: 24px;
+  width: 21px;
+}
+
+.publicationProjectIdentity .menuReadyMedal {
+  height: 24px;
+  width: 21px;
+}
+
+.publicationProjectCounters {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 11px;
+  gap: 5px 14px;
+  justify-content: flex-end;
+}
+
+.publicationProjectCounters b {
+  color: var(--text);
+}
+
+.publicationProjectBody {
+  border-top: 1px solid var(--border);
+  padding: 4px 10px 8px 40px;
+}
+
+.publicationContentTable th,
+.publicationContentTable td {
+  padding: 7px 8px;
+}
+
+.publicationContentTable td:first-child {
+  width: 34%;
+}
+
+.publicationContentTable code {
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
 .projectSelectionRow {
   align-items: center;
   display: flex;
@@ -5276,6 +5395,19 @@ a {
 
   .siteMedalLegendTitle {
     flex-basis: 100%;
+  }
+
+  .publicationProjectHeader {
+    grid-template-columns: 22px minmax(0, 1fr);
+  }
+
+  .publicationProjectCounters {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+
+  .publicationProjectBody {
+    padding-left: 10px;
   }
 
   .competitorCardHeader {

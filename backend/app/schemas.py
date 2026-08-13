@@ -263,6 +263,19 @@ class PromptGeneratedContentResponse(BaseModel):
     updated_at: datetime
 
 
+class PublicationContentResponse(BaseModel):
+    id: str
+    task_id: str
+    site_id: str
+    topic: str
+    slug: str
+    status: str
+    word_count: int
+    generated_at: datetime | None
+    published_at: datetime | None
+    updated_at: datetime
+
+
 class GenerationTaskCreate(BaseModel):
     title: str | None = Field(default=None, max_length=180)
     geo: str

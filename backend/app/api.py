@@ -28,6 +28,7 @@ from app.schemas import (
     PasswordChange,
     PublicationCampaignResponse,
     PublicationCampaignUpdate,
+    PublicationContentResponse,
     PublicationLogResponse,
     PromptTemplateCreate,
     PromptGeneratedContentResponse,
@@ -1133,6 +1134,27 @@ def start_task_pipeline(task_id: str, _: AuthUser, db: Session = Depends(get_db)
 @router.get("/content", response_model=list[ContentItemResponse])
 def list_content(_: AdminUser, db: Session = Depends(get_db)) -> Any:
     return db.scalars(select(models.ContentItem).order_by(models.ContentItem.created_at.desc()).limit(200)).all()
+
+
+@router.get("/publication-content", response_model=list[PublicationContentResponse])
+def list_publication_content(_: AdminUser, db: Session = Depends(get_db)) -> Any:
+    rows = db.execute(
+        select(
+            models.ContentItem.id,
+            models.ContentItem.task_id,
+            models.ContentItem.site_id,
+            models.ContentItem.topic,
+            models.ContentItem.slug,
+            models.ContentItem.status,
+            models.ContentItem.word_count,
+            models.ContentItem.generated_at,
+            models.ContentItem.published_at,
+            models.ContentItem.updated_at,
+        )
+        .where(models.ContentItem.site_id.is_not(None))
+        .order_by(models.ContentItem.updated_at.desc())
+    ).mappings().all()
+    return [dict(row) for row in rows]
 
 
 @router.get("/content/{content_id}", response_model=ContentItemResponse)
