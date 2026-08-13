@@ -1449,6 +1449,9 @@ function ProjectWorkspaceView({
   const selectedSite = sites.find((site) => site.id === selectedSiteId) || null;
   const routeProjectName = workspaceProjectNameFromPath(window.location.pathname);
   const pendingSectionsCount = sections.filter((section) => section.sync_status !== "synced").length;
+  const selectedProjectMedalStatus = menuCapabilities?.checked_at
+    ? headerMedalStatus(menuCapabilities.checked_at, menuCapabilities.header_menu_rendered)
+    : selectedSite ? projectHeaderMedalStatus(selectedSite) : "unchecked";
 
   const loadProject = React.useCallback(async () => {
     if (!selectedSiteId) return;
@@ -1589,7 +1592,7 @@ function ProjectWorkspaceView({
             </button>
           ) : null}
           <strong>{selectedSite?.name || "Выберите проект"}</strong>
-          {selectedSite ? <ProjectVerificationMedal verified={projectHasHeaderMedal(selectedSite)} /> : null}
+          {selectedSite ? <ProjectVerificationMedal status={selectedProjectMedalStatus} /> : null}
         </span>
       )}>
         <div className="projectHeader">
@@ -1677,6 +1680,15 @@ function ProjectWorkspaceView({
             </b>
           </div>
         ) : null}
+        {selectedSite && selectedProjectMedalStatus === "missing" ? (
+          <div className="projectMenuImplementationWarning" role="status">
+            <AlertTriangle size={20} />
+            <div>
+              <strong>Рендеринг меню не реализован на сайте</strong>
+              <span>Необходимо обратиться к веб-разработчику для добавления рендеринга меню на сайт.</span>
+            </div>
+          </div>
+        ) : null}
         <div className="workspaceTabs">
           <TabButton href={pathForRoute("workspace", "overview", selectedSite?.name)} label="Обзор" active={activeTab === "overview"} onClick={() => onTabChange("overview", selectedSite?.name)} />
           <TabButton href={pathForRoute("workspace", "topics", selectedSite?.name)} label="Задачи" active={activeTab === "topics"} onClick={() => onTabChange("topics", selectedSite?.name)} />
@@ -1735,7 +1747,7 @@ function MenuCapabilityCard({ label, rendered, nested, icon }: { label: string; 
     <span className={`projectMenuCapability ${rendered === true ? "isReady" : rendered === false ? "isMissing" : "isChecking"}`} title={`${label}: ${statusText}${rendered ? nested ? ". Вложенность поддерживается" : ". Только один уровень" : ""}`}>
       <small>{label}</small>
       <span className="projectMenuCapabilityValue">
-        {rendered === true ? <MenuReadyMedal /> : icon === "header" ? <HeaderMenuIcon /> : <FooterMenuIcon />}
+        {rendered === true ? <MenuReadyMedal /> : rendered === false ? <MenuReadyMedal tone="red" /> : icon === "header" ? <HeaderMenuIcon /> : <FooterMenuIcon />}
         <b>{statusText}</b>
       </span>
       {rendered ? <em>{nested ? "Есть вложенность" : "Один уровень"}</em> : null}
@@ -1743,9 +1755,9 @@ function MenuCapabilityCard({ label, rendered, nested, icon }: { label: string; 
   );
 }
 
-function MenuReadyMedal() {
+function MenuReadyMedal({ tone = "green" }: { tone?: "green" | "red" }) {
   return (
-    <svg className="menuReadyMedal" viewBox="0 0 48 52" aria-hidden="true">
+    <svg className={`menuReadyMedal ${tone === "red" ? "isRed" : ""}`} viewBox="0 0 48 52" aria-hidden="true">
       <defs>
         <linearGradient id="menuReadyRibbon" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#2eaa61" /><stop offset="1" stopColor="#09612e" /></linearGradient>
         <linearGradient id="menuReadyFace" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#f2fff6" /><stop offset="1" stopColor="#aee9c4" /></linearGradient>
@@ -4545,13 +4557,13 @@ function ContentView({ api, sites, content, onChanged }: ViewProps & { sites: Si
         id: site.id,
         name: site.name,
         baseUrl: site.base_url,
-        hasHeaderMedal: projectHasHeaderMedal(site),
+        medalStatus: projectHeaderMedalStatus(site),
         items: content.filter((item) => item.site_id === site.id)
       }))
       .sort((first, second) => first.name.localeCompare(second.name, "ru"));
     const unassigned = content.filter((item) => !item.site_id || !knownSiteIds.has(item.site_id));
     if (unassigned.length) {
-      groups.push({ id: "__unassigned__", name: "Без проекта", baseUrl: "", hasHeaderMedal: false, items: unassigned });
+      groups.push({ id: "__unassigned__", name: "Без проекта", baseUrl: "", medalStatus: "unchecked" as ProjectMedalStatus, items: unassigned });
     }
     return groups;
   }, [content, sites]);
@@ -4711,7 +4723,7 @@ function ContentView({ api, sites, content, onChanged }: ViewProps & { sites: Si
                   <span className="contentProjectIdentity">
                     <span className="contentProjectName">
                       <strong>{group.name}</strong>
-                      {group.id !== "__unassigned__" ? <ProjectVerificationMedal verified={group.hasHeaderMedal} /> : null}
+                      {group.id !== "__unassigned__" ? <ProjectVerificationMedal status={group.medalStatus} /> : null}
                     </span>
                     <span>{group.baseUrl || "Проект не назначен"}</span>
                   </span>
@@ -5052,15 +5064,24 @@ function localeFlag(countryCode: string | null): string {
   return String.fromCodePoint(...countryCode.split("").map((character) => 127397 + character.charCodeAt(0)));
 }
 
-function projectHasHeaderMedal(site: Site): boolean {
-  return Boolean(site.menu_capabilities_checked_at && site.header_menu_rendered === true);
+type ProjectMedalStatus = "verified" | "missing" | "unchecked";
+
+function headerMedalStatus(checkedAt: string | null, rendered: boolean | null): ProjectMedalStatus {
+  if (!checkedAt || rendered == null) return "unchecked";
+  return rendered ? "verified" : "missing";
 }
 
-function ProjectVerificationMedal({ verified }: { verified: boolean }) {
-  const status = verified ? "Проверка Header пройдена" : "Проверка Header не пройдена";
+function projectHeaderMedalStatus(site: Site): ProjectMedalStatus {
+  return headerMedalStatus(site.menu_capabilities_checked_at, site.header_menu_rendered);
+}
+
+function ProjectVerificationMedal({ status }: { status: ProjectMedalStatus }) {
+  const statusText = status === "verified"
+    ? "Проверка Header пройдена"
+    : status === "missing" ? "Проверено: рендеринг Header-меню не реализован" : "Проверка Header ещё не выполнена";
   return (
-    <span className={`projectVerificationMedal ${verified ? "isVerified" : "isPending"}`} title={status} aria-label={status}>
-      <MenuReadyMedal />
+    <span className={`projectVerificationMedal is${status[0].toUpperCase()}${status.slice(1)}`} title={statusText} aria-label={statusText}>
+      <MenuReadyMedal tone={status === "missing" ? "red" : "green"} />
     </span>
   );
 }
@@ -5071,7 +5092,7 @@ function projectSearchOption(site: Site): SearchableSelectOption {
     value: site.id,
     label: site.name,
     leading: flag ? <span className="projectSelectFlag" aria-hidden="true">{flag}</span> : undefined,
-    indicator: <ProjectVerificationMedal verified={projectHasHeaderMedal(site)} />,
+    indicator: <ProjectVerificationMedal status={projectHeaderMedalStatus(site)} />,
     keywords: `${site.cache_canon || ""} ${site.base_url}`
   };
 }
@@ -5223,7 +5244,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, onChang
       isWorking: site.project_status === "working",
       projectStatus: site.project_status,
       hasMenu: site.has_menu,
-      hasHeaderMedal: projectHasHeaderMedal(site),
+      medalStatus: projectHeaderMedalStatus(site),
       headerMenuCount,
       footerMenuCount,
       headerMenu: Array.isArray(site.default_menu.header) ? site.default_menu.header : [],
@@ -5519,7 +5540,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, onChang
                   <span className="siteNameWithFlag">
                     {localeFlag(localeCountryCode(row.geo || row.language || "")) ? <span aria-hidden="true">{localeFlag(localeCountryCode(row.geo || row.language || ""))}</span> : null}
                     <strong>{row.name}</strong>
-                    <ProjectVerificationMedal verified={row.hasHeaderMedal} />
+                    <ProjectVerificationMedal status={row.medalStatus} />
                   </span>
                   <span className="siteNameActions">
                     <button

@@ -1317,6 +1317,10 @@ h2 {
   width: 31px;
 }
 
+.menuReadyMedal.isRed {
+  filter: hue-rotate(235deg) saturate(1.55);
+}
+
 .taskMenuSectionSelect {
   background: #fff8e9;
   border: 1px solid #e7bd65;
@@ -1370,6 +1374,35 @@ h2 {
 .projectUpdatedAt > b.pending {
   background: var(--warning-soft);
   color: var(--warning);
+}
+
+.projectMenuImplementationWarning {
+  align-items: center;
+  background: #fff0f0;
+  border: 1px solid #e69a9a;
+  border-radius: 9px;
+  color: #a32222;
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 12px;
+}
+
+.projectMenuImplementationWarning > svg {
+  flex: 0 0 auto;
+}
+
+.projectMenuImplementationWarning > div {
+  display: grid;
+  gap: 2px;
+}
+
+.projectMenuImplementationWarning strong {
+  font-size: 13px;
+}
+
+.projectMenuImplementationWarning span {
+  font-size: 11px;
 }
 
 .projectMetaPrimary {
@@ -2359,7 +2392,7 @@ h2 {
   width: 25px;
 }
 
-.projectVerificationMedal.isPending .menuReadyMedal {
+.projectVerificationMedal.isUnchecked .menuReadyMedal {
   filter: grayscale(1);
   opacity: 0.24;
 }
