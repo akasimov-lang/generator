@@ -2028,7 +2028,11 @@ h2 {
 }
 
 .siteMenuPreviewSection li {
+  align-items: center;
   border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
   padding: 9px 4px;
 }
 
@@ -2036,16 +2040,47 @@ h2 {
   border-bottom: 0;
 }
 
-.siteMenuPreviewSection li strong,
-.siteMenuPreviewSection li code {
+.siteMenuPreviewItemText {
+  min-width: 0;
+}
+
+.siteMenuPreviewItemText strong,
+.siteMenuPreviewItemText code {
   display: block;
   overflow-wrap: anywhere;
 }
 
-.siteMenuPreviewSection li code {
+.siteMenuPreviewItemText code {
   color: var(--muted);
   font-size: 11px;
   margin-top: 3px;
+}
+
+.siteMenuAddChildButton {
+  align-items: center;
+  background: var(--primary-soft);
+  border: 1px solid color-mix(in srgb, var(--primary) 38%, var(--border));
+  border-radius: 7px;
+  color: var(--primary);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 750;
+  gap: 5px;
+  min-height: 30px;
+  padding: 5px 8px;
+}
+
+.siteMenuAddChildButton:hover:not(:disabled) {
+  border-color: var(--primary);
+  filter: brightness(0.98);
+}
+
+.siteMenuAddChildButton:disabled {
+  cursor: wait;
+  opacity: 0.62;
 }
 
 .siteMenuPreviewEmpty {

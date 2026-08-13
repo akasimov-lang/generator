@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app import models
-from app.api import create_menu_library_item, create_section, create_sections_bulk, delete_section, list_admin_request_logs, update_menu_library_item, update_section
+from app.api import adopt_cached_section, create_menu_library_item, create_section, create_sections_bulk, delete_section, list_admin_request_logs, update_menu_library_item, update_section
 from app.db import Base
 from app.schemas import MenuLibraryItemCreate, MenuLibraryItemUpdate, SectionCreate, SectionsBulkCreate, SectionUpdate
 
@@ -68,6 +68,36 @@ def test_project_menu_library_stores_custom_items_without_duplicates() -> None:
         db.refresh(site)
         assert first == second
         assert len(site.menu_library) == 1
+
+
+def test_cached_menu_item_can_be_adopted_and_used_as_parent() -> None:
+    with make_session() as db:
+        site = models.Site(
+            name="review.example",
+            base_url="https://review.example",
+            publication_endpoint="https://review.example/api/content",
+            default_menu={"header": [{"title": "Casinos", "path": "/casinos/"}], "footer": []},
+            header_menu_nested=True,
+        )
+        db.add(site)
+        db.commit()
+
+        parent = adopt_cached_section(
+            site.id,
+            SectionCreate(external_id="casinos", name="Casinos", path="/casinos/", menu_type="header"),
+            None,  # type: ignore[arg-type]
+            db,
+        )
+        child = create_section(
+            site.id,
+            SectionCreate(external_id="new-casinos", name="New Casinos", path="/new-casinos/", menu_type="header", parent_id=parent.id),
+            None,  # type: ignore[arg-type]
+            db,
+        )
+
+        assert parent.sync_status == "synced"
+        assert child.parent_id == parent.id
+        assert child.sync_status == "pending"
 
 
 def test_menu_library_edit_is_scoped_to_selected_project() -> None:

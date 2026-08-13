@@ -16,6 +16,7 @@ import {
   ChevronUp,
   CheckCircle2,
   Copy,
+  CornerDownRight,
   Database,
   Edit3,
   Eye,
@@ -2919,6 +2920,7 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
   const [editingSectionPath, setEditingSectionPath] = React.useState("");
   const [savingSectionEdit, setSavingSectionEdit] = React.useState(false);
   const [deletingSectionId, setDeletingSectionId] = React.useState<string | null>(null);
+  const [adoptingParentKey, setAdoptingParentKey] = React.useState<string | null>(null);
   const cachedHeader = Array.isArray(site.default_menu.header) ? site.default_menu.header : [];
   const cachedFooter = Array.isArray(site.default_menu.footer) ? site.default_menu.footer : [];
   const menuLibrary = React.useMemo(() => {
@@ -2960,6 +2962,35 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
     setInlineMenuType((current) => current === targetMenuType ? null : targetMenuType);
     setAddExpanded(false);
     setFormError("");
+  }
+
+  async function openChildForm(targetMenuType: "header" | "footer", item: MenuPreviewItem) {
+    const parentKey = `${targetMenuType}:${item.externalId}`;
+    setAdoptingParentKey(parentKey);
+    setFormError("");
+    try {
+      const parent = await api<Section>(`/sites/${site.id}/sections/adopt`, {
+        method: "POST",
+        body: JSON.stringify({
+          external_id: item.externalId,
+          name: item.title,
+          path: item.path || `/${item.externalId}/`,
+          menu_type: targetMenuType,
+          parent_id: null
+        })
+      });
+      setName("");
+      setPath("");
+      setMenuType(targetMenuType);
+      setParentId(parent.id);
+      setInlineMenuType(targetMenuType);
+      setAddExpanded(false);
+      await onChanged();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось выбрать родительский пункт");
+    } finally {
+      setAdoptingParentKey(null);
+    }
   }
 
   function startSectionEdit(section: Section) {
@@ -3177,10 +3208,10 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
           </form> : null}
         </section>
         <div className="projectMenuStructureGrid">
-          <SiteMenuPreviewSection title="Меню Header" icon={<HeaderMenuIcon />} items={cachedHeader} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("header")}><Plus size={15} /> Добавить пункт в Header</button>}>
+          <SiteMenuPreviewSection title="Меню Header" icon={<HeaderMenuIcon />} items={cachedHeader} allowChildren={menuCapabilities?.header_menu_nested === true} adoptingParentKey={adoptingParentKey} onAddChild={(item) => openChildForm("header", item)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("header")}><Plus size={15} /> Добавить пункт в Header</button>}>
             {inlineMenuType === "header" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "header")}>{menuFields("header")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
           </SiteMenuPreviewSection>
-          <SiteMenuPreviewSection title="Меню Footer" icon={<FooterMenuIcon />} items={cachedFooter} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("footer")}><Plus size={15} /> Добавить пункт в Footer</button>}>
+          <SiteMenuPreviewSection title="Меню Footer" icon={<FooterMenuIcon />} items={cachedFooter} allowChildren={menuCapabilities?.footer_menu_nested === true} adoptingParentKey={adoptingParentKey} onAddChild={(item) => openChildForm("footer", item)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("footer")}><Plus size={15} /> Добавить пункт в Footer</button>}>
             {inlineMenuType === "footer" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "footer")}>{menuFields("footer")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
           </SiteMenuPreviewSection>
         </div>
@@ -5610,18 +5641,28 @@ function SiteTitleTooltip({ name, title }: { name: string; title: string }) {
   );
 }
 
-function SiteMenuPreviewSection({ title, items, icon, action, children }: { title: string; items: unknown[]; icon?: React.ReactNode; action?: React.ReactNode; children?: React.ReactNode }) {
-  const menuItemText = (item: unknown, index: number) => {
-    if (typeof item === "string") return { title: item, path: "" };
-    if (!item || typeof item !== "object" || Array.isArray(item)) return { title: `Пункт ${index + 1}`, path: String(item ?? "") };
+type MenuPreviewItem = { title: string; path: string; externalId: string };
+
+function menuPreviewItem(item: unknown, index: number): MenuPreviewItem {
+    if (typeof item === "string") return { title: item, path: "", externalId: slugFromText(item) };
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      const title = `Пункт ${index + 1}`;
+      return { title, path: String(item ?? ""), externalId: slugFromText(title) };
+    }
     const value = item as Record<string, unknown>;
     const itemTitle = [value.title, value.name, value.label, value.text].find((entry) => typeof entry === "string" && entry.trim());
     const itemPath = [value.path, value.url, value.href, value.slug].find((entry) => typeof entry === "string" && entry.trim());
+    const externalId = [value.external_id, value.externalId, value.id].find((entry) => typeof entry === "string" && entry.trim());
+    const resolvedTitle = typeof itemTitle === "string" ? itemTitle : `Пункт ${index + 1}`;
     return {
-      title: typeof itemTitle === "string" ? itemTitle : `Пункт ${index + 1}`,
-      path: typeof itemPath === "string" ? itemPath : ""
+      title: resolvedTitle,
+      path: typeof itemPath === "string" ? itemPath : "",
+      externalId: typeof externalId === "string" ? externalId : slugFromText(resolvedTitle)
     };
-  };
+}
+
+function SiteMenuPreviewSection({ title, items, icon, action, children, allowChildren = false, adoptingParentKey, onAddChild }: { title: string; items: unknown[]; icon?: React.ReactNode; action?: React.ReactNode; children?: React.ReactNode; allowChildren?: boolean; adoptingParentKey?: string | null; onAddChild?: (item: MenuPreviewItem) => void }) {
+  const menuType = title.includes("Footer") ? "footer" : "header";
 
   return (
     <section className="siteMenuPreviewSection">
@@ -5629,8 +5670,9 @@ function SiteMenuPreviewSection({ title, items, icon, action, children }: { titl
       {items.length ? (
         <ol>
           {items.map((item, index) => {
-            const display = menuItemText(item, index);
-            return <li key={`${display.title}:${display.path}:${index}`}><strong>{display.title}</strong>{display.path ? <code>{display.path}</code> : null}</li>;
+            const display = menuPreviewItem(item, index);
+            const parentKey = `${menuType}:${display.externalId}`;
+            return <li key={`${display.title}:${display.path}:${index}`}><div className="siteMenuPreviewItemText"><strong>{display.title}</strong>{display.path ? <code>{display.path}</code> : null}</div>{allowChildren && onAddChild ? <button className="siteMenuAddChildButton" type="button" onClick={() => onAddChild(display)} disabled={Boolean(adoptingParentKey)}><CornerDownRight size={15} /> {adoptingParentKey === parentKey ? "Открываем…" : "Добавить дочерний"}</button> : null}</li>;
           })}
         </ol>
       ) : <div className="siteMenuPreviewEmpty">Пунктов нет</div>}

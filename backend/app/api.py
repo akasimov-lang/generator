@@ -113,6 +113,29 @@ def _add_site_menu_library_item(site: models.Site, payload: MenuLibraryItemCreat
     return item
 
 
+def _normalized_menu_path(value: str) -> str:
+    path = value.strip().strip("/")
+    return f"/{path}/" if path else "/"
+
+
+def _cached_menu_item_matches(item: Any, payload: SectionCreate) -> bool:
+    if isinstance(item, str):
+        return item.strip().casefold() == payload.name.strip().casefold()
+    if not isinstance(item, dict):
+        return False
+    item_path = next(
+        (str(item.get(key)).strip() for key in ("path", "url", "href", "slug") if item.get(key)),
+        "",
+    )
+    if item_path and _normalized_menu_path(item_path) == _normalized_menu_path(payload.path):
+        return True
+    item_id = str(item.get("external_id") or item.get("externalId") or item.get("id") or "").strip()
+    if item_id and item_id.casefold() == payload.external_id.strip().casefold():
+        return True
+    item_name = str(item.get("title") or item.get("name") or item.get("label") or item.get("text") or "").strip()
+    return bool(item_name and item_name.casefold() == payload.name.strip().casefold())
+
+
 def _validate_task_topics(payload: GenerationTaskCreate) -> None:
     clean_topics = [topic.strip() for topic in payload.topics if topic.strip()]
     if not clean_topics:
@@ -497,6 +520,8 @@ def create_section(site_id: str, payload: SectionCreate, _: AuthUser, db: Sessio
         parent = _get_section_for_site(db, site_id, payload.parent_id)
         if parent.menu_type != payload.menu_type:
             raise HTTPException(status_code=400, detail="Parent menu item must use the same menu type")
+        if parent.parent_id:
+            raise HTTPException(status_code=400, detail="Only top-level menu items can contain nested items")
         nesting_supported = site.header_menu_nested if payload.menu_type == "header" else site.footer_menu_nested
         if nesting_supported is not True:
             raise HTTPException(status_code=400, detail="This project template does not support nested menu items")
@@ -519,6 +544,46 @@ def create_section(site_id: str, payload: SectionCreate, _: AuthUser, db: Sessio
             response_body={"section_id": section.id, "synchronized": False},
         )
     )
+    db.commit()
+    db.refresh(section)
+    return section
+
+
+@router.post("/sites/{site_id}/sections/adopt", response_model=SectionResponse)
+def adopt_cached_section(site_id: str, payload: SectionCreate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    """Create a local synchronized reference for a menu item that already exists in the project cache."""
+    site = _get_site_or_404(db, site_id)
+    cached_menu = site.default_menu if isinstance(site.default_menu, dict) else {}
+    cached_items = cached_menu.get(payload.menu_type, [])
+    if not isinstance(cached_items, list) or not any(_cached_menu_item_matches(item, payload) for item in cached_items):
+        raise HTTPException(status_code=404, detail="Menu item was not found in the synchronized project menu")
+
+    normalized_path = _normalized_menu_path(payload.path)
+    existing = next(
+        (
+            section
+            for section in db.scalars(select(models.Section).where(models.Section.site_id == site_id)).all()
+            if section.menu_type == payload.menu_type
+            and (
+                section.external_id.casefold() == payload.external_id.strip().casefold()
+                or _normalized_menu_path(section.path) == normalized_path
+            )
+        ),
+        None,
+    )
+    if existing:
+        return existing
+
+    section = models.Section(
+        site_id=site_id,
+        external_id=payload.external_id.strip(),
+        name=payload.name.strip(),
+        path=normalized_path,
+        menu_type=payload.menu_type,
+        sync_status="synced",
+        synced_at=site.cache_synced_at or datetime.now(timezone.utc),
+    )
+    db.add(section)
     db.commit()
     db.refresh(section)
     return section
@@ -571,8 +636,9 @@ def delete_section(site_id: str, section_id: str, _: AuthUser, db: Session = Dep
     section = _get_section_for_site(db, site_id, section_id)
     task_count = db.scalar(select(func.count(models.GenerationTask.id)).where(models.GenerationTask.section_id == section.id)) or 0
     content_count = db.scalar(select(func.count(models.ContentItem.id)).where(models.ContentItem.section_id == section.id)) or 0
-    if task_count or content_count:
-        raise HTTPException(status_code=409, detail="Пункт используется в задачах или контенте и не может быть удалён")
+    child_count = db.scalar(select(func.count(models.Section.id)).where(models.Section.parent_id == section.id)) or 0
+    if task_count or content_count or child_count:
+        raise HTTPException(status_code=409, detail="Пункт используется в задачах, контенте или содержит дочерние пункты и не может быть удалён")
     db.delete(section)
     db.add(
         models.PublicationLog(
