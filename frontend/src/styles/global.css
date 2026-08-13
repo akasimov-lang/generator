@@ -2152,6 +2152,12 @@ h2 {
   width: 26px;
 }
 
+.siteMenuTreeBranchSpacer {
+  flex: 0 0 26px;
+  height: 28px;
+  width: 26px;
+}
+
 .siteMenuTreeToggle.hasChildren {
   color: var(--primary);
   cursor: pointer;

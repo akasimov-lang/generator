@@ -5902,10 +5902,11 @@ function SiteMenuPreviewSection({ title, items, sections = [], icon, action, chi
         return (
           <li className="siteMenuTreeNode" key={node.key} role="treeitem" aria-expanded={hasChildren ? !collapsed : undefined}>
             <div className="siteMenuTreeRow">
-              <button className={`siteMenuTreeToggle ${hasChildren ? "hasChildren" : ""}`} type="button" onClick={() => hasChildren && toggleNode(node.key)} disabled={!hasChildren} aria-label={hasChildren ? `${collapsed ? "Развернуть" : "Свернуть"} ${node.item.title}` : undefined}>
-                {hasChildren ? <>{collapsed ? <ChevronRight size={17} /> : <ChevronDown size={17} />}<span className="siteMenuTreeToggleLabel">{collapsed ? "Показать все" : "Свернуть"}</span><span className="siteMenuTreeNestedCount">{nestedCount}</span></> : <span />}
-              </button>
+              {hasChildren ? <span className="siteMenuTreeBranchSpacer" /> : <button className="siteMenuTreeToggle" type="button" disabled><span /></button>}
               <div className="siteMenuPreviewItemText"><strong>{node.item.title}</strong>{node.item.path ? <code>{node.item.path}</code> : null}</div>
+              {hasChildren ? <button className="siteMenuTreeToggle hasChildren" type="button" onClick={() => toggleNode(node.key)} aria-label={`${collapsed ? "Развернуть" : "Свернуть"} ${node.item.title}`}>
+                {collapsed ? <ChevronRight size={17} /> : <ChevronDown size={17} />}<span className="siteMenuTreeToggleLabel">{collapsed ? "Показать все" : "Свернуть"}</span><span className="siteMenuTreeNestedCount">{nestedCount}</span>
+              </button> : null}
               {canAddNestedItems && onAddChild ? <button className="siteMenuAddChildButton" type="button" onClick={() => onAddChild(node.item, node.section)} disabled={Boolean(adoptingParentKey)} title={`Добавить дочерний пункт в «${node.item.title}»`}><Plus size={15} /> {adoptingParentKey === parentKey ? "Открываем…" : "Добавить"}</button> : null}
             </div>
             {hasChildren && !collapsed ? renderNodes(node.children, depth + 1) : null}
