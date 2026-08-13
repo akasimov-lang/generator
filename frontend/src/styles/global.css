@@ -2071,6 +2071,32 @@ h2 {
   grid-column: 1 / -1;
 }
 
+.siteMenuTreeChildForm {
+  border-bottom: 1px solid var(--border);
+  padding: 0 10px 12px 33px;
+}
+
+.siteMenuTreeChildForm .siteMenuInlineForm {
+  background: color-mix(in srgb, var(--primary-soft) 38%, white);
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border));
+  border-radius: 9px;
+  margin-top: 0;
+  padding: 10px;
+}
+
+.siteMenuSelectedParent {
+  align-items: center;
+  color: var(--primary);
+  display: flex;
+  font-size: 12px;
+  gap: 5px;
+  grid-column: 1 / -1;
+}
+
+.siteMenuSelectedParent span {
+  color: var(--muted);
+}
+
 .siteMenuInlineActions {
   display: flex;
   gap: 8px;

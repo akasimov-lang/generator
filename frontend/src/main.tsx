@@ -16,6 +16,7 @@ import {
   ChevronUp,
   CheckCircle2,
   Copy,
+  CornerDownRight,
   Database,
   Edit3,
   Eye,
@@ -2938,6 +2939,8 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
   const [path, setPath] = React.useState("");
   const [menuType, setMenuType] = React.useState<"header" | "footer">("header");
   const [parentId, setParentId] = React.useState("");
+  const [parentName, setParentName] = React.useState("");
+  const [parentTreeKey, setParentTreeKey] = React.useState("");
   const [formError, setFormError] = React.useState("");
   const [addExpanded, setAddExpanded] = React.useState(false);
   const [inlineMenuType, setInlineMenuType] = React.useState<"header" | "footer" | null>(null);
@@ -2979,6 +2982,8 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
     setName("");
     setPath("");
     setParentId("");
+    setParentName("");
+    setParentTreeKey("");
     setTemporaryParentId(null);
     setInlineMenuType(null);
     setLibraryFormExpanded(false);
@@ -2999,12 +3004,14 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
     setPath("");
     setMenuType(targetMenuType);
     setParentId("");
+    setParentName("");
+    setParentTreeKey("");
     setInlineMenuType((current) => current === targetMenuType ? null : targetMenuType);
     setAddExpanded(false);
     setFormError("");
   }
 
-  async function openChildForm(targetMenuType: "header" | "footer", item: MenuPreviewItem, existingParent?: Section) {
+  async function openChildForm(targetMenuType: "header" | "footer", item: MenuPreviewItem, existingParent?: Section, treeKey = "") {
     const parentKey = `${targetMenuType}:${item.externalId}`;
     setAdoptingParentKey(parentKey);
     setFormError("");
@@ -3025,6 +3032,8 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
       setPath("");
       setMenuType(targetMenuType);
       setParentId(adopted.section.id);
+      setParentName(item.title);
+      setParentTreeKey(treeKey);
       setTemporaryParentId(adopted.created || adopted.section.is_temporary_parent ? adopted.section.id : null);
       setInlineMenuType(targetMenuType);
       setAddExpanded(false);
@@ -3042,6 +3051,8 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
     setName("");
     setPath("");
     setParentId("");
+    setParentName("");
+    setParentTreeKey("");
     setTemporaryParentId(null);
     if (!sectionId) return;
     setReleasingTemporaryParent(true);
@@ -3128,6 +3139,8 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
       setName("");
       setPath("");
       setParentId("");
+      setParentName("");
+      setParentTreeKey("");
       setTemporaryParentId(null);
       setInlineMenuType(null);
       setUpdatedAt(created.updated_at || new Date().toISOString());
@@ -3225,6 +3238,7 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
     };
     return (
       <>
+        {targetMenuType && parentId ? <div className="siteMenuSelectedParent"><CornerDownRight size={17} /><span>Дочерний пункт для:</span><strong>{parentName || sections.find((section) => section.id === parentId)?.name}</strong></div> : null}
         <label>
           Пункт меню
           <input list={menuLibraryListId} value={name} onChange={(event) => updateMenuName(event.target.value)} placeholder="Выберите или введите свой" required />
@@ -3236,7 +3250,7 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
           URL
           <input value={path} onChange={(event) => setPath(event.target.value)} placeholder="casino-bonuses" required />
         </label>
-        {nestingSupported && possibleParents.length ? <label>
+        {!targetMenuType && nestingSupported && possibleParents.length ? <label>
           Родительский пункт
           <select value={parentId} onChange={(event) => setParentId(event.target.value)}>
             <option value="">Без вложенности</option>
@@ -3284,10 +3298,10 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
           </form> : null}
         </section>
         <div className="projectMenuStructureGrid">
-          <SiteMenuPreviewSection key={`${site.id}:header`} title="Меню Header" icon={<HeaderMenuIcon />} items={cachedHeader} sections={sections.filter((section) => section.menu_type === "header")} adoptingParentKey={adoptingParentKey} onAddChild={(item, section) => openChildForm("header", item, section)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("header")}><Plus size={15} /> Добавить пункт в Header</button>}>
+          <SiteMenuPreviewSection key={`${site.id}:header`} title="Меню Header" icon={<HeaderMenuIcon />} items={cachedHeader} sections={sections.filter((section) => section.menu_type === "header")} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "header" ? parentTreeKey : ""} onAddChild={(item, section, treeKey) => openChildForm("header", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("header")}><Plus size={15} /> Добавить пункт в Header</button>}>
             {inlineMenuType === "header" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "header")}>{menuFields("header")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
           </SiteMenuPreviewSection>
-          <SiteMenuPreviewSection key={`${site.id}:footer`} title="Меню Footer" icon={<FooterMenuIcon />} items={cachedFooter} sections={sections.filter((section) => section.menu_type === "footer")} adoptingParentKey={adoptingParentKey} onAddChild={(item, section) => openChildForm("footer", item, section)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("footer")}><Plus size={15} /> Добавить пункт в Footer</button>}>
+          <SiteMenuPreviewSection key={`${site.id}:footer`} title="Меню Footer" icon={<FooterMenuIcon />} items={cachedFooter} sections={sections.filter((section) => section.menu_type === "footer")} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "footer" ? parentTreeKey : ""} onAddChild={(item, section, treeKey) => openChildForm("footer", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("footer")}><Plus size={15} /> Добавить пункт в Footer</button>}>
             {inlineMenuType === "footer" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "footer")}>{menuFields("footer")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
           </SiteMenuPreviewSection>
         </div>
@@ -5876,7 +5890,7 @@ function collapsibleMenuKeys(nodes: MenuTreeNode[]): Set<string> {
   return keys;
 }
 
-function SiteMenuPreviewSection({ title, items, sections = [], icon, action, children, adoptingParentKey, onAddChild }: { title: string; items: unknown[]; sections?: Section[]; icon?: React.ReactNode; action?: React.ReactNode; children?: React.ReactNode; adoptingParentKey?: string | null; onAddChild?: (item: MenuPreviewItem, section?: Section) => void }) {
+function SiteMenuPreviewSection({ title, items, sections = [], icon, action, children, adoptingParentKey, activeParentTreeKey, onAddChild }: { title: string; items: unknown[]; sections?: Section[]; icon?: React.ReactNode; action?: React.ReactNode; children?: React.ReactNode; adoptingParentKey?: string | null; activeParentTreeKey?: string; onAddChild?: (item: MenuPreviewItem, section: Section | undefined, treeKey: string) => void }) {
   const menuType = title.includes("Footer") ? "footer" : "header";
   const tree = React.useMemo(() => buildMenuTree(items, sections), [items, sections]);
   const [collapsedKeys, setCollapsedKeys] = React.useState<Set<string>>(() => collapsibleMenuKeys(tree));
@@ -5902,8 +5916,9 @@ function SiteMenuPreviewSection({ title, items, sections = [], icon, action, chi
               {hasChildren ? <button className="siteMenuTreeToggle hasChildren" type="button" onClick={() => toggleNode(node.key)} aria-label={`${collapsed ? "Развернуть" : "Свернуть"} ${node.item.title}`}>
                 {collapsed ? <ChevronRight size={17} /> : <ChevronDown size={17} />}<span className="siteMenuTreeToggleLabel">{collapsed ? "Показать все" : "Свернуть"}</span><span className="siteMenuTreeNestedCount">{nestedCount}</span>
               </button> : null}
-              {onAddChild ? <button className="siteMenuAddChildButton" type="button" onClick={() => onAddChild(node.item, node.section)} disabled={Boolean(adoptingParentKey)} title={`Добавить дочерний пункт в «${node.item.title}»`}><Plus size={15} /> {adoptingParentKey === parentKey ? "Открываем…" : "Добавить"}</button> : null}
+              {onAddChild ? <button className="siteMenuAddChildButton" type="button" onClick={() => onAddChild(node.item, node.section, node.key)} disabled={Boolean(adoptingParentKey)} title={`Добавить дочерний пункт в «${node.item.title}»`}><Plus size={15} /> {adoptingParentKey === parentKey ? "Открываем…" : "Добавить"}</button> : null}
             </div>
+            {activeParentTreeKey === node.key && children ? <div className="siteMenuTreeChildForm">{children}</div> : null}
             {hasChildren && !collapsed ? renderNodes(node.children, depth + 1) : null}
           </li>
         );
@@ -5918,7 +5933,7 @@ function SiteMenuPreviewSection({ title, items, sections = [], icon, action, chi
         <div className="siteMenuTreeViewport">{renderNodes(tree)}</div>
       ) : <div className="siteMenuPreviewEmpty">Пунктов нет</div>}
       {action ? <div className="siteMenuPreviewAction">{action}</div> : null}
-      {children}
+      {children && !activeParentTreeKey ? children : null}
     </section>
   );
 }
