@@ -2155,6 +2155,13 @@ h2 {
 .siteMenuTreeToggle.hasChildren {
   color: var(--primary);
   cursor: pointer;
+  flex-basis: auto;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 750;
+  gap: 4px;
+  padding: 0 7px;
+  width: auto;
 }
 
 .siteMenuTreeToggle.hasChildren:hover {
@@ -2170,6 +2177,14 @@ h2 {
   border-radius: 50%;
   height: 4px;
   width: 4px;
+}
+
+.siteMenuTreeToggle > .siteMenuTreeToggleLabel {
+  background: transparent;
+  border-radius: 0;
+  height: auto;
+  white-space: nowrap;
+  width: auto;
 }
 
 .siteMenuPreviewItemText {
