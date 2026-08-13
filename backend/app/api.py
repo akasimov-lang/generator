@@ -354,9 +354,12 @@ def validate_ai_provider(provider_id: str, _: AdminUser, db: Session = Depends(g
 
 
 @router.get("/sites", response_model=list[SiteResponse])
-def list_sites(_: AuthUser, db: Session = Depends(get_db)) -> Any:
+def list_sites(user: AuthUser, db: Session = Depends(get_db)) -> Any:
+    query = select(models.Site)
+    if not user.get("is_admin"):
+        query = query.where(models.Site.project_status.in_(["test", "working"]))
     return db.scalars(
-        select(models.Site).where(models.Site.project_status.in_(["test", "working"])).order_by(
+        query.order_by(
             models.Site.is_test_project.desc(),
             models.Site.has_menu.desc(),
             models.Site.name.asc(),

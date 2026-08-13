@@ -108,3 +108,20 @@ def test_user_can_manage_personal_favorite_sites() -> None:
     removed_response = client.delete(f"/api/me/favorite-sites/{site_id}")
     assert removed_response.status_code == 200
     assert removed_response.json() == {"site_ids": []}
+
+
+def test_admin_site_list_includes_projects_not_in_focus() -> None:
+    client, TestingSession = make_client()
+    with TestingSession() as db:
+        db.add(models.Site(
+            name="not-in-focus.example",
+            base_url="https://not-in-focus.example",
+            publication_endpoint="https://not-in-focus.example/api/content",
+            project_status="not_in_focus",
+        ))
+        db.commit()
+
+    response = client.get("/api/sites")
+
+    assert response.status_code == 200
+    assert "not-in-focus.example" in {site["name"] for site in response.json()}
