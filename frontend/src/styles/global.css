@@ -4033,6 +4033,11 @@ td {
   color: var(--text);
 }
 
+.publicationProjectCounters .hasErrors,
+.publicationProjectCounters .hasErrors b {
+  color: var(--danger);
+}
+
 .publicationProjectOpenButton {
   flex: 0 0 auto;
   white-space: nowrap;

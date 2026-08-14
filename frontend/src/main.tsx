@@ -5331,8 +5331,9 @@ function PublicationsView({ api, sites, content, onOpenProject, onChanged }: Vie
           {publicationProjectGroups.map(({ site, items }) => {
             const expanded = expandedProjectIds.includes(site.id);
             const generatedCount = items.filter((item) => Boolean(item.generated_at)).length;
-            const approvedCount = items.filter((item) => item.status === "approved").length;
+            const queuedCount = items.filter((item) => ["scheduled", "retry_scheduled", "publication_paused", "publishing"].includes(item.status)).length;
             const publishedCount = items.filter((item) => item.status === "published").length;
+            const errorCount = items.filter((item) => item.status === "publication_failed").length;
             const canon = site.cache_canon || site.base_url.replace(/^https?:\/\//, "").replace(/\/$/, "");
             return (
               <article className={`publicationProject ${expanded ? "expanded" : ""}`} key={site.id}>
@@ -5347,10 +5348,10 @@ function PublicationsView({ api, sites, content, onOpenProject, onChanged }: Vie
                       <small title={canon}>Canon: {canon}</small>
                     </span>
                     <span className="publicationProjectCounters">
-                      <span>Тем: <b>{items.length}</b></span>
-                      <span>Сгенерировано: <b>{generatedCount}</b></span>
-                      <span>Approved: <b>{approvedCount}</b></span>
+                      <span>Тем сгенерировано: <b>{generatedCount}</b></span>
+                      <span>Добавлено в очередь: <b>{queuedCount}</b></span>
                       <span>Опубликовано: <b>{publishedCount}</b></span>
+                      <span className={errorCount ? "hasErrors" : ""}>Ошибки: <b>{errorCount}</b></span>
                     </span>
                   </button>
                   <button className="button compact publicationProjectOpenButton" type="button" onClick={() => onOpenProject(site)} title={`Открыть контент и публикацию проекта ${site.name}`}>
