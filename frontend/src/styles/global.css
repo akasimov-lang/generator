@@ -3772,6 +3772,27 @@ td {
   -webkit-line-clamp: 2;
 }
 
+.publicationTopicButton {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+
+.publicationTopicButton:hover,
+.publicationTopicButton:focus-visible {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.publicationTopicButton:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .projectContentActions {
   flex-wrap: nowrap;
   gap: 5px;

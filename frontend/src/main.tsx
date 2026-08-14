@@ -909,8 +909,7 @@ function App() {
               <NavButton href={pathForRoute("workspace", DEFAULT_WORKSPACE_TAB)} icon={<FolderKanban />} label="Рабочий экран" active={activeView === "workspace"} onClick={() => navigateTo("workspace", DEFAULT_WORKSPACE_TAB)} />
               <NavButton href={pathForRoute("prompts")} icon={<Edit3 />} label="Промпты" active={activeView === "prompts"} onClick={() => navigateTo("prompts")} />
               <NavButton href={pathForRoute("taskArchive")} icon={<Archive />} label="Архив" active={activeView === "taskArchive"} onClick={() => navigateTo("taskArchive")} />
-              <NavButton href={pathForRoute("content")} icon={<FileText />} label="Контент" active={activeView === "content"} onClick={() => navigateTo("content")} />
-              <NavButton href={pathForRoute("publications")} icon={<Send />} label="Публикации" active={activeView === "publications"} onClick={() => navigateTo("publications")} />
+              <NavButton href={pathForRoute("publications")} icon={<Send />} label="Контент и публикации" active={activeView === "publications"} onClick={() => navigateTo("publications")} />
               <NavButton href={pathForRoute("providers")} icon={<Bot />} label="API Providers" active={activeView === "providers"} onClick={() => navigateTo("providers")} />
               <NavButton href={pathForRoute("sites")} icon={<Globe2 />} label="Сайты" active={activeView === "sites"} onClick={() => navigateTo("sites")} />
               <NavButton href={pathForRoute("favorites")} icon={<Star className="favoriteNavIcon" fill="currentColor" />} label="Избранное" active={activeView === "favorites"} onClick={() => navigateTo("favorites")} />
@@ -1016,8 +1015,7 @@ function AuthDashboardBackdrop() {
     { icon: <FolderKanban size={18} />, label: "Рабочий экран" },
     { icon: <Edit3 size={18} />, label: "Промпты" },
     { icon: <Archive size={18} />, label: "Архив" },
-    { icon: <FileText size={18} />, label: "Контент" },
-    { icon: <Send size={18} />, label: "Публикации" },
+    { icon: <Send size={18} />, label: "Контент и публикации" },
     { icon: <Globe2 size={18} />, label: "Сайты" },
     { icon: <Settings size={18} />, label: "Настройки" }
   ];
@@ -5173,6 +5171,8 @@ function PublicationsView({ api, sites, content, onOpenProject, onChanged }: Vie
   const [publishingQueueItemId, setPublishingQueueItemId] = React.useState("");
   const [publicationContent, setPublicationContent] = React.useState<PublicationContentItem[]>([]);
   const [expandedProjectIds, setExpandedProjectIds] = React.useState<string[]>([]);
+  const [selectedPreview, setSelectedPreview] = React.useState<ContentItem | null>(null);
+  const [previewLoadingId, setPreviewLoadingId] = React.useState("");
   const [formError, setFormError] = React.useState("");
   const approved = publicationContent.filter((item) => item.status === "approved" && (!siteId || item.site_id === siteId));
   const publicationProjectGroups = React.useMemo(() => sites
@@ -5200,6 +5200,18 @@ function PublicationsView({ api, sites, content, onOpenProject, onChanged }: Vie
     setExpandedProjectIds((current) => current.includes(projectId)
       ? current.filter((id) => id !== projectId)
       : [...current, projectId]);
+  }
+
+  async function openContentPreview(contentId: string) {
+    setPreviewLoadingId(contentId);
+    setFormError("");
+    try {
+      setSelectedPreview(await api<ContentItem>(`/content/${contentId}`));
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось загрузить текст и метаданные.");
+    } finally {
+      setPreviewLoadingId("");
+    }
   }
 
   async function createCampaign(event: React.FormEvent) {
@@ -5329,7 +5341,7 @@ function PublicationsView({ api, sites, content, onOpenProject, onChanged }: Vie
             columns={["№", "Тема", "Пункт меню", "Время", "Статус", "Действия"]}
             rows={campaignQueue.items.map((item, index) => [
               index + 1,
-              <div className="compactContentTopic" title={item.topic}>{item.topic}</div>,
+              <button className="compactContentTopic publicationTopicButton" type="button" onClick={() => void openContentPreview(item.id)} disabled={previewLoadingId === item.id} title="Просмотреть текст и метаданные">{item.topic}</button>,
               item.section_name || "Не выбран",
               item.published_at ? `Опубликовано ${formatDate(item.published_at)}` : item.scheduled_at ? formatDate(item.scheduled_at) : "—",
               <StatusBadge status={item.status} />,
@@ -5380,7 +5392,7 @@ function PublicationsView({ api, sites, content, onOpenProject, onChanged }: Vie
                     <ResponsiveTable
                       columns={["Тема", "Статус", "Slug", "Слова", "Сгенерировано", "Опубликовано"]}
                       rows={items.map((item) => [
-                        <div className="compactContentTopic" title={item.topic}>{item.topic}</div>,
+                        <button className="compactContentTopic publicationTopicButton" type="button" onClick={() => void openContentPreview(item.id)} disabled={previewLoadingId === item.id} title="Просмотреть текст и метаданные">{item.topic}</button>,
                         <StatusBadge status={item.status} />,
                         <code>{item.slug}</code>,
                         item.word_count,
@@ -5397,6 +5409,7 @@ function PublicationsView({ api, sites, content, onOpenProject, onChanged }: Vie
           {!publicationProjectGroups.length ? <EmptyState text="Проектов с добавленными темами пока нет." /> : null}
         </div>
       </DataPanel>
+      {selectedPreview ? <ContentPreviewModal item={selectedPreview} onClose={() => setSelectedPreview(null)} /> : null}
     </section>
   );
 }
@@ -7215,7 +7228,7 @@ function viewTitle(view: AppView, workspaceTab: WorkspaceTab) {
     tasks: "Задачи генерации",
     taskArchive: "Архив задач",
     content: "Контент",
-    publications: "Публикации",
+    publications: "Контент и публикации",
     providers: "API Providers",
     sites: "Сайты",
     favorites: "Избранное",
