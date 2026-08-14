@@ -1233,16 +1233,7 @@ h2 {
   white-space: normal;
 }
 
-.projectCanonLink {
-  align-items: center;
-  color: var(--text);
-  display: inline-flex;
-  gap: 6px;
-  min-width: 0;
-  text-decoration: none;
-}
-
-.projectCanonLink b {
+.projectCanonDomain {
   font-size: 12px;
   min-width: 0;
   overflow: visible;
@@ -1251,30 +1242,21 @@ h2 {
   white-space: normal;
 }
 
-.projectCanonLink svg {
-  color: var(--primary);
-  flex: 0 0 auto;
-}
-
-.projectCanonLink:hover b,
-.projectCanonLink:focus-visible b {
-  color: var(--primary-strong);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
 .projectCanonValue {
-  align-items: center;
+  align-items: flex-start;
   display: flex;
+  flex-direction: column;
   gap: 5px;
   min-width: 0;
 }
 
-.projectCanonValue .projectCanonLink {
-  flex: 1 1 auto;
-  min-width: 0;
+.projectCanonActions {
+  align-items: center;
+  display: flex;
+  gap: 5px;
 }
 
+.projectCanonOpenButton,
 .projectCanonCopyButton {
   align-items: center;
   background: var(--primary-soft);
@@ -1290,6 +1272,8 @@ h2 {
   width: 24px;
 }
 
+.projectCanonOpenButton:hover,
+.projectCanonOpenButton:focus-visible,
 .projectCanonCopyButton:hover,
 .projectCanonCopyButton:focus-visible {
   background: #d8f6e2;

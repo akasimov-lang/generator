@@ -1736,12 +1736,15 @@ function ProjectWorkspaceView({
                   <span>
                     <small>Canon</small>
                     <span className="projectCanonValue">
-                      <a className="projectCanonLink" href={selectedSite.base_url} target="_blank" rel="noreferrer" title={`Открыть ${selectedSite.cache_canon || selectedSite.base_url}`}>
-                        <b>{selectedSite.cache_canon || selectedSite.base_url}</b><ExternalLink size={14} />
-                      </a>
-                      <button className="projectCanonCopyButton" type="button" onClick={copyCanon} title={canonCopied ? "Скопировано" : "Скопировать canon"} aria-label="Скопировать canon">
-                        {canonCopied ? <CheckCircle2 size={14} /> : <Copy size={14} />}
-                      </button>
+                      <b className="projectCanonDomain" title={selectedSite.cache_canon || selectedSite.base_url}>{selectedSite.cache_canon || selectedSite.base_url}</b>
+                      <span className="projectCanonActions">
+                        <a className="projectCanonOpenButton" href={selectedSite.base_url} target="_blank" rel="noreferrer" title={"Открыть " + (selectedSite.cache_canon || selectedSite.base_url)} aria-label={"Открыть " + (selectedSite.cache_canon || selectedSite.base_url)}>
+                          <ExternalLink size={14} />
+                        </a>
+                        <button className="projectCanonCopyButton" type="button" onClick={copyCanon} title={canonCopied ? "Скопировано" : "Скопировать canon"} aria-label="Скопировать canon">
+                          {canonCopied ? <CheckCircle2 size={14} /> : <Copy size={14} />}
+                        </button>
+                      </span>
                     </span>
                   </span>
                   <span className="projectTitleCard"><small>Title</small><b title={selectedSite.homepage_title || "Title не указан"}>{selectedSite.homepage_title || "—"}</b></span>
