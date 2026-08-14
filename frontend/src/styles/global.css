@@ -2604,6 +2604,11 @@ h2 {
   overflow-wrap: anywhere;
 }
 
+.siteMainDomain {
+  color: var(--text);
+  font-weight: 800;
+}
+
 .projectVerificationMedal {
   align-items: center;
   display: inline-flex;

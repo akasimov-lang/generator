@@ -5535,7 +5535,7 @@ const SITE_COLUMN_LABELS: Record<SiteTableColumn, string> = {
   select: "",
   name: "Name",
   title: "Title главной",
-  canon: "Canon",
+  canon: "Main",
   language: "Язык",
   status: "Статус",
   internalPages: "Внутренние страницы",
@@ -6129,7 +6129,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, onChang
               title: row.homepageTitle ? (
                 <SiteTitleTooltip name={row.name} title={row.homepageTitle} />
               ) : "—",
-              canon: row.canon,
+              canon: <strong className="siteMainDomain">{row.canon}</strong>,
               language: <LocaleCode value={row.language} />,
               status: (
                 <select className={`siteStatusSelect ${row.projectStatus}`} value={row.projectStatus} onChange={(event) => updateProjectStatus(row.id, event.target.value as Site["project_status"])}>
