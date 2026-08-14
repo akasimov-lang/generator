@@ -14,7 +14,7 @@ from app.core.config import get_settings
 from app.db import get_db
 
 
-TOKEN_TTL_SECONDS = 60 * 60 * 12
+TOKEN_TTL_SECONDS = 60 * 60 * 24
 PASSWORD_ITERATIONS = 310_000
 
 
