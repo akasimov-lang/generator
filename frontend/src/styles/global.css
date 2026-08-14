@@ -1243,7 +1243,12 @@ h2 {
 }
 
 .projectCanonLink b {
+  font-size: 12px;
   min-width: 0;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .projectCanonLink svg {
@@ -1266,6 +1271,7 @@ h2 {
 }
 
 .projectCanonValue .projectCanonLink {
+  flex: 1 1 auto;
   min-width: 0;
 }
 
