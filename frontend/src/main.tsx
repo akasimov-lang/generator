@@ -30,6 +30,7 @@ import {
   LoaderCircle,
   LogOut,
   Moon,
+  Pause,
   Play,
   Plus,
   RefreshCcw,
@@ -3158,13 +3159,13 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
             <StatusBadge status={campaign.status} />,
             <div className="userActions">
               {campaign.status === "active" ? (
-                <button className="button compact" type="button" onClick={() => changeCampaign(campaign, "pause")}>Pause</button>
+                <button className="button compact campaignActionIconButton" type="button" onClick={() => changeCampaign(campaign, "pause")} title="Приостановить" aria-label="Приостановить кампанию"><Pause size={15} /></button>
               ) : null}
               {campaign.status === "paused" ? (
                 <button className="button compact" type="button" onClick={() => changeCampaign(campaign, "resume")}><Play size={15} /> Resume</button>
               ) : null}
               {["active", "paused"].includes(campaign.status) ? (
-                <button className="button compact danger" type="button" onClick={() => changeCampaign(campaign, "stop")}><X size={15} /> Stop</button>
+                <button className="button compact danger campaignActionIconButton" type="button" onClick={() => changeCampaign(campaign, "stop")} title="Остановить" aria-label="Остановить кампанию"><X size={15} /></button>
               ) : null}
             </div>
           ])}
@@ -5293,9 +5294,9 @@ function PublicationsView({ api, sites, content, onOpenProject, onChanged }: Vie
               <button className="button compact" type="button" onClick={() => void openCampaignQueue(campaign)} disabled={campaignQueueLoadingId === campaign.id}>
                 <ListChecks size={15} /> {campaignQueueLoadingId === campaign.id ? "Загрузка…" : "Очередь"}
               </button>
-              {campaign.status === "active" ? <button className="button compact" type="button" onClick={() => changeCampaign(campaign, "pause")}>Pause</button> : null}
+              {campaign.status === "active" ? <button className="button compact campaignActionIconButton" type="button" onClick={() => changeCampaign(campaign, "pause")} title="Приостановить" aria-label="Приостановить кампанию"><Pause size={15} /></button> : null}
               {campaign.status === "paused" ? <button className="button compact" type="button" onClick={() => changeCampaign(campaign, "resume")}><Play size={15} /> Resume</button> : null}
-              {["active", "paused"].includes(campaign.status) ? <button className="button compact danger" type="button" onClick={() => changeCampaign(campaign, "stop")}><X size={15} /> Stop</button> : null}
+              {["active", "paused"].includes(campaign.status) ? <button className="button compact danger campaignActionIconButton" type="button" onClick={() => changeCampaign(campaign, "stop")} title="Остановить" aria-label="Остановить кампанию"><X size={15} /></button> : null}
             </div>
           ])}
         />
