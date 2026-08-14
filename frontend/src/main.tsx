@@ -5326,7 +5326,7 @@ function PublicationsView({ api, sites, content, onChanged }: ViewProps & { site
           />
         </Modal>
       ) : null}
-      <DataPanel title={`Проекты и контент · ${publicationProjectGroups.length}`}>
+      <DataPanel title={`Очередь публикации · ${publicationProjectGroups.length}`}>
         <div className="publicationProjectTree">
           {publicationProjectGroups.map(({ site, items }) => {
             const expanded = expandedProjectIds.includes(site.id);
