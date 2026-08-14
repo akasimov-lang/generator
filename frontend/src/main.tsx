@@ -5571,6 +5571,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, onChang
         hiddenColumns?: SiteTableColumn[];
         rowsPerPage?: number | "all";
         summaryFilter?: SiteSummaryFilter | null;
+        medalFilter?: ProjectMedalStatus | null;
       };
     } catch {
       return {};
@@ -5584,6 +5585,10 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, onChang
   const [selectedProjectNames, setSelectedProjectNames] = React.useState<string[]>([]);
   const [syncMessage, setSyncMessage] = React.useState("");
   const [summaryFilter, setSummaryFilter] = React.useState<SiteSummaryFilter | null>(() => storedPreferences.summaryFilter || null);
+  const [medalFilter, setMedalFilter] = React.useState<ProjectMedalStatus | null>(() => {
+    const stored = storedPreferences.medalFilter;
+    return stored && (["gold", "verified", "missing", "unchecked"] as ProjectMedalStatus[]).includes(stored) ? stored : null;
+  });
   const [siteSort, setSiteSort] = React.useState<{ key: string; direction: "asc" | "desc" } | null>(storedPreferences.siteSort?.key === "geo" ? null : storedPreferences.siteSort || null);
   const [deletingDuplicates, setDeletingDuplicates] = React.useState(false);
   const [menuPreview, setMenuPreview] = React.useState<{ name: string; header: unknown[]; footer: unknown[] } | null>(null);
@@ -5631,8 +5636,8 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, onChang
   const visibleColumnOrder = columnOrder.filter((column) => !hiddenColumns.includes(column));
 
   React.useEffect(() => {
-    localStorage.setItem(preferencesKey, JSON.stringify({ statusFilters, menuTypeFilters, siteSort, columnOrder, hiddenColumns, rowsPerPage, summaryFilter }));
-  }, [columnOrder, hiddenColumns, menuTypeFilters, preferencesKey, rowsPerPage, siteSort, statusFilters, summaryFilter]);
+    localStorage.setItem(preferencesKey, JSON.stringify({ statusFilters, menuTypeFilters, siteSort, columnOrder, hiddenColumns, rowsPerPage, summaryFilter, medalFilter }));
+  }, [columnOrder, hiddenColumns, medalFilter, menuTypeFilters, preferencesKey, rowsPerPage, siteSort, statusFilters, summaryFilter]);
 
   React.useEffect(() => {
     api<{ site_ids: string[] }>("/me/favorite-sites")
@@ -5751,6 +5756,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, onChang
   const filteredRows = domainRows.filter((row) => (
     (!favoritesOnly || row.isFavorite)
     && matchesSummaryFilter(row)
+    && (!medalFilter || row.medalStatus === medalFilter)
     && statusFilters.includes(row.projectStatus)
     && menuTypeFilters.includes(row.menuTypeKey)
     && (!normalizedQuery || [row.name, row.homepageTitle || "", row.canon, row.externalProjectId || "", row.projectStatus, ...row.domains].some((value) => value.toLowerCase().includes(normalizedQuery)))
@@ -5774,10 +5780,14 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, onChang
 
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [menuTypeFilters, rowsPerPage, searchQuery, siteSort, statusFilters, summaryFilter]);
+  }, [medalFilter, menuTypeFilters, rowsPerPage, searchQuery, siteSort, statusFilters, summaryFilter]);
 
   function toggleSummaryFilter(filter: SiteSummaryFilter) {
     setSummaryFilter((current) => current === filter ? null : filter);
+  }
+
+  function toggleMedalFilter(filter: ProjectMedalStatus) {
+    setMedalFilter((current) => current === filter ? null : filter);
   }
 
   function toggleSelectedProject(name: string) {
@@ -5901,22 +5911,22 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, onChang
       </DataPanel>
       <aside className="siteMedalLegend" aria-label="Обозначения статусов проверки меню">
         <strong className="siteMedalLegendTitle">Статусы проверки меню</strong>
-        <span className="siteMedalLegendItem">
+        <button className={`siteMedalLegendItem ${medalFilter === "gold" ? "active" : ""}`} type="button" onClick={() => toggleMedalFilter("gold")} aria-pressed={medalFilter === "gold"}>
           <ProjectVerificationMedal status="gold" />
           <span><b>Золотая</b> — Header и Footer реализованы</span>
-        </span>
-        <span className="siteMedalLegendItem">
+        </button>
+        <button className={`siteMedalLegendItem ${medalFilter === "verified" ? "active" : ""}`} type="button" onClick={() => toggleMedalFilter("verified")} aria-pressed={medalFilter === "verified"}>
           <ProjectVerificationMedal status="verified" />
           <span><b>Зелёная</b> — Header реализован</span>
-        </span>
-        <span className="siteMedalLegendItem">
+        </button>
+        <button className={`siteMedalLegendItem ${medalFilter === "missing" ? "active" : ""}`} type="button" onClick={() => toggleMedalFilter("missing")} aria-pressed={medalFilter === "missing"}>
           <ProjectVerificationMedal status="missing" />
           <span><b>Красная</b> — рендеринг меню не реализован</span>
-        </span>
-        <span className="siteMedalLegendItem">
+        </button>
+        <button className={`siteMedalLegendItem ${medalFilter === "unchecked" ? "active" : ""}`} type="button" onClick={() => toggleMedalFilter("unchecked")} aria-pressed={medalFilter === "unchecked"}>
           <ProjectVerificationMedal status="unchecked" />
           <span><b>Серая</b> — проверка ещё не выполнена</span>
-        </span>
+        </button>
       </aside>
       <DataPanel
         title={(
@@ -5948,12 +5958,18 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, onChang
           <button className="button secondary siteSortResetButton" type="button" onClick={() => setSiteSort(null)} disabled={!siteSort}>Сбросить сортировку</button>
           <span>{filteredRows.length ? `${formatNumber(pageStart + 1)}–${formatNumber(pageStart + visibleRows.length)} из ${formatNumber(filteredRows.length)}` : `0 из ${formatNumber(domainRows.length)}`}</span>
         </div>
-        {summaryFilter || statusFilterActive || menuTypeFilterActive ? (
+        {summaryFilter || medalFilter || statusFilterActive || menuTypeFilterActive ? (
           <div className="siteActiveFilters" role="status">
             <strong><ListChecks size={16} /> Включены фильтры</strong>
             {summaryFilter ? (
               <button type="button" onClick={() => setSummaryFilter(null)}>
                 Панель: {{ projects: "Проекты", working: "Рабочие", menu: "С меню", test: "Тестовые", duplicate: "Дубликаты", all: "Все сайты" }[summaryFilter]}
+                <X size={13} />
+              </button>
+            ) : null}
+            {medalFilter ? (
+              <button type="button" onClick={() => setMedalFilter(null)}>
+                Проверка меню: {{ gold: "золотая", verified: "зелёная", missing: "красная", unchecked: "серая" }[medalFilter]}
                 <X size={13} />
               </button>
             ) : null}
@@ -5969,7 +5985,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, onChang
                 <X size={13} />
               </button>
             ) : null}
-            <button className="siteResetFilters" type="button" onClick={() => { setSummaryFilter(null); setStatusFilters(allStatusFilters); setMenuTypeFilters(allMenuTypeFilters); }}>Сбросить все</button>
+            <button className="siteResetFilters" type="button" onClick={() => { setSummaryFilter(null); setMedalFilter(null); setStatusFilters(allStatusFilters); setMenuTypeFilters(allMenuTypeFilters); }}>Сбросить все</button>
           </div>
         ) : null}
         <ResponsiveTable
@@ -7053,7 +7069,47 @@ function TopicMetaCell({ item, promptName }: { item: ContentItem; promptName?: s
 }
 
 function StatusBadge({ status }: { status: string }) {
-  return <span className={`status status-${status.replaceAll("_", "-")}`}>{status}</span>;
+  const labels: Record<string, string> = {
+    active: "Активно",
+    approved: "Согласовано",
+    brief_ready: "Бриф готов",
+    collecting: "Сбор данных",
+    collecting_serp: "Сбор выдачи",
+    completed: "Завершено",
+    completed_with_errors: "Завершено с ошибками",
+    discovered: "Обнаружено",
+    draft: "Черновик",
+    empty: "Нет данных",
+    failed: "Ошибка",
+    fetch_failed: "Ошибка загрузки",
+    fetched: "Загружено",
+    fetching_pages: "Загрузка страниц",
+    generated: "Сгенерировано",
+    generating: "Генерация",
+    generation_failed: "Ошибка генерации",
+    generation_queued: "В очереди на генерацию",
+    invalid: "Ошибка",
+    not_requested: "Не запрошено",
+    pages_fetched: "Страницы загружены",
+    paused: "Приостановлено",
+    pending: "Ожидает",
+    publication_failed: "Ошибка публикации",
+    publication_paused: "Публикация приостановлена",
+    published: "Опубликовано",
+    publishing: "Публикуется",
+    queries_ready: "Запросы готовы",
+    queued: "В очереди",
+    rejected: "Отклонено",
+    research_failed: "Ошибка анализа",
+    retry_scheduled: "Повтор запланирован",
+    scheduled: "Запланировано",
+    serp_collected: "Выдача собрана",
+    stopped: "Остановлено",
+    synced: "Синхронизировано",
+    unchecked: "Не проверено",
+    valid: "Готово"
+  };
+  return <span className={`status status-${status.replaceAll("_", "-")}`}>{labels[status] || status}</span>;
 }
 
 function ProviderValidationCell({ provider }: { provider: AiProvider }) {
