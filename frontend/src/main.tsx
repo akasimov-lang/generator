@@ -1739,9 +1739,9 @@ function ProjectWorkspaceView({
               <>
                 <div className="projectTopDetails">
                   <span>
-                    <small>Canon</small>
+                    <small>Main</small>
                     <span className="projectCanonValue">
-                      <b className="projectCanonDomain" title={selectedSite.cache_canon || selectedSite.base_url}>{selectedSite.cache_canon || selectedSite.base_url}</b>
+                      <AutoFitDomain value={selectedSite.cache_canon || selectedSite.base_url} />
                       <span className="projectCanonActions">
                         <a className="projectCanonOpenButton" href={selectedSite.base_url} target="_blank" rel="noreferrer" title={"Открыть " + (selectedSite.cache_canon || selectedSite.base_url)} aria-label={"Открыть " + (selectedSite.cache_canon || selectedSite.base_url)}>
                           <ExternalLink size={14} />
@@ -1832,6 +1832,29 @@ function ProjectWorkspaceView({
       ) : null}
     </section>
   );
+}
+
+function AutoFitDomain({ value }: { value: string }) {
+  const domainRef = React.useRef<HTMLElement>(null);
+
+  React.useLayoutEffect(() => {
+    const domain = domainRef.current;
+    if (!domain) return;
+    const fit = () => {
+      let fontSize = 13;
+      domain.style.fontSize = `${fontSize}px`;
+      while ((domain.scrollHeight > domain.clientHeight + 1 || domain.scrollWidth > domain.clientWidth + 1) && fontSize > 9) {
+        fontSize -= 0.5;
+        domain.style.fontSize = `${fontSize}px`;
+      }
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    if (domain.parentElement) observer.observe(domain.parentElement);
+    return () => observer.disconnect();
+  }, [value]);
+
+  return <b ref={domainRef} className="projectCanonDomain" title={value}>{value}</b>;
 }
 
 function MenuCapabilityCard({ label, rendered, nested, icon, loading, error, onRetry }: { label: string; rendered: boolean | null | undefined; nested: boolean | null | undefined; icon: "header" | "footer"; loading: boolean; error: string; onRetry: () => void }) {
