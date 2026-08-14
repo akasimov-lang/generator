@@ -1826,7 +1826,7 @@ function ProjectWorkspaceView({
 }
 
 function MenuCapabilityCard({ label, rendered, nested, icon, loading, error, onRetry }: { label: string; rendered: boolean | null | undefined; nested: boolean | null | undefined; icon: "header" | "footer"; loading: boolean; error: string; onRetry: () => void }) {
-  const statusText = loading ? "Проверяем" : error ? "Ошибка проверки" : rendered == null ? "Не проверено" : rendered ? "Меню реализовано" : "Меню не реализовано";
+  const statusText = loading ? "Проверяем" : error ? "Ошибка сервера" : rendered == null ? "Не проверено" : rendered ? "Меню реализовано" : "Меню не реализовано";
   return (
     <span className={`projectMenuCapability ${error ? "isError" : rendered === true ? "isReady" : rendered === false ? "isMissing" : "isChecking"}`} title={error || `${label}: ${statusText}${rendered ? nested ? ". Вложенность поддерживается" : ". Только один уровень" : ""}`}>
       <span className="projectMenuCapabilityHeader">
