@@ -982,7 +982,10 @@ function App() {
         {isAdmin && activeView === "tasks" && <TasksView api={api} sites={sites} providers={providers} tasks={tasks} onChanged={loadAll} />}
         {isAdmin && activeView === "taskArchive" && <TaskArchiveView api={api} tasks={archivedTasks} onChanged={loadAll} />}
         {isAdmin && activeView === "content" && <ContentView api={api} sites={sites} content={content} onChanged={loadAll} />}
-        {isAdmin && activeView === "publications" && <PublicationsView api={api} sites={sites} content={content} onOpenProject={(site) => navigateTo("workspace", "content", false, site.name)} onChanged={loadAll} />}
+        {isAdmin && activeView === "publications" && <PublicationsView api={api} sites={sites} content={content} onOpenProject={(site) => {
+          localStorage.setItem(`workspace_site_id:${currentUser.username}`, site.id);
+          navigateTo("workspace", "content", false, site.name);
+        }} onChanged={loadAll} />}
         {isAdmin && activeView === "providers" && <ProvidersView api={api} providers={providers} onChanged={loadAll} />}
         {isAdmin && activeView === "sites" && <SitesView api={api} sites={sites} currentUsername={currentUser.username} onChanged={loadAll} />}
         {isAdmin && activeView === "favorites" && <SitesView api={api} sites={sites} currentUsername={currentUser.username} favoritesOnly onChanged={loadAll} />}
@@ -1518,36 +1521,38 @@ function ProjectWorkspaceView({
     setWorkspaceError("");
     setMenuCapabilitiesLoading(true);
     setMenuCapabilitiesError("");
-    try {
-      const [nextOverview, nextTasks, nextContent, nextSections, nextPrompts, nextLogs, nextCampaigns, nextMenuCapabilitiesResult] = await Promise.all([
-        api<SiteOverview>(`/sites/${selectedSiteId}/overview`),
-        api<Task[]>(`/sites/${selectedSiteId}/tasks`),
-        api<ContentItem[]>(`/sites/${selectedSiteId}/content`),
-        api<Section[]>(`/sites/${selectedSiteId}/sections`),
-        api<PromptTemplate[]>(`/sites/${selectedSiteId}/prompt-templates`),
-        api<PublicationLog[]>(`/sites/${selectedSiteId}/publication-logs`),
-        api<PublicationCampaign[]>(`/sites/${selectedSiteId}/publication-campaigns`),
-        api<MenuCapabilities>(`/sites/${selectedSiteId}/menu-capabilities`)
-          .then((value) => ({ value, error: "" }))
-          .catch((error: unknown) => ({ value: null, error: error instanceof Error ? error.message : "Не удалось проверить меню" }))
-      ]);
-      if (requestId !== projectLoadRequestRef.current) return;
-      setOverview(nextOverview);
-      setSiteTasks(nextTasks);
-      setSiteContent(nextContent);
-      setSections(nextSections);
-      setPromptTemplates(nextPrompts);
-      setLogs(nextLogs);
-      setCampaigns(nextCampaigns);
-      setMenuCapabilities(nextMenuCapabilitiesResult.value);
-      setMenuCapabilitiesError(nextMenuCapabilitiesResult.error);
-      setMenuCapabilitiesLoading(false);
-      setWorkspaceError("");
-    } catch (error) {
-      if (requestId !== projectLoadRequestRef.current) return;
-      setMenuCapabilitiesLoading(false);
-      setWorkspaceError(error instanceof Error ? error.message : "Не удалось загрузить проект");
-    }
+    const requestResource = async <T,>(path: string): Promise<{ value: T | null; error: string }> => {
+      try {
+        return { value: await api<T>(path), error: "" };
+      } catch (error) {
+        return { value: null, error: error instanceof Error ? error.message : "Не удалось загрузить данные" };
+      }
+    };
+    const [nextOverview, nextTasks, nextContent, nextSections, nextPrompts, nextLogs, nextCampaigns, nextMenuCapabilities] = await Promise.all([
+      requestResource<SiteOverview>(`/sites/${selectedSiteId}/overview`),
+      requestResource<Task[]>(`/sites/${selectedSiteId}/tasks`),
+      requestResource<ContentItem[]>(`/sites/${selectedSiteId}/content`),
+      requestResource<Section[]>(`/sites/${selectedSiteId}/sections`),
+      requestResource<PromptTemplate[]>(`/sites/${selectedSiteId}/prompt-templates`),
+      requestResource<PublicationLog[]>(`/sites/${selectedSiteId}/publication-logs`),
+      requestResource<PublicationCampaign[]>(`/sites/${selectedSiteId}/publication-campaigns`),
+      requestResource<MenuCapabilities>(`/sites/${selectedSiteId}/menu-capabilities`)
+    ]);
+    if (requestId !== projectLoadRequestRef.current) return;
+    if (nextOverview.value) setOverview(nextOverview.value);
+    if (nextTasks.value) setSiteTasks(nextTasks.value);
+    if (nextContent.value) setSiteContent(nextContent.value);
+    if (nextSections.value) setSections(nextSections.value);
+    if (nextPrompts.value) setPromptTemplates(nextPrompts.value);
+    if (nextLogs.value) setLogs(nextLogs.value);
+    if (nextCampaigns.value) setCampaigns(nextCampaigns.value);
+    setMenuCapabilities(nextMenuCapabilities.value);
+    setMenuCapabilitiesError(nextMenuCapabilities.error);
+    setMenuCapabilitiesLoading(false);
+    const dataErrors = [nextOverview, nextTasks, nextContent, nextSections, nextPrompts, nextLogs, nextCampaigns]
+      .map((result) => result.error)
+      .filter(Boolean);
+    setWorkspaceError(dataErrors.length ? "Не удалось загрузить часть данных проекта. Повторите попытку через несколько секунд." : "");
   }, [api, selectedSiteId]);
 
   React.useEffect(() => {
