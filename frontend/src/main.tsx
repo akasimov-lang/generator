@@ -1500,6 +1500,8 @@ function ProjectWorkspaceView({
   const [favoriteSiteIds, setFavoriteSiteIds] = React.useState<string[]>([]);
   const [favoritesOnly, setFavoritesOnly] = React.useState(false);
   const [menuCapabilities, setMenuCapabilities] = React.useState<MenuCapabilities | null>(null);
+  const [menuCapabilitiesLoading, setMenuCapabilitiesLoading] = React.useState(false);
+  const [menuCapabilitiesError, setMenuCapabilitiesError] = React.useState("");
   const projectLoadRequestRef = React.useRef(0);
   const selectedSite = sites.find((site) => site.id === selectedSiteId) || null;
   const routeProjectName = workspaceProjectNameFromPath(window.location.pathname);
@@ -1513,8 +1515,10 @@ function ProjectWorkspaceView({
     const requestId = projectLoadRequestRef.current + 1;
     projectLoadRequestRef.current = requestId;
     setWorkspaceError("");
+    setMenuCapabilitiesLoading(true);
+    setMenuCapabilitiesError("");
     try {
-      const [nextOverview, nextTasks, nextContent, nextSections, nextPrompts, nextLogs, nextCampaigns, nextMenuCapabilities] = await Promise.all([
+      const [nextOverview, nextTasks, nextContent, nextSections, nextPrompts, nextLogs, nextCampaigns, nextMenuCapabilitiesResult] = await Promise.all([
         api<SiteOverview>(`/sites/${selectedSiteId}/overview`),
         api<Task[]>(`/sites/${selectedSiteId}/tasks`),
         api<ContentItem[]>(`/sites/${selectedSiteId}/content`),
@@ -1522,7 +1526,9 @@ function ProjectWorkspaceView({
         api<PromptTemplate[]>(`/sites/${selectedSiteId}/prompt-templates`),
         api<PublicationLog[]>(`/sites/${selectedSiteId}/publication-logs`),
         api<PublicationCampaign[]>(`/sites/${selectedSiteId}/publication-campaigns`),
-        api<MenuCapabilities>(`/sites/${selectedSiteId}/menu-capabilities`).catch(() => null)
+        api<MenuCapabilities>(`/sites/${selectedSiteId}/menu-capabilities`)
+          .then((value) => ({ value, error: "" }))
+          .catch((error: unknown) => ({ value: null, error: error instanceof Error ? error.message : "Не удалось проверить меню" }))
       ]);
       if (requestId !== projectLoadRequestRef.current) return;
       setOverview(nextOverview);
@@ -1532,10 +1538,13 @@ function ProjectWorkspaceView({
       setPromptTemplates(nextPrompts);
       setLogs(nextLogs);
       setCampaigns(nextCampaigns);
-      setMenuCapabilities(nextMenuCapabilities);
+      setMenuCapabilities(nextMenuCapabilitiesResult.value);
+      setMenuCapabilitiesError(nextMenuCapabilitiesResult.error);
+      setMenuCapabilitiesLoading(false);
       setWorkspaceError("");
     } catch (error) {
       if (requestId !== projectLoadRequestRef.current) return;
+      setMenuCapabilitiesLoading(false);
       setWorkspaceError(error instanceof Error ? error.message : "Не удалось загрузить проект");
     }
   }, [api, selectedSiteId]);
@@ -1580,6 +1589,8 @@ function ProjectWorkspaceView({
       setLogs([]);
       setCampaigns([]);
       setMenuCapabilities(null);
+      setMenuCapabilitiesLoading(false);
+      setMenuCapabilitiesError("");
       setWorkspaceError("");
       void loadProject();
     }
@@ -1596,6 +1607,21 @@ function ProjectWorkspaceView({
     }
     await onChanged();
     await loadProject();
+  }
+
+  async function retryMenuCapabilities() {
+    if (!selectedSite || menuCapabilitiesLoading) return;
+    setMenuCapabilitiesLoading(true);
+    setMenuCapabilitiesError("");
+    try {
+      const refreshedCapabilities = await api<MenuCapabilities>(`/sites/${selectedSite.id}/menu-capabilities?refresh=true`);
+      setMenuCapabilities(refreshedCapabilities);
+      await onChanged();
+    } catch (error) {
+      setMenuCapabilitiesError(error instanceof Error ? error.message : "Не удалось проверить меню");
+    } finally {
+      setMenuCapabilitiesLoading(false);
+    }
   }
 
   async function copyCanon() {
@@ -1720,8 +1746,8 @@ function ProjectWorkspaceView({
                   <span className="projectTitleCard"><small>Title</small><b title={selectedSite.homepage_title || "Title не указан"}>{selectedSite.homepage_title || "—"}</b></span>
                   <span className="projectMetricCard"><small>Доменов в сетке</small><b>{formatNumber(selectedSite.domains_count)}</b></span>
                   <span className="projectMetricCard"><small>Страниц</small><b>{formatNumber(selectedSite.internal_pages_count)}</b></span>
-                  <MenuCapabilityCard label="Header" rendered={menuCapabilities?.header_menu_rendered} nested={menuCapabilities?.header_menu_nested} icon="header" />
-                  <MenuCapabilityCard label="Footer" rendered={menuCapabilities?.footer_menu_rendered} nested={menuCapabilities?.footer_menu_nested} icon="footer" />
+                  <MenuCapabilityCard label="Header" rendered={menuCapabilities?.header_menu_rendered} nested={menuCapabilities?.header_menu_nested} icon="header" loading={menuCapabilitiesLoading} error={menuCapabilitiesError} onRetry={retryMenuCapabilities} />
+                  <MenuCapabilityCard label="Footer" rendered={menuCapabilities?.footer_menu_rendered} nested={menuCapabilities?.footer_menu_nested} icon="footer" loading={menuCapabilitiesLoading} error={menuCapabilitiesError} onRetry={retryMenuCapabilities} />
                 </div>
               </>
             ) : null}
@@ -1799,11 +1825,16 @@ function ProjectWorkspaceView({
   );
 }
 
-function MenuCapabilityCard({ label, rendered, nested, icon }: { label: string; rendered: boolean | null | undefined; nested: boolean | null | undefined; icon: "header" | "footer" }) {
-  const statusText = rendered == null ? "Проверяем" : rendered ? "Меню реализовано" : "Меню не реализовано";
+function MenuCapabilityCard({ label, rendered, nested, icon, loading, error, onRetry }: { label: string; rendered: boolean | null | undefined; nested: boolean | null | undefined; icon: "header" | "footer"; loading: boolean; error: string; onRetry: () => void }) {
+  const statusText = loading ? "Проверяем" : error ? "Ошибка проверки" : rendered == null ? "Не проверено" : rendered ? "Меню реализовано" : "Меню не реализовано";
   return (
-    <span className={`projectMenuCapability ${rendered === true ? "isReady" : rendered === false ? "isMissing" : "isChecking"}`} title={`${label}: ${statusText}${rendered ? nested ? ". Вложенность поддерживается" : ". Только один уровень" : ""}`}>
-      <small>{label}</small>
+    <span className={`projectMenuCapability ${error ? "isError" : rendered === true ? "isReady" : rendered === false ? "isMissing" : "isChecking"}`} title={error || `${label}: ${statusText}${rendered ? nested ? ". Вложенность поддерживается" : ". Только один уровень" : ""}`}>
+      <span className="projectMenuCapabilityHeader">
+        <small>{label}</small>
+        <button className="projectMenuCapabilityRetry" type="button" onClick={onRetry} disabled={loading} title={`Повторить проверку ${label}`} aria-label={`Повторить проверку ${label}`}>
+          <RefreshCcw className={loading ? "spin" : ""} size={13} />
+        </button>
+      </span>
       <span className="projectMenuCapabilityValue">
         {rendered === true ? <MenuReadyMedal /> : rendered === false ? <MenuReadyMedal tone="red" /> : icon === "header" ? <HeaderMenuIcon /> : <FooterMenuIcon />}
         <b>{statusText}</b>
