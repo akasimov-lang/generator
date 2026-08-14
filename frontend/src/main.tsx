@@ -5362,7 +5362,7 @@ function PublicationsView({ api, sites, content, onOpenProject, onChanged }: Vie
                         <strong>{site.name}</strong>
                         <ProjectVerificationMedal status={projectMenuMedalStatus(site)} />
                       </span>
-                      <small title={canon}>Canon: {canon}</small>
+                      <small title={canon}>Main: {canon}</small>
                     </span>
                     <span className="publicationProjectCounters">
                       <span>Тем сгенерировано: <b>{generatedCount}</b></span>
