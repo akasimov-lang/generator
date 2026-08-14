@@ -3761,8 +3761,6 @@ function TasksView({
   const [sectionId, setSectionId] = React.useState("");
   const [promptTemplateId, setPromptTemplateId] = React.useState("");
   const [targetWords, setTargetWords] = React.useState(DEFAULT_TARGET_WORDS);
-  const [payloadMode, setPayloadMode] = React.useState("site_default");
-  const [shortcode, setShortcode] = React.useState("");
   const taskCheckboxPreferences = React.useMemo(() => {
     try {
       return JSON.parse(localStorage.getItem("task_create_checkbox_preferences") || "{}") as Partial<Record<"includeToc" | "includeFaq" | "collectCompetitors", boolean>>;
@@ -3876,11 +3874,11 @@ function TasksView({
       site_id: siteId || null,
       section_id: sectionId || null,
       ai_provider_id: providerId || null,
-      payload_mode: payloadMode,
+      payload_mode: "site_default",
       target_words: targetWords || null,
       prompt_template_name: selectedPrompt?.name || null,
       prompt_template: selectedPrompt?.content || null,
-      shortcode: shortcode.trim() || null,
+      shortcode: null,
       include_toc: includeToc,
       include_faq: includeFaq,
       collect_competitors: collectCompetitors,
@@ -3894,7 +3892,6 @@ function TasksView({
         await api(`/tasks/${task.id}/start`, { method: "POST" });
       }
       setTopics("");
-      setShortcode("");
       setCreateFormExpanded(false);
       await onChanged();
     } catch (error) {
@@ -4287,18 +4284,6 @@ function TasksView({
               />
             </label>
           ) : null}
-          <label>
-            Формат payload
-            <select value={payloadMode} onChange={(event) => setPayloadMode(event.target.value)}>
-              <option value="site_default">По настройкам сайта</option>
-              <option value="simple_page">Simple: menu + pages</option>
-              <option value="full_site">Full: menu + pages + casinos</option>
-            </select>
-          </label>
-          <label>
-            Shortcode, если нужен
-            <input value={shortcode} onChange={(event) => setShortcode(event.target.value)} placeholder="showcase-redesign" />
-          </label>
           <label className="checkboxRow">
             <input type="checkbox" checked={includeToc} onChange={(event) => setIncludeToc(event.target.checked)} />
             Добавить содержание
