@@ -981,7 +981,7 @@ function App() {
         {isAdmin && activeView === "tasks" && <TasksView api={api} sites={sites} providers={providers} tasks={tasks} onChanged={loadAll} />}
         {isAdmin && activeView === "taskArchive" && <TaskArchiveView api={api} tasks={archivedTasks} onChanged={loadAll} />}
         {isAdmin && activeView === "content" && <ContentView api={api} sites={sites} content={content} onChanged={loadAll} />}
-        {isAdmin && activeView === "publications" && <PublicationsView api={api} sites={sites} content={content} onChanged={loadAll} />}
+        {isAdmin && activeView === "publications" && <PublicationsView api={api} sites={sites} content={content} onOpenProject={(site) => navigateTo("workspace", "content", false, site.name)} onChanged={loadAll} />}
         {isAdmin && activeView === "providers" && <ProvidersView api={api} providers={providers} onChanged={loadAll} />}
         {isAdmin && activeView === "sites" && <SitesView api={api} sites={sites} currentUsername={currentUser.username} onChanged={loadAll} />}
         {isAdmin && activeView === "favorites" && <SitesView api={api} sites={sites} currentUsername={currentUser.username} favoritesOnly onChanged={loadAll} />}
@@ -5146,7 +5146,7 @@ function ContentView({ api, sites, content, onChanged }: ViewProps & { sites: Si
   );
 }
 
-function PublicationsView({ api, sites, content, onChanged }: ViewProps & { sites: Site[]; content: ContentItem[] }) {
+function PublicationsView({ api, sites, content, onOpenProject, onChanged }: ViewProps & { sites: Site[]; content: ContentItem[]; onOpenProject: (site: Site) => void }) {
   const [name, setName] = React.useState("Daily publication");
   const [siteId, setSiteId] = React.useState("");
   const [interval, setIntervalValue] = React.useState<1440 | 720 | 420>(1440);
@@ -5333,21 +5333,30 @@ function PublicationsView({ api, sites, content, onChanged }: ViewProps & { site
             const generatedCount = items.filter((item) => Boolean(item.generated_at)).length;
             const approvedCount = items.filter((item) => item.status === "approved").length;
             const publishedCount = items.filter((item) => item.status === "published").length;
+            const canon = site.cache_canon || site.base_url.replace(/^https?:\/\//, "").replace(/\/$/, "");
             return (
               <article className={`publicationProject ${expanded ? "expanded" : ""}`} key={site.id}>
-                <button className="publicationProjectHeader" type="button" onClick={() => togglePublicationProject(site.id)} aria-expanded={expanded}>
-                  <span className="publicationProjectChevron">{expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}</span>
-                  <span className="publicationProjectIdentity">
-                    <strong>{site.name}</strong>
-                    <ProjectVerificationMedal status={projectMenuMedalStatus(site)} />
-                  </span>
-                  <span className="publicationProjectCounters">
-                    <span>Тем: <b>{items.length}</b></span>
-                    <span>Сгенерировано: <b>{generatedCount}</b></span>
-                    <span>Approved: <b>{approvedCount}</b></span>
-                    <span>Опубликовано: <b>{publishedCount}</b></span>
-                  </span>
-                </button>
+                <div className="publicationProjectHeader">
+                  <button className="publicationProjectToggle" type="button" onClick={() => togglePublicationProject(site.id)} aria-expanded={expanded}>
+                    <span className="publicationProjectChevron">{expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}</span>
+                    <span className="publicationProjectIdentity">
+                      <span className="publicationProjectIdentityTitle">
+                        <strong>{site.name}</strong>
+                        <ProjectVerificationMedal status={projectMenuMedalStatus(site)} />
+                      </span>
+                      <small title={canon}>Canon: {canon}</small>
+                    </span>
+                    <span className="publicationProjectCounters">
+                      <span>Тем: <b>{items.length}</b></span>
+                      <span>Сгенерировано: <b>{generatedCount}</b></span>
+                      <span>Approved: <b>{approvedCount}</b></span>
+                      <span>Опубликовано: <b>{publishedCount}</b></span>
+                    </span>
+                  </button>
+                  <button className="button compact publicationProjectOpenButton" type="button" onClick={() => onOpenProject(site)} title={`Открыть контент и публикацию проекта ${site.name}`}>
+                    <FileText size={14} /> Контент и публикация
+                  </button>
+                </div>
                 {expanded ? (
                   <div className="publicationProjectBody">
                     <ResponsiveTable

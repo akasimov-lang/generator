@@ -3940,22 +3940,34 @@ td {
 .publicationProjectHeader {
   align-items: center;
   background: var(--surface);
-  border: 0;
   color: var(--text);
-  cursor: pointer;
   display: grid;
-  font: inherit;
   gap: 8px;
-  grid-template-columns: 22px minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   min-height: 46px;
-  padding: 7px 12px;
-  text-align: left;
+  padding-right: 10px;
   width: 100%;
 }
 
 .publicationProjectHeader:hover,
 .publicationProject.expanded .publicationProjectHeader {
   background: var(--primary-soft);
+}
+
+.publicationProjectToggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 8px;
+  grid-template-columns: 22px minmax(220px, 1fr) auto;
+  min-height: 54px;
+  padding: 6px 4px 6px 12px;
+  text-align: left;
+  width: 100%;
 }
 
 .publicationProjectChevron {
@@ -3966,14 +3978,32 @@ td {
 }
 
 .publicationProjectIdentity {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.publicationProjectIdentityTitle {
   align-items: center;
   display: flex;
   gap: 5px;
   min-width: 0;
+  width: 100%;
 }
 
 .publicationProjectIdentity strong {
   font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.publicationProjectIdentity small {
+  color: var(--muted);
+  font-size: 10px;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4001,6 +4031,11 @@ td {
 
 .publicationProjectCounters b {
   color: var(--text);
+}
+
+.publicationProjectOpenButton {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .publicationProjectBody {
@@ -5597,12 +5632,23 @@ a {
   }
 
   .publicationProjectHeader {
+    grid-template-columns: 1fr;
+    padding: 0 10px 8px;
+  }
+
+  .publicationProjectToggle {
     grid-template-columns: 22px minmax(0, 1fr);
+    padding-left: 2px;
   }
 
   .publicationProjectCounters {
     grid-column: 2;
     justify-content: flex-start;
+  }
+
+  .publicationProjectOpenButton {
+    justify-self: start;
+    margin-left: 30px;
   }
 
   .publicationProjectBody {
