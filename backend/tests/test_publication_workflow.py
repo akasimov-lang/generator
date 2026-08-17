@@ -11,7 +11,9 @@ from app.db import Base
 from app.schemas import PublicationCampaignCreate
 from app.services import (
     approve_and_schedule_item,
+    build_campaign_publication_bundle,
     publish_item,
+    refresh_campaign_status,
     schedule_campaign,
     update_campaign_status,
     validate_content_for_publication,
@@ -184,3 +186,56 @@ def test_invalid_payload_is_not_sent_by_publication_worker(db: Session) -> None:
     assert log.response_status is None
     assert "Content validation failed" in (log.error_message or "")
     assert db.scalar(select(func.count(models.PublicationLog.id))) == 1
+
+
+def test_campaign_bundle_contains_project_actor_and_ordered_changes(db: Session) -> None:
+    site, item = make_content(db)
+    site.cache_canon = "main.example.test"
+    campaign = schedule_campaign(
+        db,
+        PublicationCampaignCreate(
+            name="Bulk publication",
+            site_id=site.id,
+            content_item_ids=[item.id],
+            start_at=datetime.now(timezone.utc),
+            interval_minutes=1440,
+            items_per_run=1,
+        ),
+    )
+
+    payload = build_campaign_publication_bundle(
+        db,
+        campaign,
+        site,
+        [item],
+        {"id": "user-1", "username": "Арсений"},
+    )
+
+    assert payload["action"] == "campaign_publish_all"
+    assert payload["requested_by"] == {"id": "user-1", "username": "Арсений"}
+    assert payload["project"]["name"] == "Test site"
+    assert payload["project"]["main"] == "main.example.test"
+    assert payload["campaign"]["id"] == campaign.id
+    assert payload["changes"][0]["content_item_id"] == item.id
+    assert payload["changes"][0]["payload"]["pages"][0]["slug"] == "/test/"
+
+
+def test_campaign_completion_time_is_fixed_when_queue_finishes(db: Session) -> None:
+    site, item = make_content(db)
+    campaign = schedule_campaign(
+        db,
+        PublicationCampaignCreate(
+            name="Finished campaign",
+            site_id=site.id,
+            content_item_ids=[item.id],
+            start_at=datetime.now(timezone.utc),
+            interval_minutes=1440,
+            items_per_run=1,
+        ),
+    )
+    item.status = "published"
+    item.published_at = datetime.now(timezone.utc)
+    refresh_campaign_status(db, campaign.id)
+
+    assert campaign.status == "completed"
+    assert campaign.completed_at is not None

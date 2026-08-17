@@ -249,6 +249,56 @@ button {
   padding: 20px 14px;
 }
 
+.sidebarDigitalRain {
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  z-index: 0;
+}
+
+.sidebarDigitalRain::after {
+  background: linear-gradient(180deg, var(--sidebar-bg) 0%, transparent 16%, transparent 72%, var(--sidebar-bg) 100%);
+  content: "";
+  inset: 0;
+  position: absolute;
+}
+
+.sidebarDigitalRain span {
+  animation: sidebar-digital-rain 8s linear infinite;
+  animation-delay: var(--rain-delay);
+  color: rgba(74, 222, 128, 0.16);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  left: calc(var(--rain-column) * 8.35% + 2%);
+  line-height: 1.5;
+  opacity: 0;
+  position: absolute;
+  text-orientation: upright;
+  text-shadow: 0 0 5px rgba(74, 222, 128, 0.5), 0 12px 8px rgba(255, 128, 38, 0.15);
+  top: -210px;
+  width: 9px;
+  word-break: break-all;
+  writing-mode: vertical-rl;
+}
+
+.sidebar > :not(.sidebarDigitalRain) {
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes sidebar-digital-rain {
+  0% { opacity: 0; transform: translateY(-12vh); }
+  9% { opacity: 0.42; }
+  76% { color: rgba(74, 222, 128, 0.13); opacity: 0.28; }
+  94% { color: rgba(255, 126, 54, 0.18); opacity: 0.16; text-shadow: 0 0 8px rgba(255, 90, 30, 0.26); }
+  100% { opacity: 0; transform: translateY(calc(100vh + 300px)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebarDigitalRain { display: none; }
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -1629,6 +1679,23 @@ h2 {
   border-color: var(--primary);
   background: var(--primary-soft);
   color: var(--primary);
+}
+
+.tabButton.attention:not(.active) {
+  background: color-mix(in srgb, var(--warning-soft) 78%, var(--surface));
+  border-color: color-mix(in srgb, var(--warning) 55%, var(--border));
+  color: var(--warning);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning-soft) 55%, transparent);
+}
+
+.tabButton.attention:not(.active) .tabButtonIcon.menu {
+  background: linear-gradient(135deg, #d97706, #f59e0b);
+  color: #fff;
+  opacity: 0.9;
+}
+
+.tabButton.attention.active {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning-soft) 65%, transparent);
 }
 
 .dataPanel {
@@ -4489,6 +4556,40 @@ td {
   background: color-mix(in srgb, var(--primary-soft) 15%, var(--surface));
 }
 
+.projectCampaignItem.campaign-working {
+  border-color: color-mix(in srgb, var(--blue) 35%, var(--border));
+}
+
+.projectCampaignItem.campaign-working .projectCampaignHeader {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--blue-soft) 58%, var(--surface)), color-mix(in srgb, var(--blue-soft) 18%, var(--surface)));
+}
+
+.projectCampaignItem.campaign-success {
+  border-color: color-mix(in srgb, var(--primary) 52%, var(--border));
+}
+
+.projectCampaignItem.campaign-success .projectCampaignHeader {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--primary-soft) 72%, var(--surface)), color-mix(in srgb, var(--primary-soft) 24%, var(--surface)));
+}
+
+.projectCampaignItem.campaign-error {
+  border-color: color-mix(in srgb, var(--danger) 50%, var(--border));
+}
+
+.projectCampaignItem.campaign-error .projectCampaignHeader {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--danger-soft) 70%, var(--surface)), color-mix(in srgb, var(--danger-soft) 20%, var(--surface)));
+}
+
+.publishAllCampaignButton {
+  min-width: 142px;
+  white-space: nowrap;
+}
+
+.status-publishing-all {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
 .projectCampaignContentTable th,
 .projectCampaignContentTable td {
   padding: 7px 8px;
@@ -4573,6 +4674,7 @@ td {
   min-height: 55px;
   padding: 7px 10px;
   text-align: left;
+  transition: background 150ms ease, border-color 150ms ease, box-shadow 150ms ease, color 150ms ease, transform 150ms ease;
 }
 
 .publicationWorkflowNav button > span:last-child {
@@ -4580,7 +4682,7 @@ td {
   background: color-mix(in srgb, var(--muted) 13%, transparent);
   border-radius: 999px;
   display: inline-flex;
-  font-size: 10px;
+  font-size: 11px;
   justify-content: center;
   min-width: 21px;
   padding: 2px 6px;
@@ -4600,13 +4702,13 @@ td {
 
 .publicationWorkflowLabel strong {
   color: inherit;
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.1;
 }
 
 .publicationWorkflowLabel small {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 10.5px;
   font-weight: 650;
   line-height: 1.15;
 }
@@ -4653,6 +4755,21 @@ td {
 .publicationWorkflowNav button.danger.active {
   background: var(--danger-soft);
   border-color: var(--danger);
+  color: var(--danger);
+}
+
+.publicationWorkflowNav button:not(.active):hover {
+  background: color-mix(in srgb, var(--primary-soft) 68%, var(--surface));
+  border-color: color-mix(in srgb, var(--primary) 62%, var(--border));
+  box-shadow: 0 7px 16px color-mix(in srgb, var(--primary) 14%, transparent);
+  color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.publicationWorkflowNav button.danger:not(.active):hover {
+  background: color-mix(in srgb, var(--danger-soft) 72%, var(--surface));
+  border-color: color-mix(in srgb, var(--danger) 60%, var(--border));
+  box-shadow: 0 7px 16px color-mix(in srgb, var(--danger) 12%, transparent);
   color: var(--danger);
 }
 

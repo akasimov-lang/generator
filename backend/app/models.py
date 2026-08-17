@@ -233,6 +233,7 @@ class PublicationCampaign(Base, TimestampMixin):
     interval_minutes: Mapped[int] = mapped_column(Integer, default=1440)
     items_per_run: Mapped[int] = mapped_column(Integer, default=1)
     start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class PublicationLog(Base, TimestampMixin):

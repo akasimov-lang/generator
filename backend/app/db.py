@@ -135,6 +135,14 @@ def apply_lightweight_migrations() -> None:
         )
         backfill_content_site_ids()
 
+    if "publication_campaigns" in tables:
+        columns = {column["name"] for column in inspector.get_columns("publication_campaigns")}
+        _add_missing_columns(
+            "publication_campaigns",
+            columns,
+            {"completed_at": "TIMESTAMP WITH TIME ZONE"},
+        )
+
 
 def ensure_default_admin() -> None:
     from app import models

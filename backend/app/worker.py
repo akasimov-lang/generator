@@ -7,7 +7,7 @@ from sqlalchemy import select
 from app import models
 from app.core.config import get_settings
 from app.db import SessionLocal
-from app.services import collect_competitor_research_for_item, generate_content_item, generate_task_items, publish_item, refresh_campaign_status, run_task_pipeline
+from app.services import collect_competitor_research_for_item, generate_content_item, generate_task_items, publish_campaign_bundle, publish_item, refresh_campaign_status, run_task_pipeline
 
 settings = get_settings()
 
@@ -130,5 +130,20 @@ def publish_due_items() -> dict:
             asyncio.run(publish_item(db, item, site))
             published += 1
         return {"processed": published}
+    finally:
+        db.close()
+
+
+@celery_app.task(name="app.worker.publish_campaign_bundle")
+def publish_campaign_bundle_job(campaign_id: str, log_id: str) -> dict:
+    db = SessionLocal()
+    try:
+        asyncio.run(publish_campaign_bundle(db, campaign_id, log_id))
+        campaign = db.get(models.PublicationCampaign, campaign_id)
+        return {
+            "status": campaign.status if campaign else "missing",
+            "campaign_id": campaign_id,
+            "log_id": log_id,
+        }
     finally:
         db.close()

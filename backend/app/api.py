@@ -7,6 +7,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app import models
+from app.core.config import get_settings
 from app.db import get_db
 from app.schemas import (
     AiProviderCreate,
@@ -61,6 +62,7 @@ from app.security import AdminUser, AuthUser, create_token, hash_password, verif
 from app.services import (
     BASE_PROMPT_TEMPLATE_NAME,
     approve_and_schedule_item,
+    build_campaign_publication_bundle,
     build_competitor_brief_for_item,
     collect_competitor_serp_for_item,
     count_words,
@@ -81,7 +83,7 @@ from app.services import (
     validate_content_for_publication,
     validate_ai_provider_key,
 )
-from app.worker import collect_competitor_research_job, generate_content_item_job, generate_task_content_job, run_task_pipeline_job
+from app.worker import collect_competitor_research_job, generate_content_item_job, generate_task_content_job, publish_campaign_bundle_job, run_task_pipeline_job
 
 router = APIRouter()
 
@@ -1539,6 +1541,61 @@ def update_campaign(campaign_id: str, payload: PublicationCampaignUpdate, _: Aut
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.post("/publication-campaigns/{campaign_id}/publish-all")
+def publish_all_campaign_items(campaign_id: str, user: AuthUser, db: Session = Depends(get_db)) -> dict[str, Any]:
+    campaign = db.get(models.PublicationCampaign, campaign_id)
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Кампания публикации не найдена")
+    if campaign.status == "publishing_all":
+        raise HTTPException(status_code=409, detail="Пакетная публикация этой кампании уже выполняется")
+    site = db.get(models.Site, campaign.site_id)
+    if not site:
+        raise HTTPException(status_code=404, detail="Проект кампании не найден")
+
+    items = db.scalars(
+        select(models.ContentItem)
+        .where(models.ContentItem.publication_campaign_id == campaign.id)
+        .where(models.ContentItem.status != "published")
+        .order_by(models.ContentItem.scheduled_at.asc().nullslast(), models.ContentItem.created_at.asc())
+    ).all()
+    if not items:
+        raise HTTPException(status_code=400, detail="В кампании нет текстов для публикации")
+
+    endpoint = get_settings().bulk_publication_endpoint.strip()
+    request_payload = build_campaign_publication_bundle(db, campaign, site, items, user)
+    log = models.PublicationLog(
+        content_item_id=items[0].id,
+        endpoint_url=endpoint or "bulk-publication-endpoint-not-configured",
+        request_payload=request_payload,
+    )
+    db.add(log)
+    db.flush()
+
+    if not endpoint:
+        log.response_status = 503
+        log.error_message = "Эндпоинт пакетной публикации пока не настроен"
+        db.commit()
+        raise HTTPException(status_code=503, detail="Эндпоинт пакетной публикации пока не настроен. Адрес можно добавить позже без изменения кампании.")
+
+    previous_status = campaign.status
+    campaign.status = "publishing_all"
+    campaign.completed_at = None
+    db.commit()
+    try:
+        publish_campaign_bundle_job.delay(campaign.id, log.id)
+    except Exception as exc:
+        campaign.status = previous_status
+        log.error_message = f"Не удалось поставить пакетную публикацию в фоновую очередь: {exc}"[:1000]
+        db.commit()
+        raise HTTPException(status_code=503, detail="Не удалось запустить пакетную публикацию") from exc
+    return {
+        "status": "queued",
+        "campaign_id": campaign.id,
+        "log_id": log.id,
+        "items_count": len(items),
+    }
+
+
 @router.get("/publication-logs", response_model=list[PublicationLogResponse])
 def list_logs(_: AdminUser, db: Session = Depends(get_db)) -> Any:
     return db.scalars(select(models.PublicationLog).order_by(models.PublicationLog.created_at.desc()).limit(200)).all()
@@ -1565,14 +1622,18 @@ def list_admin_request_logs(_: AdminUser, db: Session = Depends(get_db)) -> list
         is_menu_update = action == "menu_item_update"
         is_menu_delete = action == "menu_item_delete"
         is_menu_confirmation = action == "menu_item_sync_confirmed"
+        is_campaign_publish_all = action == "campaign_publish_all"
+        requested_by = payload.get("requested_by") if isinstance(payload.get("requested_by"), dict) else {}
+        project = payload.get("project") if isinstance(payload.get("project"), dict) else {}
         successful = log.response_status is not None and 200 <= log.response_status < 300 and not log.error_message
         result.append(
             {
                 "id": log.id,
                 "created_at": log.created_at,
-                "project_name": str(payload.get("project_name") or site_name or "Не определён"),
-                "action": "Добавление пункта меню" if is_menu_create else "Изменение пункта меню" if is_menu_update else "Удаление пункта меню" if is_menu_delete else "Синхронизация пункта меню" if is_menu_confirmation else "Публикация контента",
-                "item_name": str(payload.get("name") or topic or "").strip() or None,
+                "project_name": str(project.get("name") or payload.get("project_name") or site_name or "Не определён"),
+                "actor_username": str(requested_by.get("username") or payload.get("username") or "").strip() or None,
+                "action": "Публикация всей кампании" if is_campaign_publish_all else "Добавление пункта меню" if is_menu_create else "Изменение пункта меню" if is_menu_update else "Удаление пункта меню" if is_menu_delete else "Синхронизация пункта меню" if is_menu_confirmation else "Публикация контента",
+                "item_name": str(payload.get("campaign", {}).get("name") if is_campaign_publish_all and isinstance(payload.get("campaign"), dict) else payload.get("name") or topic or "").strip() or None,
                 "method": "POST",
                 "destination": log.endpoint_url,
                 "result": "Успешно" if successful else "Ошибка" if log.error_message or (log.response_status or 0) >= 400 else "Ожидает ответа",

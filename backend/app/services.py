@@ -15,6 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import models
+from app.core.config import get_settings
 from app.schemas import GenerationTaskCreate, PublicationCampaignCreate
 
 SIMPLE_PAGE = "simple_page"
@@ -2377,6 +2378,7 @@ def update_campaign_status(db: Session, campaign: models.PublicationCampaign, ac
 def refresh_campaign_status(db: Session, campaign_id: str | None) -> None:
     if not campaign_id:
         return
+    db.flush()
     campaign = db.get(models.PublicationCampaign, campaign_id)
     if not campaign or campaign.status not in {"active", "paused"}:
         return
@@ -2392,6 +2394,7 @@ def refresh_campaign_status(db: Session, campaign_id: str | None) -> None:
             .where(models.ContentItem.status == "publication_failed")
         ) or 0
         campaign.status = "completed_with_errors" if failed else "completed"
+        campaign.completed_at = datetime.now(timezone.utc)
 
 
 def get_dashboard(db: Session) -> dict:
@@ -2551,3 +2554,159 @@ def build_publication_payload(db: Session, item: models.ContentItem) -> dict:
             page["sectionId"] = section.external_id
             page["sectionPath"] = section.path
     return payload
+
+
+def build_campaign_publication_bundle(
+    db: Session,
+    campaign: models.PublicationCampaign,
+    site: models.Site,
+    items: list[models.ContentItem],
+    actor: dict,
+) -> dict:
+    requested_at = datetime.now(timezone.utc)
+    return {
+        "schema_version": "1.0",
+        "action": "campaign_publish_all",
+        "requested_at": requested_at.isoformat(),
+        "requested_by": {
+            "id": actor.get("id"),
+            "username": actor.get("username"),
+        },
+        "project": {
+            "id": site.id,
+            "name": site.name,
+            "main": site.cache_canon or site.base_url,
+            "base_url": site.base_url,
+        },
+        "campaign": {
+            "id": campaign.id,
+            "name": campaign.name,
+            "start_at": campaign.start_at.isoformat(),
+            "interval_minutes": campaign.interval_minutes,
+            "items_per_run": campaign.items_per_run,
+        },
+        "changes": [
+            {
+                "content_item_id": item.id,
+                "topic": item.topic,
+                "slug": item.slug,
+                "section_id": item.section_id,
+                "scheduled_at": item.scheduled_at.isoformat() if item.scheduled_at else None,
+                "payload": build_publication_payload(db, item),
+            }
+            for item in items
+        ],
+    }
+
+
+def _campaign_endpoint_result_by_item(response_body: dict) -> dict[str, dict]:
+    rows = response_body.get("items") or response_body.get("results") or []
+    if not isinstance(rows, list):
+        return {}
+    indexed: dict[str, dict] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        key = row.get("content_item_id") or row.get("id") or row.get("slug")
+        if key:
+            indexed[str(key)] = row
+    return indexed
+
+
+async def publish_campaign_bundle(db: Session, campaign_id: str, log_id: str) -> None:
+    campaign = db.get(models.PublicationCampaign, campaign_id)
+    log = db.get(models.PublicationLog, log_id)
+    if not campaign or not log:
+        return
+
+    payload = log.request_payload if isinstance(log.request_payload, dict) else {}
+    changes = payload.get("changes") if isinstance(payload.get("changes"), list) else []
+    item_ids = [str(change.get("content_item_id")) for change in changes if isinstance(change, dict) and change.get("content_item_id")]
+    items = db.scalars(
+        select(models.ContentItem)
+        .where(models.ContentItem.id.in_(item_ids))
+    ).all() if item_ids else []
+    items_by_id = {item.id: item for item in items}
+    endpoint = get_settings().bulk_publication_endpoint.strip()
+    completed_at = datetime.now(timezone.utc)
+    results: list[dict] = []
+
+    try:
+        headers = {
+            "Content-Type": "application/json",
+            "Idempotency-Key": f"campaign:{campaign.id}:publish-all:{log.id}",
+        }
+        site = db.get(models.Site, campaign.site_id)
+        if site and site.api_token:
+            headers["Authorization"] = f"Bearer {site.api_token}"
+        async with httpx.AsyncClient(timeout=120) as client:
+            response = await client.post(endpoint, json=payload, headers=headers)
+        try:
+            endpoint_body = response.json()
+        except Exception:
+            endpoint_body = {"raw": response.text}
+        if not isinstance(endpoint_body, dict):
+            endpoint_body = {"data": endpoint_body}
+        response_items = _campaign_endpoint_result_by_item(endpoint_body)
+        request_succeeded = 200 <= response.status_code < 300
+        has_failures = not request_succeeded
+
+        for change in changes:
+            if not isinstance(change, dict):
+                continue
+            item_id = str(change.get("content_item_id") or "")
+            item = items_by_id.get(item_id)
+            if not item:
+                continue
+            item_result = response_items.get(item.id) or response_items.get(item.slug) or {}
+            item_status = str(item_result.get("status") or "").lower()
+            item_succeeded = request_succeeded and item_result.get("success") is not False and item_status not in {"failed", "error", "publication_failed"}
+            if item_succeeded:
+                published_at = datetime.now(timezone.utc)
+                item.status = "published"
+                item.published_at = published_at
+                item.published_url = item_result.get("url") or item_result.get("published_url") or item.published_url
+                item.scheduled_at = None
+                results.append({
+                    "content_item_id": item.id,
+                    "topic": item.topic,
+                    "status": "published",
+                    "published_at": published_at.isoformat(),
+                    "published_url": item.published_url,
+                })
+            else:
+                has_failures = True
+                item.status = "publication_failed"
+                item.scheduled_at = None
+                results.append({
+                    "content_item_id": item.id,
+                    "topic": item.topic,
+                    "status": "publication_failed",
+                    "error": item_result.get("error") or item_result.get("message") or f"HTTP {response.status_code}",
+                })
+
+        campaign.status = "completed_with_errors" if has_failures else "completed"
+        campaign.completed_at = completed_at
+        log.response_status = response.status_code
+        log.response_body = {
+            "endpoint_response": endpoint_body,
+            "completed_at": completed_at.isoformat(),
+            "results": results,
+        }
+        log.error_message = "Пакетная публикация завершена с ошибками" if has_failures else None
+        db.commit()
+    except Exception as exc:
+        for item in items:
+            item.status = "publication_failed"
+            item.scheduled_at = None
+            results.append({
+                "content_item_id": item.id,
+                "topic": item.topic,
+                "status": "publication_failed",
+                "error": str(exc),
+            })
+        campaign.status = "completed_with_errors"
+        campaign.completed_at = completed_at
+        log.response_body = {"completed_at": completed_at.isoformat(), "results": results}
+        log.error_message = f"{type(exc).__name__}: {exc}"[:1000]
+        db.commit()

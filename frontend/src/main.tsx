@@ -380,6 +380,7 @@ type AdminRequestLog = {
   id: string;
   created_at: string;
   project_name: string;
+  actor_username: string | null;
   action: string;
   item_name: string | null;
   method: string;
@@ -395,6 +396,7 @@ type PublicationCampaign = {
   interval_minutes: number;
   items_per_run: number;
   start_at: string;
+  completed_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -953,6 +955,13 @@ function App() {
   return (
     <div className="appShell">
       <aside className="sidebar">
+        <div className="sidebarDigitalRain" aria-hidden="true">
+          {Array.from({ length: 12 }, (_, index) => (
+            <span key={index} style={{ "--rain-column": index, "--rain-delay": `${-(index * 0.73) % 7}s` } as React.CSSProperties}>
+              {index % 3 === 0 ? "01011010 101001 11001" : index % 3 === 1 ? "1011001 001011 01010" : "001101 110010 10101"}
+            </span>
+          ))}
+        </div>
         <div className="brand">
           <div className="brandMark logoMark"><BrandLogo /></div>
           <div>
@@ -1586,7 +1595,7 @@ function ProjectWorkspaceView({
   const [menuCapabilities, setMenuCapabilities] = React.useState<MenuCapabilities | null>(null);
   const [menuCapabilitiesLoading, setMenuCapabilitiesLoading] = React.useState(false);
   const [menuCapabilitiesError, setMenuCapabilitiesError] = React.useState("");
-  const [publicationWorkflowSection, setPublicationWorkflowSection] = React.useState<PublicationWorkspaceSection>("content");
+  const [publicationWorkflowSection, setPublicationWorkflowSection] = React.useState<PublicationWorkspaceSection>("campaigns");
   const projectLoadRequestRef = React.useRef(0);
   const selectedSite = sites.find((site) => site.id === selectedSiteId) || null;
   const routeProjectName = workspaceProjectNameFromPath(window.location.pathname);
@@ -1599,7 +1608,7 @@ function ProjectWorkspaceView({
     if (!selectedSiteId) return;
     const saved = window.localStorage.getItem(`publication_workspace_section:${currentUsername}:${selectedSiteId}`) as PublicationWorkspaceSection | null;
     if (saved && ["content", "campaigns", "process", "queue", "backlog"].includes(saved)) setPublicationWorkflowSection(saved);
-    else setPublicationWorkflowSection("content");
+    else setPublicationWorkflowSection("campaigns");
   }, [currentUsername, selectedSiteId]);
 
   const openPublicationSection = React.useCallback((section: PublicationWorkspaceSection) => {
@@ -1930,8 +1939,9 @@ function ProjectWorkspaceView({
           <TabButton
             href={pathForRoute("workspace", "menu", selectedSite?.name)}
             icon={<span className="tabButtonIcon menu" aria-hidden="true"><Menu size={16} /></span>}
-            label="Меню"
+            label={pendingSectionsCount ? `Меню (${pendingSectionsCount})` : "Меню"}
             active={activeTab === "menu"}
+            attention={pendingSectionsCount > 0}
             onClick={() => onTabChange("menu", selectedSite?.name)}
           />
         </div>
@@ -1982,9 +1992,11 @@ function ProjectWorkspaceView({
             />
           </WorkspaceTabPane>
           <WorkspaceTabPane active={activeTab === "content" || activeTab === "publication"} storagePrefix={`${currentUsername}:${selectedSite.id}:content`}>
-            <FastProjectPublicationPanel key={`${selectedSite.id}:publication-launch`} mode="launch" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} onChanged={refreshProject} />
-            <FastProjectPublicationPanel key={`${selectedSite.id}:publication-campaigns`} mode="campaigns" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} onChanged={refreshProject} />
-            <FastProjectContentPanel key={`${selectedSite.id}:content`} api={api} site={selectedSite} content={siteContent} sections={sections} onChanged={refreshProject} />
+            {publicationWorkflowSection === "campaigns" ? <>
+              <FastProjectPublicationPanel key={`${selectedSite.id}:publication-launch`} mode="launch" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} onChanged={refreshProject} />
+              <FastProjectPublicationPanel key={`${selectedSite.id}:publication-campaigns`} mode="campaigns" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} onChanged={refreshProject} />
+            </> : null}
+            {publicationWorkflowSection === "content" ? <FastProjectContentPanel key={`${selectedSite.id}:content`} api={api} site={selectedSite} content={siteContent} sections={sections} onChanged={refreshProject} /> : null}
             {publicationWorkflowSection !== "content" && publicationWorkflowSection !== "campaigns" ? (
               <FastProjectPublicationPanel key={`${selectedSite.id}:publication-workflow`} mode="workflow" workflowSection={publicationWorkflowSection} api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} onChanged={refreshProject} />
             ) : null}
@@ -3244,18 +3256,18 @@ type PublicationWorkspaceSection = "content" | "campaigns" | PublicationWorkflow
 
 function PublicationWorkflowNav({ content, campaigns, activeSection, onSectionChange }: { content: ContentItem[]; campaigns: PublicationCampaign[]; activeSection: PublicationWorkspaceSection; onSectionChange: (section: PublicationWorkspaceSection) => void }) {
   const agreedCount = content.filter((item) => ["approved", "scheduled", "retry_scheduled", "publication_paused", "publishing", "published", "publication_failed"].includes(item.status)).length;
-  const activeCampaignCount = campaigns.filter((campaign) => ["active", "paused", "created"].includes(campaign.status)).length;
+  const activeCampaignCount = campaigns.filter((campaign) => ["active", "paused", "created", "publishing_all"].includes(campaign.status)).length;
   const completedCampaignCount = campaigns.filter((campaign) => ["completed", "completed_with_errors"].includes(campaign.status)).length;
   const processCount = content.filter((item) => item.status === "approved").length;
   const queueCount = content.filter((item) => ["scheduled", "retry_scheduled", "publication_paused", "publishing"].includes(item.status)).length;
   const errorCount = content.filter((item) => item.status === "publication_failed").length;
   return (
     <nav className="publicationWorkflowNav publicationWorkflowNavTop" aria-label="Разделы публикации">
-      <button className={activeSection === "content" ? "active" : ""} type="button" onClick={() => onSectionChange("content")}>
-        <FileText size={17} /> <span className="publicationWorkflowLabel"><strong>Контент</strong><small>{agreedCount} согласовано</small></span><span>{content.length}</span>
-      </button>
       <button className={activeSection === "campaigns" ? "active" : ""} type="button" onClick={() => onSectionChange("campaigns")}>
         <FolderKanban size={17} /> <span className="publicationWorkflowLabel"><strong>Кампании</strong><small>{activeCampaignCount} в работе · {completedCampaignCount} завершено</small></span><span>{campaigns.length}</span>
+      </button>
+      <button className={activeSection === "content" ? "active" : ""} type="button" onClick={() => onSectionChange("content")}>
+        <FileText size={17} /> <span className="publicationWorkflowLabel"><strong>Контент</strong><small>{agreedCount} согласовано</small></span><span>{content.length}</span>
       </button>
       <button className={activeSection === "process" ? "active" : ""} type="button" onClick={() => onSectionChange("process")}>
         <Activity size={17} /> <span className="publicationWorkflowLabel"><strong>Процесс</strong><small>готовы к запуску</small></span><span>{processCount}</span>
@@ -3278,6 +3290,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
   const [startAt, setStartAt] = React.useState(() => toDateTimeInputValue(new Date()));
   const [formError, setFormError] = React.useState("");
   const [publishingNowId, setPublishingNowId] = React.useState("");
+  const [publishingAllCampaignId, setPublishingAllCampaignId] = React.useState("");
   const [previewItem, setPreviewItem] = React.useState<ContentItem | null>(null);
   const approved = content.filter((item) => item.status === "approved" && (!selectedPublicationSectionIds.length || (item.section_id && selectedPublicationSectionIds.includes(item.section_id))));
   const publicationSections = sections
@@ -3289,7 +3302,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
   const publicationBacklog = content
     .filter((item) => item.status === "publication_failed")
     .sort((left, right) => new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime());
-  const activeCampaignCount = campaigns.filter((campaign) => ["active", "paused", "created"].includes(campaign.status)).length;
+  const activeCampaignCount = campaigns.filter((campaign) => ["active", "paused", "created", "publishing_all"].includes(campaign.status)).length;
   const completedCampaignCount = campaigns.filter((campaign) => ["completed", "completed_with_errors"].includes(campaign.status)).length;
   const latestErrorByContentId = React.useMemo(() => {
     const result = new Map<string, PublicationLog>();
@@ -3348,6 +3361,30 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
       setPublishingNowId("");
     }
   }
+
+  async function publishAll(campaign: PublicationCampaign) {
+    const count = content.filter((item) => item.publication_campaign_id === campaign.id && item.status !== "published").length;
+    if (!count || !window.confirm(`Опубликовать все тексты кампании «${campaign.name}» (${count}) одним пакетным запросом?`)) return;
+    setPublishingAllCampaignId(campaign.id);
+    setFormError("");
+    try {
+      await api(`/publication-campaigns/${campaign.id}/publish-all`, { method: "POST" });
+      await onChanged();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось запустить пакетную публикацию.");
+      setPublishingAllCampaignId("");
+    }
+  }
+
+  React.useEffect(() => {
+    const inProgress = campaigns.some((campaign) => campaign.status === "publishing_all");
+    if (!inProgress) {
+      if (publishingAllCampaignId) setPublishingAllCampaignId("");
+      return;
+    }
+    const timer = window.setInterval(() => void onChanged(), 4000);
+    return () => window.clearInterval(timer);
+  }, [campaigns, onChanged, publishingAllCampaignId]);
 
   function togglePublicationSection(sectionId: string) {
     setSelectedPublicationSectionIds((current) => current.includes(sectionId)
@@ -3423,8 +3460,10 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
               sections={sections}
               defaultExpanded={index === 0}
               publishingNowId={publishingNowId}
+              publishingAllCampaignId={publishingAllCampaignId}
               onPreview={setPreviewItem}
               onPublishImmediately={publishImmediately}
+              onPublishAll={publishAll}
               onChangeCampaign={changeCampaign}
             />
           ))}
@@ -3492,8 +3531,10 @@ function ProjectCampaignTreeItem({
   sections,
   defaultExpanded,
   publishingNowId,
+  publishingAllCampaignId,
   onPreview,
   onPublishImmediately,
+  onPublishAll,
   onChangeCampaign
 }: {
   campaign: PublicationCampaign;
@@ -3501,8 +3542,10 @@ function ProjectCampaignTreeItem({
   sections: Section[];
   defaultExpanded: boolean;
   publishingNowId: string;
+  publishingAllCampaignId: string;
   onPreview: (item: ContentItem) => void;
   onPublishImmediately: (item: ContentItem) => Promise<void>;
+  onPublishAll: (campaign: PublicationCampaign) => Promise<void>;
   onChangeCampaign: (campaign: PublicationCampaign, action: "pause" | "resume" | "stop") => Promise<void>;
 }) {
   const [expanded, setExpanded] = usePersistentWorkspacePanelState(`campaign:${campaign.id}`, defaultExpanded);
@@ -3514,17 +3557,20 @@ function ProjectCampaignTreeItem({
   const queuedCount = items.filter((item) => ["scheduled", "retry_scheduled", "publication_paused", "publishing"].includes(item.status)).length;
   const publishedCount = items.filter((item) => item.status === "published").length;
   const failedCount = items.filter((item) => item.status === "publication_failed").length;
+  const campaignTone = campaign.status === "completed_with_errors" ? "error" : campaign.status === "completed" ? "success" : "working";
+  const isPublishingAll = campaign.status === "publishing_all" || publishingAllCampaignId === campaign.id;
+  const unpublishedCount = items.length - publishedCount;
 
   return (
-    <article className={`projectCampaignItem ${expanded ? "expanded" : ""}`}>
+    <article className={`projectCampaignItem campaign-${campaignTone} ${expanded ? "expanded" : ""}`}>
       <div className="projectCampaignHeader">
         <button className="projectCampaignToggle" type="button" onClick={() => setExpanded((current) => !current)} aria-expanded={expanded}>
           <span className="projectCampaignChevron">{expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}</span>
           <span className="projectCampaignIdentity">
             <strong>{campaign.name}</strong>
-            <small>Старт: {formatDate(campaign.start_at)} · {publicationIntervalLabel(campaign.interval_minutes)}</small>
+            <small>{campaign.completed_at ? `Завершена: ${formatDate(campaign.completed_at)}` : `Старт: ${formatDate(campaign.start_at)}`} · {publicationIntervalLabel(campaign.interval_minutes)}</small>
           </span>
-          <StatusBadge status={campaign.status} />
+          <CampaignStatusBadge status={campaign.status} />
           <span className="projectCampaignCounters">
             <span>Текстов <b>{items.length}</b></span>
             <span>В очереди <b>{queuedCount}</b></span>
@@ -3533,6 +3579,11 @@ function ProjectCampaignTreeItem({
           </span>
         </button>
         <div className="projectCampaignActions">
+          {unpublishedCount > 0 ? (
+            <button className="button compact primary publishAllCampaignButton" type="button" onClick={() => void onPublishAll(campaign)} disabled={isPublishingAll} title="Сформировать единый JSON и отправить все тексты кампании">
+              <Send size={15} /> {isPublishingAll ? "Публикуем…" : "Опубликовать все"}
+            </button>
+          ) : null}
           {campaign.status === "active" ? (
             <button className="button compact campaignActionIconButton" type="button" onClick={() => void onChangeCampaign(campaign, "pause")} title="Приостановить" aria-label="Приостановить кампанию"><Pause size={15} /></button>
           ) : null}
@@ -7063,10 +7114,11 @@ function AdminRequestLogsPanel({ api }: Pick<ViewProps, "api">) {
       {error ? <div className="formError">{error}</div> : null}
       {!loading && !logs.length ? <EmptyState text="Запросов пока нет." /> : (
         <ResponsiveTable
-          columns={["Дата и время", "Проект", "Что отправили", "Метод", "Куда", "Результат"]}
+          columns={["Дата и время", "Проект", "Пользователь", "Что отправили", "Метод", "Куда", "Результат"]}
           rows={logs.map((log) => [
             formatDate(log.created_at),
             <strong>{log.project_name}</strong>,
+            log.actor_username || "—",
             <span className="requestLogAction"><strong>{log.action}</strong>{log.item_name ? <small>{log.item_name}</small> : null}</span>,
             <code className="requestLogMethod">{log.method}</code>,
             <span className="requestLogDestination" title={log.destination}>{log.destination}</span>,
@@ -7241,10 +7293,10 @@ function NavButton({ href, icon, label, active, onClick }: { href: string; icon:
   );
 }
 
-function TabButton({ href, icon, label, active, onClick }: { href: string; icon?: React.ReactNode; label: string; active: boolean; onClick: () => void }) {
+function TabButton({ href, icon, label, active, attention = false, onClick }: { href: string; icon?: React.ReactNode; label: string; active: boolean; attention?: boolean; onClick: () => void }) {
   return (
     <a
-      className={`tabButton ${active ? "active" : ""}`}
+      className={`tabButton ${active ? "active" : ""} ${attention ? "attention" : ""}`}
       href={href}
       onClick={(event) => {
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -7656,6 +7708,7 @@ function StatusBadge({ status }: { status: string }) {
     publication_paused: "Публикация приостановлена",
     published: "Опубликовано",
     publishing: "Публикуется",
+    publishing_all: "Публикуем все",
     queries_ready: "Запросы готовы",
     queued: "В очереди",
     rejected: "Отклонено",
@@ -7669,6 +7722,13 @@ function StatusBadge({ status }: { status: string }) {
     valid: "Готово"
   };
   return <span className={`status status-${status.replaceAll("_", "-")}`}>{labels[status] || status}</span>;
+}
+
+function CampaignStatusBadge({ status }: { status: string }) {
+  const label = status === "active" ? "В работе" : status === "publishing_all" ? "Публикуем все" : null;
+  return label
+    ? <span className={`status status-${status.replaceAll("_", "-")}`}>{label}</span>
+    : <StatusBadge status={status} />;
 }
 
 function ProviderValidationCell({ provider }: { provider: AiProvider }) {

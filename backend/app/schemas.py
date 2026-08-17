@@ -496,6 +496,7 @@ class PublicationCampaignResponse(BaseModel):
     interval_minutes: int
     items_per_run: int
     start_at: datetime
+    completed_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -543,6 +544,7 @@ class AdminRequestLogResponse(BaseModel):
     id: str
     created_at: datetime
     project_name: str
+    actor_username: str | None
     action: str
     item_name: str | None
     method: str
