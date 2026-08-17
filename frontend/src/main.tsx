@@ -1569,6 +1569,7 @@ function ProjectWorkspaceView({
   const [menuCapabilities, setMenuCapabilities] = React.useState<MenuCapabilities | null>(null);
   const [menuCapabilitiesLoading, setMenuCapabilitiesLoading] = React.useState(false);
   const [menuCapabilitiesError, setMenuCapabilitiesError] = React.useState("");
+  const [publicationWorkflowSection, setPublicationWorkflowSection] = React.useState<PublicationWorkflowSection>("process");
   const projectLoadRequestRef = React.useRef(0);
   const selectedSite = sites.find((site) => site.id === selectedSiteId) || null;
   const routeProjectName = workspaceProjectNameFromPath(window.location.pathname);
@@ -1883,7 +1884,13 @@ function ProjectWorkspaceView({
         {workspaceError ? <div className="notice">{workspaceError}</div> : null}
       </DataPanel>
 
-      {selectedSite ? (
+      {selectedSite && (activeTab === "content" || activeTab === "publication") ? (
+        <PublicationWorkflowNav
+          content={siteContent}
+          activeSection={publicationWorkflowSection}
+          onSectionChange={setPublicationWorkflowSection}
+        />
+      ) : selectedSite ? (
         <div className="workspaceAccordionHint" role="note">
           <ChevronDown size={17} />
           <span><strong>Блоки можно сворачивать.</strong> Нажмите на заголовок блока — выбранное положение сохранится отдельно для вашего пользователя и проекта.</span>
@@ -1923,7 +1930,7 @@ function ProjectWorkspaceView({
             <FastProjectPublicationPanel key={`${selectedSite.id}:publication-launch`} mode="launch" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} onChanged={refreshProject} />
             <FastProjectPublicationPanel key={`${selectedSite.id}:publication-campaigns`} mode="campaigns" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} onChanged={refreshProject} />
             <FastProjectContentPanel key={`${selectedSite.id}:content`} api={api} site={selectedSite} content={siteContent} sections={sections} onChanged={refreshProject} />
-            <FastProjectPublicationPanel key={`${selectedSite.id}:publication-workflow`} mode="workflow" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} onChanged={refreshProject} />
+            <FastProjectPublicationPanel key={`${selectedSite.id}:publication-workflow`} mode="workflow" workflowSection={publicationWorkflowSection} api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} onChanged={refreshProject} />
           </WorkspaceTabPane>
           <WorkspaceTabPane active={activeTab === "menu"} storagePrefix={`${currentUsername}:${selectedSite.id}:menu`}>
             <FastProjectMenuPanel api={api} site={selectedSite} sections={sections} menuCapabilities={menuCapabilities} onChanged={refreshProject} />
@@ -3170,7 +3177,26 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
 
 type PublicationWorkflowSection = "process" | "queue" | "backlog";
 
-function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs, mode, onChanged }: ViewProps & { site: Site; content: ContentItem[]; sections: Section[]; campaigns: PublicationCampaign[]; logs: PublicationLog[]; mode: "launch" | "campaigns" | "workflow" }) {
+function PublicationWorkflowNav({ content, activeSection, onSectionChange }: { content: ContentItem[]; activeSection: PublicationWorkflowSection; onSectionChange: (section: PublicationWorkflowSection) => void }) {
+  const processCount = content.filter((item) => item.status === "approved").length;
+  const queueCount = content.filter((item) => ["scheduled", "retry_scheduled", "publication_paused", "publishing"].includes(item.status)).length;
+  const errorCount = content.filter((item) => item.status === "publication_failed").length;
+  return (
+    <nav className="publicationWorkflowNav publicationWorkflowNavTop" aria-label="Разделы публикации">
+      <button className={activeSection === "process" ? "active" : ""} type="button" onClick={() => onSectionChange("process")}>
+        <Activity size={16} /> Процесс <span>{processCount}</span>
+      </button>
+      <button className={activeSection === "queue" ? "active" : ""} type="button" onClick={() => onSectionChange("queue")}>
+        <ListChecks size={16} /> Очередь <span>{queueCount}</span>
+      </button>
+      <button className={`${activeSection === "backlog" ? "active" : ""} ${errorCount ? "danger" : ""}`} type="button" onClick={() => onSectionChange("backlog")}>
+        <AlertTriangle size={16} /> Ошибки <span>{errorCount}</span>
+      </button>
+    </nav>
+  );
+}
+
+function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs, mode, workflowSection = "process", onChanged }: ViewProps & { site: Site; content: ContentItem[]; sections: Section[]; campaigns: PublicationCampaign[]; logs: PublicationLog[]; mode: "launch" | "campaigns" | "workflow"; workflowSection?: PublicationWorkflowSection }) {
   const [launchExpanded, setLaunchExpanded] = usePersistentWorkspacePanelState("publication-launch", false);
   const [name, setName] = React.useState("Daily publication");
   const [itemsPerDay, setItemsPerDay] = React.useState(1);
@@ -3178,7 +3204,6 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
   const [startAt, setStartAt] = React.useState(() => toDateTimeInputValue(new Date()));
   const [formError, setFormError] = React.useState("");
   const [publishingNowId, setPublishingNowId] = React.useState("");
-  const [workflowSection, setWorkflowSection] = React.useState<PublicationWorkflowSection>("process");
   const approved = content.filter((item) => item.status === "approved" && (!selectedPublicationSectionIds.length || (item.section_id && selectedPublicationSectionIds.includes(item.section_id))));
   const publicationSections = sections
     .map((section) => ({ section, count: content.filter((item) => item.status === "approved" && item.section_id === section.id).length }))
@@ -3331,19 +3356,6 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
         </div>
         {formError ? <span className="formError">{formError}</span> : null}
       </DataPanel> : null}
-      {mode === "workflow" ? (
-        <nav className="publicationWorkflowNav" aria-label="Разделы публикации">
-          <button className={workflowSection === "process" ? "active" : ""} type="button" onClick={() => setWorkflowSection("process")}>
-            <Activity size={16} /> Процесс публикации <span>{approved.length}</span>
-          </button>
-          <button className={workflowSection === "queue" ? "active" : ""} type="button" onClick={() => setWorkflowSection("queue")}>
-            <ListChecks size={16} /> Очередь публикации <span>{publicationQueue.length}</span>
-          </button>
-          <button className={`${workflowSection === "backlog" ? "active" : ""} ${publicationBacklog.length ? "danger" : ""}`} type="button" onClick={() => setWorkflowSection("backlog")}>
-            <AlertTriangle size={16} /> Беклог публикации <span>{publicationBacklog.length}</span>
-          </button>
-        </nav>
-      ) : null}
       {mode === "workflow" && workflowSection === "process" ? <DataPanel title={`Процесс публикации · ${approved.length}`}>
         <ResponsiveTable
           columns={["Тема", "Меню", "Slug", "Действия"]}
@@ -3375,7 +3387,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
         />
         {formError ? <span className="formError">{formError}</span> : null}
       </DataPanel> : null}
-      {mode === "workflow" && workflowSection === "backlog" ? <DataPanel className="publicationBacklogPanel" collapseKey="publication-backlog" title={<span className="publicationBacklogTitle"><AlertTriangle size={18} /> Беклог публикации · {publicationBacklog.length}</span>}>
+      {mode === "workflow" && workflowSection === "backlog" ? <DataPanel className="publicationBacklogPanel" collapseKey="publication-backlog" title={<span className="publicationBacklogTitle"><AlertTriangle size={18} /> Ошибки публикации · {publicationBacklog.length}</span>}>
         <div className="publicationBacklogHint">Сюда автоматически переносятся тексты, которые не удалось опубликовать из-за ошибки.</div>
         <ResponsiveTable
           columns={["Тема", "Меню", "Ошибка", "Время", "Статус"]}
