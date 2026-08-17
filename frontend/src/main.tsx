@@ -4900,6 +4900,7 @@ function AdminTasksAccordion({
   const [regenerateIncludeFaq, setRegenerateIncludeFaq] = React.useState(true);
   const [regenerateCollectCompetitors, setRegenerateCollectCompetitors] = React.useState(false);
   const [regenerateIncludeCasinoRating, setRegenerateIncludeCasinoRating] = React.useState(false);
+  const [summaryDialog, setSummaryDialog] = React.useState<"queries" | "competitors" | null>(null);
   const selectedItems = expandedItems.filter((item) => selectedIds.includes(item.id));
   const allSelected = expandedItemIds.length > 0 && expandedItemIds.every((id) => selectedIds.includes(id));
   const bulkApproveItems = selectedItems.filter(canApproveContent);
@@ -4922,6 +4923,7 @@ function AdminTasksAccordion({
   React.useEffect(() => {
     setSelectedIds([]);
     setCopyState("");
+    setSummaryDialog(null);
   }, [expandedTaskId]);
 
   React.useEffect(() => {
@@ -5012,6 +5014,7 @@ function AdminTasksAccordion({
   }
 
   return (
+    <>
     <div className="tasksTableWrap">
       <table className="expandableTable">
         <thead>
@@ -5119,17 +5122,23 @@ function AdminTasksAccordion({
                               <ChevronUp size={16} /> Свернуть задачу
                             </button>
                           </div>
-                          <div className="accordionSummary taskAccordionSummaryCompact">
-                            <TaskQueriesMetric total={totalQueries} groups={taskQueryGroups} busy={actionId === "bulk:regenerate-queries"} onGenerate={handleGenerateQueries} />
-                            <div className="infoMetric competitorRequestMetric">
-                              <span>Конкуренты для генерации</span>
-                              <strong>{competitorBriefs ? `${competitorBriefs}/${expandedItems.length} brief` : "Не запрашивались"}</strong>
-                              <button className="button compact" type="button" onClick={handleRequestCompetitors} disabled={!competitorRequestItems.length || actionId === "bulk:collect-competitors"}>
-                                <Globe2 size={15} /> {actionId === "bulk:collect-competitors" ? "Запрашиваю конкурентов" : competitorRequestItems.length ? `Запросить конкурентов (${competitorRequestItems.length})` : "Конкуренты собраны"}
+                          <div className="taskSummaryPanel">
+                            <div className="taskSummaryMetrics">
+                              <button className="taskSummaryMetricButton" type="button" onClick={() => setSummaryDialog("queries")}>
+                                <span>Запросы для сбора конкурентов</span>
+                                <strong>{totalQueries}</strong>
+                                <span className="taskSummaryListIcon" title="Посмотреть запросы"><ListChecks size={16} /></span>
+                              </button>
+                              <button className="taskSummaryMetricButton" type="button" onClick={() => setSummaryDialog("competitors")}>
+                                <span>Конкуренты для генерации</span>
+                                <strong>{competitorBriefs}/{expandedItems.length}</strong>
+                                <span className="taskSummaryListIcon" title="Посмотреть конкурентов"><ListChecks size={16} /></span>
                               </button>
                             </div>
-                            <InfoMetric label="Последняя генерация" value={latestGeneration ? formatDate(latestGeneration) : "Не запускалась"} />
-                            <InfoMetric label="Загрузил" value={expandedTask.created_by_username || "-"} />
+                            <div className="taskSummaryPlainInfo">
+                              <span>Последняя генерация <b>{latestGeneration ? formatDate(latestGeneration) : "не запускалась"}</b></span>
+                              <span>Автор задачи <b>{expandedTask.created_by_username || "—"}</b></span>
+                            </div>
                           </div>
                           <div className="taskRegenerateAllPanel">
                             <div className="taskRegenerateAllHeading">
@@ -5252,43 +5261,62 @@ function AdminTasksAccordion({
         </tbody>
       </table>
     </div>
-  );
-}
-
-function InfoMetric({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="infoMetric">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-function TaskQueriesMetric({ total, groups, busy, onGenerate }: { total: number; groups: Array<{ topic: string; queries: CompetitorQuery[] }>; busy: boolean; onGenerate: () => void }) {
-  return (
-    <div className="infoMetric taskQueriesMetric" tabIndex={0} aria-label="Показать запросы для сбора конкурентов">
-      <span>Запросы для сбора конкурентов</span>
-      <strong>{total}</strong>
-      <button className="button compact" type="button" onClick={onGenerate} disabled={busy}>
-        <RefreshCcw size={15} /> {busy ? "Генерирую запросы" : "Сгенерировать запросы"}
-      </button>
-      <div className="queryTooltip taskQueriesTooltip" role="tooltip">
-        <strong>Запросы по темам задачи</strong>
-        {groups.length ? groups.map((group) => (
-          <div className="taskQueryGroup" key={group.topic}>
-            <b>{group.topic}</b>
-            <ol>
-              {group.queries.map((query) => (
-                <li key={query.id}>
-                  {query.query}
-                  <small>{query.status === "serp_collected" ? `Сбор выполнен · результатов: ${query.result_count}` : query.status === "collecting" ? "Сбор выполняется" : "Запрос подготовлен"}</small>
-                </li>
-              ))}
-            </ol>
-          </div>
-        )) : <span>Запросы пока не подготовлены.</span>}
-      </div>
-    </div>
+    {summaryDialog === "queries" && expandedTask ? (
+      <Modal title="Запросы для сбора конкурентов" subtitle={`Всего запросов: ${totalQueries}`} onClose={() => setSummaryDialog(null)} wide className="taskSummaryDetailsModal">
+        <div className="taskSummaryModalToolbar">
+          <span>Запросы сгруппированы по темам задачи.</span>
+          <button className="button compact" type="button" onClick={handleGenerateQueries} disabled={actionId === "bulk:regenerate-queries"}>
+            <RefreshCcw size={15} /> {actionId === "bulk:regenerate-queries" ? "Генерирую" : "Сгенерировать запросы"}
+          </button>
+        </div>
+        <div className="taskSummaryDetailsList">
+          {taskQueryGroups.length ? taskQueryGroups.map((group) => (
+            <section className="taskSummaryDetailGroup" key={group.topic}>
+              <strong>{group.topic}</strong>
+              <ol>
+                {group.queries.map((query) => (
+                  <li key={query.id}>
+                    <span>{query.query}</span>
+                    <small>{query.status === "serp_collected" ? `Сбор выполнен · результатов: ${query.result_count}` : query.status === "collecting" ? "Сбор выполняется" : "Запрос подготовлен"}</small>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )) : <EmptyState text="Запросы пока не подготовлены." />}
+        </div>
+      </Modal>
+    ) : null}
+    {summaryDialog === "competitors" && expandedTask ? (
+      <Modal title="Конкуренты для генерации" subtitle={`Анализ готов для ${competitorBriefs} из ${expandedItems.length} тем`} onClose={() => setSummaryDialog(null)} wide className="taskSummaryDetailsModal">
+        <div className="taskSummaryModalToolbar">
+          <span>Показаны найденные сайты и состояние анализа по каждой теме.</span>
+          <button className="button compact" type="button" onClick={handleRequestCompetitors} disabled={!competitorRequestItems.length || actionId === "bulk:collect-competitors"}>
+            <Globe2 size={15} /> {actionId === "bulk:collect-competitors" ? "Запрашиваю" : competitorRequestItems.length ? `Собрать недостающие (${competitorRequestItems.length})` : "Все конкуренты собраны"}
+          </button>
+        </div>
+        <div className="taskSummaryDetailsList">
+          {expandedItems.map((item) => {
+            const itemResearch = researchByItem.get(item.id);
+            const results = itemResearch?.results || [];
+            const briefReady = Boolean(item.competitor_brief || itemResearch?.brief);
+            return (
+              <section className="taskSummaryDetailGroup" key={item.id}>
+                <div className="taskCompetitorDetailHeading">
+                  <strong>{item.topic}</strong>
+                  <span>{results.length} URL · {itemResearch?.pages.length || 0} страниц · {briefReady ? "анализ готов" : competitorStatusLabel(item, itemResearch)}</span>
+                </div>
+                {results.length ? (
+                  <ul className="taskCompetitorLinks">
+                    {results.slice(0, 10).map((result) => <li key={result.id}><a href={result.url} target="_blank" rel="noreferrer">{result.title || result.url}</a></li>)}
+                  </ul>
+                ) : <small className="fieldHint">Конкуренты ещё не собраны.</small>}
+              </section>
+            );
+          })}
+        </div>
+      </Modal>
+    ) : null}
+    </>
   );
 }
 

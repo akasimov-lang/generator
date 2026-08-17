@@ -3915,6 +3915,201 @@ td {
   grid-template-columns: 1.25fr 1.25fr minmax(170px, 0.8fr) minmax(130px, 0.55fr);
 }
 
+.taskSummaryPanel {
+  align-items: center;
+  background: color-mix(in srgb, var(--surface-2) 72%, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  min-height: 54px;
+  padding: 8px 10px;
+}
+
+.taskSummaryMetrics {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.taskSummaryMetricButton {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  gap: 7px;
+  grid-template-columns: minmax(0, auto) auto auto;
+  min-height: 36px;
+  padding: 6px 7px 6px 10px;
+  text-align: left;
+  transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+}
+
+.taskSummaryMetricButton:hover {
+  background: var(--primary-soft);
+  border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
+  box-shadow: 0 4px 12px rgba(20, 111, 55, 0.1);
+}
+
+.taskSummaryMetricButton > span:first-child {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.taskSummaryMetricButton > strong {
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.taskSummaryListIcon {
+  align-items: center;
+  background: var(--primary-soft);
+  border-radius: 7px;
+  color: var(--primary-strong);
+  display: inline-flex;
+  height: 25px;
+  justify-content: center;
+  width: 25px;
+}
+
+.taskSummaryPlainInfo {
+  align-items: flex-end;
+  display: grid;
+  flex: 0 1 430px;
+  gap: 3px;
+  justify-items: end;
+  min-width: 0;
+}
+
+.taskSummaryPlainInfo span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.taskSummaryPlainInfo b {
+  color: var(--text);
+  font-size: 12px;
+  margin-left: 5px;
+}
+
+.taskSummaryDetailsModal {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.taskSummaryModalToolbar {
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 8px 10px;
+}
+
+.taskSummaryModalToolbar > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.taskSummaryDetailsList {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.taskSummaryDetailGroup {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  display: grid;
+  gap: 7px;
+  padding: 10px 12px;
+}
+
+.taskSummaryDetailGroup > strong,
+.taskCompetitorDetailHeading strong {
+  font-size: 13px;
+}
+
+.taskSummaryDetailGroup ol,
+.taskCompetitorLinks {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 22px;
+}
+
+.taskSummaryDetailGroup li {
+  font-size: 12px;
+}
+
+.taskSummaryDetailGroup li small {
+  color: var(--muted);
+  display: block;
+  font-size: 10px;
+  margin-top: 1px;
+}
+
+.taskCompetitorDetailHeading {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  justify-content: space-between;
+}
+
+.taskCompetitorDetailHeading span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.taskCompetitorLinks a {
+  color: var(--primary-strong);
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.taskCompetitorLinks a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 820px) {
+  .taskSummaryPanel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .taskSummaryMetricButton {
+    flex: 1 1 100%;
+  }
+
+  .taskSummaryPlainInfo {
+    align-items: start;
+    flex-basis: auto;
+    justify-items: start;
+  }
+
+  .taskSummaryPlainInfo span {
+    text-align: left;
+  }
+
+  .taskSummaryModalToolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
 .infoMetric {
   background: var(--surface);
   border: 1px solid var(--border);
