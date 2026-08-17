@@ -3456,7 +3456,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
             item.scheduled_at ? formatDate(item.scheduled_at) : "—",
             <StatusBadge status={item.status} />,
             <button className="button compact primary publishImmediatelyButton" type="button" onClick={() => void publishImmediately(item)} disabled={publishingNowId === item.id || item.status === "publishing"}>
-              <Send size={14} /> {publishingNowId === item.id ? "Публикуем…" : "Без очереди"}
+              <Send size={14} /> {publishingNowId === item.id ? "Отправляем…" : "Отправить"}
             </button>
           ])}
           wrapperClassName="projectPublicationQueueTable"
@@ -3560,7 +3560,7 @@ function ProjectCampaignTreeItem({
               <span className="projectCampaignRowActions">
                 {item.status !== "published" ? (
                   <button className="button compact primary publishImmediatelyButton" type="button" onClick={() => void onPublishImmediately(item)} disabled={publishingNowId === item.id || item.status === "publishing"}>
-                    <Send size={14} /> {publishingNowId === item.id ? "Публикуем…" : "Без очереди"}
+                    <Send size={14} /> {publishingNowId === item.id ? "Отправляем…" : "Отправить"}
                   </button>
                 ) : item.published_url ? <a href={item.published_url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Открыть</a> : "—"}
               </span>
@@ -5774,7 +5774,7 @@ function PublicationsView({ api, sites, content, onOpenProject, onChanged }: Vie
               <StatusBadge status={item.status} />,
               ["scheduled", "retry_scheduled", "publication_paused", "approved"].includes(item.status) ? (
                 <button className="button compact primary publishImmediatelyButton" type="button" onClick={() => void publishCampaignQueueItem(item)} disabled={publishingQueueItemId === item.id}>
-                  <Send size={14} /> {publishingQueueItemId === item.id ? "Публикуем…" : "Без очереди"}
+                  <Send size={14} /> {publishingQueueItemId === item.id ? "Отправляем…" : "Отправить"}
                 </button>
               ) : "—"
             ])}
