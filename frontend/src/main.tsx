@@ -1604,6 +1604,11 @@ function ProjectWorkspaceView({
     ? menuMedalStatus(menuCapabilities.checked_at, menuCapabilities.header_menu_rendered, menuCapabilities.footer_menu_rendered)
     : selectedSite ? projectMenuMedalStatus(selectedSite) : "unchecked";
 
+  React.useLayoutEffect(() => {
+    if ("scrollRestoration" in window.history) window.history.scrollRestoration = "manual";
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, []);
+
   React.useEffect(() => {
     if (!selectedSiteId) return;
     const saved = window.localStorage.getItem(`publication_workspace_section:${currentUsername}:${selectedSiteId}`) as PublicationWorkspaceSection | null;
@@ -1614,32 +1619,7 @@ function ProjectWorkspaceView({
   const openPublicationSection = React.useCallback((section: PublicationWorkspaceSection) => {
     setPublicationWorkflowSection(section);
     if (selectedSiteId) window.localStorage.setItem(`publication_workspace_section:${currentUsername}:${selectedSiteId}`, section);
-    const panelKeys: Record<PublicationWorkspaceSection, string> = {
-      content: "project-content",
-      campaigns: "project-campaigns",
-      process: "publication-process",
-      queue: "publication-queue",
-      backlog: "publication-backlog"
-    };
-    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-      window.dispatchEvent(new CustomEvent("workspace:open-panel", { detail: { key: panelKeys[section], exclusive: true } }));
-      document.getElementById(`workspace-section-${section}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }));
   }, [currentUsername, selectedSiteId]);
-
-  React.useEffect(() => {
-    if (!selectedSiteId || (activeTab !== "content" && activeTab !== "publication")) return;
-    const panelKeys: Record<PublicationWorkspaceSection, string> = {
-      content: "project-content",
-      campaigns: "project-campaigns",
-      process: "publication-process",
-      queue: "publication-queue",
-      backlog: "publication-backlog"
-    };
-    window.requestAnimationFrame(() => {
-      window.dispatchEvent(new CustomEvent("workspace:open-panel", { detail: { key: panelKeys[publicationWorkflowSection], exclusive: true } }));
-    });
-  }, [activeTab, publicationWorkflowSection, selectedSiteId]);
 
   const loadProject = React.useCallback(async () => {
     if (!selectedSiteId) return;
@@ -3154,7 +3134,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
             <Send size={15} /> В публикацию ({bulkPublishItems.length})
           </button>
           <button className="button compact secondary createMenuButton" type="button" onClick={() => setCreateMenuVisible((current) => !current)} disabled={bulkBusy}>
-            <Plus size={15} /> Создать пункт меню
+            <Plus size={20} /> Новый пункт меню
           </button>
         </div>
         {createMenuVisible ? (
@@ -3202,15 +3182,17 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
               aria-label={`Выбрать ${item.topic}`}
               title={isPublicationLocked(item) ? "Пункт меню опубликованного или запланированного текста изменять нельзя" : undefined}
             />,
-            <div className="compactContentTopic" title={item.topic}><ContentTopicLabel item={item} /></div>,
+            <span className="campaignTopicWithPreview">
+              <span className="compactContentTopic" title={item.topic}><ContentTopicLabel item={item} /></span>
+              <button className="contentPreviewIconButton" type="button" onClick={() => setPreviewItem(item)} title="Просмотреть текст и метаданные" aria-label={`Просмотреть текст: ${item.topic}`}><Eye size={14} /></button>
+            </span>,
             sectionLabel(item.section_id, sections),
             item.word_count,
             <StatusBadge status={item.status} />,
             item.published_url ? <a href={item.published_url} target="_blank" rel="noreferrer"><ExternalLink size={15} /> URL</a> : item.published_at ? formatDate(item.published_at) : "-",
             <div className="userActions projectContentActions">
               <button className="button compact" type="button" onClick={() => openEditor(item)} disabled={isPublicationLocked(item)} title="Открыть и редактировать JSON payload"><Database size={15} /> JSON</button>
-              <button className="button compact" type="button" onClick={() => setPreviewItem(item)} title="Посмотреть готовый текст, Title и Meta Description"><Eye size={15} /> Просмотр</button>
-              <button className="button compact approve" type="button" onClick={() => approve(item)} disabled={!canApproveContent(item)} title="Согласовать текст"><CheckCircle2 size={15} /> Approve</button>
+              <button className="button compact approve" type="button" onClick={() => approve(item)} disabled={!canApproveContent(item)} title="Принять текст"><CheckCircle2 size={15} /> Принять</button>
             </div>
           ])}
         />

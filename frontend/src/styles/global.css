@@ -4160,6 +4160,13 @@ td {
   font-weight: 800;
 }
 
+.createMenuButton svg {
+  color: var(--primary);
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--primary) 35%, transparent));
+  flex: 0 0 auto;
+  stroke-width: 3;
+}
+
 .inlineMenuCreate {
   background: var(--surface-3);
   border: 1px solid var(--border);
