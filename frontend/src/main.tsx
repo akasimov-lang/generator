@@ -4611,8 +4611,16 @@ function TasksView({
           className="newGenerationTaskButton"
           type="button"
           onClick={toggleCreateForm}
+          aria-haspopup="dialog"
         >
-          <Plus size={19} strokeWidth={2.6} /> Новая задача
+          <span className="newGenerationTaskIcon" aria-hidden="true">
+            <Brain size={25} strokeWidth={2.1} />
+            <Plus className="newGenerationTaskIconPlus" size={13} strokeWidth={3} />
+          </span>
+          <span className="newGenerationTaskCopy">
+            <strong>Новая задача на генерацию</strong>
+            <small>Добавить темы для генерации текстов</small>
+          </span>
         </button>
       </div>
       {createFormExpanded ? (

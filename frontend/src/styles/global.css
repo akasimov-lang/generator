@@ -3013,30 +3013,78 @@ h2 {
 
 .taskCreateToolbar {
   display: flex;
-  justify-content: flex-end;
+  width: 100%;
 }
 
 .newGenerationTaskButton {
   align-items: center;
-  background: var(--primary);
-  border: 1px solid var(--primary);
-  border-radius: 9px;
-  box-shadow: 0 4px 12px rgba(20, 111, 55, 0.16);
-  color: #fff;
+  background: linear-gradient(135deg, #f5fff8 0%, #eefbf3 100%);
+  border: 1px solid #9bc9aa;
+  border-radius: 13px;
+  box-shadow: 0 4px 14px rgba(20, 111, 55, 0.08);
+  color: var(--text);
   cursor: pointer;
+  display: flex;
+  gap: 13px;
+  min-height: 70px;
+  padding: 11px 16px 11px 12px;
+  text-align: left;
+  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+  width: 100%;
+}
+
+.newGenerationTaskIcon {
+  align-items: center;
+  background: var(--primary);
+  border-radius: 11px;
+  box-shadow: 0 5px 13px rgba(20, 111, 55, 0.2);
+  color: #fff;
   display: inline-flex;
+  flex: 0 0 48px;
+  height: 48px;
+  justify-content: center;
+  position: relative;
+}
+
+.newGenerationTaskIconPlus {
+  background: #fff;
+  border: 2px solid var(--primary);
+  border-radius: 50%;
+  bottom: -3px;
+  color: var(--primary);
+  padding: 1px;
+  position: absolute;
+  right: -4px;
+}
+
+.newGenerationTaskCopy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.newGenerationTaskCopy strong {
+  color: #173b25;
+  font-size: 17px;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.newGenerationTaskCopy small {
+  color: var(--muted);
   font-size: 13px;
-  font-weight: 800;
-  gap: 5px;
-  min-height: 34px;
-  padding: 6px 13px 6px 9px;
-  transition: background 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+  font-weight: 600;
+  line-height: 1.25;
 }
 
 .newGenerationTaskButton:hover {
-  background: var(--primary-strong);
-  box-shadow: 0 6px 16px rgba(20, 111, 55, 0.22);
+  border-color: var(--primary);
+  box-shadow: 0 7px 20px rgba(20, 111, 55, 0.15);
   transform: translateY(-1px);
+}
+
+.newGenerationTaskButton:hover .newGenerationTaskIcon {
+  background: var(--primary-strong);
 }
 
 .newGenerationTaskButton:focus-visible {
