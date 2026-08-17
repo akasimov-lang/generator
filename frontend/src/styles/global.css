@@ -1659,8 +1659,9 @@ h2 {
 }
 
 .collapsibleDataPanel.collapsed {
-  padding-bottom: 12px;
-  padding-top: 12px;
+  min-height: 62px;
+  padding-bottom: 16px;
+  padding-top: 16px;
 }
 
 .collapsibleDataPanel.collapsed .panelHeader {
@@ -3966,6 +3967,40 @@ td {
   -webkit-line-clamp: 2;
 }
 
+.contentTopicWithRating {
+  align-items: center;
+  display: inline-flex;
+  gap: 5px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.contentTopicWithRating > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.casinoRatingMedal {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  justify-content: center;
+  transition: color 160ms ease, filter 160ms ease, opacity 160ms ease;
+}
+
+.casinoRatingMedal.active {
+  color: #c89200;
+  filter: drop-shadow(0 2px 4px rgba(200, 146, 0, 0.28));
+  opacity: 1;
+}
+
+.casinoRatingMedal.inactive {
+  color: #aab2ba;
+  filter: grayscale(1);
+  opacity: 0.34;
+}
+
 .publicationTopicButton {
   background: transparent;
   border: 0;
@@ -4303,8 +4338,13 @@ td {
 }
 
 .projectCampaignItem.expanded {
-  border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
-  box-shadow: 0 7px 18px color-mix(in srgb, var(--primary) 7%, transparent);
+  border-color: color-mix(in srgb, var(--primary) 58%, var(--border));
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--primary) 13%, transparent), 0 2px 7px color-mix(in srgb, var(--text) 7%, transparent);
+  transform: translateY(-1px);
+}
+
+.projectCampaignItem.expanded .projectCampaignHeader {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--primary-soft) 72%, var(--surface)), color-mix(in srgb, var(--primary-soft) 24%, var(--surface)));
 }
 
 .projectCampaignHeader {
@@ -4395,9 +4435,42 @@ td {
   padding: 4px 10px 9px 40px;
 }
 
+.projectCampaignItem.expanded .projectCampaignBody {
+  background: color-mix(in srgb, var(--primary-soft) 15%, var(--surface));
+}
+
 .projectCampaignContentTable th,
 .projectCampaignContentTable td {
   padding: 7px 8px;
+}
+
+.campaignTopicWithPreview,
+.projectCampaignRowActions {
+  align-items: center;
+  display: inline-flex;
+  gap: 7px;
+  min-width: 0;
+}
+
+.contentPreviewIconButton {
+  align-items: center;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 27px;
+  justify-content: center;
+  padding: 0;
+  width: 27px;
+}
+
+.contentPreviewIconButton:hover {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 .projectCampaignContentTable th:first-child,
@@ -4419,10 +4492,11 @@ td {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  padding: 8px;
+  display: grid;
+  gap: 9px;
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  padding: 10px;
+  scroll-margin-top: 16px;
 }
 
 .publicationWorkflowNav button {
@@ -4435,12 +4509,14 @@ td {
   display: inline-flex;
   font-size: 12px;
   font-weight: 750;
-  gap: 6px;
-  min-height: 34px;
-  padding: 0 10px;
+  gap: 8px;
+  justify-content: flex-start;
+  min-height: 55px;
+  padding: 7px 10px;
+  text-align: left;
 }
 
-.publicationWorkflowNav button > span {
+.publicationWorkflowNav button > span:last-child {
   align-items: center;
   background: color-mix(in srgb, var(--muted) 13%, transparent);
   border-radius: 999px;
@@ -4451,11 +4527,61 @@ td {
   padding: 2px 6px;
 }
 
+.publicationWorkflowNav button > svg {
+  flex: 0 0 auto;
+}
+
+.publicationWorkflowLabel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.publicationWorkflowLabel strong {
+  color: inherit;
+  font-size: 13px;
+  line-height: 1.1;
+}
+
+.publicationWorkflowLabel small {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 650;
+  line-height: 1.15;
+}
+
 .publicationWorkflowNav button:hover,
 .publicationWorkflowNav button.active {
   background: var(--primary-soft);
   border-color: var(--primary);
   color: var(--primary);
+}
+
+.publicationWorkflowNav button:not(.active) {
+  background: color-mix(in srgb, var(--surface-soft) 82%, var(--muted) 4%);
+  border-color: color-mix(in srgb, var(--border) 88%, var(--muted));
+}
+
+.publicationWorkflowNav button.active {
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--primary) 15%, transparent);
+}
+
+[id^="workspace-section-"] {
+  scroll-margin-top: 18px;
+}
+
+@media (max-width: 1250px) {
+  .publicationWorkflowNav {
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .publicationWorkflowNav {
+    grid-template-columns: 1fr;
+  }
 }
 
 .publicationWorkflowNav button.danger:not(.active) {
@@ -4943,6 +5069,29 @@ label {
   gap: 9px;
   min-height: 42px;
   color: var(--text);
+}
+
+.casinoRatingOption {
+  background: color-mix(in srgb, var(--primary-soft) 58%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--border));
+  border-radius: 9px;
+  padding: 9px 11px;
+}
+
+.casinoRatingOption > span {
+  display: grid;
+  gap: 2px;
+}
+
+.casinoRatingOption b {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.casinoRatingOption small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 550;
 }
 
 .checkboxRow input {

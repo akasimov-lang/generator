@@ -33,6 +33,27 @@ MAX_COMPETITOR_PAGE_CHARS = 1_200_000
 MAX_COMPETITOR_TEXT_CHARS = 60_000
 DATAFORSEO_COUNTRY_ALIASES = {"UK": "GB"}
 DATAFORSEO_LOCATION_CACHE: dict[tuple[str, str], dict[str, int]] = {}
+CASINO_RATING_PROMPT_MARKER = "=== CASINO RATING REQUIREMENT ==="
+CASINO_RATING_PROMPT_INSTRUCTION = f"""{CASINO_RATING_PROMPT_MARKER}
+Для текста по каждой заданной теме обязательно собери и добавь отдельный тематический рейтинг казино, релевантный GEO, языку и поисковому интенту страницы.
+
+Требования к рейтингу:
+- включи от 5 до 10 реально существующих казино и расположи их по местам;
+- для каждой позиции укажи название, итоговую оценку по шкале 1–10, ключевые преимущества и краткое обоснование места;
+- учитывай безопасность, лицензию, репутацию, платежи, бонусные условия, ассортимент игр и соответствие теме страницы;
+- не выдумывай лицензии, бонусы, цифры или факты: если достоверных данных недостаточно, явно обозначь ограничение;
+- оформи рейтинг отдельным H2-разделом, удобным для быстрого сравнения, используя нумерованный список или таблицу в рамках действующего JSON-контракта;
+- после рейтинга добавь короткое объяснение методологии оценки;
+- весь рейтинг и пояснения должны быть на языке создаваемого текста.
+=== END CASINO RATING REQUIREMENT ==="""
+
+
+def append_casino_rating_requirement(prompt_template: str, enabled: bool) -> str:
+    if not enabled or CASINO_RATING_PROMPT_MARKER in prompt_template:
+        return prompt_template
+    return f"{prompt_template.rstrip()}\n\n{CASINO_RATING_PROMPT_INSTRUCTION}\n"
+
+
 DEFAULT_CONTENT_PROMPT_TEMPLATE = """Рабочий промпт для конкретной задачи.
 
 Базовые требования качества, юридической осторожности и формата ответа применяются отдельно через "Базовый промпт".
@@ -1992,6 +2013,7 @@ def breadcrumb_schema_block(slug: str, title: str) -> dict:
 def create_generation_task(db: Session, payload: GenerationTaskCreate, created_by_user_id: str | None = None) -> models.GenerationTask:
     clean_topics = [topic.strip() for topic in payload.topics if topic.strip()]
     prompt_template = compose_prompt_with_base(db, payload.prompt_template)
+    prompt_template = append_casino_rating_requirement(prompt_template, payload.include_casino_rating)
     site = db.get(models.Site, payload.site_id) if payload.site_id else None
     automatic_title = (
         f"{site.name} · {len(clean_topics)} тем · {payload.language.upper()}-{payload.geo.upper()}"
@@ -2012,6 +2034,7 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
         prompt_template_name=payload.prompt_template_name,
         prompt_template=prompt_template,
         collect_competitors=payload.collect_competitors,
+        include_casino_rating=payload.include_casino_rating,
         status="draft" if payload.save_as_draft else ("research_queries_ready" if payload.collect_competitors else "created"),
     )
     db.add(task)
@@ -2040,6 +2063,7 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
             word_count=count_words(generated_json),
             section_id=payload.section_id,
             generation_prompt_name=payload.prompt_template_name,
+            include_casino_rating=payload.include_casino_rating,
             competitor_research_status="queries_ready" if payload.collect_competitors else "not_requested",
             idempotency_key=f"{payload.geo.lower()}-{payload.language.lower()}-{slugify(topic)}-{index}-{uuid.uuid4().hex[:8]}",
         )

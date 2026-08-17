@@ -30,6 +30,7 @@ import {
   ListChecks,
   LoaderCircle,
   LogOut,
+  Medal,
   Menu,
   Moon,
   Pause,
@@ -74,6 +75,7 @@ type Task = {
   target_words: number | null;
   status: string;
   collect_competitors: boolean;
+  include_casino_rating: boolean;
   archived_at: string | null;
   archived_by_user_id: string | null;
   created_at: string;
@@ -92,6 +94,7 @@ type ContentItem = {
   slug: string;
   status: string;
   word_count: number;
+  include_casino_rating: boolean;
   scheduled_at: string | null;
   published_at: string | null;
   published_url: string | null;
@@ -293,6 +296,7 @@ type PromptGeneratedContent = {
   status: string;
   word_count: number;
   generation_prompt_name: string | null;
+  include_casino_rating: boolean;
   generated_at: string | null;
   updated_at: string;
 };
@@ -305,6 +309,7 @@ type PublicationContentItem = {
   slug: string;
   status: string;
   word_count: number;
+  include_casino_rating: boolean;
   generated_at: string | null;
   published_at: string | null;
   updated_at: string;
@@ -391,6 +396,7 @@ type PublicationQueueItem = {
   section_name: string | null;
   status: string;
   word_count: number;
+  include_casino_rating: boolean;
   scheduled_at: string | null;
   published_at: string | null;
 };
@@ -1497,7 +1503,7 @@ function DashboardView({ api, dashboard, tasks, content, sites, onOpenTask, onCh
             rows={content
               .filter((item) => ["scheduled", "retry_scheduled", "publishing"].includes(item.status))
               .slice(0, 8)
-              .map((item) => [item.topic, <StatusBadge status={item.status} />, item.scheduled_at ? formatDate(item.scheduled_at) : "-"])}
+              .map((item) => [<ContentTopicLabel item={item} />, <StatusBadge status={item.status} />, item.scheduled_at ? formatDate(item.scheduled_at) : "-"])}
           />
         </DataPanel>
       </div>
@@ -1569,7 +1575,7 @@ function ProjectWorkspaceView({
   const [menuCapabilities, setMenuCapabilities] = React.useState<MenuCapabilities | null>(null);
   const [menuCapabilitiesLoading, setMenuCapabilitiesLoading] = React.useState(false);
   const [menuCapabilitiesError, setMenuCapabilitiesError] = React.useState("");
-  const [publicationWorkflowSection, setPublicationWorkflowSection] = React.useState<PublicationWorkflowSection>("process");
+  const [publicationWorkflowSection, setPublicationWorkflowSection] = React.useState<PublicationWorkspaceSection>("content");
   const projectLoadRequestRef = React.useRef(0);
   const selectedSite = sites.find((site) => site.id === selectedSiteId) || null;
   const routeProjectName = workspaceProjectNameFromPath(window.location.pathname);
@@ -1577,6 +1583,43 @@ function ProjectWorkspaceView({
   const selectedProjectMedalStatus = menuCapabilities?.checked_at
     ? menuMedalStatus(menuCapabilities.checked_at, menuCapabilities.header_menu_rendered, menuCapabilities.footer_menu_rendered)
     : selectedSite ? projectMenuMedalStatus(selectedSite) : "unchecked";
+
+  React.useEffect(() => {
+    if (!selectedSiteId) return;
+    const saved = window.localStorage.getItem(`publication_workspace_section:${currentUsername}:${selectedSiteId}`) as PublicationWorkspaceSection | null;
+    if (saved && ["content", "campaigns", "process", "queue", "backlog"].includes(saved)) setPublicationWorkflowSection(saved);
+    else setPublicationWorkflowSection("content");
+  }, [currentUsername, selectedSiteId]);
+
+  const openPublicationSection = React.useCallback((section: PublicationWorkspaceSection) => {
+    setPublicationWorkflowSection(section);
+    if (selectedSiteId) window.localStorage.setItem(`publication_workspace_section:${currentUsername}:${selectedSiteId}`, section);
+    const panelKeys: Record<PublicationWorkspaceSection, string> = {
+      content: "project-content",
+      campaigns: "project-campaigns",
+      process: "publication-process",
+      queue: "publication-queue",
+      backlog: "publication-backlog"
+    };
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      window.dispatchEvent(new CustomEvent("workspace:open-panel", { detail: { key: panelKeys[section], exclusive: true } }));
+      document.getElementById(`workspace-section-${section}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }));
+  }, [currentUsername, selectedSiteId]);
+
+  React.useEffect(() => {
+    if (!selectedSiteId || (activeTab !== "content" && activeTab !== "publication")) return;
+    const panelKeys: Record<PublicationWorkspaceSection, string> = {
+      content: "project-content",
+      campaigns: "project-campaigns",
+      process: "publication-process",
+      queue: "publication-queue",
+      backlog: "publication-backlog"
+    };
+    window.requestAnimationFrame(() => {
+      window.dispatchEvent(new CustomEvent("workspace:open-panel", { detail: { key: panelKeys[publicationWorkflowSection], exclusive: true } }));
+    });
+  }, [activeTab, publicationWorkflowSection, selectedSiteId]);
 
   const loadProject = React.useCallback(async () => {
     if (!selectedSiteId) return;
@@ -1887,8 +1930,9 @@ function ProjectWorkspaceView({
       {selectedSite && (activeTab === "content" || activeTab === "publication") ? (
         <PublicationWorkflowNav
           content={siteContent}
+          campaigns={campaigns}
           activeSection={publicationWorkflowSection}
-          onSectionChange={setPublicationWorkflowSection}
+          onSectionChange={openPublicationSection}
         />
       ) : selectedSite ? (
         <div className="workspaceAccordionHint" role="note">
@@ -1930,7 +1974,9 @@ function ProjectWorkspaceView({
             <FastProjectPublicationPanel key={`${selectedSite.id}:publication-launch`} mode="launch" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} onChanged={refreshProject} />
             <FastProjectPublicationPanel key={`${selectedSite.id}:publication-campaigns`} mode="campaigns" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} onChanged={refreshProject} />
             <FastProjectContentPanel key={`${selectedSite.id}:content`} api={api} site={selectedSite} content={siteContent} sections={sections} onChanged={refreshProject} />
-            <FastProjectPublicationPanel key={`${selectedSite.id}:publication-workflow`} mode="workflow" workflowSection={publicationWorkflowSection} api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} onChanged={refreshProject} />
+            {publicationWorkflowSection !== "content" && publicationWorkflowSection !== "campaigns" ? (
+              <FastProjectPublicationPanel key={`${selectedSite.id}:publication-workflow`} mode="workflow" workflowSection={publicationWorkflowSection} api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} onChanged={refreshProject} />
+            ) : null}
           </WorkspaceTabPane>
           <WorkspaceTabPane active={activeTab === "menu"} storagePrefix={`${currentUsername}:${selectedSite.id}:menu`}>
             <FastProjectMenuPanel api={api} site={selectedSite} sections={sections} menuCapabilities={menuCapabilities} onChanged={refreshProject} />
@@ -1944,9 +1990,10 @@ function ProjectWorkspaceView({
 
 function WorkspaceTabPane({ active, storagePrefix, children }: { active: boolean; storagePrefix: string; children: React.ReactNode }) {
   const accordionContextValue = React.useMemo(() => ({ storagePrefix }), [storagePrefix]);
+  if (!active) return null;
   return (
     <WorkspaceAccordionContext.Provider value={accordionContextValue}>
-      <div className="workspaceTabPane" hidden={!active} aria-hidden={!active}>{children}</div>
+      <div className="workspaceTabPane">{children}</div>
     </WorkspaceAccordionContext.Provider>
   );
 }
@@ -2056,6 +2103,7 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
   const [sectionId, setSectionId] = React.useState("");
   const [shortcode, setShortcode] = React.useState("");
   const [collectCompetitors, setCollectCompetitors] = React.useState(false);
+  const [includeCasinoRating, setIncludeCasinoRating] = React.useState(false);
   const [formError, setFormError] = React.useState("");
   const [taskDetails, setTaskDetails] = React.useState<TaskDetails | null>(null);
   const [taskResearch, setTaskResearch] = React.useState<CompetitorResearch[]>([]);
@@ -2113,6 +2161,7 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
         include_toc: true,
         include_faq: true,
         collect_competitors: collectCompetitors,
+        include_casino_rating: includeCasinoRating,
         topics: cleanTopics
       })
     });
@@ -2256,6 +2305,10 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
           <label className="checkboxRow wide">
             <input checked={collectCompetitors} onChange={(event) => setCollectCompetitors(event.target.checked)} type="checkbox" />
             Собрать конкурентов перед генерацией
+          </label>
+          <label className="checkboxRow wide casinoRatingOption">
+            <input checked={includeCasinoRating} onChange={(event) => setIncludeCasinoRating(event.target.checked)} type="checkbox" />
+            <span><b>Собрать рейтинг казино для текста</b><small>Добавит в промпт тематический рейтинг из 5–10 казино с оценками и обоснованием мест.</small></span>
           </label>
           <label className="wide">
             Темы, каждая с новой строки
@@ -2419,7 +2472,7 @@ function CompetitorResearchCard({
       <div className="competitorCardHeader">
         <div>
           <span className="fieldHint">Тема</span>
-          <strong>{item.topic}</strong>
+          <strong><ContentTopicLabel item={item} /></strong>
           <div className="topicMeta">
             <StatusBadge status={research?.status || item.competitor_research_status || "not_requested"} />
             <span>{research?.results.length || 0} URL</span>
@@ -2831,7 +2884,7 @@ function ProjectPromptsPanel({ api, site, promptTemplates, basePrompt, isAdmin, 
             <ResponsiveTable
               columns={["Тема", "Проект", "URL", "Сгенерировано", "Слов", "Статус", "Действия"]}
               rows={generatedTexts.map((item) => [
-                <strong>{item.topic}</strong>,
+                <strong><ContentTopicLabel item={item} /></strong>,
                 item.site_name || "—",
                 <code>{item.slug}</code>,
                 item.generated_at ? formatDate(item.generated_at) : "—",
@@ -3036,7 +3089,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
 
   return (
     <section className="viewStack">
-      <DataPanel collapseKey="project-content" title={(
+      <DataPanel id="workspace-section-content" collapseKey="project-content" title={(
         <span className="workspacePanelTitleWithStats">
           <span>Контент проекта</span>
           <span className="workspacePanelStats">
@@ -3126,7 +3179,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
               aria-label={`Выбрать ${item.topic}`}
               title={isPublicationLocked(item) ? "Пункт меню опубликованного или запланированного текста изменять нельзя" : undefined}
             />,
-            <div className="compactContentTopic" title={item.topic}>{item.topic}</div>,
+            <div className="compactContentTopic" title={item.topic}><ContentTopicLabel item={item} /></div>,
             sectionLabel(item.section_id, sections),
             item.word_count,
             <StatusBadge status={item.status} />,
@@ -3176,21 +3229,31 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
 }
 
 type PublicationWorkflowSection = "process" | "queue" | "backlog";
+type PublicationWorkspaceSection = "content" | "campaigns" | PublicationWorkflowSection;
 
-function PublicationWorkflowNav({ content, activeSection, onSectionChange }: { content: ContentItem[]; activeSection: PublicationWorkflowSection; onSectionChange: (section: PublicationWorkflowSection) => void }) {
+function PublicationWorkflowNav({ content, campaigns, activeSection, onSectionChange }: { content: ContentItem[]; campaigns: PublicationCampaign[]; activeSection: PublicationWorkspaceSection; onSectionChange: (section: PublicationWorkspaceSection) => void }) {
+  const agreedCount = content.filter((item) => ["approved", "scheduled", "retry_scheduled", "publication_paused", "publishing", "published", "publication_failed"].includes(item.status)).length;
+  const activeCampaignCount = campaigns.filter((campaign) => ["active", "paused", "created"].includes(campaign.status)).length;
+  const completedCampaignCount = campaigns.filter((campaign) => ["completed", "completed_with_errors"].includes(campaign.status)).length;
   const processCount = content.filter((item) => item.status === "approved").length;
   const queueCount = content.filter((item) => ["scheduled", "retry_scheduled", "publication_paused", "publishing"].includes(item.status)).length;
   const errorCount = content.filter((item) => item.status === "publication_failed").length;
   return (
     <nav className="publicationWorkflowNav publicationWorkflowNavTop" aria-label="Разделы публикации">
+      <button className={activeSection === "content" ? "active" : ""} type="button" onClick={() => onSectionChange("content")}>
+        <FileText size={17} /> <span className="publicationWorkflowLabel"><strong>Контент</strong><small>{agreedCount} согласовано</small></span><span>{content.length}</span>
+      </button>
+      <button className={activeSection === "campaigns" ? "active" : ""} type="button" onClick={() => onSectionChange("campaigns")}>
+        <FolderKanban size={17} /> <span className="publicationWorkflowLabel"><strong>Кампании</strong><small>{activeCampaignCount} в работе · {completedCampaignCount} завершено</small></span><span>{campaigns.length}</span>
+      </button>
       <button className={activeSection === "process" ? "active" : ""} type="button" onClick={() => onSectionChange("process")}>
-        <Activity size={16} /> Процесс <span>{processCount}</span>
+        <Activity size={17} /> <span className="publicationWorkflowLabel"><strong>Процесс</strong><small>готовы к запуску</small></span><span>{processCount}</span>
       </button>
       <button className={activeSection === "queue" ? "active" : ""} type="button" onClick={() => onSectionChange("queue")}>
-        <ListChecks size={16} /> Очередь <span>{queueCount}</span>
+        <ListChecks size={17} /> <span className="publicationWorkflowLabel"><strong>Очередь</strong><small>ожидают публикации</small></span><span>{queueCount}</span>
       </button>
       <button className={`${activeSection === "backlog" ? "active" : ""} ${errorCount ? "danger" : ""}`} type="button" onClick={() => onSectionChange("backlog")}>
-        <AlertTriangle size={16} /> Ошибки <span>{errorCount}</span>
+        <AlertTriangle size={17} /> <span className="publicationWorkflowLabel"><strong>Ошибки</strong><small>нужна проверка</small></span><span>{errorCount}</span>
       </button>
     </nav>
   );
@@ -3204,6 +3267,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
   const [startAt, setStartAt] = React.useState(() => toDateTimeInputValue(new Date()));
   const [formError, setFormError] = React.useState("");
   const [publishingNowId, setPublishingNowId] = React.useState("");
+  const [previewItem, setPreviewItem] = React.useState<ContentItem | null>(null);
   const approved = content.filter((item) => item.status === "approved" && (!selectedPublicationSectionIds.length || (item.section_id && selectedPublicationSectionIds.includes(item.section_id))));
   const publicationSections = sections
     .map((section) => ({ section, count: content.filter((item) => item.status === "approved" && item.section_id === section.id).length }))
@@ -3329,7 +3393,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
           </form>
         ) : null}
       </section> : null}
-      {mode === "campaigns" ? <DataPanel collapseKey="project-campaigns" title={(
+      {mode === "campaigns" ? <DataPanel id="workspace-section-campaigns" collapseKey="project-campaigns" title={(
         <span className="workspacePanelTitleWithStats">
           <span>Кампании проекта</span>
           <span className="workspacePanelStats">
@@ -3348,6 +3412,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
               sections={sections}
               defaultExpanded={index === 0}
               publishingNowId={publishingNowId}
+              onPreview={setPreviewItem}
               onPublishImmediately={publishImmediately}
               onChangeCampaign={changeCampaign}
             />
@@ -3356,11 +3421,11 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
         </div>
         {formError ? <span className="formError">{formError}</span> : null}
       </DataPanel> : null}
-      {mode === "workflow" && workflowSection === "process" ? <DataPanel title={`Процесс публикации · ${approved.length}`}>
+      {mode === "workflow" && workflowSection === "process" ? <DataPanel id="workspace-section-process" collapseKey="publication-process" title={`Процесс публикации · ${approved.length}`}>
         <ResponsiveTable
           columns={["Тема", "Меню", "Slug", "Действия"]}
           rows={approved.map((item) => [
-            <div className="compactContentTopic" title={item.topic}>{item.topic}</div>,
+            <div className="compactContentTopic" title={item.topic}><ContentTopicLabel item={item} /></div>,
             sectionLabel(item.section_id, sections),
             item.slug,
             <button className="button compact primary publishImmediatelyButton" type="button" onClick={() => void publishImmediately(item)} disabled={publishingNowId === item.id}>
@@ -3369,13 +3434,13 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
           ])}
         />
       </DataPanel> : null}
-      {mode === "workflow" && workflowSection === "queue" ? <DataPanel title={`Очередь публикации · ${publicationQueue.length}`}>
+      {mode === "workflow" && workflowSection === "queue" ? <DataPanel id="workspace-section-queue" collapseKey="publication-queue" title={`Очередь публикации · ${publicationQueue.length}`}>
         <div className="publicationQueueHint">Очередь чередуется по пунктам меню и сохраняет исходный порядок добавления тем.</div>
         <ResponsiveTable
           columns={["№", "Тема", "Меню", "Публикация", "Статус", "Действия"]}
           rows={publicationQueue.map((item, index) => [
             index + 1,
-            <div className="compactContentTopic" title={item.topic}>{item.topic}</div>,
+            <div className="compactContentTopic" title={item.topic}><ContentTopicLabel item={item} /></div>,
             sectionLabel(item.section_id, sections),
             item.scheduled_at ? formatDate(item.scheduled_at) : "—",
             <StatusBadge status={item.status} />,
@@ -3387,14 +3452,14 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
         />
         {formError ? <span className="formError">{formError}</span> : null}
       </DataPanel> : null}
-      {mode === "workflow" && workflowSection === "backlog" ? <DataPanel className="publicationBacklogPanel" collapseKey="publication-backlog" title={<span className="publicationBacklogTitle"><AlertTriangle size={18} /> Ошибки публикации · {publicationBacklog.length}</span>}>
+      {mode === "workflow" && workflowSection === "backlog" ? <DataPanel id="workspace-section-backlog" className="publicationBacklogPanel" collapseKey="publication-backlog" title={<span className="publicationBacklogTitle"><AlertTriangle size={18} /> Ошибки публикации · {publicationBacklog.length}</span>}>
         <div className="publicationBacklogHint">Сюда автоматически переносятся тексты, которые не удалось опубликовать из-за ошибки.</div>
         <ResponsiveTable
           columns={["Тема", "Меню", "Ошибка", "Время", "Статус"]}
           rows={publicationBacklog.map((item) => {
             const errorLog = latestErrorByContentId.get(item.id);
             return [
-              <div className="compactContentTopic" title={item.topic}>{item.topic}</div>,
+              <div className="compactContentTopic" title={item.topic}><ContentTopicLabel item={item} /></div>,
               sectionLabel(item.section_id, sections),
               <span className="publicationBacklogError">{errorLog?.error_message || (errorLog?.response_status ? `HTTP ${errorLog.response_status}` : "Ошибка публикации")}</span>,
               errorLog ? formatDate(errorLog.created_at) : formatDate(item.updated_at),
@@ -3405,6 +3470,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
           wrapperClassName="publicationBacklogTable"
         />
       </DataPanel> : null}
+      {previewItem ? <ContentPreviewModal item={previewItem} onClose={() => setPreviewItem(null)} /> : null}
     </section>
   );
 }
@@ -3415,6 +3481,7 @@ function ProjectCampaignTreeItem({
   sections,
   defaultExpanded,
   publishingNowId,
+  onPreview,
   onPublishImmediately,
   onChangeCampaign
 }: {
@@ -3423,6 +3490,7 @@ function ProjectCampaignTreeItem({
   sections: Section[];
   defaultExpanded: boolean;
   publishingNowId: string;
+  onPreview: (item: ContentItem) => void;
   onPublishImmediately: (item: ContentItem) => Promise<void>;
   onChangeCampaign: (campaign: PublicationCampaign, action: "pause" | "resume" | "stop") => Promise<void>;
 }) {
@@ -3471,15 +3539,20 @@ function ProjectCampaignTreeItem({
             columns={["№", "Тема", "Пункт меню", "Публикация", "Статус", "Действия"]}
             rows={orderedItems.map((item, index) => [
               index + 1,
-              <div className="compactContentTopic" title={item.topic}>{item.topic}</div>,
+              <span className="campaignTopicWithPreview">
+                <span className="compactContentTopic" title={item.topic}><ContentTopicLabel item={item} /></span>
+                <button className="contentPreviewIconButton" type="button" onClick={() => onPreview(item)} title="Просмотреть текст и метаданные" aria-label={`Просмотреть текст: ${item.topic}`}><Eye size={14} /></button>
+              </span>,
               sectionLabel(item.section_id, sections),
               item.published_at ? formatDate(item.published_at) : item.scheduled_at ? formatDate(item.scheduled_at) : "—",
               <StatusBadge status={item.status} />,
-              item.status !== "published" ? (
-                <button className="button compact primary publishImmediatelyButton" type="button" onClick={() => void onPublishImmediately(item)} disabled={publishingNowId === item.id || item.status === "publishing"}>
-                  <Send size={14} /> {publishingNowId === item.id ? "Публикуем…" : "Без очереди"}
-                </button>
-              ) : item.published_url ? <a href={item.published_url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Открыть</a> : "—"
+              <span className="projectCampaignRowActions">
+                {item.status !== "published" ? (
+                  <button className="button compact primary publishImmediatelyButton" type="button" onClick={() => void onPublishImmediately(item)} disabled={publishingNowId === item.id || item.status === "publishing"}>
+                    <Send size={14} /> {publishingNowId === item.id ? "Публикуем…" : "Без очереди"}
+                  </button>
+                ) : item.published_url ? <a href={item.published_url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Открыть</a> : "—"}
+              </span>
             ])}
             wrapperClassName="projectCampaignContentTable"
           />
@@ -3997,7 +4070,7 @@ function TasksView({
   const [targetWords, setTargetWords] = React.useState(DEFAULT_TARGET_WORDS);
   const taskCheckboxPreferences = React.useMemo(() => {
     try {
-      return JSON.parse(localStorage.getItem("task_create_checkbox_preferences") || "{}") as Partial<Record<"includeToc" | "includeFaq" | "collectCompetitors", boolean>>;
+      return JSON.parse(localStorage.getItem("task_create_checkbox_preferences") || "{}") as Partial<Record<"includeToc" | "includeFaq" | "collectCompetitors" | "includeCasinoRating", boolean>>;
     } catch {
       return {};
     }
@@ -4005,6 +4078,7 @@ function TasksView({
   const [includeToc, setIncludeToc] = React.useState(taskCheckboxPreferences.includeToc ?? true);
   const [includeFaq, setIncludeFaq] = React.useState(taskCheckboxPreferences.includeFaq ?? true);
   const [collectCompetitors, setCollectCompetitors] = React.useState(taskCheckboxPreferences.collectCompetitors ?? false);
+  const [includeCasinoRating, setIncludeCasinoRating] = React.useState(taskCheckboxPreferences.includeCasinoRating ?? false);
   const [createFormExpanded, setCreateFormExpanded] = usePersistentWorkspacePanelState("create-generation-task", false);
   const [creatingTaskAction, setCreatingTaskAction] = React.useState<"draft" | "start" | "">("");
   const [expandedTaskId, setExpandedTaskId] = React.useState("");
@@ -4062,8 +4136,8 @@ function TasksView({
   }, [fixedSite?.id, tasks]);
 
   React.useEffect(() => {
-    localStorage.setItem("task_create_checkbox_preferences", JSON.stringify({ includeToc, includeFaq, collectCompetitors }));
-  }, [includeToc, includeFaq, collectCompetitors]);
+    localStorage.setItem("task_create_checkbox_preferences", JSON.stringify({ includeToc, includeFaq, collectCompetitors, includeCasinoRating }));
+  }, [includeToc, includeFaq, collectCompetitors, includeCasinoRating]);
 
   React.useEffect(() => {
     if (!expandedTaskId || (!hasResearchInProgress && !hasGenerationInProgress)) return;
@@ -4116,6 +4190,7 @@ function TasksView({
       include_toc: includeToc,
       include_faq: includeFaq,
       collect_competitors: collectCompetitors,
+      include_casino_rating: includeCasinoRating,
       save_as_draft: action === "draft",
       topics: cleanTopics
     };
@@ -4529,6 +4604,10 @@ function TasksView({
           <label className="checkboxRow wide">
             <input type="checkbox" checked={collectCompetitors} onChange={(event) => setCollectCompetitors(event.target.checked)} />
             Собрать конкурентов перед генерацией
+          </label>
+          <label className="checkboxRow wide casinoRatingOption">
+            <input type="checkbox" checked={includeCasinoRating} onChange={(event) => setIncludeCasinoRating(event.target.checked)} />
+            <span><b>Собрать рейтинг казино для текста</b><small>Добавит в промпт тематический рейтинг из 5–10 казино с оценками и обоснованием мест.</small></span>
           </label>
           <label className="wide">
             Темы, каждая с новой строки
@@ -5577,7 +5656,7 @@ function PublicationsView({ api, sites, content, onOpenProject, onChanged }: Vie
             columns={["№", "Тема", "Пункт меню", "Время", "Статус", "Действия"]}
             rows={campaignQueue.items.map((item, index) => [
               index + 1,
-              <button className="compactContentTopic publicationTopicButton" type="button" onClick={() => void openContentPreview(item.id)} disabled={previewLoadingId === item.id} title="Просмотреть текст и метаданные">{item.topic}</button>,
+              <button className="compactContentTopic publicationTopicButton" type="button" onClick={() => void openContentPreview(item.id)} disabled={previewLoadingId === item.id} title="Просмотреть текст и метаданные"><ContentTopicLabel item={item} /></button>,
               item.section_name || "Не выбран",
               item.published_at ? `Опубликовано ${formatDate(item.published_at)}` : item.scheduled_at ? formatDate(item.scheduled_at) : "—",
               <StatusBadge status={item.status} />,
@@ -5628,7 +5707,7 @@ function PublicationsView({ api, sites, content, onOpenProject, onChanged }: Vie
                     <ResponsiveTable
                       columns={["Тема", "Статус", "Slug", "Слова", "Сгенерировано", "Опубликовано"]}
                       rows={items.map((item) => [
-                        <button className="compactContentTopic publicationTopicButton" type="button" onClick={() => void openContentPreview(item.id)} disabled={previewLoadingId === item.id} title="Просмотреть текст и метаданные">{item.topic}</button>,
+                        <button className="compactContentTopic publicationTopicButton" type="button" onClick={() => void openContentPreview(item.id)} disabled={previewLoadingId === item.id} title="Просмотреть текст и метаданные"><ContentTopicLabel item={item} /></button>,
                         <StatusBadge status={item.status} />,
                         <code>{item.slug}</code>,
                         item.word_count,
@@ -7283,15 +7362,30 @@ function SearchableSelect({
   );
 }
 
-function DataPanel({ title, actions, children, collapseKey, className = "" }: { title: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode; collapseKey?: string; className?: string }) {
+function DataPanel({ id, title, actions, children, collapseKey, className = "" }: { id?: string; title: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode; collapseKey?: string; className?: string }) {
   const accordionContext = React.useContext(WorkspaceAccordionContext);
   const automaticKey = typeof title === "string" ? title.split(" · ")[0].trim().toLowerCase().replace(/[^a-zа-яё0-9]+/gi, "-") : "";
   const effectiveCollapseKey = collapseKey || automaticKey;
   const collapsible = Boolean(accordionContext && effectiveCollapseKey);
   const [expanded, setExpanded] = usePersistentWorkspacePanelState(effectiveCollapseKey || "static-panel", true);
 
+  React.useEffect(() => {
+    if (!collapsible) return;
+    const openPanel = (event: Event) => {
+      const detail = (event as CustomEvent<{ key?: string; exclusive?: boolean }>).detail;
+      const publicationPanelKeys = ["project-content", "project-campaigns", "publication-process", "publication-queue", "publication-backlog"];
+      if (detail?.exclusive && publicationPanelKeys.includes(effectiveCollapseKey)) {
+        setExpanded(detail.key === effectiveCollapseKey);
+      } else if (detail?.key === effectiveCollapseKey) {
+        setExpanded(true);
+      }
+    };
+    window.addEventListener("workspace:open-panel", openPanel);
+    return () => window.removeEventListener("workspace:open-panel", openPanel);
+  }, [collapsible, effectiveCollapseKey, setExpanded]);
+
   return (
-    <section className={`dataPanel ${collapsible ? "collapsibleDataPanel" : ""} ${collapsible && !expanded ? "collapsed" : ""} ${className}`.trim()}>
+    <section id={id} className={`dataPanel ${collapsible ? "collapsibleDataPanel" : ""} ${collapsible && !expanded ? "collapsed" : ""} ${className}`.trim()}>
       <div className="panelHeader">
         {collapsible ? (
           <button className="dataPanelCollapseToggle" type="button" onClick={() => setExpanded((current) => !current)} aria-expanded={expanded} title={expanded ? "Свернуть блок" : "Развернуть блок"}>
@@ -7302,7 +7396,7 @@ function DataPanel({ title, actions, children, collapseKey, className = "" }: { 
         ) : <h2>{title}</h2>}
         {actions && (!collapsible || expanded) ? actions : null}
       </div>
-      <div className="dataPanelBody" hidden={collapsible && !expanded}>{children}</div>
+      {(!collapsible || expanded) ? <div className="dataPanelBody">{children}</div> : null}
     </section>
   );
 }
@@ -7389,6 +7483,19 @@ function PromptBadge({ name }: { name?: string | null }) {
   return <span className={`promptBadge ${isImproved ? "improved" : ""}`}>Промпт: {label}</span>;
 }
 
+function CasinoRatingMedal({ enabled }: { enabled: boolean }) {
+  const label = enabled ? "В тексте предусмотрен рейтинг казино" : "В тексте нет рейтинга казино";
+  return (
+    <span className={`casinoRatingMedal ${enabled ? "active" : "inactive"}`} title={label} aria-label={label}>
+      <Medal size={17} />
+    </span>
+  );
+}
+
+function ContentTopicLabel({ item }: { item: { topic: string; include_casino_rating: boolean } }) {
+  return <span className="contentTopicWithRating"><span>{item.topic}</span><CasinoRatingMedal enabled={item.include_casino_rating} /></span>;
+}
+
 function TopicMetaCell({ item, promptName }: { item: ContentItem; promptName?: string | null }) {
   const generationPrompt = item.generation_prompt_name || promptName || "Промпт не указан";
   const generationDate = item.generated_at || item.updated_at;
@@ -7400,7 +7507,7 @@ function TopicMetaCell({ item, promptName }: { item: ContentItem; promptName?: s
     && (competitorResearch as Record<string, unknown>).status === "used";
   return (
     <div className="topicMetaCell">
-      <strong>{item.topic}</strong>
+      <strong><ContentTopicLabel item={item} /></strong>
       <PromptBadge name={generationPrompt} />
       {usedCompetitorResearch ? <span className="researchBadge">На основе анализа конкурентов</span> : null}
       <span>Генерация: {generationDate ? formatDate(generationDate) : "-"}</span>

@@ -1,7 +1,26 @@
 import asyncio
 
 from app import models
-from app.services import PROMPT_FORMAT_CONTRACT_MARKER, build_gemini_content, build_gemini_prompt
+from app.services import (
+    CASINO_RATING_PROMPT_MARKER,
+    PROMPT_FORMAT_CONTRACT_MARKER,
+    append_casino_rating_requirement,
+    build_gemini_content,
+    build_gemini_prompt,
+)
+
+
+def test_casino_rating_requirement_is_optional_and_idempotent() -> None:
+    base_prompt = "Generate an article about {{TOPIC}}"
+
+    disabled = append_casino_rating_requirement(base_prompt, enabled=False)
+    enabled = append_casino_rating_requirement(base_prompt, enabled=True)
+    repeated = append_casino_rating_requirement(enabled, enabled=True)
+
+    assert disabled == base_prompt
+    assert enabled.count(CASINO_RATING_PROMPT_MARKER) == 1
+    assert "от 5 до 10" in enabled
+    assert repeated == enabled
 
 
 def test_prompt_placeholders_are_rendered() -> None:

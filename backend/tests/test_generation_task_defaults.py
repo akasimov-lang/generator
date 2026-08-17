@@ -11,6 +11,7 @@ def test_generation_task_default_target_is_2000_words() -> None:
 
     assert payload.target_words == 2000
     assert payload.save_as_draft is False
+    assert payload.include_casino_rating is False
 
 
 def test_generation_task_title_can_be_generated_by_service() -> None:

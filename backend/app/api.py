@@ -885,6 +885,7 @@ def list_prompt_generated_content(prompt_id: str, _: AuthUser, db: Session = Dep
             "status": item.status,
             "word_count": item.word_count,
             "generation_prompt_name": item.generation_prompt_name,
+            "include_casino_rating": item.include_casino_rating,
             "generated_at": item.generated_at,
             "updated_at": item.updated_at,
         }
@@ -1150,6 +1151,7 @@ def list_publication_content(_: AdminUser, db: Session = Depends(get_db)) -> Any
             models.ContentItem.slug,
             models.ContentItem.status,
             models.ContentItem.word_count,
+            models.ContentItem.include_casino_rating,
             models.ContentItem.generated_at,
             models.ContentItem.published_at,
             models.ContentItem.updated_at,
@@ -1456,6 +1458,7 @@ def get_campaign_queue(campaign_id: str, _: AuthUser, db: Session = Depends(get_
                 "section_name": section_name,
                 "status": item.status,
                 "word_count": item.word_count,
+                "include_casino_rating": item.include_casino_rating,
                 "scheduled_at": item.scheduled_at,
                 "published_at": item.published_at,
             }

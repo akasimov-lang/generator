@@ -259,6 +259,7 @@ class PromptGeneratedContentResponse(BaseModel):
     status: str
     word_count: int
     generation_prompt_name: str | None
+    include_casino_rating: bool
     generated_at: datetime | None
     updated_at: datetime
 
@@ -271,6 +272,7 @@ class PublicationContentResponse(BaseModel):
     slug: str
     status: str
     word_count: int
+    include_casino_rating: bool
     generated_at: datetime | None
     published_at: datetime | None
     updated_at: datetime
@@ -292,6 +294,7 @@ class GenerationTaskCreate(BaseModel):
     include_toc: bool = True
     include_faq: bool = True
     collect_competitors: bool = False
+    include_casino_rating: bool = False
     save_as_draft: bool = False
 
 
@@ -318,6 +321,7 @@ class GenerationTaskResponse(BaseModel):
     prompt_template_name: str | None
     prompt_template: str | None
     collect_competitors: bool
+    include_casino_rating: bool
     archived_at: datetime | None = None
     archived_by_user_id: str | None = None
     created_at: datetime
@@ -337,6 +341,7 @@ class ContentItemResponse(BaseModel):
     generated_json: dict[str, Any]
     status: str
     word_count: int
+    include_casino_rating: bool
     generation_prompt_name: str | None
     generated_at: datetime | None
     generation_progress: int = 0
@@ -492,6 +497,7 @@ class PublicationQueueItemResponse(BaseModel):
     section_name: str | None
     status: str
     word_count: int
+    include_casino_rating: bool
     scheduled_at: datetime | None
     published_at: datetime | None
 

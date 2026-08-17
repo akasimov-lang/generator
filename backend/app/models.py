@@ -130,6 +130,7 @@ class GenerationTask(Base, TimestampMixin):
     prompt_template_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
     prompt_template: Mapped[str | None] = mapped_column(Text, nullable=True)
     collect_competitors: Mapped[bool] = mapped_column(Boolean, default=False)
+    include_casino_rating: Mapped[bool] = mapped_column(Boolean, default=False)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     archived_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
@@ -155,6 +156,7 @@ class ContentItem(Base, TimestampMixin):
     word_count: Mapped[int] = mapped_column(Integer, default=0)
     section_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
     generation_prompt_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    include_casino_rating: Mapped[bool] = mapped_column(Boolean, default=False)
     generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     generation_progress: Mapped[int] = mapped_column(Integer, default=0)
     generation_error: Mapped[str | None] = mapped_column(Text, nullable=True)
