@@ -403,6 +403,37 @@ type InputStyle = "balanced" | "classic" | "soft" | "inset" | "underline" | "eme
 type AppView = "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "favorites" | "settings";
 type WorkspaceTab = "overview" | "topics" | "content" | "publication" | "menu";
 
+type WorkspaceAccordionContextValue = {
+  storagePrefix: string;
+};
+
+const WorkspaceAccordionContext = React.createContext<WorkspaceAccordionContextValue | null>(null);
+
+function usePersistentWorkspacePanelState(panelKey: string, defaultExpanded = true) {
+  const accordionContext = React.useContext(WorkspaceAccordionContext);
+  const storageKey = accordionContext ? `workspace_accordion:${accordionContext.storagePrefix}:${panelKey}` : "";
+  const readStoredState = React.useCallback(() => {
+    if (!storageKey) return defaultExpanded;
+    const stored = localStorage.getItem(storageKey);
+    return stored === null ? defaultExpanded : stored === "expanded";
+  }, [defaultExpanded, storageKey]);
+  const [expanded, setExpandedState] = React.useState(readStoredState);
+
+  React.useEffect(() => {
+    setExpandedState(readStoredState());
+  }, [readStoredState]);
+
+  const setExpanded = React.useCallback((next: React.SetStateAction<boolean>) => {
+    setExpandedState((current) => {
+      const value = typeof next === "function" ? next(current) : next;
+      if (storageKey) localStorage.setItem(storageKey, value ? "expanded" : "collapsed");
+      return value;
+    });
+  }, [storageKey]);
+
+  return [expanded, setExpanded] as const;
+}
+
 type AppRoute = {
   view: AppView;
   workspaceTab: WorkspaceTab;
@@ -710,6 +741,8 @@ function App() {
   const [users, setUsers] = React.useState<User[]>([]);
   const [message, setMessage] = React.useState("");
   const [notificationPromptVisible, setNotificationPromptVisible] = React.useState(false);
+  const [viewAsUser, setViewAsUser] = React.useState(false);
+  const isAdmin = Boolean(currentUser?.is_admin && !viewAsUser);
 
   const navigateTo = React.useCallback((view: AppView, nextWorkspaceTab: WorkspaceTab = workspaceTab, replace = false, projectName?: string | null) => {
     const normalizedWorkspaceTab = view === "workspace" ? nextWorkspaceTab : workspaceTab;
@@ -827,6 +860,14 @@ function App() {
   }, [loadAll]);
 
   React.useEffect(() => {
+    if (!currentUser?.is_admin) {
+      setViewAsUser(false);
+      return;
+    }
+    setViewAsUser(localStorage.getItem(`admin_view_mode:${currentUser.username}`) === "user");
+  }, [currentUser?.id, currentUser?.is_admin, currentUser?.username]);
+
+  React.useEffect(() => {
     const handlePopState = () => {
       const nextRoute = routeFromPath(window.location.pathname);
       setActiveView(nextRoute.view);
@@ -862,7 +903,7 @@ function App() {
 
   React.useEffect(() => {
     if (!currentUser) return;
-    if (!currentUser.is_admin && isAdminOnlyView(activeView)) {
+    if (!isAdmin && isAdminOnlyView(activeView)) {
       navigateTo("workspace", DEFAULT_WORKSPACE_TAB, true);
       return;
     }
@@ -871,7 +912,7 @@ function App() {
     if (window.location.pathname !== nextPath) {
       window.history.replaceState(null, "", nextPath);
     }
-  }, [activeView, currentUser, navigateTo, workspaceTab]);
+  }, [activeView, currentUser, isAdmin, navigateTo, workspaceTab]);
 
   if (!token) {
     return <LoginScreen onLogin={setToken} />;
@@ -889,8 +930,6 @@ function App() {
       </AuthScreen>
     );
   }
-
-  const isAdmin = currentUser?.is_admin ?? true;
 
   return (
     <div className="appShell">
@@ -931,9 +970,25 @@ function App() {
             <h1>{viewTitle(activeView, workspaceTab)}</h1>
           </div>
           <div className="topbarActions">
+            {currentUser.is_admin ? (
+              <button
+                className={`button secondary adminViewModeButton ${viewAsUser ? "active" : ""}`}
+                type="button"
+                onClick={() => {
+                  const nextValue = !viewAsUser;
+                  setViewAsUser(nextValue);
+                  localStorage.setItem(`admin_view_mode:${currentUser.username}`, nextValue ? "user" : "admin");
+                  if (nextValue && isAdminOnlyView(activeView)) navigateTo("workspace", DEFAULT_WORKSPACE_TAB);
+                }}
+                title={viewAsUser ? "Вернуться к полному интерфейсу администратора" : "Показать интерфейс обычного пользователя"}
+              >
+                {viewAsUser ? <ShieldCheck size={17} /> : <Eye size={17} />}
+                {viewAsUser ? "Режим администратора" : "Посмотреть как пользователь"}
+              </button>
+            ) : null}
             {currentUser ? (
               <div className="userPill">
-                <span>{currentUser.is_admin ? "Администратор" : "Пользователь"}</span>
+                <span>{viewAsUser ? "Просмотр как пользователь" : currentUser.is_admin ? "Администратор" : "Пользователь"}</span>
                 <strong>{currentUser.username}</strong>
               </div>
             ) : null}
@@ -1663,7 +1718,12 @@ function ProjectWorkspaceView({
     return <EmptyState text="Сначала добавьте сайт в админском разделе Сайты." />;
   }
 
+  const accordionContextValue = {
+    storagePrefix: `${currentUsername}:${selectedSiteId || "no-project"}:${activeTab}`
+  };
+
   return (
+    <WorkspaceAccordionContext.Provider value={accordionContextValue}>
     <section className="viewStack">
       <DataPanel title={(
         <span className="workspaceProjectTitle">
@@ -1789,6 +1849,13 @@ function ProjectWorkspaceView({
         {workspaceError ? <div className="notice">{workspaceError}</div> : null}
       </DataPanel>
 
+      {selectedSite ? (
+        <div className="workspaceAccordionHint" role="note">
+          <ChevronDown size={17} />
+          <span><strong>Блоки можно сворачивать.</strong> Нажмите на заголовок блока — выбранное положение сохранится отдельно для вашего пользователя и проекта.</span>
+        </div>
+      ) : null}
+
       {!selectedSite ? (
         <div className="workspaceProjectEmpty">
           <span className="workspaceProjectEmptyIcon"><FolderKanban size={34} /></span>
@@ -1829,6 +1896,7 @@ function ProjectWorkspaceView({
         <ProjectMenuPanel api={api} site={selectedSite} sections={sections} menuCapabilities={menuCapabilities} onChanged={refreshProject} />
       ) : null}
     </section>
+    </WorkspaceAccordionContext.Provider>
   );
 }
 
@@ -3048,7 +3116,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
 }
 
 function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs, mode, onChanged }: ViewProps & { site: Site; content: ContentItem[]; sections: Section[]; campaigns: PublicationCampaign[]; logs: PublicationLog[]; mode: "launch" | "details" }) {
-  const [launchExpanded, setLaunchExpanded] = React.useState(false);
+  const [launchExpanded, setLaunchExpanded] = usePersistentWorkspacePanelState("publication-launch", false);
   const [name, setName] = React.useState("Daily publication");
   const [itemsPerDay, setItemsPerDay] = React.useState(1);
   const [selectedPublicationSectionIds, setSelectedPublicationSectionIds] = React.useState<string[]>([]);
@@ -3231,8 +3299,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
         />
         {formError ? <span className="formError">{formError}</span> : null}
       </DataPanel> : null}
-      {mode === "details" ? <section className="dataPanel publicationBacklogPanel">
-        <div className="panelHeader"><h2><AlertTriangle size={18} /> Беклог публикации · {publicationBacklog.length}</h2></div>
+      {mode === "details" ? <DataPanel className="publicationBacklogPanel" collapseKey="publication-backlog" title={<span className="publicationBacklogTitle"><AlertTriangle size={18} /> Беклог публикации · {publicationBacklog.length}</span>}>
         <div className="publicationBacklogHint">Сюда автоматически переносятся тексты, которые не удалось опубликовать из-за ошибки.</div>
         <ResponsiveTable
           columns={["Тема", "Меню", "Ошибка", "Время", "Статус"]}
@@ -3249,7 +3316,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
           rowClassNames={publicationBacklog.map(() => "publicationBacklogRow")}
           wrapperClassName="publicationBacklogTable"
         />
-      </section> : null}
+      </DataPanel> : null}
     </section>
   );
 }
@@ -3262,7 +3329,7 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
   const [parentName, setParentName] = React.useState("");
   const [parentTreeKey, setParentTreeKey] = React.useState("");
   const [formError, setFormError] = React.useState("");
-  const [addExpanded, setAddExpanded] = React.useState(false);
+  const [addExpanded, setAddExpanded] = usePersistentWorkspacePanelState("menu-add-item", false);
   const [inlineMenuType, setInlineMenuType] = React.useState<"header" | "footer" | null>(null);
   const [addingMenuItemId, setAddingMenuItemId] = React.useState<string | null>(null);
   const [libraryFormExpanded, setLibraryFormExpanded] = React.useState(false);
@@ -3769,7 +3836,7 @@ function TasksView({
   const [includeToc, setIncludeToc] = React.useState(taskCheckboxPreferences.includeToc ?? true);
   const [includeFaq, setIncludeFaq] = React.useState(taskCheckboxPreferences.includeFaq ?? true);
   const [collectCompetitors, setCollectCompetitors] = React.useState(taskCheckboxPreferences.collectCompetitors ?? false);
-  const [createFormExpanded, setCreateFormExpanded] = React.useState(false);
+  const [createFormExpanded, setCreateFormExpanded] = usePersistentWorkspacePanelState("create-generation-task", false);
   const [creatingTaskAction, setCreatingTaskAction] = React.useState<"draft" | "start" | "">("");
   const [expandedTaskId, setExpandedTaskId] = React.useState("");
   const [expandedDetails, setExpandedDetails] = React.useState<TaskDetails | null>(null);
@@ -7034,8 +7101,28 @@ function SearchableSelect({
   );
 }
 
-function DataPanel({ title, actions, children }: { title: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode }) {
-  return <section className="dataPanel"><div className="panelHeader"><h2>{title}</h2>{actions}</div>{children}</section>;
+function DataPanel({ title, actions, children, collapseKey, className = "" }: { title: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode; collapseKey?: string; className?: string }) {
+  const accordionContext = React.useContext(WorkspaceAccordionContext);
+  const automaticKey = typeof title === "string" ? title.split(" · ")[0].trim().toLowerCase().replace(/[^a-zа-яё0-9]+/gi, "-") : "";
+  const effectiveCollapseKey = collapseKey || automaticKey;
+  const collapsible = Boolean(accordionContext && effectiveCollapseKey);
+  const [expanded, setExpanded] = usePersistentWorkspacePanelState(effectiveCollapseKey || "static-panel", true);
+
+  return (
+    <section className={`dataPanel ${collapsible ? "collapsibleDataPanel" : ""} ${collapsible && !expanded ? "collapsed" : ""} ${className}`.trim()}>
+      <div className="panelHeader">
+        {collapsible ? (
+          <button className="dataPanelCollapseToggle" type="button" onClick={() => setExpanded((current) => !current)} aria-expanded={expanded} title={expanded ? "Свернуть блок" : "Развернуть блок"}>
+            <h2>{title}</h2>
+            <span>{expanded ? "Свернуть" : "Показать"}</span>
+            {expanded ? <ChevronUp size={19} /> : <ChevronDown size={19} />}
+          </button>
+        ) : <h2>{title}</h2>}
+        {actions && (!collapsible || expanded) ? actions : null}
+      </div>
+      <div className="dataPanelBody" hidden={collapsible && !expanded}>{children}</div>
+    </section>
+  );
 }
 
 function ResponsiveTable({ columns, columnKeys = [], rows, rowClassNames, wrapperClassName = "", sortableColumnIndexes = [], sortColumnIndex = null, sortDirection, onSortColumn, columnHeaders = {} }: { columns: string[]; columnKeys?: string[]; rows: React.ReactNode[][]; rowClassNames?: string[]; wrapperClassName?: string; sortableColumnIndexes?: number[]; sortColumnIndex?: number | null; sortDirection?: "asc" | "desc"; onSortColumn?: (columnIndex: number) => void; columnHeaders?: Record<number, React.ReactNode> }) {
