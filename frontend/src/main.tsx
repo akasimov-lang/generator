@@ -9,7 +9,7 @@ import {
   Archive,
   BellRing,
   Bot,
-  BrainCircuit,
+  Brain,
   CalendarClock,
   ChevronDown,
   ChevronLeft,
@@ -1532,6 +1532,12 @@ function DashboardView({ api, dashboard, tasks, content, sites, onOpenTask, onCh
   );
 }
 
+const FastProjectOverviewPanel = React.memo(ProjectOverviewPanel);
+const FastTasksView = React.memo(TasksView);
+const FastProjectContentPanel = React.memo(ProjectContentPanel);
+const FastProjectPublicationPanel = React.memo(ProjectPublicationPanel);
+const FastProjectMenuPanel = React.memo(ProjectMenuPanel);
+
 function ProjectWorkspaceView({
   api,
   sites,
@@ -1659,7 +1665,7 @@ function ProjectWorkspaceView({
     }
   }, [loadProject, selectedSiteId, workspaceSiteStorageKey]);
 
-  async function refreshProject(syncExternal = false) {
+  const refreshProject = React.useCallback(async (syncExternal = false) => {
     if (syncExternal && selectedSite) {
       await api<ProjectCacheSyncResult>("/sites/cache/sync", {
         method: "POST",
@@ -1670,7 +1676,7 @@ function ProjectWorkspaceView({
     }
     await onChanged();
     await loadProject();
-  }
+  }, [api, loadProject, onChanged, selectedSite]);
 
   async function retryMenuCapabilities() {
     if (!selectedSite || menuCapabilitiesLoading) return;
@@ -1854,7 +1860,7 @@ function ProjectWorkspaceView({
           />
           <TabButton
             href={pathForRoute("workspace", "topics", selectedSite?.name)}
-            icon={<span className="tabButtonIcon ai" aria-hidden="true"><BrainCircuit size={15} /></span>}
+            icon={<span className="tabButtonIcon ai" aria-hidden="true"><Brain size={17} /></span>}
             label="Генерация"
             active={activeTab === "topics"}
             onClick={() => onTabChange("topics", selectedSite?.name)}
@@ -1894,36 +1900,45 @@ function ProjectWorkspaceView({
         </div>
       ) : null}
 
-      {selectedSite && activeTab === "overview" && overview ? (
-        <ProjectOverviewPanel key={selectedSite.id} overview={overview} content={siteContent} sections={sections} logs={logs} />
-      ) : null}
-      {selectedSite && activeTab === "topics" ? (
-        <TasksView
-          key={selectedSite.id}
-          api={api}
-          sites={sites}
-          providers={providers}
-          tasks={siteTasks}
-          fixedSite={selectedSite}
-          onProjectChange={setSelectedSiteId}
-          sections={sections}
-          promptTemplates={promptTemplates}
-          onChanged={refreshProject}
-        />
-      ) : null}
-      {selectedSite && (activeTab === "content" || activeTab === "publication") ? (
-        <ProjectPublicationPanel key={`${selectedSite.id}:publication-launch`} mode="launch" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} onChanged={refreshProject} />
-      ) : null}
-      {selectedSite && (activeTab === "content" || activeTab === "publication") ? (
-        <ProjectContentPanel key={`${selectedSite.id}:content`} api={api} site={selectedSite} content={siteContent} sections={sections} onChanged={refreshProject} />
-      ) : null}
-      {selectedSite && (activeTab === "content" || activeTab === "publication") ? (
-        <ProjectPublicationPanel key={`${selectedSite.id}:publication-details`} mode="details" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} onChanged={refreshProject} />
-      ) : null}
-      {selectedSite && activeTab === "menu" ? (
-        <ProjectMenuPanel api={api} site={selectedSite} sections={sections} menuCapabilities={menuCapabilities} onChanged={refreshProject} />
+      {selectedSite ? (
+        <>
+          <WorkspaceTabPane active={activeTab === "overview"} storagePrefix={`${currentUsername}:${selectedSite.id}:overview`}>
+            {overview ? <FastProjectOverviewPanel key={selectedSite.id} overview={overview} content={siteContent} sections={sections} logs={logs} /> : null}
+          </WorkspaceTabPane>
+          <WorkspaceTabPane active={activeTab === "topics"} storagePrefix={`${currentUsername}:${selectedSite.id}:topics`}>
+            <FastTasksView
+              key={selectedSite.id}
+              api={api}
+              sites={sites}
+              providers={providers}
+              tasks={siteTasks}
+              fixedSite={selectedSite}
+              onProjectChange={setSelectedSiteId}
+              sections={sections}
+              promptTemplates={promptTemplates}
+              onChanged={refreshProject}
+            />
+          </WorkspaceTabPane>
+          <WorkspaceTabPane active={activeTab === "content" || activeTab === "publication"} storagePrefix={`${currentUsername}:${selectedSite.id}:content`}>
+            <FastProjectPublicationPanel key={`${selectedSite.id}:publication-launch`} mode="launch" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} onChanged={refreshProject} />
+            <FastProjectContentPanel key={`${selectedSite.id}:content`} api={api} site={selectedSite} content={siteContent} sections={sections} onChanged={refreshProject} />
+            <FastProjectPublicationPanel key={`${selectedSite.id}:publication-details`} mode="details" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} onChanged={refreshProject} />
+          </WorkspaceTabPane>
+          <WorkspaceTabPane active={activeTab === "menu"} storagePrefix={`${currentUsername}:${selectedSite.id}:menu`}>
+            <FastProjectMenuPanel api={api} site={selectedSite} sections={sections} menuCapabilities={menuCapabilities} onChanged={refreshProject} />
+          </WorkspaceTabPane>
+        </>
       ) : null}
     </section>
+    </WorkspaceAccordionContext.Provider>
+  );
+}
+
+function WorkspaceTabPane({ active, storagePrefix, children }: { active: boolean; storagePrefix: string; children: React.ReactNode }) {
+  const accordionContextValue = React.useMemo(() => ({ storagePrefix }), [storagePrefix]);
+  return (
+    <WorkspaceAccordionContext.Provider value={accordionContextValue}>
+      <div className="workspaceTabPane" hidden={!active} aria-hidden={!active}>{children}</div>
     </WorkspaceAccordionContext.Provider>
   );
 }

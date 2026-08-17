@@ -1568,6 +1568,10 @@ h2 {
   border-top: 1px solid var(--border);
 }
 
+.workspaceTabPane[hidden] {
+  display: none !important;
+}
+
 .tabButton {
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1600,6 +1604,10 @@ h2 {
   opacity: 0.48;
   transition: background 160ms ease, box-shadow 160ms ease, opacity 160ms ease, transform 160ms ease;
   width: 25px;
+}
+
+.tabButtonIcon.ai {
+  margin-right: 2px;
 }
 
 .tabButton.active .tabButtonIcon.ai,
