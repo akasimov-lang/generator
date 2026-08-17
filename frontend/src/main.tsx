@@ -520,7 +520,7 @@ const MAIN_VIEW_PATHS: Record<Exclude<AppView, "workspace">, string> = {
 
 const WORKSPACE_TAB_PATHS: Record<WorkspaceTab, string> = {
   overview: "/project-overview",
-  topics: "/project-tasks",
+  topics: "/project-generation",
   content: "/project-content",
   publication: "/project-publication",
   menu: "/project-menu"
@@ -535,6 +535,9 @@ function routeFromPath(pathname: string): AppRoute {
     return { view: "workspace", workspaceTab: "topics" };
   }
   if (path === "/tasks") {
+    return { view: "workspace", workspaceTab: "topics" };
+  }
+  if (path === "/project-tasks" || path.startsWith("/project-tasks/")) {
     return { view: "workspace", workspaceTab: "topics" };
   }
   const workspaceEntry = Object.entries(WORKSPACE_TAB_PATHS).find(([, routePath]) => path === routePath || path.startsWith(`${routePath}/`));
@@ -556,7 +559,7 @@ function routeFromPath(pathname: string): AppRoute {
 
 function workspaceProjectNameFromPath(pathname: string): string | null {
   const path = pathname.replace(/\/+$/, "") || "/";
-  const routePath = Object.values(WORKSPACE_TAB_PATHS).find((candidate) => path.startsWith(`${candidate}/`));
+  const routePath = [...Object.values(WORKSPACE_TAB_PATHS), "/project-tasks"].find((candidate) => path.startsWith(`${candidate}/`));
   if (!routePath) return null;
   const encodedName = path.slice(routePath.length + 1).split("/")[0];
   if (!encodedName) return null;
@@ -1935,7 +1938,7 @@ function ProjectWorkspaceView({
           activeSection={publicationWorkflowSection}
           onSectionChange={openPublicationSection}
         />
-      ) : selectedSite ? (
+      ) : selectedSite && activeTab !== "topics" ? (
         <div className="workspaceAccordionHint" role="note">
           <ChevronDown size={17} />
           <span><strong>Блоки можно сворачивать.</strong> Нажмите на заголовок блока — выбранное положение сохранится отдельно для вашего пользователя и проекта.</span>
@@ -4731,7 +4734,7 @@ function TasksView({
           </div>
         </form> : null}
       </section>
-      <DataPanel title="Все задачи">
+      <DataPanel title="Все задачи" allowCollapse={false}>
         <AdminTasksAccordion
           tasks={tasks}
           sections={sections}
@@ -7550,11 +7553,11 @@ function SearchableSelect({
   );
 }
 
-function DataPanel({ id, title, actions, children, collapseKey, className = "" }: { id?: string; title: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode; collapseKey?: string; className?: string }) {
+function DataPanel({ id, title, actions, children, collapseKey, allowCollapse = true, className = "" }: { id?: string; title: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode; collapseKey?: string; allowCollapse?: boolean; className?: string }) {
   const accordionContext = React.useContext(WorkspaceAccordionContext);
   const automaticKey = typeof title === "string" ? title.split(" · ")[0].trim().toLowerCase().replace(/[^a-zа-яё0-9]+/gi, "-") : "";
   const effectiveCollapseKey = collapseKey || automaticKey;
-  const collapsible = Boolean(accordionContext && effectiveCollapseKey);
+  const collapsible = Boolean(allowCollapse && accordionContext && effectiveCollapseKey);
   const [expanded, setExpanded] = usePersistentWorkspacePanelState(effectiveCollapseKey || "static-panel", true);
 
   React.useEffect(() => {
@@ -7668,7 +7671,7 @@ function EmptyState({ text }: { text: string }) {
 function PromptBadge({ name }: { name?: string | null }) {
   const label = name || "Промпт не указан";
   const isImproved = /v\s*2|улучш|доработ/i.test(label);
-  return <span className={`promptBadge ${isImproved ? "improved" : ""}`}>Промпт: {label}</span>;
+  return <span className={`promptBadge ${isImproved ? "improved" : ""}`}>{label}</span>;
 }
 
 function CasinoRatingMedal({ enabled }: { enabled: boolean }) {
