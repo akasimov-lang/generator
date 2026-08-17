@@ -9,6 +9,7 @@ import {
   Archive,
   BellRing,
   Bot,
+  BrainCircuit,
   CalendarClock,
   ChevronDown,
   ChevronLeft,
@@ -29,6 +30,7 @@ import {
   ListChecks,
   LoaderCircle,
   LogOut,
+  Menu,
   Moon,
   Pause,
   Play,
@@ -1843,10 +1845,34 @@ function ProjectWorkspaceView({
           </div>
         ) : null}
         <div className="workspaceTabs">
-          <TabButton href={pathForRoute("workspace", "overview", selectedSite?.name)} label="Обзор" active={activeTab === "overview"} onClick={() => onTabChange("overview", selectedSite?.name)} />
-          <TabButton href={pathForRoute("workspace", "topics", selectedSite?.name)} label="Задачи" active={activeTab === "topics"} onClick={() => onTabChange("topics", selectedSite?.name)} />
-          <TabButton href={pathForRoute("workspace", "content", selectedSite?.name)} label="Контент и публикация" active={activeTab === "content" || activeTab === "publication"} onClick={() => onTabChange("content", selectedSite?.name)} />
-          <TabButton href={pathForRoute("workspace", "menu", selectedSite?.name)} label="Меню" active={activeTab === "menu"} onClick={() => onTabChange("menu", selectedSite?.name)} />
+          <TabButton
+            href={pathForRoute("workspace", "overview", selectedSite?.name)}
+            icon={<span className="tabButtonIcon overview" aria-hidden="true"><Search size={15} /></span>}
+            label="Обзор"
+            active={activeTab === "overview"}
+            onClick={() => onTabChange("overview", selectedSite?.name)}
+          />
+          <TabButton
+            href={pathForRoute("workspace", "topics", selectedSite?.name)}
+            icon={<span className="tabButtonIcon ai" aria-hidden="true"><BrainCircuit size={15} /></span>}
+            label="Генерация"
+            active={activeTab === "topics"}
+            onClick={() => onTabChange("topics", selectedSite?.name)}
+          />
+          <TabButton
+            href={pathForRoute("workspace", "content", selectedSite?.name)}
+            icon={<span className="tabButtonIcon document" aria-hidden="true"><FileText size={15} /></span>}
+            label="Контент и публикация"
+            active={activeTab === "content" || activeTab === "publication"}
+            onClick={() => onTabChange("content", selectedSite?.name)}
+          />
+          <TabButton
+            href={pathForRoute("workspace", "menu", selectedSite?.name)}
+            icon={<span className="tabButtonIcon menu" aria-hidden="true"><Menu size={16} /></span>}
+            label="Меню"
+            active={activeTab === "menu"}
+            onClick={() => onTabChange("menu", selectedSite?.name)}
+          />
         </div>
         {workspaceError ? <div className="notice">{workspaceError}</div> : null}
       </DataPanel>
@@ -6903,7 +6929,7 @@ function NavButton({ href, icon, label, active, onClick }: { href: string; icon:
   );
 }
 
-function TabButton({ href, label, active, onClick }: { href: string; label: string; active: boolean; onClick: () => void }) {
+function TabButton({ href, icon, label, active, onClick }: { href: string; icon?: React.ReactNode; label: string; active: boolean; onClick: () => void }) {
   return (
     <a
       className={`tabButton ${active ? "active" : ""}`}
@@ -6914,6 +6940,7 @@ function TabButton({ href, label, active, onClick }: { href: string; label: stri
         onClick();
       }}
     >
+      {icon}
       {label}
     </a>
   );
@@ -7335,7 +7362,7 @@ function viewTitle(view: AppView, workspaceTab: WorkspaceTab) {
   if (view === "workspace") {
     const tabTitles: Record<WorkspaceTab, string> = {
       overview: "Рабочий экран: обзор",
-      topics: "Рабочий экран: задачи",
+      topics: "Рабочий экран: генерация",
       content: "Рабочий экран: контент и публикация",
       publication: "Рабочий экран: контент и публикация",
       menu: "Рабочий экран: меню"
