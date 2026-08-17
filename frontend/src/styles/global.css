@@ -4499,6 +4499,15 @@ td {
   scroll-margin-top: 16px;
 }
 
+.publicationWorkflowNavTop {
+  backdrop-filter: blur(10px);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--text) 10%, transparent);
+  position: sticky;
+  top: 8px;
+  z-index: 18;
+}
+
 .publicationWorkflowNav button {
   align-items: center;
   background: var(--surface-soft);
@@ -4569,7 +4578,7 @@ td {
 }
 
 [id^="workspace-section-"] {
-  scroll-margin-top: 18px;
+  scroll-margin-top: 92px;
 }
 
 @media (max-width: 1250px) {
@@ -4580,7 +4589,10 @@ td {
 
 @media (max-width: 760px) {
   .publicationWorkflowNav {
-    grid-template-columns: 1fr;
+    grid-auto-columns: minmax(165px, 1fr);
+    grid-auto-flow: column;
+    grid-template-columns: none;
+    overflow-x: auto;
   }
 }
 
