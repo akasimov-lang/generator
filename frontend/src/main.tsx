@@ -1921,8 +1921,9 @@ function ProjectWorkspaceView({
           </WorkspaceTabPane>
           <WorkspaceTabPane active={activeTab === "content" || activeTab === "publication"} storagePrefix={`${currentUsername}:${selectedSite.id}:content`}>
             <FastProjectPublicationPanel key={`${selectedSite.id}:publication-launch`} mode="launch" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} onChanged={refreshProject} />
+            <FastProjectPublicationPanel key={`${selectedSite.id}:publication-campaigns`} mode="campaigns" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} onChanged={refreshProject} />
             <FastProjectContentPanel key={`${selectedSite.id}:content`} api={api} site={selectedSite} content={siteContent} sections={sections} onChanged={refreshProject} />
-            <FastProjectPublicationPanel key={`${selectedSite.id}:publication-details`} mode="details" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} onChanged={refreshProject} />
+            <FastProjectPublicationPanel key={`${selectedSite.id}:publication-workflow`} mode="workflow" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} onChanged={refreshProject} />
           </WorkspaceTabPane>
           <WorkspaceTabPane active={activeTab === "menu"} storagePrefix={`${currentUsername}:${selectedSite.id}:menu`}>
             <FastProjectMenuPanel api={api} site={selectedSite} sections={sections} menuCapabilities={menuCapabilities} onChanged={refreshProject} />
@@ -3167,7 +3168,9 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
   );
 }
 
-function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs, mode, onChanged }: ViewProps & { site: Site; content: ContentItem[]; sections: Section[]; campaigns: PublicationCampaign[]; logs: PublicationLog[]; mode: "launch" | "details" }) {
+type PublicationWorkflowSection = "process" | "queue" | "backlog";
+
+function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs, mode, onChanged }: ViewProps & { site: Site; content: ContentItem[]; sections: Section[]; campaigns: PublicationCampaign[]; logs: PublicationLog[]; mode: "launch" | "campaigns" | "workflow" }) {
   const [launchExpanded, setLaunchExpanded] = usePersistentWorkspacePanelState("publication-launch", false);
   const [name, setName] = React.useState("Daily publication");
   const [itemsPerDay, setItemsPerDay] = React.useState(1);
@@ -3175,6 +3178,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
   const [startAt, setStartAt] = React.useState(() => toDateTimeInputValue(new Date()));
   const [formError, setFormError] = React.useState("");
   const [publishingNowId, setPublishingNowId] = React.useState("");
+  const [workflowSection, setWorkflowSection] = React.useState<PublicationWorkflowSection>("process");
   const approved = content.filter((item) => item.status === "approved" && (!selectedPublicationSectionIds.length || (item.section_id && selectedPublicationSectionIds.includes(item.section_id))));
   const publicationSections = sections
     .map((section) => ({ section, count: content.filter((item) => item.status === "approved" && item.section_id === section.id).length }))
@@ -3300,7 +3304,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
           </form>
         ) : null}
       </section> : null}
-      {mode === "details" ? <DataPanel collapseKey="project-campaigns" title={(
+      {mode === "campaigns" ? <DataPanel collapseKey="project-campaigns" title={(
         <span className="workspacePanelTitleWithStats">
           <span>Кампании проекта</span>
           <span className="workspacePanelStats">
@@ -3310,28 +3314,37 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
           </span>
         </span>
       )}>
-        <ResponsiveTable
-          columns={["Кампания", "Старт", "Интервал", "Статус", "Действия"]}
-          rows={campaigns.map((campaign) => [
-            campaign.name,
-            formatDate(campaign.start_at),
-            publicationIntervalLabel(campaign.interval_minutes),
-            <StatusBadge status={campaign.status} />,
-            <div className="userActions">
-              {campaign.status === "active" ? (
-                <button className="button compact campaignActionIconButton" type="button" onClick={() => changeCampaign(campaign, "pause")} title="Приостановить" aria-label="Приостановить кампанию"><Pause size={15} /></button>
-              ) : null}
-              {campaign.status === "paused" ? (
-                <button className="button compact" type="button" onClick={() => changeCampaign(campaign, "resume")}><Play size={15} /> Resume</button>
-              ) : null}
-              {["active", "paused"].includes(campaign.status) ? (
-                <button className="button compact danger campaignActionIconButton" type="button" onClick={() => changeCampaign(campaign, "stop")} title="Остановить" aria-label="Остановить кампанию"><X size={15} /></button>
-              ) : null}
-            </div>
-          ])}
-        />
+        <div className="projectCampaignTree">
+          {campaigns.map((campaign, index) => (
+            <ProjectCampaignTreeItem
+              key={campaign.id}
+              campaign={campaign}
+              items={content.filter((item) => item.publication_campaign_id === campaign.id)}
+              sections={sections}
+              defaultExpanded={index === 0}
+              publishingNowId={publishingNowId}
+              onPublishImmediately={publishImmediately}
+              onChangeCampaign={changeCampaign}
+            />
+          ))}
+          {!campaigns.length ? <div className="projectCampaignEmpty">Кампании для проекта пока не созданы.</div> : null}
+        </div>
+        {formError ? <span className="formError">{formError}</span> : null}
       </DataPanel> : null}
-      {mode === "details" ? <DataPanel title="Процесс публикации">
+      {mode === "workflow" ? (
+        <nav className="publicationWorkflowNav" aria-label="Разделы публикации">
+          <button className={workflowSection === "process" ? "active" : ""} type="button" onClick={() => setWorkflowSection("process")}>
+            <Activity size={16} /> Процесс публикации <span>{approved.length}</span>
+          </button>
+          <button className={workflowSection === "queue" ? "active" : ""} type="button" onClick={() => setWorkflowSection("queue")}>
+            <ListChecks size={16} /> Очередь публикации <span>{publicationQueue.length}</span>
+          </button>
+          <button className={`${workflowSection === "backlog" ? "active" : ""} ${publicationBacklog.length ? "danger" : ""}`} type="button" onClick={() => setWorkflowSection("backlog")}>
+            <AlertTriangle size={16} /> Беклог публикации <span>{publicationBacklog.length}</span>
+          </button>
+        </nav>
+      ) : null}
+      {mode === "workflow" && workflowSection === "process" ? <DataPanel title={`Процесс публикации · ${approved.length}`}>
         <ResponsiveTable
           columns={["Тема", "Меню", "Slug", "Действия"]}
           rows={approved.map((item) => [
@@ -3344,7 +3357,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
           ])}
         />
       </DataPanel> : null}
-      {mode === "details" ? <DataPanel title={`Очередь публикации · ${publicationQueue.length}`}>
+      {mode === "workflow" && workflowSection === "queue" ? <DataPanel title={`Очередь публикации · ${publicationQueue.length}`}>
         <div className="publicationQueueHint">Очередь чередуется по пунктам меню и сохраняет исходный порядок добавления тем.</div>
         <ResponsiveTable
           columns={["№", "Тема", "Меню", "Публикация", "Статус", "Действия"]}
@@ -3362,7 +3375,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
         />
         {formError ? <span className="formError">{formError}</span> : null}
       </DataPanel> : null}
-      {mode === "details" ? <DataPanel className="publicationBacklogPanel" collapseKey="publication-backlog" title={<span className="publicationBacklogTitle"><AlertTriangle size={18} /> Беклог публикации · {publicationBacklog.length}</span>}>
+      {mode === "workflow" && workflowSection === "backlog" ? <DataPanel className="publicationBacklogPanel" collapseKey="publication-backlog" title={<span className="publicationBacklogTitle"><AlertTriangle size={18} /> Беклог публикации · {publicationBacklog.length}</span>}>
         <div className="publicationBacklogHint">Сюда автоматически переносятся тексты, которые не удалось опубликовать из-за ошибки.</div>
         <ResponsiveTable
           columns={["Тема", "Меню", "Ошибка", "Время", "Статус"]}
@@ -3381,6 +3394,87 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
         />
       </DataPanel> : null}
     </section>
+  );
+}
+
+function ProjectCampaignTreeItem({
+  campaign,
+  items,
+  sections,
+  defaultExpanded,
+  publishingNowId,
+  onPublishImmediately,
+  onChangeCampaign
+}: {
+  campaign: PublicationCampaign;
+  items: ContentItem[];
+  sections: Section[];
+  defaultExpanded: boolean;
+  publishingNowId: string;
+  onPublishImmediately: (item: ContentItem) => Promise<void>;
+  onChangeCampaign: (campaign: PublicationCampaign, action: "pause" | "resume" | "stop") => Promise<void>;
+}) {
+  const [expanded, setExpanded] = usePersistentWorkspacePanelState(`campaign:${campaign.id}`, defaultExpanded);
+  const orderedItems = React.useMemo(() => [...items].sort((left, right) => {
+    const leftDate = new Date(left.scheduled_at || left.published_at || left.created_at).getTime();
+    const rightDate = new Date(right.scheduled_at || right.published_at || right.created_at).getTime();
+    return leftDate - rightDate;
+  }), [items]);
+  const queuedCount = items.filter((item) => ["scheduled", "retry_scheduled", "publication_paused", "publishing"].includes(item.status)).length;
+  const publishedCount = items.filter((item) => item.status === "published").length;
+  const failedCount = items.filter((item) => item.status === "publication_failed").length;
+
+  return (
+    <article className={`projectCampaignItem ${expanded ? "expanded" : ""}`}>
+      <div className="projectCampaignHeader">
+        <button className="projectCampaignToggle" type="button" onClick={() => setExpanded((current) => !current)} aria-expanded={expanded}>
+          <span className="projectCampaignChevron">{expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}</span>
+          <span className="projectCampaignIdentity">
+            <strong>{campaign.name}</strong>
+            <small>Старт: {formatDate(campaign.start_at)} · {publicationIntervalLabel(campaign.interval_minutes)}</small>
+          </span>
+          <StatusBadge status={campaign.status} />
+          <span className="projectCampaignCounters">
+            <span>Текстов <b>{items.length}</b></span>
+            <span>В очереди <b>{queuedCount}</b></span>
+            <span className="published">Опубликовано <b>{publishedCount}</b></span>
+            <span className={failedCount ? "failed" : ""}>Ошибки <b>{failedCount}</b></span>
+          </span>
+        </button>
+        <div className="projectCampaignActions">
+          {campaign.status === "active" ? (
+            <button className="button compact campaignActionIconButton" type="button" onClick={() => void onChangeCampaign(campaign, "pause")} title="Приостановить" aria-label="Приостановить кампанию"><Pause size={15} /></button>
+          ) : null}
+          {campaign.status === "paused" ? (
+            <button className="button compact campaignActionIconButton" type="button" onClick={() => void onChangeCampaign(campaign, "resume")} title="Продолжить" aria-label="Продолжить кампанию"><Play size={15} /></button>
+          ) : null}
+          {["active", "paused"].includes(campaign.status) ? (
+            <button className="button compact danger campaignActionIconButton" type="button" onClick={() => void onChangeCampaign(campaign, "stop")} title="Остановить" aria-label="Остановить кампанию"><X size={15} /></button>
+          ) : null}
+        </div>
+      </div>
+      {expanded ? (
+        <div className="projectCampaignBody">
+          <ResponsiveTable
+            columns={["№", "Тема", "Пункт меню", "Публикация", "Статус", "Действия"]}
+            rows={orderedItems.map((item, index) => [
+              index + 1,
+              <div className="compactContentTopic" title={item.topic}>{item.topic}</div>,
+              sectionLabel(item.section_id, sections),
+              item.published_at ? formatDate(item.published_at) : item.scheduled_at ? formatDate(item.scheduled_at) : "—",
+              <StatusBadge status={item.status} />,
+              item.status !== "published" ? (
+                <button className="button compact primary publishImmediatelyButton" type="button" onClick={() => void onPublishImmediately(item)} disabled={publishingNowId === item.id || item.status === "publishing"}>
+                  <Send size={14} /> {publishingNowId === item.id ? "Публикуем…" : "Без очереди"}
+                </button>
+              ) : item.published_url ? <a href={item.published_url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Открыть</a> : "—"
+            ])}
+            wrapperClassName="projectCampaignContentTable"
+          />
+          {!orderedItems.length ? <div className="projectCampaignEmpty">В этой кампании пока нет текстов.</div> : null}
+        </div>
+      ) : null}
+    </article>
   );
 }
 
