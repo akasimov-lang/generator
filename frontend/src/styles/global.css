@@ -1642,6 +1642,56 @@ h2 {
   min-width: 0;
 }
 
+.workspacePanelTitleWithStats {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  min-width: 0;
+}
+
+.workspacePanelStats {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  flex-wrap: wrap;
+  font-size: 11px;
+  font-weight: 650;
+  gap: 6px;
+}
+
+.workspacePanelStats > span {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.workspacePanelStats b {
+  color: var(--text);
+}
+
+.workspacePanelStats .positive {
+  background: var(--primary-soft);
+  border-color: color-mix(in srgb, var(--primary) 28%, var(--border));
+  color: var(--primary);
+}
+
+.workspacePanelStats .positive b {
+  color: var(--primary);
+}
+
+.workspacePanelStats .muted {
+  background: color-mix(in srgb, var(--surface-3) 65%, transparent);
+  border-color: color-mix(in srgb, var(--border) 55%, transparent);
+  color: color-mix(in srgb, var(--muted) 58%, transparent);
+}
+
+.workspacePanelStats .muted b {
+  color: color-mix(in srgb, var(--muted) 64%, transparent);
+}
+
 .dataPanelCollapseToggle > span {
   color: var(--primary);
   font-size: 12px;
@@ -2462,6 +2512,35 @@ h2 {
 
 .siteStatusSelect.duplicate {
   border-color: var(--danger);
+  color: var(--danger);
+}
+
+.siteStatusReadonly {
+  align-items: center;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 8px;
+  font-weight: 800;
+  justify-content: center;
+  min-height: 22px;
+  padding: 0 7px;
+  white-space: nowrap;
+}
+
+.siteStatusReadonly.test {
+  color: var(--warning);
+}
+
+.siteStatusReadonly.working {
+  color: var(--primary);
+}
+
+.siteStatusReadonly.not_in_focus {
+  color: var(--muted);
+}
+
+.siteStatusReadonly.duplicate {
   color: var(--danger);
 }
 

@@ -555,7 +555,7 @@ function pathForRoute(view: AppView, workspaceTab: WorkspaceTab = DEFAULT_WORKSP
 }
 
 function isAdminOnlyView(view: AppView) {
-  return !["workspace", "prompts", "settings"].includes(view);
+  return !["workspace", "prompts", "sites", "favorites", "settings"].includes(view);
 }
 
 const DEFAULT_PROMPT_DRAFT = `Рабочий промпт для конкретной задачи.
@@ -957,6 +957,8 @@ function App() {
             <>
               <NavButton href={pathForRoute("workspace", DEFAULT_WORKSPACE_TAB)} icon={<FolderKanban />} label="Рабочий экран" active={activeView === "workspace"} onClick={() => navigateTo("workspace", DEFAULT_WORKSPACE_TAB)} />
               <NavButton href={pathForRoute("prompts")} icon={<Edit3 />} label="Промпты" active={activeView === "prompts"} onClick={() => navigateTo("prompts")} />
+              <NavButton href={pathForRoute("sites")} icon={<Globe2 />} label="Сайты" active={activeView === "sites"} onClick={() => navigateTo("sites")} />
+              <NavButton href={pathForRoute("favorites")} icon={<Star className="favoriteNavIcon" fill="currentColor" />} label="Избранное" active={activeView === "favorites"} onClick={() => navigateTo("favorites")} />
             </>
           )}
           <NavButton href={pathForRoute("settings")} icon={<Settings />} label="Настройки" active={activeView === "settings"} onClick={() => navigateTo("settings")} />
@@ -1041,8 +1043,8 @@ function App() {
           navigateTo("workspace", "content", false, site.name);
         }} onChanged={loadAll} />}
         {isAdmin && activeView === "providers" && <ProvidersView api={api} providers={providers} onChanged={loadAll} />}
-        {isAdmin && activeView === "sites" && <SitesView api={api} sites={sites} currentUsername={currentUser.username} onChanged={loadAll} />}
-        {isAdmin && activeView === "favorites" && <SitesView api={api} sites={sites} currentUsername={currentUser.username} favoritesOnly onChanged={loadAll} />}
+        {activeView === "sites" && <SitesView api={api} sites={sites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll} />}
+        {activeView === "favorites" && <SitesView api={api} sites={sites} currentUsername={currentUser.username} favoritesOnly readOnly={!isAdmin} onChanged={loadAll} />}
         {activeView === "settings" && <SettingsView api={api} currentUser={currentUser} users={users} inputStyle={inputStyle} onInputStyleChange={setInputStyle} onChanged={loadAll} />}
       </main>
       {notificationPromptVisible ? (
@@ -2820,6 +2822,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
   const selectedItems = content.filter((item) => selectedIds.includes(item.id));
   const bulkApproveItems = selectedItems.filter((item) => Boolean(item.section_id) && canApproveContent(item));
   const bulkPublishItems = selectedItems.filter((item) => Boolean(item.section_id) && ["generated", "rejected", "approved"].includes(item.status));
+  const agreedContentCount = content.filter((item) => ["approved", "scheduled", "retry_scheduled", "publication_paused", "publishing", "published", "publication_failed"].includes(item.status)).length;
   const sectionContentCounts = React.useMemo(() => {
     const counts = new Map<string, number>();
     content.forEach((item) => {
@@ -2984,7 +2987,15 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
 
   return (
     <section className="viewStack">
-      <DataPanel title="Контент проекта">
+      <DataPanel collapseKey="project-content" title={(
+        <span className="workspacePanelTitleWithStats">
+          <span>Контент проекта</span>
+          <span className="workspacePanelStats">
+            <span>Контента: <b>{content.length}</b></span>
+            <span className="positive">Согласовано: <b>{agreedContentCount}</b></span>
+          </span>
+        </span>
+      )}>
         <div className="bulkToolbar projectContentBulkToolbar">
           <label className="checkboxRow bulkSelectAll">
             <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} disabled={!selectableIds.length || bulkBusy} />
@@ -3133,6 +3144,8 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
   const publicationBacklog = content
     .filter((item) => item.status === "publication_failed")
     .sort((left, right) => new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime());
+  const activeCampaignCount = campaigns.filter((campaign) => ["active", "paused", "created"].includes(campaign.status)).length;
+  const completedCampaignCount = campaigns.filter((campaign) => ["completed", "completed_with_errors"].includes(campaign.status)).length;
   const latestErrorByContentId = React.useMemo(() => {
     const result = new Map<string, PublicationLog>();
     logs.forEach((log) => {
@@ -3246,7 +3259,16 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
           </form>
         ) : null}
       </section> : null}
-      {mode === "details" ? <DataPanel title="Кампании проекта">
+      {mode === "details" ? <DataPanel collapseKey="project-campaigns" title={(
+        <span className="workspacePanelTitleWithStats">
+          <span>Кампании проекта</span>
+          <span className="workspacePanelStats">
+            <span>Всего: <b>{campaigns.length}</b></span>
+            <span className="positive">В работе: <b>{activeCampaignCount}</b></span>
+            <span className="muted">Завершено: <b>{completedCampaignCount}</b></span>
+          </span>
+        </span>
+      )}>
         <ResponsiveTable
           columns={["Кампания", "Старт", "Интервал", "Статус", "Действия"]}
           rows={campaigns.map((campaign) => [
@@ -5697,7 +5719,7 @@ function LocaleCode({ value }: { value: string | null }) {
   return <span className="siteLocaleCode">{flag ? <span aria-hidden="true">{flag}</span> : null}<b>{value.replace(/_/g, "-")}</b></span>;
 }
 
-function SitesView({ api, sites, currentUsername, favoritesOnly = false, onChanged }: ViewProps & { sites: Site[]; currentUsername: string; favoritesOnly?: boolean }) {
+function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnly = false, onChanged }: ViewProps & { sites: Site[]; currentUsername: string; favoritesOnly?: boolean; readOnly?: boolean }) {
   const preferencesKey = `sites-table-preferences:${currentUsername}`;
   const storedPreferences = React.useMemo(() => {
     try {
@@ -5771,7 +5793,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, onChang
     return Array.isArray(stored) && stored.every((column) => DEFAULT_SITE_COLUMN_ORDER.includes(column)) ? stored : [];
   });
   const [favoriteSiteIds, setFavoriteSiteIds] = React.useState<string[]>([]);
-  const visibleColumnOrder = columnOrder.filter((column) => !hiddenColumns.includes(column));
+  const visibleColumnOrder = columnOrder.filter((column) => !hiddenColumns.includes(column) && (!readOnly || column !== "select"));
 
   React.useEffect(() => {
     localStorage.setItem(preferencesKey, JSON.stringify({ statusFilters, menuTypeFilters, siteSort, columnOrder, hiddenColumns, rowsPerPage, summaryFilter, medalFilter }));
@@ -5784,8 +5806,12 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, onChang
   }, [api]);
 
   const loadManagedSites = React.useCallback(async () => {
+    if (readOnly) {
+      setManagedSites(sites);
+      return;
+    }
     setManagedSites(await api<Site[]>("/sites/cache/projects"));
-  }, [api]);
+  }, [api, readOnly, sites]);
 
   React.useEffect(() => {
     loadManagedSites().catch((error: unknown) => setSyncError(error instanceof Error ? error.message : "Не удалось загрузить проекты"));
@@ -6018,7 +6044,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, onChang
 
   return (
     <section className="viewStack sitesManagementView">
-      <DataPanel title="Панель управления сайтами">
+      <DataPanel title={readOnly ? "Обзор сайтов" : "Панель управления сайтами"}>
         <div className="siteCacheToolbar">
           <div className="siteCacheStats">
             <button className={summaryFilter === "projects" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("projects")} aria-pressed={summaryFilter === "projects"}><span>Проекты</span><strong>{formatNumber(cacheResult?.cache_count || managedSites.filter((site) => site.external_project_id).length)}</strong></button>
@@ -6028,16 +6054,20 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, onChang
             <button className={summaryFilter === "duplicate" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("duplicate")} aria-pressed={summaryFilter === "duplicate"}><span>Дубликаты</span><strong>{formatNumber(duplicateCount)}</strong></button>
             <button className={summaryFilter === "all" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("all")} aria-pressed={summaryFilter === "all"}><span>Всего сайтов</span><strong>{formatNumber(managedSites.length)}</strong></button>
           </div>
-          <button className="button primary siteCacheSyncButton" type="button" onClick={() => syncCache()} disabled={syncing}>
-            <RefreshCcw size={18} className={syncing ? "spin" : ""} />
-            {syncing ? "Обновляем данные" : "Обновить данные"}
-          </button>
-          <button className="button secondary siteCacheSyncButton" type="button" onClick={() => syncCache(selectedProjectNames)} disabled={syncing || !selectedProjectNames.length}>
-            <RefreshCcw size={18} /> Обновить выбранные ({selectedProjectNames.length})
-          </button>
-          <button className="button danger siteCacheSyncButton" type="button" onClick={deleteDuplicates} disabled={syncing || deletingDuplicates || !duplicateCount}>
-            <Trash2 size={18} /> {deletingDuplicates ? "Удаляем" : `Удалить дубликаты (${duplicateCount})`}
-          </button>
+          {!readOnly ? (
+            <>
+              <button className="button primary siteCacheSyncButton" type="button" onClick={() => syncCache()} disabled={syncing}>
+                <RefreshCcw size={18} className={syncing ? "spin" : ""} />
+                {syncing ? "Обновляем данные" : "Обновить данные"}
+              </button>
+              <button className="button secondary siteCacheSyncButton" type="button" onClick={() => syncCache(selectedProjectNames)} disabled={syncing || !selectedProjectNames.length}>
+                <RefreshCcw size={18} /> Обновить выбранные ({selectedProjectNames.length})
+              </button>
+              <button className="button danger siteCacheSyncButton" type="button" onClick={deleteDuplicates} disabled={syncing || deletingDuplicates || !duplicateCount}>
+                <Trash2 size={18} /> {deletingDuplicates ? "Удаляем" : `Удалить дубликаты (${duplicateCount})`}
+              </button>
+            </>
+          ) : null}
         </div>
         <div className="siteCacheUpdatedAt">
           <CalendarClock size={17} />
@@ -6211,7 +6241,11 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, onChang
               ) : "—",
               canon: <strong className="siteMainDomain">{row.canon}</strong>,
               language: <LocaleCode value={row.language} />,
-              status: (
+              status: readOnly ? (
+                <span className={`siteStatusReadonly ${row.projectStatus}`}>
+                  {{ test: "Тестовый", working: "Рабочий", not_in_focus: "Не в фокусе", duplicate: "Дубликат" }[row.projectStatus]}
+                </span>
+              ) : (
                 <select className={`siteStatusSelect ${row.projectStatus}`} value={row.projectStatus} onChange={(event) => updateProjectStatus(row.id, event.target.value as Site["project_status"])}>
                   <option value="test">Тестовый</option>
                   <option value="working">Рабочий</option>
