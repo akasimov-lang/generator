@@ -7586,16 +7586,9 @@ function sectionLabel(sectionId: string | null, sections: Section[]) {
   return section ? `${section.name} · ${section.path}` : sectionId;
 }
 
-function viewTitle(view: AppView, workspaceTab: WorkspaceTab) {
+function viewTitle(view: AppView, _workspaceTab: WorkspaceTab) {
   if (view === "workspace") {
-    const tabTitles: Record<WorkspaceTab, string> = {
-      overview: "Рабочий экран: обзор",
-      topics: "Рабочий экран: генерация",
-      content: "Рабочий экран: контент и публикация",
-      publication: "Рабочий экран: контент и публикация",
-      menu: "Рабочий экран: меню"
-    };
-    return tabTitles[workspaceTab];
+    return "С каким проектом сегодня поработаем?";
   }
 
   const titles: Record<Exclude<AppView, "workspace">, string> = {
