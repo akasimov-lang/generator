@@ -19,6 +19,7 @@ from app.schemas import (
     DuplicateSitesDeleteResponse,
     FavoriteSitesResponse,
     GenerationTaskCreate,
+    GenerationTaskRegenerateAll,
     GenerationTaskResponse,
     GenerationTaskSectionUpdate,
     LoginRequest,
@@ -63,6 +64,8 @@ from app.services import (
     build_competitor_brief_for_item,
     collect_competitor_serp_for_item,
     count_words,
+    append_casino_rating_requirement,
+    compose_prompt_with_base,
     create_generation_task,
     ensure_base_prompt_template,
     ensure_default_prompt_template,
@@ -1099,6 +1102,64 @@ def generate_task(task_id: str, _: AuthUser, db: Session = Depends(get_db)) -> A
             item.generation_error = f"{type(exc).__name__}: {exc}"[:500]
         db.commit()
         raise HTTPException(status_code=502, detail="Failed to queue content generation") from exc
+    db.refresh(task)
+    return task
+
+
+@router.post("/tasks/{task_id}/regenerate-all", response_model=GenerationTaskResponse)
+def regenerate_all_task_content(
+    task_id: str,
+    payload: GenerationTaskRegenerateAll,
+    _: AuthUser,
+    db: Session = Depends(get_db),
+) -> Any:
+    task = db.get(models.GenerationTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task.archived_at is not None:
+        raise HTTPException(status_code=400, detail="Archived task must be restored before generation")
+
+    locked_statuses = {"scheduled", "retry_scheduled", "publication_paused", "publishing", "published"}
+    mutable_items = [item for item in task.items if item.status not in locked_statuses]
+    if not mutable_items:
+        raise HTTPException(status_code=400, detail="Task has no content that can be regenerated")
+    if any(item.status in {"generation_queued", "generating"} for item in mutable_items):
+        raise HTTPException(status_code=409, detail="Task generation is already in progress")
+
+    prompt_template = compose_prompt_with_base(db, payload.prompt_template)
+    task.prompt_template_name = payload.prompt_template_name
+    task.prompt_template = append_casino_rating_requirement(prompt_template, payload.include_casino_rating)
+    task.include_toc = payload.include_toc
+    task.include_faq = payload.include_faq
+    task.collect_competitors = payload.collect_competitors
+    task.include_casino_rating = payload.include_casino_rating
+    task.status = "generating"
+
+    for item in mutable_items:
+        item.status = "generation_queued"
+        item.generation_progress = 1
+        item.generation_error = None
+        if payload.collect_competitors:
+            item.competitor_brief = None
+            item.competitor_brief_text = None
+            item.competitor_research_status = "queries_ready"
+            item.competitor_research_progress = 0
+            item.competitor_research_error = None
+
+    db.commit()
+    try:
+        if payload.collect_competitors:
+            run_task_pipeline_job.delay(task.id)
+        else:
+            generate_task_content_job.delay(task.id)
+    except Exception as exc:
+        task.status = "generation_failed"
+        for item in mutable_items:
+            item.status = "generation_failed"
+            item.generation_error = f"{type(exc).__name__}: {exc}"[:500]
+        db.commit()
+        raise HTTPException(status_code=502, detail="Failed to queue task regeneration") from exc
+
     db.refresh(task)
     return task
 

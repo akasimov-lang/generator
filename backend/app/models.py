@@ -129,6 +129,8 @@ class GenerationTask(Base, TimestampMixin):
     target_words: Mapped[int | None] = mapped_column(Integer, nullable=True)
     prompt_template_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
     prompt_template: Mapped[str | None] = mapped_column(Text, nullable=True)
+    include_toc: Mapped[bool] = mapped_column(Boolean, default=True)
+    include_faq: Mapped[bool] = mapped_column(Boolean, default=True)
     collect_competitors: Mapped[bool] = mapped_column(Boolean, default=False)
     include_casino_rating: Mapped[bool] = mapped_column(Boolean, default=False)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)

@@ -3811,6 +3811,56 @@ td {
   width: 100%;
 }
 
+.taskRegenerateAllPanel {
+  background: color-mix(in srgb, var(--primary-soft) 42%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--primary) 45%, var(--border));
+  border-radius: var(--radius);
+  display: grid;
+  gap: 11px;
+  padding: 12px;
+}
+
+.taskRegenerateAllHeading {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.taskRegenerateAllHeading > div {
+  display: grid;
+  gap: 3px;
+}
+
+.taskRegenerateAllHeading small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.taskRegeneratePromptField {
+  display: grid;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 6px;
+  max-width: 720px;
+}
+
+.taskRegenerateOptions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+}
+
+.taskRegenerateOptions .checkboxRow {
+  font-size: 12px;
+  margin: 0;
+}
+
+.taskRegenerateAllButton {
+  flex: 0 0 auto;
+}
+
 .modalOverlay {
   align-items: center;
   background: rgba(15, 20, 25, 0.52);

@@ -302,6 +302,15 @@ class GenerationTaskSectionUpdate(BaseModel):
     section_id: str | None = None
 
 
+class GenerationTaskRegenerateAll(BaseModel):
+    prompt_template_name: str | None = Field(default=None, max_length=160)
+    prompt_template: str | None = None
+    include_toc: bool = True
+    include_faq: bool = True
+    collect_competitors: bool = False
+    include_casino_rating: bool = False
+
+
 class GenerationTaskResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -320,6 +329,8 @@ class GenerationTaskResponse(BaseModel):
     target_words: int | None
     prompt_template_name: str | None
     prompt_template: str | None
+    include_toc: bool
+    include_faq: bool
     collect_competitors: bool
     include_casino_rating: bool
     archived_at: datetime | None = None

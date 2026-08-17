@@ -2033,6 +2033,8 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
         target_words=payload.target_words,
         prompt_template_name=payload.prompt_template_name,
         prompt_template=prompt_template,
+        include_toc=payload.include_toc,
+        include_faq=payload.include_faq,
         collect_competitors=payload.collect_competitors,
         include_casino_rating=payload.include_casino_rating,
         status="draft" if payload.save_as_draft else ("research_queries_ready" if payload.collect_competitors else "created"),
@@ -2103,8 +2105,8 @@ def generate_task_items(db: Session, task: models.GenerationTask) -> models.Gene
                         payload_mode=task.payload_mode,
                         prompt_template=task.prompt_template,
                         shortcode=None,
-                        include_toc=True,
-                        include_faq=True,
+                        include_toc=task.include_toc,
+                        include_faq=task.include_faq,
                         competitor_brief=item.competitor_brief,
                     )
                 )
@@ -2112,6 +2114,7 @@ def generate_task_items(db: Session, task: models.GenerationTask) -> models.Gene
                 item.word_count = count_words(item.generated_json)
             item.generation_progress = 90
             item.generation_prompt_name = task.prompt_template_name
+            item.include_casino_rating = task.include_casino_rating
             item.generated_at = datetime.now(timezone.utc)
             item.status = "generated"
             item.generation_progress = 100
@@ -2215,8 +2218,8 @@ def generate_content_item(db: Session, item: models.ContentItem) -> models.Conte
                     payload_mode=task.payload_mode,
                     prompt_template=task.prompt_template,
                     shortcode=None,
-                    include_toc=True,
-                    include_faq=True,
+                    include_toc=task.include_toc,
+                    include_faq=task.include_faq,
                     competitor_brief=item.competitor_brief,
                 )
             )
@@ -2224,6 +2227,7 @@ def generate_content_item(db: Session, item: models.ContentItem) -> models.Conte
             item.word_count = count_words(item.generated_json)
         item.generation_progress = 90
         item.generation_prompt_name = task.prompt_template_name
+        item.include_casino_rating = task.include_casino_rating
         item.generated_at = datetime.now(timezone.utc)
         item.status = "generated"
         item.generation_progress = 100

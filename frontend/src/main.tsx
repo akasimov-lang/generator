@@ -74,6 +74,8 @@ type Task = {
   topics_count: number;
   target_words: number | null;
   status: string;
+  include_toc: boolean;
+  include_faq: boolean;
   collect_competitors: boolean;
   include_casino_rating: boolean;
   archived_at: string | null;
@@ -318,6 +320,15 @@ type PublicationContentItem = {
 type TaskDetails = {
   task: Task;
   items: ContentItem[];
+};
+
+type TaskRegenerateAllOptions = {
+  prompt_template_name: string;
+  prompt_template: string;
+  include_toc: boolean;
+  include_faq: boolean;
+  collect_competitors: boolean;
+  include_casino_rating: boolean;
 };
 
 type User = {
@@ -4431,6 +4442,28 @@ function TasksView({
     }
   }
 
+  async function regenerateAllTaskContent(task: Task, options: TaskRegenerateAllOptions) {
+    const mutableCount = (expandedDetails?.items || []).filter((item) => !isPublicationLocked(item)).length;
+    if (!mutableCount) return;
+    const confirmed = window.confirm(
+      `Перегенерировать все доступные тексты задачи (${mutableCount}) по промпту «${options.prompt_template_name}»? Запланированные и опубликованные тексты останутся без изменений.`
+    );
+    if (!confirmed) return;
+    setTaskError("");
+    setTaskActionId(`${task.id}:regenerate-all`);
+    try {
+      await api(`/tasks/${task.id}/regenerate-all`, {
+        method: "POST",
+        body: JSON.stringify(options)
+      });
+      await refreshExpandedTask();
+    } catch (error) {
+      setTaskError(error instanceof Error ? error.message : "Не удалось запустить генерацию всех текстов задачи.");
+    } finally {
+      setTaskActionId("");
+    }
+  }
+
   async function bulkCollectTaskCompetitors(items: ContentItem[]) {
     if (!items.length) return;
     setTaskError("");
@@ -4628,6 +4661,7 @@ function TasksView({
         <AdminTasksAccordion
           tasks={tasks}
           sections={sections}
+          promptTemplates={promptTemplates}
           expandedTaskId={expandedTaskId}
           expandedDetails={expandedDetails}
           research={expandedResearch}
@@ -4647,6 +4681,7 @@ function TasksView({
           onBulkRegenerateQueries={bulkRegenerateCompetitorQueries}
           onBulkCollectCompetitors={bulkCollectTaskCompetitors}
           onBulkRegenerate={bulkRegenerateTaskContent}
+          onRegenerateAll={regenerateAllTaskContent}
           onBulkDelete={bulkDeleteTaskContent}
           onShowPrompt={(task) => setPromptModalTask(task)}
         />
@@ -4732,6 +4767,7 @@ function TaskArchiveView({ api, tasks, onChanged }: ViewProps & { tasks: Task[] 
 function AdminTasksAccordion({
   tasks,
   sections,
+  promptTemplates,
   expandedTaskId,
   expandedDetails,
   research,
@@ -4751,11 +4787,13 @@ function AdminTasksAccordion({
   onBulkRegenerateQueries,
   onBulkCollectCompetitors,
   onBulkRegenerate,
+  onRegenerateAll,
   onBulkDelete,
   onShowPrompt
 }: {
   tasks: Task[];
   sections: Section[];
+  promptTemplates: PromptTemplate[];
   expandedTaskId: string;
   expandedDetails: TaskDetails | null;
   research: CompetitorResearch[];
@@ -4775,6 +4813,7 @@ function AdminTasksAccordion({
   onBulkRegenerateQueries: (items: ContentItem[]) => Promise<void>;
   onBulkCollectCompetitors: (items: ContentItem[]) => Promise<void>;
   onBulkRegenerate: (items: ContentItem[]) => Promise<void>;
+  onRegenerateAll: (task: Task, options: TaskRegenerateAllOptions) => Promise<void>;
   onBulkDelete: (items: ContentItem[]) => Promise<void>;
   onShowPrompt: (task: Task) => void;
 }) {
@@ -4783,6 +4822,11 @@ function AdminTasksAccordion({
   const expandedItemIds = React.useMemo(() => expandedItems.map((item) => item.id), [expandedItems]);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [copyState, setCopyState] = React.useState("");
+  const [regeneratePromptId, setRegeneratePromptId] = React.useState("");
+  const [regenerateIncludeToc, setRegenerateIncludeToc] = React.useState(true);
+  const [regenerateIncludeFaq, setRegenerateIncludeFaq] = React.useState(true);
+  const [regenerateCollectCompetitors, setRegenerateCollectCompetitors] = React.useState(false);
+  const [regenerateIncludeCasinoRating, setRegenerateIncludeCasinoRating] = React.useState(false);
   const selectedItems = expandedItems.filter((item) => selectedIds.includes(item.id));
   const allSelected = expandedItemIds.length > 0 && expandedItemIds.every((id) => selectedIds.includes(id));
   const bulkApproveItems = selectedItems.filter(canApproveContent);
@@ -4806,6 +4850,16 @@ function AdminTasksAccordion({
     setSelectedIds([]);
     setCopyState("");
   }, [expandedTaskId]);
+
+  React.useEffect(() => {
+    if (!expandedTask) return;
+    const matchingPrompt = promptTemplates.find((prompt) => prompt.name === expandedTask.prompt_template_name);
+    setRegeneratePromptId(matchingPrompt?.id || latestPromptTemplate(promptTemplates)?.id || "");
+    setRegenerateIncludeToc(expandedTask.include_toc ?? true);
+    setRegenerateIncludeFaq(expandedTask.include_faq ?? true);
+    setRegenerateCollectCompetitors(expandedTask.collect_competitors ?? false);
+    setRegenerateIncludeCasinoRating(expandedTask.include_casino_rating ?? false);
+  }, [expandedTask?.id, promptTemplates]);
 
   React.useEffect(() => {
     setSelectedIds((current) => {
@@ -4832,6 +4886,20 @@ function AdminTasksAccordion({
   async function handleBulkRegenerate() {
     await onBulkRegenerate(bulkRegenerateItems);
     setSelectedIds([]);
+  }
+
+  async function handleRegenerateAll() {
+    if (!expandedTask) return;
+    const selectedPrompt = promptTemplates.find((prompt) => prompt.id === regeneratePromptId);
+    if (!selectedPrompt) return;
+    await onRegenerateAll(expandedTask, {
+      prompt_template_name: selectedPrompt.name,
+      prompt_template: selectedPrompt.content,
+      include_toc: regenerateIncludeToc,
+      include_faq: regenerateIncludeFaq,
+      collect_competitors: regenerateCollectCompetitors,
+      include_casino_rating: regenerateIncludeCasinoRating
+    });
   }
 
   async function handleBulkCollectCompetitors() {
@@ -4991,6 +5059,50 @@ function AdminTasksAccordion({
                               <Eye size={15} /> Посмотреть промпт
                             </button>
                           </div>
+                          <div className="taskRegenerateAllPanel">
+                            <div className="taskRegenerateAllHeading">
+                              <div>
+                                <strong>Перегенерация всей задачи</strong>
+                                <small>Новый промпт и параметры применятся ко всем доступным текстам. Материалы в публикации не изменяются.</small>
+                              </div>
+                              <button
+                                className="button compact primary taskRegenerateAllButton"
+                                type="button"
+                                onClick={handleRegenerateAll}
+                                disabled={!regeneratePromptId || actionId === `${expandedTask.id}:regenerate-all` || !bulkRegenerateItems.length && !expandedItems.some((item) => !isPublicationLocked(item))}
+                              >
+                                <Play size={15} /> {actionId === `${expandedTask.id}:regenerate-all` ? "Запускаю" : "Сгенерировать все"}
+                              </button>
+                            </div>
+                            <label className="taskRegeneratePromptField">
+                              Промпт для всех текстов задачи
+                              <SearchableSelect
+                                value={regeneratePromptId}
+                                onChange={setRegeneratePromptId}
+                                options={promptTemplates.map((prompt) => ({ value: prompt.id, label: `${latestPromptTemplate(promptTemplates)?.id === prompt.id ? "Последняя версия · " : ""}${prompt.name}` }))}
+                                searchPlaceholder="Найти промпт"
+                                disabled={actionId === `${expandedTask.id}:regenerate-all`}
+                              />
+                            </label>
+                            <div className="taskRegenerateOptions">
+                              <label className="checkboxRow">
+                                <input type="checkbox" checked={regenerateIncludeToc} onChange={(event) => setRegenerateIncludeToc(event.target.checked)} />
+                                Добавить содержание
+                              </label>
+                              <label className="checkboxRow">
+                                <input type="checkbox" checked={regenerateIncludeFaq} onChange={(event) => setRegenerateIncludeFaq(event.target.checked)} />
+                                Создавать FAQ
+                              </label>
+                              <label className="checkboxRow">
+                                <input type="checkbox" checked={regenerateCollectCompetitors} onChange={(event) => setRegenerateCollectCompetitors(event.target.checked)} />
+                                Собрать конкурентов перед генерацией
+                              </label>
+                              <label className="checkboxRow">
+                                <input type="checkbox" checked={regenerateIncludeCasinoRating} onChange={(event) => setRegenerateIncludeCasinoRating(event.target.checked)} />
+                                Собрать рейтинг казино для текста
+                              </label>
+                            </div>
+                          </div>
                           <div className="bulkToolbar">
                             <button className="button compact" type="button" onClick={copyTopicNames} disabled={!expandedItems.length}>
                               <Copy size={15} /> Скопировать все названия тем
@@ -5002,7 +5114,7 @@ function AdminTasksAccordion({
                             </label>
                             <span className="fieldHint">Выбрано: {selectedIds.length}</span>
                             <button className="button compact approve" type="button" onClick={handleBulkApprove} disabled={!bulkApproveItems.length || actionId === "bulk:approve"}>
-                              <CheckCircle2 size={15} /> {actionId === "bulk:approve" ? "Согласовываю" : `Approve выбранные (${bulkApproveItems.length})`}
+                              <CheckCircle2 size={15} /> {actionId === "bulk:approve" ? "Согласовываю" : `Согласовать (${bulkApproveItems.length})`}
                             </button>
                             <button className="button compact" type="button" onClick={handleBulkCollectCompetitors} disabled={!bulkCollectItems.length || actionId === "bulk:collect-competitors"}>
                               <Globe2 size={15} /> {actionId === "bulk:collect-competitors" ? "Сбор конкурентов" : `Собрать конкурентов (${bulkCollectItems.length})`}

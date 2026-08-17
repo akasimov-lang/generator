@@ -5,9 +5,9 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app import models
-from app.api import archive_task, collect_content_competitors, generate_content, get_task, list_archived_tasks, list_tasks, restore_task, start_task_pipeline, update_task_section
+from app.api import archive_task, collect_content_competitors, generate_content, get_task, list_archived_tasks, list_tasks, regenerate_all_task_content, restore_task, start_task_pipeline, update_task_section
 from app.db import Base
-from app.schemas import GenerationTaskCreate, GenerationTaskSectionUpdate
+from app.schemas import GenerationTaskCreate, GenerationTaskRegenerateAll, GenerationTaskSectionUpdate
 from app.services import create_generation_task, run_task_pipeline
 
 
@@ -121,6 +121,43 @@ def test_task_pipeline_is_queued_for_all_mutable_items(monkeypatch: pytest.Monke
         assert queued_ids == [task.id]
         assert response.status == "generating"
         assert item.status == "generation_queued"
+
+
+def test_regenerate_all_updates_task_options_and_uses_one_queue_job(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+    queued_ids: list[str] = []
+    monkeypatch.setattr("app.api.generate_task_content_job.delay", queued_ids.append)
+
+    with TestingSession() as db:
+        task = models.GenerationTask(title="Regenerate", geo="DK", language="da", topics_count=2)
+        mutable_item = models.ContentItem(task=task, topic="Mutable", slug="/mutable/", generated_json={}, status="generated", idempotency_key="regenerate-mutable")
+        published_item = models.ContentItem(task=task, topic="Published", slug="/published/", generated_json={}, status="published", idempotency_key="regenerate-published")
+        db.add_all([task, mutable_item, published_item])
+        db.commit()
+
+        result = regenerate_all_task_content(
+            task.id,
+            GenerationTaskRegenerateAll(
+                prompt_template_name="Prompt v7",
+                prompt_template="Write a useful page.",
+                include_toc=False,
+                include_faq=False,
+                collect_competitors=False,
+                include_casino_rating=True,
+            ),
+            {"id": "admin-id", "username": "admin", "is_admin": True},
+            db,
+        )
+
+        assert queued_ids == [task.id]
+        assert result.prompt_template_name == "Prompt v7"
+        assert result.include_toc is False
+        assert result.include_faq is False
+        assert result.include_casino_rating is True
+        assert mutable_item.status == "generation_queued"
+        assert published_item.status == "published"
 
 
 def test_generation_task_can_be_saved_as_draft() -> None:
