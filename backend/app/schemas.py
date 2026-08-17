@@ -486,6 +486,11 @@ class PublicationCampaignUpdate(BaseModel):
     action: Literal["pause", "resume", "stop"]
 
 
+class PublicationCampaignReschedule(BaseModel):
+    items_per_day: Literal[1, 2, 3]
+    timezone_offset_minutes: int = Field(default=0, ge=-840, le=840)
+
+
 class PublicationCampaignResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -2307,11 +2307,11 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
           </label>
           <label className="checkboxRow wide">
             <input checked={collectCompetitors} onChange={(event) => setCollectCompetitors(event.target.checked)} type="checkbox" />
-            Собрать конкурентов перед генерацией
+            Собрать конкурентов
           </label>
           <label className="checkboxRow wide casinoRatingOption">
             <input checked={includeCasinoRating} onChange={(event) => setIncludeCasinoRating(event.target.checked)} type="checkbox" />
-            <span><b>Собрать рейтинг казино для текста</b><small>Добавит в промпт тематический рейтинг из 5–10 казино с оценками и обоснованием мест.</small></span>
+            <span><b>Собрать рейтинг казино</b><small>Добавит в промпт тематический рейтинг из 5–10 казино с оценками и обоснованием мест.</small></span>
           </label>
           <label className="wide">
             Темы, каждая с новой строки
@@ -3273,6 +3273,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
   const [formError, setFormError] = React.useState("");
   const [publishingNowId, setPublishingNowId] = React.useState("");
   const [publishingAllCampaignId, setPublishingAllCampaignId] = React.useState("");
+  const [reschedulingCampaignId, setReschedulingCampaignId] = React.useState("");
   const [previewItem, setPreviewItem] = React.useState<ContentItem | null>(null);
   const approved = content.filter((item) => item.status === "approved" && (!selectedPublicationSectionIds.length || (item.section_id && selectedPublicationSectionIds.includes(item.section_id))));
   const publicationSections = sections
@@ -3355,6 +3356,23 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Не удалось запустить пакетную публикацию.");
       setPublishingAllCampaignId("");
+    }
+  }
+
+  async function rescheduleCampaign(campaign: PublicationCampaign, nextItemsPerDay: number) {
+    if (!window.confirm(`Изменить режим кампании «${campaign.name}» и заново рассчитать оставшуюся очередь?`)) return;
+    setReschedulingCampaignId(campaign.id);
+    setFormError("");
+    try {
+      await api(`/publication-campaigns/${campaign.id}/reschedule`, {
+        method: "POST",
+        body: JSON.stringify({ items_per_day: nextItemsPerDay, timezone_offset_minutes: new Date().getTimezoneOffset() })
+      });
+      await onChanged();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось пересчитать очередь публикации.");
+    } finally {
+      setReschedulingCampaignId("");
     }
   }
 
@@ -3443,9 +3461,11 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
               defaultExpanded={index === 0}
               publishingNowId={publishingNowId}
               publishingAllCampaignId={publishingAllCampaignId}
+              reschedulingCampaignId={reschedulingCampaignId}
               onPreview={setPreviewItem}
               onPublishImmediately={publishImmediately}
               onPublishAll={publishAll}
+              onRescheduleCampaign={rescheduleCampaign}
               onChangeCampaign={changeCampaign}
             />
           ))}
@@ -3514,9 +3534,11 @@ function ProjectCampaignTreeItem({
   defaultExpanded,
   publishingNowId,
   publishingAllCampaignId,
+  reschedulingCampaignId,
   onPreview,
   onPublishImmediately,
   onPublishAll,
+  onRescheduleCampaign,
   onChangeCampaign
 }: {
   campaign: PublicationCampaign;
@@ -3525,12 +3547,17 @@ function ProjectCampaignTreeItem({
   defaultExpanded: boolean;
   publishingNowId: string;
   publishingAllCampaignId: string;
+  reschedulingCampaignId: string;
   onPreview: (item: ContentItem) => void;
   onPublishImmediately: (item: ContentItem) => Promise<void>;
   onPublishAll: (campaign: PublicationCampaign) => Promise<void>;
+  onRescheduleCampaign: (campaign: PublicationCampaign, itemsPerDay: number) => Promise<void>;
   onChangeCampaign: (campaign: PublicationCampaign, action: "pause" | "resume" | "stop") => Promise<void>;
 }) {
   const [expanded, setExpanded] = usePersistentWorkspacePanelState(`campaign:${campaign.id}`, defaultExpanded);
+  const currentItemsPerDay = campaign.interval_minutes === 420 ? 3 : campaign.interval_minutes === 720 ? 2 : 1;
+  const [itemsPerDayDraft, setItemsPerDayDraft] = React.useState(currentItemsPerDay);
+  React.useEffect(() => setItemsPerDayDraft(currentItemsPerDay), [currentItemsPerDay]);
   const orderedItems = React.useMemo(() => [...items].sort((left, right) => {
     const leftDate = new Date(left.scheduled_at || left.published_at || left.created_at).getTime();
     const rightDate = new Date(right.scheduled_at || right.published_at || right.created_at).getTime();
@@ -3541,6 +3568,8 @@ function ProjectCampaignTreeItem({
   const failedCount = items.filter((item) => item.status === "publication_failed").length;
   const campaignTone = campaign.status === "completed_with_errors" ? "error" : campaign.status === "completed" ? "success" : "working";
   const isPublishingAll = campaign.status === "publishing_all" || publishingAllCampaignId === campaign.id;
+  const isRescheduling = reschedulingCampaignId === campaign.id;
+  const publicationModeChanged = itemsPerDayDraft !== currentItemsPerDay;
   const unpublishedCount = items.length - publishedCount;
 
   return (
@@ -3561,6 +3590,18 @@ function ProjectCampaignTreeItem({
           </span>
         </button>
         <div className="projectCampaignActions">
+          {["active", "paused"].includes(campaign.status) ? (
+            <span className="projectCampaignModeControls">
+              <select value={itemsPerDayDraft} onChange={(event) => setItemsPerDayDraft(Number(event.target.value))} disabled={isRescheduling || isPublishingAll} aria-label="Режим публикации кампании" title="Режим публикации">
+                <option value={1}>1 текст в сутки · 24 ч</option>
+                <option value={2}>2 текста в сутки · 12 ч</option>
+                <option value={3}>3 текста в сутки · 7 ч</option>
+              </select>
+              <button className="button compact applyCampaignModeButton" type="button" onClick={() => void onRescheduleCampaign(campaign, itemsPerDayDraft)} disabled={!publicationModeChanged || isRescheduling || isPublishingAll}>
+                {isRescheduling ? "Пересчёт…" : "Применить"}
+              </button>
+            </span>
+          ) : null}
           {unpublishedCount > 0 ? (
             <button className="button compact primary publishAllCampaignButton" type="button" onClick={() => void onPublishAll(campaign)} disabled={isPublishingAll} title="Сформировать единый JSON и отправить все тексты кампании">
               <Send size={15} /> {isPublishingAll ? "Публикуем…" : "Опубликовать все"}
@@ -4669,11 +4710,11 @@ function TasksView({
           </label>
           <label className="checkboxRow wide">
             <input type="checkbox" checked={collectCompetitors} onChange={(event) => setCollectCompetitors(event.target.checked)} />
-            Собрать конкурентов перед генерацией
+            Собрать конкурентов
           </label>
           <label className="checkboxRow wide casinoRatingOption">
             <input type="checkbox" checked={includeCasinoRating} onChange={(event) => setIncludeCasinoRating(event.target.checked)} />
-            <span><b>Собрать рейтинг казино для текста</b><small>Добавит в промпт тематический рейтинг из 5–10 казино с оценками и обоснованием мест.</small></span>
+            <span><b>Собрать рейтинг казино</b><small>Добавит в промпт тематический рейтинг из 5–10 казино с оценками и обоснованием мест.</small></span>
           </label>
           <label className="wide">
             Темы, каждая с новой строки
@@ -5023,7 +5064,12 @@ function AdminTasksAccordion({
                       {sections.map((section) => <option value={section.id} key={section.id}>{section.name} · {section.path}</option>)}
                     </select>
                   </td>
-                  <td data-label="Промпт"><PromptBadge name={task.prompt_template_name} /></td>
+                  <td data-label="Промпт" onClick={(event) => event.stopPropagation()}>
+                    <span className="taskPromptSummary">
+                      <PromptBadge name={task.prompt_template_name} />
+                      <button className="taskPromptPreviewButton" type="button" onClick={() => onShowPrompt(task)} title="Посмотреть промпт" aria-label={`Посмотреть промпт задачи ${task.title}`}><Eye size={14} /></button>
+                    </span>
+                  </td>
                   <td data-label="Тем">{task.topics_count}</td>
                   <td data-label="Статус"><StatusBadge status={task.status} /></td>
                   <td data-label="Действия">
@@ -5062,7 +5108,7 @@ function AdminTasksAccordion({
                       ) : expandedTask ? (
                         <div className="taskAccordionBody">
                           <div className="taskAccordionControls">
-                            <strong>Темы задачи</strong>
+                            <strong>Управление темами</strong>
                             <button
                               className="button compact taskAccordionCollapseButton"
                               type="button"
@@ -5074,11 +5120,8 @@ function AdminTasksAccordion({
                               <ChevronUp size={16} /> Свернуть задачу
                             </button>
                           </div>
-                          <div className="accordionSummary">
-                            <InfoMetric label="Название темы/задачи" value={expandedTask.title} />
+                          <div className="accordionSummary taskAccordionSummaryCompact">
                             <TaskQueriesMetric total={totalQueries} groups={taskQueryGroups} busy={actionId === "bulk:regenerate-queries"} onGenerate={handleGenerateQueries} />
-                            <InfoMetric label="Дата загрузки темы" value={formatDate(expandedTask.created_at)} />
-                            <InfoMetric label="Дата генерации" value={latestGeneration ? formatDate(latestGeneration) : "-"} />
                             <div className="infoMetric competitorRequestMetric">
                               <span>Конкуренты для генерации</span>
                               <strong>{competitorBriefs ? `${competitorBriefs}/${expandedItems.length} brief` : "Не запрашивались"}</strong>
@@ -5086,18 +5129,27 @@ function AdminTasksAccordion({
                                 <Globe2 size={15} /> {actionId === "bulk:collect-competitors" ? "Запрашиваю конкурентов" : competitorRequestItems.length ? `Запросить конкурентов (${competitorRequestItems.length})` : "Конкуренты собраны"}
                               </button>
                             </div>
+                            <InfoMetric label="Последняя генерация" value={latestGeneration ? formatDate(latestGeneration) : "Не запускалась"} />
                             <InfoMetric label="Загрузил" value={expandedTask.created_by_username || "-"} />
-                            <InfoMetric label="Промпт" value={expandedTask.prompt_template_name || "Не указан"} />
-                            <button className="button compact" type="button" onClick={() => onShowPrompt(expandedTask)}>
-                              <Eye size={15} /> Посмотреть промпт
-                            </button>
                           </div>
                           <div className="taskRegenerateAllPanel">
                             <div className="taskRegenerateAllHeading">
                               <div>
-                                <strong>Перегенерация всей задачи</strong>
-                                <small>Новый промпт и параметры применятся ко всем доступным текстам. Материалы в публикации не изменяются.</small>
+                                <strong>Перегенерировать задачу</strong>
+                                <small>Настройки применятся к доступным текстам. Материалы в публикации не изменятся.</small>
                               </div>
+                            </div>
+                            <div className="taskRegeneratePrimaryRow">
+                              <label className="taskRegeneratePromptField">
+                                Промпт
+                                <SearchableSelect
+                                  value={regeneratePromptId}
+                                  onChange={setRegeneratePromptId}
+                                  options={promptTemplates.map((prompt) => ({ value: prompt.id, label: `${latestPromptTemplate(promptTemplates)?.id === prompt.id ? "Последняя версия · " : ""}${prompt.name}` }))}
+                                  searchPlaceholder="Найти промпт"
+                                  disabled={actionId === `${expandedTask.id}:regenerate-all`}
+                                />
+                              </label>
                               <button
                                 className="button compact primary taskRegenerateAllButton"
                                 type="button"
@@ -5107,16 +5159,6 @@ function AdminTasksAccordion({
                                 <Play size={15} /> {actionId === `${expandedTask.id}:regenerate-all` ? "Запускаю" : "Сгенерировать все"}
                               </button>
                             </div>
-                            <label className="taskRegeneratePromptField">
-                              Промпт для всех текстов задачи
-                              <SearchableSelect
-                                value={regeneratePromptId}
-                                onChange={setRegeneratePromptId}
-                                options={promptTemplates.map((prompt) => ({ value: prompt.id, label: `${latestPromptTemplate(promptTemplates)?.id === prompt.id ? "Последняя версия · " : ""}${prompt.name}` }))}
-                                searchPlaceholder="Найти промпт"
-                                disabled={actionId === `${expandedTask.id}:regenerate-all`}
-                              />
-                            </label>
                             <div className="taskRegenerateOptions">
                               <label className="checkboxRow">
                                 <input type="checkbox" checked={regenerateIncludeToc} onChange={(event) => setRegenerateIncludeToc(event.target.checked)} />
@@ -5128,17 +5170,17 @@ function AdminTasksAccordion({
                               </label>
                               <label className="checkboxRow">
                                 <input type="checkbox" checked={regenerateCollectCompetitors} onChange={(event) => setRegenerateCollectCompetitors(event.target.checked)} />
-                                Собрать конкурентов перед генерацией
+                                Собрать конкурентов
                               </label>
                               <label className="checkboxRow">
                                 <input type="checkbox" checked={regenerateIncludeCasinoRating} onChange={(event) => setRegenerateIncludeCasinoRating(event.target.checked)} />
-                                Собрать рейтинг казино для текста
+                                Собрать рейтинг казино
                               </label>
                             </div>
                           </div>
                           <div className="bulkToolbar">
                             <button className="button compact" type="button" onClick={copyTopicNames} disabled={!expandedItems.length}>
-                              <Copy size={15} /> Скопировать все названия тем
+                              <Copy size={15} /> Копировать темы
                             </button>
                             {copyState ? <span className="fieldHint">{copyState}</span> : null}
                             <label className="checkboxRow bulkSelectAll">
@@ -5153,7 +5195,7 @@ function AdminTasksAccordion({
                               <Globe2 size={15} /> {actionId === "bulk:collect-competitors" ? "Сбор конкурентов" : `Собрать конкурентов (${bulkCollectItems.length})`}
                             </button>
                             <button className="button compact" type="button" onClick={handleBulkRegenerate} disabled={!bulkRegenerateItems.length || actionId === "bulk:generate"}>
-                              <Play size={15} /> {actionId === "bulk:generate" ? "Генерация" : `Сгенерировать выбранные (${bulkRegenerateItems.length})`}
+                              <Play size={15} /> {actionId === "bulk:generate" ? "Генерация" : `Перегенерировать (${bulkRegenerateItems.length})`}
                             </button>
                             <button className="button compact danger" type="button" onClick={handleBulkDelete} disabled={!bulkDeleteItems.length || actionId === "bulk:delete"}>
                               <Trash2 size={15} /> {actionId === "bulk:delete" ? "Удаляю" : `Удалить выбранные (${bulkDeleteItems.length})`}

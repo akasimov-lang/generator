@@ -14,6 +14,7 @@ from app.services import (
     build_campaign_publication_bundle,
     publish_item,
     refresh_campaign_status,
+    reschedule_campaign,
     schedule_campaign,
     update_campaign_status,
     validate_content_for_publication,
@@ -157,6 +158,51 @@ def test_campaign_preserves_topic_order_and_alternates_menu_sections(db: Session
         .order_by(models.ContentItem.scheduled_at.asc())
     ).all()
     assert [item.topic for item in queued] == ["Casino 1", "Bonus 1", "Casino 2", "Bonus 2"]
+
+
+def test_campaign_mode_change_replaces_remaining_queue_and_counts_today_publications(db: Session) -> None:
+    site = models.Site(name="Reschedule site", base_url="https://reschedule.test", publication_endpoint="https://reschedule.test/api/pages", payload_mode="simple_page")
+    db.add(site)
+    db.flush()
+    task = models.GenerationTask(title="Reschedule topics", site_id=site.id, geo="DK", language="da", topics_count=5)
+    section = models.Section(site=site, external_id="guides", name="Guides", path="/guides/")
+    db.add_all([task, section])
+    db.flush()
+    items = [
+        models.ContentItem(task=task, site_id=site.id, section_id=section.id, topic=f"Topic {index}", slug=f"/topic-{index}/", generated_json=valid_payload(), status="approved", idempotency_key=f"reschedule-{index}")
+        for index in range(1, 6)
+    ]
+    db.add_all(items)
+    db.commit()
+    campaign = schedule_campaign(
+        db,
+        PublicationCampaignCreate(
+            name="Change publication mode",
+            site_id=site.id,
+            content_item_ids=[item.id for item in items],
+            start_at=datetime(2026, 8, 16, 8, 0, tzinfo=timezone.utc),
+            interval_minutes=1440,
+            items_per_run=1,
+        ),
+    )
+    items[0].status = "published"
+    items[0].published_at = datetime(2026, 8, 16, 8, 0, tzinfo=timezone.utc)
+    items[1].status = "published"
+    items[1].published_at = datetime(2026, 8, 17, 8, 0, tzinfo=timezone.utc)
+    old_schedule = [item.scheduled_at for item in items[2:]]
+    db.commit()
+
+    reschedule_campaign(db, campaign, 3, now=datetime(2026, 8, 17, 10, 0, tzinfo=timezone.utc))
+
+    assert campaign.interval_minutes == 420
+    assert items[0].published_at == datetime(2026, 8, 16, 8, 0)
+    assert items[1].published_at == datetime(2026, 8, 17, 8, 0)
+    assert [item.scheduled_at for item in items[2:]] != old_schedule
+    assert [item.scheduled_at for item in items[2:]] == [
+        datetime(2026, 8, 17, 15, 0),
+        datetime(2026, 8, 17, 22, 0),
+        datetime(2026, 8, 18, 5, 0),
+    ]
 
 
 def test_approve_and_schedule_item_creates_immediate_campaign(db: Session) -> None:

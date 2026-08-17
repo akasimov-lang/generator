@@ -29,6 +29,7 @@ from app.schemas import (
     MenuLibraryItemUpdate,
     PasswordChange,
     PublicationCampaignResponse,
+    PublicationCampaignReschedule,
     PublicationCampaignUpdate,
     PublicationContentResponse,
     PublicationLogResponse,
@@ -79,6 +80,7 @@ from app.services import (
     regenerate_competitor_queries,
     replace_competitor_queries,
     schedule_campaign,
+    reschedule_campaign,
     update_campaign_status,
     validate_content_for_publication,
     validate_ai_provider_key,
@@ -1537,6 +1539,21 @@ def update_campaign(campaign_id: str, payload: PublicationCampaignUpdate, _: Aut
         raise HTTPException(status_code=404, detail="Publication campaign not found")
     try:
         return update_campaign_status(db, campaign, payload.action)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/publication-campaigns/{campaign_id}/reschedule", response_model=PublicationCampaignResponse)
+def reschedule_publication_campaign(campaign_id: str, payload: PublicationCampaignReschedule, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    campaign = db.scalar(
+        select(models.PublicationCampaign)
+        .where(models.PublicationCampaign.id == campaign_id)
+        .with_for_update()
+    )
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Publication campaign not found")
+    try:
+        return reschedule_campaign(db, campaign, payload.items_per_day, timezone_offset_minutes=payload.timezone_offset_minutes)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

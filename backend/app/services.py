@@ -2309,6 +2309,83 @@ def schedule_campaign(db: Session, payload: PublicationCampaignCreate) -> models
     return campaign
 
 
+def reschedule_campaign(
+    db: Session,
+    campaign: models.PublicationCampaign,
+    items_per_day: int,
+    *,
+    now: datetime | None = None,
+    timezone_offset_minutes: int = 0,
+) -> models.PublicationCampaign:
+    interval_by_daily_limit = {1: 1440, 2: 720, 3: 420}
+    if items_per_day not in interval_by_daily_limit:
+        raise ValueError("Доступны режимы: 1, 2 или 3 текста в сутки")
+    if campaign.status not in {"active", "paused"}:
+        raise ValueError("Режим можно изменить только у активной или приостановленной кампании")
+
+    items = db.scalars(
+        select(models.ContentItem)
+        .where(models.ContentItem.publication_campaign_id == campaign.id)
+        .order_by(models.ContentItem.scheduled_at.asc().nullslast(), models.ContentItem.created_at.asc(), models.ContentItem.id.asc())
+        .with_for_update()
+    ).all()
+    if any(item.status == "publishing" for item in items):
+        raise ValueError("Дождитесь завершения текущей публикации и повторите изменение режима")
+
+    queued_statuses = {"scheduled", "retry_scheduled", "publication_paused"}
+    queued_items = [item for item in items if item.status in queued_statuses]
+    interval_minutes = interval_by_daily_limit[items_per_day]
+    current_time = now or datetime.now(timezone.utc)
+    if current_time.tzinfo is None:
+        current_time = current_time.replace(tzinfo=timezone.utc)
+    else:
+        current_time = current_time.astimezone(timezone.utc)
+
+    def local_date(value: datetime):
+        return (value - timedelta(minutes=timezone_offset_minutes)).date()
+
+    published_by_day: Counter = Counter()
+    published_today: list[datetime] = []
+    current_local_date = local_date(current_time)
+    for item in items:
+        if not item.published_at:
+            continue
+        published_at = item.published_at
+        if published_at.tzinfo is None:
+            published_at = published_at.replace(tzinfo=timezone.utc)
+        else:
+            published_at = published_at.astimezone(timezone.utc)
+        published_by_day[local_date(published_at)] += 1
+        if local_date(published_at) == current_local_date:
+            published_today.append(published_at)
+
+    cursor = current_time
+    if campaign.start_at:
+        campaign_start = campaign.start_at
+        if campaign_start.tzinfo is None:
+            campaign_start = campaign_start.replace(tzinfo=timezone.utc)
+        else:
+            campaign_start = campaign_start.astimezone(timezone.utc)
+        cursor = max(cursor, campaign_start)
+    if published_today:
+        cursor = max(cursor, max(published_today) + timedelta(minutes=interval_minutes))
+
+    for item in queued_items:
+        while published_by_day[local_date(cursor)] >= items_per_day:
+            next_local_day = local_date(cursor) + timedelta(days=1)
+            cursor = datetime(next_local_day.year, next_local_day.month, next_local_day.day, tzinfo=timezone.utc) + timedelta(minutes=timezone_offset_minutes)
+        item.scheduled_at = cursor
+        item.status = "publication_paused" if campaign.status == "paused" else "scheduled"
+        published_by_day[local_date(cursor)] += 1
+        cursor += timedelta(minutes=interval_minutes)
+
+    campaign.interval_minutes = interval_minutes
+    campaign.items_per_run = 1
+    db.commit()
+    db.refresh(campaign)
+    return campaign
+
+
 def approve_and_schedule_item(db: Session, item: models.ContentItem) -> models.PublicationCampaign:
     if item.status not in {"generated", "rejected", "approved"}:
         raise ValueError(f"Content in status '{item.status}' cannot be sent to publication")
