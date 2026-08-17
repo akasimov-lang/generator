@@ -4167,7 +4167,7 @@ function TasksView({
   const [includeFaq, setIncludeFaq] = React.useState(taskCheckboxPreferences.includeFaq ?? true);
   const [collectCompetitors, setCollectCompetitors] = React.useState(taskCheckboxPreferences.collectCompetitors ?? false);
   const [includeCasinoRating, setIncludeCasinoRating] = React.useState(taskCheckboxPreferences.includeCasinoRating ?? false);
-  const [createFormExpanded, setCreateFormExpanded] = usePersistentWorkspacePanelState("create-generation-task", false);
+  const [createFormExpanded, setCreateFormExpanded] = React.useState(false);
   const [creatingTaskAction, setCreatingTaskAction] = React.useState<"draft" | "start" | "">("");
   const [expandedTaskId, setExpandedTaskId] = React.useState("");
   const [expandedDetails, setExpandedDetails] = React.useState<TaskDetails | null>(null);
@@ -4179,7 +4179,6 @@ function TasksView({
   const [queryDraft, setQueryDraft] = React.useState("");
   const [promptModalTask, setPromptModalTask] = React.useState<Task | null>(null);
   const [previewItem, setPreviewItem] = React.useState<ContentItem | null>(null);
-  const createPanelRef = React.useRef<HTMLElement>(null);
   const hasResearchInProgress = expandedResearch.some((entry) => ACTIVE_RESEARCH_STATUSES.includes(entry.status));
   const hasGenerationInProgress = (expandedDetails?.items || []).some((item) => ACTIVE_GENERATION_STATUSES.includes(item.status));
   const cleanTopics = topics.split("\n").map((line) => line.trim()).filter(Boolean);
@@ -4602,34 +4601,29 @@ function TasksView({
   }
 
   function toggleCreateForm() {
-    if (createFormExpanded) {
-      setCreateFormExpanded(false);
-      return;
-    }
-    setCreateFormExpanded(true);
-    window.requestAnimationFrame(() => {
-      createPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
+    setCreateFormExpanded((current) => !current);
   }
 
   return (
     <section className="viewStack">
-      <section ref={createPanelRef} className={`dataPanel createTaskPanel ${createFormExpanded ? "expanded" : ""}`}>
+      <div className="taskCreateToolbar">
         <button
-          className="createTaskToggle"
+          className="newGenerationTaskButton"
           type="button"
-          aria-expanded={createFormExpanded}
-          aria-controls="create-generation-task-form"
           onClick={toggleCreateForm}
         >
-          <span className="createTaskToggleIcon"><Plus size={20} /></span>
-          <span className="createTaskToggleText">
-            <strong>Создать задачу генерации</strong>
-            <small>{createFormExpanded ? "Нажмите, чтобы свернуть рабочую область" : "Нажмите, чтобы развернуть рабочую область и создать задачу генерации контента по темам"}</small>
-          </span>
-          {createFormExpanded ? <ChevronDown size={22} /> : <ChevronRight size={22} />}
+          <Plus size={19} strokeWidth={2.6} /> Новая задача
         </button>
-        {createFormExpanded ? <form id="create-generation-task-form" className="formGrid createTaskForm" onSubmit={createTask}>
+      </div>
+      {createFormExpanded ? (
+        <Modal
+          title="Создать задачу генерации"
+          subtitle="Настройте параметры и добавьте темы для новой задачи"
+          onClose={() => setCreateFormExpanded(false)}
+          wide
+          className="createGenerationTaskModal"
+        >
+        <form id="create-generation-task-form" className="formGrid createTaskForm" onSubmit={createTask}>
           <label>
             {fixedSite ? "Проект" : "Выберите проект"}
             <SearchableSelect
@@ -4724,6 +4718,7 @@ function TasksView({
             <textarea value={topics} onChange={(event) => setTopics(event.target.value)} required rows={8} placeholder="best online casinos in Germany" />
             <span className="fieldHint">Тем в задаче: {cleanTopics.length}</span>
           </label>
+          {taskError ? <span className="formError wide">{taskError}</span> : null}
           <div className="formActions wide">
             <button className="button secondary" type="submit" name="taskAction" value="draft" disabled={Boolean(creatingTaskAction)}>
               <FileText size={18} /> {creatingTaskAction === "draft" ? "Сохраняем" : "Сохранить как черновик"}
@@ -4732,8 +4727,9 @@ function TasksView({
               <Play size={18} /> {creatingTaskAction === "start" ? "Запускаем" : "Запустить"}
             </button>
           </div>
-        </form> : null}
-      </section>
+        </form>
+        </Modal>
+      ) : null}
       <DataPanel title="Все задачи" allowCollapse={false}>
         <AdminTasksAccordion
           tasks={tasks}
