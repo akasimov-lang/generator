@@ -1580,7 +1580,7 @@ h2 {
   display: inline-flex;
   align-items: center;
   min-height: 36px;
-  padding: 0 12px;
+  padding: 0 7px 0 5px;
   font-weight: 700;
   text-decoration: none;
 }
@@ -1590,7 +1590,7 @@ h2 {
   display: inline-flex;
   flex: 0 0 auto;
   justify-content: center;
-  margin-right: 7px;
+  margin-right: 2px;
 }
 
 .tabButtonIcon.ai,
@@ -1604,10 +1604,6 @@ h2 {
   opacity: 0.48;
   transition: background 160ms ease, box-shadow 160ms ease, opacity 160ms ease, transform 160ms ease;
   width: 25px;
-}
-
-.tabButtonIcon.ai {
-  margin-right: 2px;
 }
 
 .tabButton.active .tabButtonIcon.ai,
