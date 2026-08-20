@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import create_engine, func, select
@@ -7,6 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app import models
+from app import project_cache as project_cache_module
 from app import services as service_module
 from app.db import Base
 from app.schemas import PublicationCampaignCreate
@@ -291,6 +293,14 @@ def test_project_page_payload_matches_receiver_dto(db: Session) -> None:
 
 def test_project_server_requests_refresh_token_and_store_status_codes(db: Session, monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict] = []
+    fake_settings = SimpleNamespace(
+        project_cache_url="https://auth.example",
+        project_cache_username="anton",
+        project_cache_password="test-password",
+        alfan_url="slf-hostesting.com",
+    )
+    monkeypatch.setattr(project_cache_module, "get_settings", lambda: fake_settings)
+    monkeypatch.setattr(service_module, "get_settings", lambda: fake_settings)
 
     class FakeResponse:
         def __init__(self, status_code: int, body: dict):

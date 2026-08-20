@@ -1,0 +1,40 @@
+#!/bin/sh
+set -eu
+
+REPOSITORY=/home/akasimov/generator.git
+WORK_TREE=/home/akasimov/generator
+DEPLOY_BRANCH=refs/heads/main
+SHOULD_DEPLOY=0
+
+while read -r old_revision new_revision reference_name; do
+  if [ "$reference_name" = "$DEPLOY_BRANCH" ]; then
+    SHOULD_DEPLOY=1
+  fi
+done
+
+if [ "$SHOULD_DEPLOY" -ne 1 ]; then
+  exit 0
+fi
+
+echo "Deploying main to $WORK_TREE"
+git --work-tree="$WORK_TREE" --git-dir="$REPOSITORY" checkout -f main
+
+cd "$WORK_TREE"
+docker compose -f docker-compose.yml -f docker-compose.production.yml build
+docker compose -f docker-compose.yml -f docker-compose.production.yml up -d postgres redis
+docker compose -f docker-compose.yml -f docker-compose.production.yml run --rm backend alembic upgrade head
+docker compose -f docker-compose.yml -f docker-compose.production.yml up -d --remove-orphans
+
+attempt=1
+while [ "$attempt" -le 15 ]; do
+  if docker compose -f docker-compose.yml -f docker-compose.production.yml exec -T backend \
+    curl -fsS http://127.0.0.1:8000/api/health >/dev/null; then
+    echo "Production health check passed"
+    exit 0
+  fi
+  attempt=$((attempt + 1))
+  sleep 2
+done
+
+echo "Production health check failed" >&2
+exit 1
