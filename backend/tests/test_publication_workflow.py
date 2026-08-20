@@ -17,6 +17,7 @@ from app.services import (
     approve_and_schedule_item,
     build_project_menu_payload,
     build_project_page_payload,
+    build_nested_page_slug,
     build_campaign_publication_bundle,
     publish_item,
     refresh_campaign_status,
@@ -316,6 +317,24 @@ def test_project_page_payload_matches_receiver_dto(db: Session) -> None:
     assert payload["page"]["content"]["time"] == "2026-08-20T09:17:04.551Z"
     assert payload["token"] == "fresh-token"
     assert payload["dateTime"] == "2026-08-20 09:17:04"
+
+
+def test_nested_page_slug_uses_full_parent_path_without_duplication() -> None:
+    assert build_nested_page_slug("/best-casinos/", "/online-casino-bonus-terms-in/") == "/best-casinos/online-casino-bonus-terms-in/"
+    assert build_nested_page_slug("/best-casinos/", "/best-casinos/online-casino-bonus-terms-in/") == "/best-casinos/online-casino-bonus-terms-in/"
+    assert build_nested_page_slug("/casino/guides/", "/article/") == "/casino/guides/article/"
+
+
+def test_project_page_payload_uses_assigned_menu_path(db: Session) -> None:
+    site, item = make_content(db)
+    section = models.Section(site=site, external_id="best-casinos", name="Best Casinos", path="/best-casinos/")
+    db.add(section)
+    db.flush()
+    item.section_id = section.id
+
+    payload = build_project_page_payload(item, site, "fresh-token", section=section)
+
+    assert payload["page"]["slug"] == "/best-casinos/test/"
 
 
 def test_project_server_requests_refresh_token_and_store_status_codes(db: Session, monkeypatch: pytest.MonkeyPatch) -> None:

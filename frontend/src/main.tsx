@@ -2119,7 +2119,7 @@ function ProjectWorkspaceView({
             ) : null}
           </WorkspaceTabPane>
           <WorkspaceTabPane active={activeTab === "menu"} storagePrefix={`${currentUsername}:${selectedSite.id}:menu`}>
-            <FastProjectMenuPanel api={api} site={selectedSite} sections={sections} menuCapabilities={menuCapabilities} onChanged={refreshProject} />
+            <FastProjectMenuPanel api={api} site={selectedSite} sections={sections} content={siteContent} menuCapabilities={menuCapabilities} onChanged={refreshProject} />
           </WorkspaceTabPane>
         </>
       ) : null}
@@ -3902,7 +3902,7 @@ function ProjectCampaignTreeItem({
   );
 }
 
-function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: ViewProps & { site: Site; sections: Section[]; menuCapabilities: MenuCapabilities | null }) {
+function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onChanged }: ViewProps & { site: Site; sections: Section[]; content: ContentItem[]; menuCapabilities: MenuCapabilities | null }) {
   const [name, setName] = React.useState("");
   const [path, setPath] = React.useState("");
   const [menuType, setMenuType] = React.useState<"header" | "footer">("header");
@@ -4306,10 +4306,10 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
           </form> : null}
         </section>
         <div className="projectMenuStructureGrid">
-          <SiteMenuPreviewSection key={`${site.id}:header`} title="Меню Header" icon={<HeaderMenuIcon />} items={cachedHeader} sections={sections.filter((section) => section.menu_type === "header")} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "header" ? parentTreeKey : ""} onAddChild={(item, section, treeKey) => openChildForm("header", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("header")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Header</button>}>
+          <SiteMenuPreviewSection key={`${site.id}:header`} title="Меню Header" icon={<HeaderMenuIcon />} items={cachedHeader} sections={sections.filter((section) => section.menu_type === "header")} content={content} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "header" ? parentTreeKey : ""} onAddChild={(item, section, treeKey) => openChildForm("header", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("header")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Header</button>}>
             {inlineMenuType === "header" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "header")}>{menuFields("header")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
           </SiteMenuPreviewSection>
-          <SiteMenuPreviewSection key={`${site.id}:footer`} title="Меню Footer" icon={<FooterMenuIcon />} items={cachedFooter} sections={sections.filter((section) => section.menu_type === "footer")} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "footer" ? parentTreeKey : ""} onAddChild={(item, section, treeKey) => openChildForm("footer", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("footer")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Footer</button>}>
+          <SiteMenuPreviewSection key={`${site.id}:footer`} title="Меню Footer" icon={<FooterMenuIcon />} items={cachedFooter} sections={sections.filter((section) => section.menu_type === "footer")} content={content} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "footer" ? parentTreeKey : ""} onAddChild={(item, section, treeKey) => openChildForm("footer", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("footer")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Footer</button>}>
             {inlineMenuType === "footer" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "footer")}>{menuFields("footer")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
           </SiteMenuPreviewSection>
         </div>
@@ -6640,6 +6640,8 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
         rowsPerPage?: number | "all";
         summaryFilter?: SiteSummaryFilter | null;
         medalFilter?: ProjectMedalStatus | null;
+        geoFilter?: string;
+        brandFilter?: string;
       };
     } catch {
       return {};
@@ -6648,6 +6650,8 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
   const [managedSites, setManagedSites] = React.useState<Site[]>(sites);
   const [cacheResult, setCacheResult] = React.useState<ProjectCacheSyncResult | null>(null);
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [geoFilter, setGeoFilter] = React.useState(() => storedPreferences.geoFilter || "");
+  const [brandFilter, setBrandFilter] = React.useState(() => storedPreferences.brandFilter || "");
   const [syncing, setSyncing] = React.useState(false);
   const [syncError, setSyncError] = React.useState("");
   const [selectedProjectNames, setSelectedProjectNames] = React.useState<string[]>([]);
@@ -6704,8 +6708,8 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
   const visibleColumnOrder = columnOrder.filter((column) => !hiddenColumns.includes(column) && (!readOnly || column !== "select"));
 
   React.useEffect(() => {
-    localStorage.setItem(preferencesKey, JSON.stringify({ statusFilters, menuTypeFilters, siteSort, columnOrder, hiddenColumns, rowsPerPage, summaryFilter, medalFilter }));
-  }, [columnOrder, hiddenColumns, medalFilter, menuTypeFilters, preferencesKey, rowsPerPage, siteSort, statusFilters, summaryFilter]);
+    localStorage.setItem(preferencesKey, JSON.stringify({ statusFilters, menuTypeFilters, siteSort, columnOrder, hiddenColumns, rowsPerPage, summaryFilter, medalFilter, geoFilter, brandFilter }));
+  }, [brandFilter, columnOrder, geoFilter, hiddenColumns, medalFilter, menuTypeFilters, preferencesKey, rowsPerPage, siteSort, statusFilters, summaryFilter]);
 
   React.useEffect(() => {
     api<{ site_ids: string[] }>("/me/favorite-sites")
@@ -6817,6 +6821,9 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
     return comparison * (siteSort.direction === "asc" ? 1 : -1) || left.name.localeCompare(right.name);
   });
   const normalizedQuery = searchQuery.trim().toLowerCase();
+  const normalizedBrandFilter = brandFilter.trim().toLowerCase();
+  const geoOptions = Array.from(new Set(domainRows.map((row) => (row.geo || "").trim().toLowerCase()).filter(Boolean)))
+    .sort((left, right) => left.localeCompare(right));
   const matchesSummaryFilter = (row: (typeof domainRows)[number]) => {
     if (!summaryFilter || summaryFilter === "all") return true;
     if (summaryFilter === "projects") return Boolean(row.externalProjectId);
@@ -6831,6 +6838,8 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
     && (!medalFilter || row.medalStatus === medalFilter)
     && statusFilters.includes(row.projectStatus)
     && menuTypeFilters.includes(row.menuTypeKey)
+    && (!geoFilter || (row.geo || "").trim().toLowerCase() === geoFilter)
+    && (!normalizedBrandFilter || [row.name, row.homepageTitle || "", row.canon, ...row.domains].some((value) => value.toLowerCase().includes(normalizedBrandFilter)))
     && (!normalizedQuery || [row.name, row.homepageTitle || "", row.canon, row.externalProjectId || "", row.projectStatus, ...row.domains].some((value) => value.toLowerCase().includes(normalizedQuery)))
   ));
   const totalPages = rowsPerPage === "all" ? 1 : Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
@@ -6852,7 +6861,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
 
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [medalFilter, menuTypeFilters, rowsPerPage, searchQuery, siteSort, statusFilters, summaryFilter]);
+  }, [brandFilter, geoFilter, medalFilter, menuTypeFilters, rowsPerPage, searchQuery, siteSort, statusFilters, summaryFilter]);
 
   function toggleSummaryFilter(filter: SiteSummaryFilter) {
     setSummaryFilter((current) => current === filter ? null : filter);
@@ -7021,6 +7030,17 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
         <div className="siteCacheSearch">
           <Search size={18} />
           <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Поиск по домену" />
+          <label className="siteCacheFilter">
+            <span>GEO</span>
+            <select value={geoFilter} onChange={(event) => setGeoFilter(event.target.value)} aria-label="Фильтр сайтов по GEO">
+              <option value="">Все GEO</option>
+              {geoOptions.map((geo) => <option value={geo} key={geo}>{localeFlag(localeCountryCode(geo)) || "🌐"} {geo.toUpperCase()}</option>)}
+            </select>
+          </label>
+          <label className="siteCacheFilter siteBrandFilter">
+            <span>Бренд</span>
+            <input value={brandFilter} onChange={(event) => setBrandFilter(event.target.value)} placeholder="Название бренда" aria-label="Фильтр сайтов по бренду" />
+          </label>
           <label className="siteRowsPerPage">
             <span>Строк</span>
             <select value={rowsPerPage} onChange={(event) => setRowsPerPage(event.target.value === "all" ? "all" : Number(event.target.value))} aria-label="Количество строк на странице">
@@ -7034,7 +7054,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
           <button className="button secondary siteSortResetButton" type="button" onClick={() => setSiteSort(null)} disabled={!siteSort}>Сбросить сортировку</button>
           <span>{filteredRows.length ? `${formatNumber(pageStart + 1)}–${formatNumber(pageStart + visibleRows.length)} из ${formatNumber(filteredRows.length)}` : `0 из ${formatNumber(domainRows.length)}`}</span>
         </div>
-        {summaryFilter || medalFilter || statusFilterActive || menuTypeFilterActive ? (
+        {summaryFilter || medalFilter || statusFilterActive || menuTypeFilterActive || geoFilter || normalizedBrandFilter ? (
           <div className="siteActiveFilters" role="status">
             <strong><ListChecks size={16} /> Включены фильтры</strong>
             {summaryFilter ? (
@@ -7061,7 +7081,19 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
                 <X size={13} />
               </button>
             ) : null}
-            <button className="siteResetFilters" type="button" onClick={() => { setSummaryFilter(null); setMedalFilter(null); setStatusFilters(allStatusFilters); setMenuTypeFilters(allMenuTypeFilters); }}>Сбросить все</button>
+            {geoFilter ? (
+              <button type="button" onClick={() => setGeoFilter("")}>
+                GEO: {geoFilter.toUpperCase()}
+                <X size={13} />
+              </button>
+            ) : null}
+            {normalizedBrandFilter ? (
+              <button type="button" onClick={() => setBrandFilter("")}>
+                Бренд: {brandFilter.trim()}
+                <X size={13} />
+              </button>
+            ) : null}
+            <button className="siteResetFilters" type="button" onClick={() => { setSummaryFilter(null); setMedalFilter(null); setStatusFilters(allStatusFilters); setMenuTypeFilters(allMenuTypeFilters); setGeoFilter(""); setBrandFilter(""); }}>Сбросить все</button>
           </div>
         ) : null}
         <ResponsiveTable
@@ -7413,7 +7445,16 @@ function collapsibleMenuKeys(nodes: MenuTreeNode[]): Set<string> {
   return keys;
 }
 
-function SiteMenuPreviewSection({ title, items, sections = [], icon, action, children, adoptingParentKey, activeParentTreeKey, onAddChild }: { title: string; items: unknown[]; sections?: Section[]; icon?: React.ReactNode; action?: React.ReactNode; children?: React.ReactNode; adoptingParentKey?: string | null; activeParentTreeKey?: string; onAddChild?: (item: MenuPreviewItem, section: Section | undefined, treeKey: string) => void }) {
+function nestedContentSlug(sectionPath: string, contentSlug: string): string {
+  const parent = normalizedTreePath(sectionPath) || "/";
+  const contentPath = normalizedTreePath(contentSlug);
+  const parts = contentPath.split("/").filter(Boolean);
+  const leaf = parts.at(-1) || "";
+  if (!leaf) return parent;
+  return parent === "/" ? `/${leaf}/` : `${parent}${leaf}/`;
+}
+
+function SiteMenuPreviewSection({ title, items, sections = [], content = [], icon, action, children, adoptingParentKey, activeParentTreeKey, onAddChild }: { title: string; items: unknown[]; sections?: Section[]; content?: ContentItem[]; icon?: React.ReactNode; action?: React.ReactNode; children?: React.ReactNode; adoptingParentKey?: string | null; activeParentTreeKey?: string; onAddChild?: (item: MenuPreviewItem, section: Section | undefined, treeKey: string) => void }) {
   const menuType = title.includes("Footer") ? "footer" : "header";
   const tree = React.useMemo(() => buildMenuTree(items, sections), [items, sections]);
   const [collapsedKeys, setCollapsedKeys] = React.useState<Set<string>>(() => collapsibleMenuKeys(tree));
@@ -7431,17 +7472,41 @@ function SiteMenuPreviewSection({ title, items, sections = [], icon, action, chi
         const hasChildren = node.children.length > 0;
         const nestedCount = countMenuTree(node.children);
         const collapsed = collapsedKeys.has(node.key);
+        const nestedPages = node.section
+          ? content
+              .filter((item) => item.section_id === node.section?.id && (Boolean(item.generated_at) || item.status === "published"))
+              .sort((left, right) => {
+                if (left.status === "published" && right.status !== "published") return 1;
+                if (left.status !== "published" && right.status === "published") return -1;
+                return left.topic.localeCompare(right.topic);
+              })
+          : [];
         return (
           <li className="siteMenuTreeNode" key={node.key} role="treeitem" aria-expanded={hasChildren ? !collapsed : undefined}>
             <div className="siteMenuTreeRow">
               {hasChildren ? <span className="siteMenuTreeBranchSpacer" /> : <button className="siteMenuTreeToggle" type="button" disabled><span /></button>}
               <div className="siteMenuPreviewItemText"><strong>{node.item.title}</strong>{node.item.path ? <code>{node.item.path}</code> : null}</div>
+              {nestedPages.length ? <span className="siteMenuNestedPageCount">Страниц: {nestedPages.length}</span> : null}
               {hasChildren ? <button className="siteMenuTreeToggle hasChildren" type="button" onClick={() => toggleNode(node.key)} aria-label={`${collapsed ? "Развернуть" : "Свернуть"} ${node.item.title}`}>
                 {collapsed ? <ChevronRight size={17} /> : <ChevronDown size={17} />}<span className="siteMenuTreeToggleLabel">{collapsed ? "Показать все" : "Свернуть"}</span><span className="siteMenuTreeNestedCount">{nestedCount}</span>
               </button> : null}
               {onAddChild ? <button className="siteMenuAddChildButton" type="button" onClick={() => onAddChild(node.item, node.section, node.key)} disabled={Boolean(adoptingParentKey)} title={`Добавить дочерний пункт в «${node.item.title}»`}><span className="buttonPlusIcon"><Plus size={15} /></span> {adoptingParentKey === parentKey ? "Открываем…" : "Добавить"}</button> : null}
             </div>
             {activeParentTreeKey === node.key && children ? <div className="siteMenuTreeChildForm">{children}</div> : null}
+            {nestedPages.length ? (
+              <ul className="siteMenuNestedPages" aria-label={`Страницы в пункте ${node.item.title}`}>
+                {nestedPages.map((page) => (
+                  <li key={page.id}>
+                    <span className="siteMenuNestedPageIcon"><FileText size={13} /></span>
+                    <span className="siteMenuNestedPageText">
+                      <strong title={page.topic}>{page.topic}</strong>
+                      <code>{nestedContentSlug(node.item.path || node.section?.path || "/", page.slug)}</code>
+                    </span>
+                    <StatusBadge status={page.status} />
+                  </li>
+                ))}
+              </ul>
+            ) : null}
             {hasChildren && !collapsed ? renderNodes(node.children, depth + 1) : null}
           </li>
         );

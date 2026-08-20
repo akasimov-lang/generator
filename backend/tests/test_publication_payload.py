@@ -34,3 +34,4 @@ def test_publication_payload_adds_section_target() -> None:
     }
     assert payload["pages"][0]["sectionId"] == "casino-menu"
     assert payload["pages"][0]["sectionPath"] == "/online-casinos/"
+    assert payload["pages"][0]["slug"] == "/online-casinos/test/"

@@ -2257,7 +2257,7 @@ h2 {
   border-radius: var(--radius);
   display: grid;
   gap: 10px;
-  grid-template-columns: auto minmax(180px, 1fr) auto minmax(160px, auto) auto;
+  grid-template-columns: auto minmax(180px, 1fr) minmax(105px, 135px) minmax(150px, 210px) auto minmax(160px, auto) auto;
   margin-bottom: 14px;
   padding: 6px 10px;
 }
@@ -2284,6 +2284,33 @@ h2 {
 
 .siteCacheSearch select {
   min-height: 36px;
+}
+
+.siteCacheFilter {
+  align-items: center;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.siteCacheFilter > span {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.siteCacheFilter select,
+.siteCacheFilter input {
+  font-size: 11px;
+  min-height: 32px;
+}
+
+.siteCacheFilter input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 0 9px;
 }
 
 .siteRowsPerPage {
@@ -2711,6 +2738,82 @@ h2 {
 .siteMenuPreviewItemText code {
   display: block;
   overflow-wrap: anywhere;
+}
+
+.siteMenuNestedPages {
+  border-left: 1px solid color-mix(in srgb, var(--primary) 38%, var(--border));
+  list-style: none;
+  margin: 0 8px 4px 39px;
+  padding: 2px 0 2px 14px;
+}
+
+.siteMenuNestedPages li {
+  align-items: center;
+  display: flex;
+  gap: 7px;
+  min-height: 34px;
+  padding: 4px 0;
+  position: relative;
+}
+
+.siteMenuNestedPages li::before {
+  border-top: 1px solid color-mix(in srgb, var(--primary) 38%, var(--border));
+  content: "";
+  left: -14px;
+  position: absolute;
+  top: 17px;
+  width: 10px;
+}
+
+.siteMenuNestedPageIcon {
+  align-items: center;
+  background: var(--primary-soft);
+  border-radius: 6px;
+  color: var(--primary);
+  display: inline-flex;
+  flex: 0 0 25px;
+  height: 25px;
+  justify-content: center;
+}
+
+.siteMenuNestedPageText {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.siteMenuNestedPageText strong,
+.siteMenuNestedPageText code {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.siteMenuNestedPageText strong {
+  font-size: 11px;
+}
+
+.siteMenuNestedPageText code {
+  color: var(--muted);
+  font-size: 9px;
+  margin-top: 2px;
+}
+
+.siteMenuNestedPages .status {
+  flex: 0 0 auto;
+  font-size: 9px;
+  padding: 3px 6px;
+}
+
+.siteMenuNestedPageCount {
+  background: color-mix(in srgb, var(--primary) 11%, white);
+  border-radius: 999px;
+  color: var(--primary);
+  flex: 0 0 auto;
+  font-size: 9px;
+  font-weight: 750;
+  padding: 3px 7px;
+  white-space: nowrap;
 }
 
 .siteMenuPreviewItemText code {

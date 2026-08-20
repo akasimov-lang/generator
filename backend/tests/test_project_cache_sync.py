@@ -113,6 +113,33 @@ def test_static_nav_and_unrelated_iteration_do_not_count_as_project_menu_renderi
     }
 
 
+def test_static_multilink_navigation_counts_as_rendered_menu() -> None:
+    capabilities = analyze_menu_templates([
+        {
+            "name": "header.hbs",
+            "data": """
+                <header>
+                  <div class="header-inner__menu" id="mainMenu">
+                    <div class="menu-item"><a href="/ontario/">Ontario</a></div>
+                    <div class="menu-item has-dropdown">
+                      <a href="/bonuses/">Bonuses</a>
+                      <div class="dropdown"><a href="/bonuses/free-spins/">Free Spins</a></div>
+                    </div>
+                  </div>
+                </header>
+            """,
+        },
+        {"name": "footer.hbs", "data": "<footer>2026 © All rights reserved</footer>"},
+    ])
+
+    assert capabilities == {
+        "header_menu_rendered": True,
+        "header_menu_nested": True,
+        "footer_menu_rendered": False,
+        "footer_menu_nested": False,
+    }
+
+
 def test_menu_capabilities_are_fetched_only_once(monkeypatch) -> None:
     calls: list[str] = []
 

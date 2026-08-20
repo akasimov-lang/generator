@@ -69,6 +69,7 @@ from app.security import AdminUser, AuthUser, create_token, hash_password, verif
 from app.services import (
     BASE_PROMPT_TEMPLATE_NAME,
     approve_and_schedule_item,
+    apply_content_section_slug,
     build_campaign_publication_bundle,
     build_competitor_brief_for_item,
     collect_competitor_serp_for_item,
@@ -853,6 +854,14 @@ def update_section(site_id: str, section_id: str, payload: SectionUpdate, user: 
     section.path = f"/{path}/" if path else "/"
     section.sync_status = "pending"
     section.synced_at = None
+    assigned_content = db.scalars(
+        select(models.ContentItem).where(
+            models.ContentItem.section_id == section.id,
+            models.ContentItem.status.notin_({"publishing", "published"}),
+        )
+    ).all()
+    for item in assigned_content:
+        apply_content_section_slug(item, section)
     current_library = site.menu_library if isinstance(site.menu_library, list) else []
     site.menu_library = [
         {
@@ -1298,14 +1307,16 @@ def update_task_section(task_id: str, payload: GenerationTaskSectionUpdate, _: A
     task = db.get(models.GenerationTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    section = None
     if payload.section_id:
         if not task.site_id:
             raise HTTPException(status_code=400, detail="Task does not have a project")
-        _get_section_for_site(db, task.site_id, payload.section_id)
+        section = _get_section_for_site(db, task.site_id, payload.section_id)
     task.section_id = payload.section_id
     for item in task.items:
         if item.status not in {"scheduled", "retry_scheduled", "publishing", "published"}:
             item.section_id = payload.section_id
+            apply_content_section_slug(item, section)
     db.commit()
     db.refresh(task)
     return task
@@ -1621,11 +1632,14 @@ def update_content(content_id: str, payload: ContentUpdate, _: AuthUser, db: Ses
     if item.status in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "published"}:
         raise HTTPException(status_code=400, detail=f"Content in status '{item.status}' cannot be edited")
 
+    selected_section = db.get(models.Section, item.section_id) if item.section_id else None
     if "section_id" in payload.model_fields_set:
         if payload.section_id:
             if not item.site_id:
                 raise HTTPException(status_code=400, detail="Content item has no site")
-            _get_section_for_site(db, item.site_id, payload.section_id)
+            selected_section = _get_section_for_site(db, item.site_id, payload.section_id)
+        else:
+            selected_section = None
         item.section_id = payload.section_id
 
         # The generation tab displays the menu section stored on the parent
@@ -1640,6 +1654,9 @@ def update_content(content_id: str, payload: ContentUpdate, _: AuthUser, db: Ses
             raise HTTPException(status_code=400, detail="generated_json cannot be null")
         item.generated_json = payload.generated_json
         item.word_count = count_words(payload.generated_json)
+
+    if "section_id" in payload.model_fields_set or "generated_json" in payload.model_fields_set:
+        apply_content_section_slug(item, selected_section)
 
     if item.status in {"draft", "generated", "approved", "rejected", "scheduled", "publication_failed"}:
         item.status = "generated"

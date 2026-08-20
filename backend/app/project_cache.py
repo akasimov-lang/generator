@@ -95,7 +95,18 @@ def analyze_menu_templates(shortcodes: Any) -> dict[str, bool]:
                 re.IGNORECASE,
             )
         )
-        return handlebars_loop or scripted_menu
+        anchor_count = len(re.findall(r"<a\b[^>]*\bhref\s*=", template, re.IGNORECASE))
+        navigation_container = bool(
+            re.search(r"<nav\b", template, re.IGNORECASE)
+            or re.search(
+                r"<(?:div|ul|ol)\b[^>]*\b(?:class|id)\s*=\s*['\"][^'\"]*"
+                r"(?:menu|nav|navigation)[^'\"]*['\"]",
+                template,
+                re.IGNORECASE,
+            )
+        )
+        static_menu = navigation_container and anchor_count >= 2
+        return handlebars_loop or scripted_menu or static_menu
 
     def renders_nested_menu(template: str) -> bool:
         return bool(

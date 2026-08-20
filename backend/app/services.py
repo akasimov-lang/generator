@@ -2413,6 +2413,7 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
     prompt_template = compose_prompt_with_base(db, payload.prompt_template)
     prompt_template = append_casino_rating_requirement(prompt_template, payload.include_casino_rating)
     site = db.get(models.Site, payload.site_id) if payload.site_id else None
+    section = db.get(models.Section, payload.section_id) if payload.section_id else None
     automatic_title = (
         f"{site.name} · {len(clean_topics)} тем · {payload.language.upper()}-{payload.geo.upper()}"
         if site
@@ -2467,6 +2468,7 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
             competitor_research_status="queries_ready" if payload.collect_competitors else "not_requested",
             idempotency_key=f"{payload.geo.lower()}-{payload.language.lower()}-{slugify(topic)}-{index}-{uuid.uuid4().hex[:8]}",
         )
+        apply_content_section_slug(item, section)
         db.add(item)
         db.flush()
         if payload.collect_competitors:
@@ -2509,8 +2511,9 @@ def generate_task_items(db: Session, task: models.GenerationTask) -> models.Gene
                         variation_context=build_task_variation_context(db, item),
                     )
                 )
-                item.slug = item.generated_json["pages"][0]["slug"]
                 item.word_count = count_words(item.generated_json)
+            section = db.get(models.Section, item.section_id) if item.section_id else None
+            apply_content_section_slug(item, section)
             item.generation_progress = 90
             item.generation_prompt_name = task.prompt_template_name
             item.include_casino_rating = task.include_casino_rating
@@ -2631,8 +2634,9 @@ def generate_content_item(db: Session, item: models.ContentItem) -> models.Conte
                     variation_context=build_task_variation_context(db, item),
                 )
             )
-            item.slug = item.generated_json["pages"][0]["slug"]
             item.word_count = count_words(item.generated_json)
+        section = db.get(models.Section, item.section_id) if item.section_id else None
+        apply_content_section_slug(item, section)
         item.generation_progress = 90
         item.generation_prompt_name = task.prompt_template_name
         item.include_casino_rating = task.include_casino_rating
@@ -2961,6 +2965,33 @@ def _normalized_project_slug(value: object) -> str:
     return f"/{path}/" if path else "/"
 
 
+def build_nested_page_slug(section_path: object | None, page_slug: object) -> str:
+    """Build a page URL below its assigned menu section without duplicating parents."""
+    normalized_page = _normalized_project_slug(page_slug)
+    page_parts = [part for part in normalized_page.strip("/").split("/") if part]
+    page_leaf = page_parts[-1] if page_parts else ""
+    normalized_parent = _normalized_project_slug(section_path) if section_path else "/"
+    if not page_leaf:
+        return normalized_parent
+    if normalized_parent == "/":
+        return f"/{page_leaf}/"
+    return f"{normalized_parent.rstrip('/')}/{page_leaf}/"
+
+
+def apply_content_section_slug(item: models.ContentItem, section: models.Section | None) -> str:
+    """Keep the model slug and EditorJS page slug aligned with the selected menu item."""
+    payload = copy.deepcopy(item.generated_json) if isinstance(item.generated_json, dict) else {}
+    pages = payload.get("pages") if isinstance(payload.get("pages"), list) else []
+    page = pages[0] if pages and isinstance(pages[0], dict) else None
+    source_slug = page.get("slug") if page else item.slug
+    full_slug = build_nested_page_slug(section.path if section else None, source_slug or item.slug)
+    item.slug = full_slug
+    if page is not None:
+        page["slug"] = full_slug
+        item.generated_json = payload
+    return full_slug
+
+
 def _numeric_menu_id(value: object, fallback: int) -> int:
     try:
         numeric = int(value)
@@ -3126,6 +3157,7 @@ def build_project_page_payload(
     site: models.Site,
     token: str,
     now: datetime | None = None,
+    section: models.Section | None = None,
 ) -> dict:
     current_time = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     numeric_id = int(current_time.timestamp() * 1000)
@@ -3145,7 +3177,7 @@ def build_project_page_payload(
             "description": str(page.get("description") or ""),
             "publishedTime": timestamp,
             "updatedTime": timestamp,
-            "slug": _normalized_project_slug(page.get("slug") or item.slug),
+            "slug": build_nested_page_slug(section.path if section else None, page.get("slug") or item.slug),
             "content": content,
         },
         "token": token,
@@ -3181,7 +3213,9 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
         endpoint = project_server_url(site, "/projects/create")
         async with httpx.AsyncClient(timeout=45.0) as client:
             token = await refresh_project_server_token(client)
-            request_payload = build_project_page_payload(item, site, token)
+            section = db.get(models.Section, item.section_id) if item.section_id else None
+            apply_content_section_slug(item, section)
+            request_payload = build_project_page_payload(item, site, token, section=section)
             response = await client.post(
                 endpoint,
                 json=request_payload,
@@ -3253,6 +3287,7 @@ def build_publication_payload(db: Session, item: models.ContentItem) -> dict:
     payload["publication_target"] = publication_target
     for page in payload.get("pages", []):
         if isinstance(page, dict):
+            page["slug"] = build_nested_page_slug(section.path, page.get("slug") or item.slug)
             page["sectionId"] = section.external_id
             page["sectionPath"] = section.path
     return payload
