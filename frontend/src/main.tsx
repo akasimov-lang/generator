@@ -3666,7 +3666,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
             </label>
             {formError ? <span className="formError wide">{formError}</span> : null}
             <div className="formActions wide">
-              <button className="button primary" type="submit" disabled={!approved.length}><Play size={18} /> Запланировать ({approved.length})</button>
+              <button className="button primary" type="submit" disabled={!publicationReady.length}><Play size={18} /> Запланировать ({publicationReady.length})</button>
             </div>
           </form>
         ) : null}
@@ -3703,10 +3703,10 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
         </div>
         {formError ? <span className="formError">{formError}</span> : null}
       </DataPanel> : null}
-      {mode === "workflow" && workflowSection === "process" ? <DataPanel id="workspace-section-process" collapseKey="publication-process" title={`Процесс публикации · ${approved.length}`}>
+      {mode === "workflow" && workflowSection === "process" ? <DataPanel id="workspace-section-process" collapseKey="publication-process" title={`Процесс публикации · ${publicationReady.length}`}>
         <ResponsiveTable
           columns={["Тема", "Меню", "Slug", "Действия"]}
-          rows={approved.map((item) => [
+          rows={publicationReady.map((item) => [
             <div className="compactContentTopic" title={item.topic}><ContentTopicLabel item={item} /></div>,
             sectionLabel(item.section_id, sections),
             item.slug,
