@@ -7,11 +7,9 @@ from sqlalchemy import select
 from app import models
 from app.core.config import get_settings
 from app.db import SessionLocal
-from app.services import collect_competitor_research_for_item, generate_content_item, generate_task_items, publish_campaign_bundle, publish_item, refresh_campaign_status, run_task_pipeline
+from app.services import COMPETITOR_RESEARCH_MAX_ATTEMPTS, collect_competitor_research_for_item, generate_content_item, generate_task_items, publish_campaign_bundle, publish_item, refresh_campaign_status, run_task_pipeline
 
 settings = get_settings()
-
-COMPETITOR_RESEARCH_MAX_ATTEMPTS = 3
 
 celery_app = Celery("generator", broker=settings.celery_broker_url, backend=settings.celery_result_backend)
 celery_app.conf.timezone = "UTC"
@@ -48,7 +46,8 @@ def collect_competitor_research_job(self, content_item_id: str) -> dict:
             )[:500]
             db.commit()
         if has_next_attempt:
-            raise self.retry(exc=exc, countdown=failed_attempt * 5)
+            retry_delay = min(15 * (2 ** (failed_attempt - 1)), 300)
+            raise self.retry(exc=exc, countdown=retry_delay)
         raise
     finally:
         db.close()

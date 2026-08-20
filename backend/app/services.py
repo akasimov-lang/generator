@@ -27,12 +27,14 @@ SITE_DEFAULT = "site_default"
 DEFAULT_EDITOR_VERSION = "2.31.0"
 GEMINI_DEFAULT_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 GEMINI_DEFAULT_MODEL = "gemini-3.5-flash"
+GEMINI_REQUEST_MAX_ATTEMPTS = 5
 DATAFORSEO_DEFAULT_ENDPOINT = "https://api.dataforseo.com/v3"
 DATAFORSEO_USER_DATA_PATH = "/appendix/user_data"
 DATAFORSEO_LOCATIONS_PATH = "/serp/google/locations"
 DATAFORSEO_SERP_PATH = "/serp/google/organic/live/advanced"
 COMPETITOR_QUERY_LIMIT = 5
 COMPETITOR_RESULTS_PER_QUERY = 6
+COMPETITOR_RESEARCH_MAX_ATTEMPTS = 6
 MAX_COMPETITOR_PAGE_CHARS = 1_200_000
 MAX_COMPETITOR_TEXT_CHARS = 60_000
 DATAFORSEO_COUNTRY_ALIASES = {"UK": "GB"}
@@ -1218,10 +1220,23 @@ async def call_gemini(provider: models.AiProvider, prompt: str) -> dict:
         "Content-Type": "application/json",
         "x-goog-api-key": provider.api_key,
     }
+    transient_statuses = {408, 429, 500, 502, 503, 504}
     async with httpx.AsyncClient(timeout=90) as client:
-        response = await client.post(endpoint, json=body, headers=headers)
-    response.raise_for_status()
-    return response.json()
+        for attempt in range(GEMINI_REQUEST_MAX_ATTEMPTS):
+            try:
+                response = await client.post(endpoint, json=body, headers=headers)
+            except httpx.TransportError:
+                if attempt + 1 >= GEMINI_REQUEST_MAX_ATTEMPTS:
+                    raise
+                await asyncio.sleep(min(2 ** (attempt + 1), 20))
+                continue
+            if response.status_code not in transient_statuses:
+                response.raise_for_status()
+                return response.json()
+            if attempt + 1 >= GEMINI_REQUEST_MAX_ATTEMPTS:
+                response.raise_for_status()
+            await asyncio.sleep(min(2 ** (attempt + 1), 20))
+    raise RuntimeError("Gemini request retries were exhausted")
 
 
 def extract_gemini_text(response: dict) -> str:
@@ -2510,7 +2525,11 @@ def generate_task_items(db: Session, task: models.GenerationTask) -> models.Gene
     return task
 
 
-def run_task_pipeline(db: Session, task: models.GenerationTask, competitor_attempts: int = 3) -> models.GenerationTask:
+def run_task_pipeline(
+    db: Session,
+    task: models.GenerationTask,
+    competitor_attempts: int = COMPETITOR_RESEARCH_MAX_ATTEMPTS,
+) -> models.GenerationTask:
     locked_statuses = {"scheduled", "retry_scheduled", "publication_paused", "publishing", "published"}
     item_ids = [item.id for item in task.items if item.status not in locked_statuses]
     if not item_ids:

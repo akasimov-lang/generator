@@ -4674,7 +4674,7 @@ td {
 }
 
 .projectContentTable .column-actions {
-  width: 310px;
+  width: 455px;
 }
 
 .compactContentTopic {
@@ -5241,6 +5241,30 @@ td {
   display: inline-flex;
   gap: 7px;
   min-width: 0;
+}
+
+.campaignTopicWithPreview {
+  gap: 10px;
+  width: 100%;
+}
+
+.campaignTopicWithPreview .compactContentTopic {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.campaignTopicWithPreview .contentTopicWithRating {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  width: 100%;
+}
+
+.campaignTopicWithPreview .contentTopicWithRating > span:first-child {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .contentPreviewIconButton {

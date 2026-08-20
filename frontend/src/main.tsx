@@ -3094,6 +3094,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [bulkSectionId, setBulkSectionId] = React.useState("");
   const [bulkBusy, setBulkBusy] = React.useState(false);
+  const [publishingItemId, setPublishingItemId] = React.useState("");
   const [createMenuVisible, setCreateMenuVisible] = React.useState(false);
   const [menuName, setMenuName] = React.useState("");
   const [menuExternalId, setMenuExternalId] = React.useState("");
@@ -3107,7 +3108,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
   const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.includes(id));
   const selectedItems = content.filter((item) => selectedIds.includes(item.id));
   const bulkApproveItems = selectedItems.filter((item) => Boolean(item.section_id) && canApproveContent(item));
-  const bulkPublishItems = selectedItems.filter((item) => Boolean(item.section_id) && ["generated", "rejected", "approved"].includes(item.status));
+  const bulkPublishItems = selectedItems.filter(canPublishContentImmediately);
   const agreedContentCount = content.filter((item) => ["approved", "scheduled", "retry_scheduled", "publication_paused", "publishing", "published", "publication_failed"].includes(item.status)).length;
   const sectionContentCounts = React.useMemo(() => {
     const counts = new Map<string, number>();
@@ -3181,9 +3182,9 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
       const results = await Promise.allSettled(bulkApproveItems.map((item) => api(`/content/${item.id}/approve`, { method: "POST" })));
       const failed = results.filter((result) => result.status === "rejected").length;
       await onChanged();
-      if (failed) setEditorError(`Не удалось согласовать ${failed} текстов.`);
+      if (failed) setEditorError(`Не удалось принять ${failed} текстов.`);
     } catch (error) {
-      setEditorError(error instanceof Error ? error.message : "Не удалось согласовать выбранные тексты.");
+      setEditorError(error instanceof Error ? error.message : "Не удалось принять выбранные тексты.");
     } finally {
       setBulkBusy(false);
     }
@@ -3194,13 +3195,13 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
     setEditorError("");
     setBulkBusy(true);
     try {
-      const results = await Promise.allSettled(bulkPublishItems.map((item) => api(`/content/${item.id}/publish-now`, { method: "POST" })));
+      const results = await Promise.allSettled(bulkPublishItems.map((item) => api(`/content/${item.id}/publish-immediately`, { method: "POST" })));
       const failed = results.filter((result) => result.status === "rejected").length;
       setSelectedIds([]);
       await onChanged();
-      if (failed) setEditorError(`Не удалось отправить в публикацию ${failed} текстов.`);
+      if (failed) setEditorError(`Не удалось опубликовать ${failed} текстов.`);
     } catch (error) {
-      setEditorError(error instanceof Error ? error.message : "Не удалось отправить выбранные тексты в публикацию.");
+      setEditorError(error instanceof Error ? error.message : "Не удалось опубликовать выбранные тексты.");
     } finally {
       setBulkBusy(false);
     }
@@ -3263,12 +3264,29 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
   async function approve(item: ContentItem) {
     setEditorError("");
     if (!item.section_id) {
-      setEditorError("Перед approve выберите пункт меню.");
+      setEditorError("Перед принятием выберите пункт меню.");
       openEditor(item);
       return;
     }
     await api(`/content/${item.id}/approve`, { method: "POST" });
     await onChanged();
+  }
+
+  async function publishImmediately(item: ContentItem) {
+    if (!canPublishContentImmediately(item)) {
+      setEditorError("Перед публикацией выберите пункт меню и убедитесь, что текст готов.");
+      return;
+    }
+    setEditorError("");
+    setPublishingItemId(item.id);
+    try {
+      await api(`/content/${item.id}/publish-immediately`, { method: "POST" });
+      await onChanged();
+    } catch (error) {
+      setEditorError(error instanceof Error ? error.message : "Не удалось опубликовать текст.");
+    } finally {
+      setPublishingItemId("");
+    }
   }
 
   return (
@@ -3278,7 +3296,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
           <span>Контент проекта</span>
           <span className="workspacePanelStats">
             <span>Контента: <b>{content.length}</b></span>
-            <span className="positive">Согласовано: <b>{agreedContentCount}</b></span>
+            <span className="positive">Принято: <b>{agreedContentCount}</b></span>
           </span>
         </span>
       )}>
@@ -3309,10 +3327,10 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
             <CheckCircle2 size={15} /> {bulkBusy ? "Сохраняю" : `Назначить выбранным (${selectedIds.length})`}
           </button>
           <button className="button compact approve" type="button" onClick={approveSelected} disabled={!bulkApproveItems.length || bulkBusy} title={selectedIds.length && !bulkApproveItems.length ? "Сначала назначьте пункт меню текстам со статусом generated" : undefined}>
-            <CheckCircle2 size={15} /> Согласовать ({bulkApproveItems.length})
+            <CheckCircle2 size={15} /> Принять ({bulkApproveItems.length})
           </button>
-          <button className="button compact primary" type="button" onClick={publishSelected} disabled={!bulkPublishItems.length || bulkBusy} title={selectedIds.length && !bulkPublishItems.length ? "Сначала назначьте пункт меню" : "Согласовать и поставить выбранные тексты в очередь публикации"}>
-            <Send size={15} /> В публикацию ({bulkPublishItems.length})
+          <button className="button compact primary" type="button" onClick={publishSelected} disabled={!bulkPublishItems.length || bulkBusy} title={selectedIds.length && !bulkPublishItems.length ? "Сначала назначьте пункт меню" : "Сразу отправить JSON выбранных текстов на сервер проекта"}>
+            <Send size={15} /> Опубликовать ({bulkPublishItems.length})
           </button>
           <button className="button compact secondary createMenuButton" type="button" onClick={() => setCreateMenuVisible((current) => !current)} disabled={bulkBusy}>
             <span className="buttonPlusIcon"><Plus size={15} /></span> Новый пункт меню
@@ -3374,6 +3392,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
             <div className="userActions projectContentActions">
               <button className="button compact" type="button" onClick={() => openEditor(item)} disabled={isPublicationLocked(item)} title="Открыть и редактировать JSON payload"><Database size={15} /> JSON</button>
               <button className="button compact approve" type="button" onClick={() => approve(item)} disabled={!canApproveContent(item)} title="Принять текст"><CheckCircle2 size={15} /> Принять</button>
+              <button className="button compact primary" type="button" onClick={() => void publishImmediately(item)} disabled={!canPublishContentImmediately(item) || publishingItemId === item.id} title="Сразу отправить JSON текста на сервер проекта"><Send size={15} /> {publishingItemId === item.id ? "Публикуем…" : "Опубликовать"}</button>
             </div>
           ])}
         />
@@ -4775,10 +4794,57 @@ function TasksView({
       const failed = results.filter((result) => result.status === "rejected").length;
       await refreshExpandedTask();
       if (failed) {
-        setTaskError(`Не удалось согласовать часть текстов: ${failed}. Проверьте, выбран ли пункт меню.`);
+        setTaskError(`Не удалось принять часть текстов: ${failed}. Проверьте, выбран ли пункт меню.`);
       }
     } catch (error) {
-      setTaskError(error instanceof Error ? error.message : "Не удалось согласовать выбранные тексты.");
+      setTaskError(error instanceof Error ? error.message : "Не удалось принять выбранные тексты.");
+    } finally {
+      setTaskActionId("");
+    }
+  }
+
+  async function approveTaskContent(item: ContentItem) {
+    setTaskError("");
+    setTaskActionId(`${item.id}:approve`);
+    try {
+      await api(`/content/${item.id}/approve`, { method: "POST" });
+      await refreshExpandedTask();
+    } catch (error) {
+      setTaskError(error instanceof Error ? error.message : "Не удалось принять текст.");
+    } finally {
+      setTaskActionId("");
+    }
+  }
+
+  async function publishTaskContent(item: ContentItem) {
+    if (!canPublishContentImmediately(item)) {
+      setTaskError("Перед публикацией выберите проект и пункт меню.");
+      return;
+    }
+    setTaskError("");
+    setTaskActionId(`${item.id}:publish`);
+    try {
+      await api(`/content/${item.id}/publish-immediately`, { method: "POST" });
+      await refreshExpandedTask();
+    } catch (error) {
+      setTaskError(error instanceof Error ? error.message : "Не удалось опубликовать текст.");
+    } finally {
+      setTaskActionId("");
+    }
+  }
+
+  async function bulkPublishTaskContent(items: ContentItem[]) {
+    const actionable = items.filter(canPublishContentImmediately);
+    if (!actionable.length) return;
+    setTaskError("");
+    setTaskActionId("bulk:publish");
+    try {
+      const results = await Promise.allSettled(actionable.map((item) => api(`/content/${item.id}/publish-immediately`, { method: "POST" })));
+      const failed = results.filter((result) => result.status === "rejected").length;
+      await refreshExpandedTask();
+      if (failed) setTaskError(`Не удалось опубликовать часть текстов: ${failed}.`);
+    } catch (error) {
+      setTaskError(error instanceof Error ? error.message : "Не удалось опубликовать выбранные тексты.");
     } finally {
       setTaskActionId("");
     }
@@ -5055,7 +5121,10 @@ function TasksView({
           onPreview={setPreviewItem}
           onRegenerate={regenerateContent}
           onDelete={deleteContentItem}
+          onApprove={approveTaskContent}
+          onPublish={publishTaskContent}
           onBulkApprove={bulkApproveTaskContent}
+          onBulkPublish={bulkPublishTaskContent}
           onBulkRegenerateQueries={bulkRegenerateCompetitorQueries}
           onBulkCollectCompetitors={bulkCollectTaskCompetitors}
           onBulkRegenerate={bulkRegenerateTaskContent}
@@ -5094,6 +5163,12 @@ function TasksView({
           item={previewItem}
           promptName={previewItem.generation_prompt_name || expandedDetails?.task.prompt_template_name}
           onClose={() => setPreviewItem(null)}
+          actions={(
+            <>
+              <button className="button compact approve" type="button" onClick={() => void approveTaskContent(previewItem)} disabled={!canApproveContent(previewItem) || taskActionId.startsWith(previewItem.id)}><CheckCircle2 size={15} /> Принять</button>
+              <button className="button compact primary" type="button" onClick={() => void publishTaskContent(previewItem)} disabled={!canPublishContentImmediately(previewItem) || taskActionId.startsWith(previewItem.id)}><Send size={15} /> {taskActionId === `${previewItem.id}:publish` ? "Публикуем…" : "Опубликовать"}</button>
+            </>
+          )}
         />
       ) : null}
     </section>
@@ -5161,7 +5236,10 @@ function AdminTasksAccordion({
   onPreview,
   onRegenerate,
   onDelete,
+  onApprove,
+  onPublish,
   onBulkApprove,
+  onBulkPublish,
   onBulkRegenerateQueries,
   onBulkCollectCompetitors,
   onBulkRegenerate,
@@ -5187,7 +5265,10 @@ function AdminTasksAccordion({
   onPreview: (item: ContentItem) => void;
   onRegenerate: (item: ContentItem) => Promise<void>;
   onDelete: (item: ContentItem) => Promise<void>;
+  onApprove: (item: ContentItem) => Promise<void>;
+  onPublish: (item: ContentItem) => Promise<void>;
   onBulkApprove: (items: ContentItem[]) => Promise<void>;
+  onBulkPublish: (items: ContentItem[]) => Promise<void>;
   onBulkRegenerateQueries: (items: ContentItem[]) => Promise<void>;
   onBulkCollectCompetitors: (items: ContentItem[]) => Promise<void>;
   onBulkRegenerate: (items: ContentItem[]) => Promise<void>;
@@ -5209,6 +5290,7 @@ function AdminTasksAccordion({
   const selectedItems = expandedItems.filter((item) => selectedIds.includes(item.id));
   const allSelected = expandedItemIds.length > 0 && expandedItemIds.every((id) => selectedIds.includes(id));
   const bulkApproveItems = selectedItems.filter(canApproveContent);
+  const bulkPublishItems = selectedItems.filter(canPublishContentImmediately);
   const bulkDeleteItems = selectedItems.filter((item) => !isPublicationLocked(item));
   const bulkRegenerateItems = selectedItems.filter((item) => !isPublicationLocked(item));
   const bulkCollectItems = selectedItems;
@@ -5302,6 +5384,11 @@ function AdminTasksAccordion({
 
   async function handleBulkDelete() {
     await onBulkDelete(bulkDeleteItems);
+    setSelectedIds([]);
+  }
+
+  async function handleBulkPublish() {
+    await onBulkPublish(bulkPublishItems);
     setSelectedIds([]);
   }
 
@@ -5502,7 +5589,10 @@ function AdminTasksAccordion({
                             </label>
                             <span className="fieldHint">Выбрано: {selectedIds.length}</span>
                             <button className="button compact approve" type="button" onClick={handleBulkApprove} disabled={!bulkApproveItems.length || actionId === "bulk:approve"}>
-                              <CheckCircle2 size={15} /> {actionId === "bulk:approve" ? "Согласовываю" : `Согласовать (${bulkApproveItems.length})`}
+                              <CheckCircle2 size={15} /> {actionId === "bulk:approve" ? "Принимаю" : `Принять (${bulkApproveItems.length})`}
+                            </button>
+                            <button className="button compact primary" type="button" onClick={handleBulkPublish} disabled={!bulkPublishItems.length || actionId === "bulk:publish"} title="Сразу отправить JSON выбранных текстов на сервер проекта">
+                              <Send size={15} /> {actionId === "bulk:publish" ? "Публикуем…" : `Опубликовать (${bulkPublishItems.length})`}
                             </button>
                             <button className="button compact" type="button" onClick={handleBulkCollectCompetitors} disabled={!bulkCollectItems.length || actionId === "bulk:collect-competitors"}>
                               <Globe2 size={15} /> {actionId === "bulk:collect-competitors" ? "Сбор конкурентов" : `Собрать конкурентов (${bulkCollectItems.length})`}
@@ -5544,6 +5634,12 @@ function AdminTasksAccordion({
                                   </button>
                                   <button className="button compact" type="button" onClick={() => onRegenerate(item)} disabled={busy || isPublicationLocked(item)}>
                                     <Play size={15} /> {actionId === `${item.id}:generate` ? "Генерация" : "Сгенерировать заново"}
+                                  </button>
+                                  <button className="button compact approve" type="button" onClick={() => void onApprove(item)} disabled={busy || !canApproveContent(item)} title="Принять текст">
+                                    <CheckCircle2 size={15} /> {actionId === `${item.id}:approve` ? "Принимаю" : "Принять"}
+                                  </button>
+                                  <button className="button compact primary" type="button" onClick={() => void onPublish(item)} disabled={busy || !canPublishContentImmediately(item)} title="Сразу отправить JSON текста на сервер проекта">
+                                    <Send size={15} /> {actionId === `${item.id}:publish` ? "Публикуем…" : "Опубликовать"}
                                   </button>
                                   <button className="button compact danger" type="button" onClick={() => onDelete(item)} disabled={busy || deleteDisabled} title={deleteDisabled ? "Нельзя удалить scheduled/published контент" : undefined}>
                                     <Trash2 size={15} /> {actionId === `${item.id}:delete` ? "Удаляю" : "Удалить"}
@@ -5746,6 +5842,10 @@ function isPublicationLocked(item: ContentItem) {
 
 function canApproveContent(item: ContentItem) {
   return ["generated", "rejected"].includes(item.status);
+}
+
+function canPublishContentImmediately(item: ContentItem) {
+  return Boolean(item.site_id && item.section_id) && ["generated", "rejected", "approved"].includes(item.status);
 }
 
 function ContentView({ api, sites, content, onChanged }: ViewProps & { sites: Site[]; content: ContentItem[] }) {
@@ -8049,7 +8149,7 @@ function TopicMetaCell({ item, promptName }: { item: ContentItem; promptName?: s
 function StatusBadge({ status }: { status: string }) {
   const labels: Record<string, string> = {
     active: "Активно",
-    approved: "Согласовано",
+    approved: "Принято",
     brief_ready: "Бриф готов",
     collecting: "Сбор данных",
     collecting_serp: "Сбор выдачи",

@@ -1,6 +1,6 @@
 import asyncio
 
-from app import models
+from app import models, services as service_module
 from app.services import (
     CASINO_RATING_PROMPT_MARKER,
     PROMPT_FORMAT_CONTRACT_MARKER,
@@ -8,8 +8,52 @@ from app.services import (
     append_casino_rating_requirement,
     build_gemini_content,
     build_gemini_prompt,
+    call_gemini,
     variation_profile_for_position,
 )
+
+
+def test_gemini_request_retries_transient_http_errors(monkeypatch) -> None:
+    calls: list[str] = []
+    sleeps: list[int] = []
+
+    class FakeResponse:
+        def __init__(self, status_code: int):
+            self.status_code = status_code
+
+        def raise_for_status(self) -> None:
+            if self.status_code >= 400:
+                raise RuntimeError(f"HTTP {self.status_code}")
+
+        def json(self) -> dict:
+            return {"status": "ok"}
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, endpoint: str, json: dict, headers: dict) -> FakeResponse:
+            calls.append(endpoint)
+            return FakeResponse(503 if len(calls) < 3 else 200)
+
+    async def fake_sleep(delay: int) -> None:
+        sleeps.append(delay)
+
+    monkeypatch.setattr(service_module.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(service_module.asyncio, "sleep", fake_sleep)
+    provider = models.AiProvider(name="Gemini", provider_type="gemini", api_key="test-key")
+
+    response = asyncio.run(call_gemini(provider, "Generate"))
+
+    assert response == {"status": "ok"}
+    assert len(calls) == 3
+    assert sleeps == [2, 4]
 
 
 def test_casino_rating_requirement_is_optional_and_idempotent() -> None:

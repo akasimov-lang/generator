@@ -242,7 +242,7 @@ def test_task_pipeline_retries_competitor_failure_before_generation(monkeypatch:
         assert result.status == "generated"
 
 
-def test_task_pipeline_stops_competitor_collection_after_three_failures(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_task_pipeline_stops_competitor_collection_after_six_failures(monkeypatch: pytest.MonkeyPatch) -> None:
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     Base.metadata.create_all(bind=engine)
@@ -262,7 +262,7 @@ def test_task_pipeline_stops_competitor_collection_after_three_failures(monkeypa
 
         result = run_task_pipeline(db, task)
 
-        assert attempts == [item.id, item.id, item.id]
+        assert attempts == [item.id] * 6
         assert result.status == "generation_failed"
         assert item.competitor_research_status == "research_failed"
-        assert item.competitor_research_error.startswith("Attempt 3/3:")
+        assert item.competitor_research_error.startswith("Attempt 6/6:")
