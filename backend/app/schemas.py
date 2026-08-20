@@ -613,3 +613,4 @@ class AdminRequestLogResponse(BaseModel):
     destination: str
     result: str
     status_code: int | None
+    can_retry: bool

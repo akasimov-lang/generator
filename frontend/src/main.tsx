@@ -420,6 +420,7 @@ type AdminRequestLog = {
   destination: string;
   result: "Успешно" | "Ошибка" | "Ожидает ответа";
   status_code: number | null;
+  can_retry: boolean;
 };
 
 type PublicationCampaign = {
@@ -550,6 +551,35 @@ async function copyTextToClipboard(text: string) {
   const copied = document.execCommand("copy");
   document.body.removeChild(textarea);
   if (!copied) throw new Error("Clipboard copy failed");
+}
+
+function secureRandomIndex(max: number): number {
+  if (!Number.isInteger(max) || max < 1 || max > 256) throw new Error("Invalid random range");
+  const randomByte = new Uint8Array(1);
+  const unbiasedLimit = Math.floor(256 / max) * max;
+  do {
+    window.crypto.getRandomValues(randomByte);
+  } while (randomByte[0] >= unbiasedLimit);
+  return randomByte[0] % max;
+}
+
+function generateSecurePassword(length = 10): string {
+  const groups = [
+    "abcdefghijkmnopqrstuvwxyz",
+    "ABCDEFGHJKLMNPQRSTUVWXYZ",
+    "23456789",
+    "!@#$%^&*_-+="
+  ];
+  const allCharacters = groups.join("");
+  const characters = groups.map((group) => group[secureRandomIndex(group.length)]);
+  while (characters.length < Math.max(length, groups.length)) {
+    characters.push(allCharacters[secureRandomIndex(allCharacters.length)]);
+  }
+  for (let index = characters.length - 1; index > 0; index -= 1) {
+    const swapIndex = secureRandomIndex(index + 1);
+    [characters[index], characters[swapIndex]] = [characters[swapIndex], characters[index]];
+  }
+  return characters.join("");
 }
 
 const MAIN_VIEW_PATHS: Record<Exclude<AppView, "workspace">, string> = {
@@ -3107,7 +3137,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
   const selectedItems = content.filter((item) => selectedIds.includes(item.id));
   const bulkApproveItems = selectedItems.filter((item) => Boolean(item.section_id) && canApproveContent(item));
   const bulkPublishItems = selectedItems.filter(canPublishContentImmediately);
-  const agreedContentCount = content.filter((item) => ["approved", "scheduled", "retry_scheduled", "publication_paused", "publishing", "published", "publication_failed"].includes(item.status)).length;
+  const awaitingPublicationCount = content.filter((item) => Boolean(item.generated_at) && item.status !== "published").length;
   const sectionContentCounts = React.useMemo(() => {
     const counts = new Map<string, number>();
     content.forEach((item) => {
@@ -3294,7 +3324,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
           <span>Контент проекта</span>
           <span className="workspacePanelStats">
             <span>Контента: <b>{content.length}</b></span>
-            <span className="positive">Принято: <b>{agreedContentCount}</b></span>
+            <span className="positive">Ожидает публикации: <b>{awaitingPublicationCount}</b></span>
           </span>
         </span>
       )}>
@@ -3435,10 +3465,10 @@ type PublicationWorkflowSection = "process" | "queue" | "backlog";
 type PublicationWorkspaceSection = "content" | "campaigns" | PublicationWorkflowSection;
 
 function PublicationWorkflowNav({ content, campaigns, activeSection, onSectionChange }: { content: ContentItem[]; campaigns: PublicationCampaign[]; activeSection: PublicationWorkspaceSection; onSectionChange: (section: PublicationWorkspaceSection) => void }) {
-  const agreedCount = content.filter((item) => ["approved", "scheduled", "retry_scheduled", "publication_paused", "publishing", "published", "publication_failed"].includes(item.status)).length;
+  const awaitingPublicationCount = content.filter((item) => Boolean(item.generated_at) && item.status !== "published").length;
   const activeCampaignCount = campaigns.filter((campaign) => ["active", "paused", "created", "publishing_all"].includes(campaign.status)).length;
   const completedCampaignCount = campaigns.filter((campaign) => ["completed", "completed_with_errors"].includes(campaign.status)).length;
-  const processCount = content.filter((item) => item.status === "approved").length;
+  const processCount = content.filter((item) => Boolean(item.site_id && item.section_id) && ["generated", "rejected", "approved"].includes(item.status)).length;
   const queueCount = content.filter((item) => ["scheduled", "retry_scheduled", "publication_paused", "publishing"].includes(item.status)).length;
   const errorCount = content.filter((item) => item.status === "publication_failed").length;
   return (
@@ -3447,7 +3477,7 @@ function PublicationWorkflowNav({ content, campaigns, activeSection, onSectionCh
         <FolderKanban size={17} /> <span className="publicationWorkflowLabel"><strong>Кампании</strong><small>{activeCampaignCount} в работе · {completedCampaignCount} завершено</small></span><span>{campaigns.length}</span>
       </button>
       <button className={activeSection === "content" ? "active" : ""} type="button" onClick={() => onSectionChange("content")}>
-        <FileText size={17} /> <span className="publicationWorkflowLabel"><strong>Контент</strong><small>{agreedCount} согласовано</small></span><span>{content.length}</span>
+        <FileText size={17} /> <span className="publicationWorkflowLabel"><strong>Контент</strong><small>{awaitingPublicationCount} ожидает публикации</small></span><span>{content.length}</span>
       </button>
       <button className={activeSection === "process" ? "active" : ""} type="button" onClick={() => onSectionChange("process")}>
         <Activity size={17} /> <span className="publicationWorkflowLabel"><strong>Процесс</strong><small>готовы к запуску</small></span><span>{processCount}</span>
@@ -3473,9 +3503,11 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
   const [publishingAllCampaignId, setPublishingAllCampaignId] = React.useState("");
   const [reschedulingCampaignId, setReschedulingCampaignId] = React.useState("");
   const [previewItem, setPreviewItem] = React.useState<ContentItem | null>(null);
-  const approved = content.filter((item) => item.status === "approved" && (!selectedPublicationSectionIds.length || (item.section_id && selectedPublicationSectionIds.includes(item.section_id))));
+  const publicationReady = content.filter((item) => Boolean(item.site_id && item.section_id)
+    && ["generated", "rejected", "approved"].includes(item.status)
+    && (!selectedPublicationSectionIds.length || (item.section_id && selectedPublicationSectionIds.includes(item.section_id))));
   const publicationSections = sections
-    .map((section) => ({ section, count: content.filter((item) => item.status === "approved" && item.section_id === section.id).length }))
+    .map((section) => ({ section, count: content.filter((item) => ["generated", "rejected", "approved"].includes(item.status) && item.section_id === section.id).length }))
     .filter(({ count }) => count > 0);
   const publicationQueue = content
     .filter((item) => ["scheduled", "retry_scheduled", "publication_paused", "publishing"].includes(item.status))
@@ -3496,8 +3528,8 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
   async function createCampaign(event: React.FormEvent) {
     event.preventDefault();
     setFormError("");
-    if (!approved.length) {
-      setFormError("Нет approved-текстов для выбранного фильтра.");
+    if (!publicationReady.length) {
+      setFormError("Нет принятых текстов, ожидающих публикации, для выбранного фильтра.");
       return;
     }
     try {
@@ -3505,7 +3537,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
         method: "POST",
         body: JSON.stringify({
           name,
-          content_item_ids: approved.map((item) => item.id),
+          content_item_ids: publicationReady.map((item) => item.id),
           start_at: new Date(startAt).toISOString(),
           items_per_day: itemsPerDay
         })
@@ -3597,7 +3629,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
           <span className="publicationLaunchIcon"><Send size={20} /></span>
           <span className="publicationLaunchText">
             <strong>Запустить публикацию</strong>
-            <small>{launchExpanded ? "Нажмите, чтобы свернуть настройки" : `Нажмите, чтобы настроить кампанию · готово текстов: ${approved.length}`}</small>
+            <small>{launchExpanded ? "Нажмите, чтобы свернуть настройки" : `Нажмите, чтобы настроить кампанию · приняты и ожидают публикации: ${publicationReady.length}`}</small>
           </span>
           {launchExpanded ? <ChevronUp size={22} /> : <ChevronDown size={22} />}
         </button>
@@ -3611,7 +3643,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
               Пункты меню
               <span className="publicationSectionPicker">
                 <button className={!selectedPublicationSectionIds.length ? "active" : ""} type="button" onClick={() => setSelectedPublicationSectionIds([])}>
-                  Все approved <small>{content.filter((item) => item.status === "approved").length}</small>
+                  Приняты и ожидают публикации <small>{content.filter((item) => Boolean(item.site_id && item.section_id) && ["generated", "rejected", "approved"].includes(item.status)).length}</small>
                 </button>
                 {publicationSections.map(({ section, count }) => (
                   <button className={selectedPublicationSectionIds.includes(section.id) ? "active" : ""} type="button" key={section.id} onClick={() => togglePublicationSection(section.id)}>
@@ -5843,7 +5875,15 @@ function canApproveContent(item: ContentItem) {
 }
 
 function canPublishContentImmediately(item: ContentItem) {
-  return Boolean(item.site_id && item.section_id) && ["generated", "rejected", "approved"].includes(item.status);
+  return Boolean(item.site_id && item.section_id) && [
+    "generated",
+    "rejected",
+    "approved",
+    "scheduled",
+    "retry_scheduled",
+    "publication_paused",
+    "publication_failed"
+  ].includes(item.status);
 }
 
 function ContentView({ api, sites, content, onChanged }: ViewProps & { sites: Site[]; content: ContentItem[] }) {
@@ -7554,6 +7594,7 @@ function AdminRequestLogsPanel({ api }: Pick<ViewProps, "api">) {
   const [logs, setLogs] = React.useState<AdminRequestLog[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
+  const [retryingId, setRetryingId] = React.useState("");
 
   const loadLogs = React.useCallback(async () => {
     setLoading(true);
@@ -7571,6 +7612,20 @@ function AdminRequestLogsPanel({ api }: Pick<ViewProps, "api">) {
     loadLogs();
   }, [loadLogs]);
 
+  async function retryRequest(log: AdminRequestLog) {
+    if (!log.can_retry || retryingId) return;
+    setRetryingId(log.id);
+    setError("");
+    try {
+      await api(`/admin/request-logs/${log.id}/retry`, { method: "POST" });
+      await loadLogs();
+    } catch (retryError) {
+      setError(retryError instanceof Error ? retryError.message : "Не удалось повторить запрос");
+    } finally {
+      setRetryingId("");
+    }
+  }
+
   return (
     <DataPanel
       title="Логи запросов"
@@ -7579,15 +7634,16 @@ function AdminRequestLogsPanel({ api }: Pick<ViewProps, "api">) {
       {error ? <div className="formError">{error}</div> : null}
       {!loading && !logs.length ? <EmptyState text="Запросов пока нет." /> : (
         <ResponsiveTable
-          columns={["Дата и время", "Проект", "Пользователь", "Что отправили", "Метод", "Куда", "Результат"]}
+          columns={["Дата и время", "Проект", "Пользователь", "Что отправили", "Метод", "Куда", "Результат", "Действия"]}
           rows={logs.map((log) => [
             formatDate(log.created_at),
-            <strong>{log.project_name}</strong>,
+            <a className="requestLogProjectLink" href={pathForRoute("workspace", "overview", log.project_name)}>{log.project_name}</a>,
             log.actor_username || "—",
             <span className="requestLogAction"><strong>{log.action}</strong>{log.item_name ? <small>{log.item_name}</small> : null}</span>,
             <code className="requestLogMethod">{log.method}</code>,
             <span className="requestLogDestination" title={log.destination}>{log.destination}</span>,
-            <span className={`requestLogResult ${log.result === "Успешно" ? "success" : log.result === "Ошибка" ? "error" : "pending"}`}>{log.result}{log.status_code ? ` · ${log.status_code}` : ""}</span>
+            <span className={`requestLogResult ${log.result === "Успешно" ? "success" : log.result === "Ошибка" ? "error" : "pending"}`}>{log.result}{log.status_code ? ` · ${log.status_code}` : ""}</span>,
+            <button className="button compact secondary requestLogRetryButton" type="button" onClick={() => void retryRequest(log)} disabled={!log.can_retry || Boolean(retryingId)} title={log.can_retry ? "Повторить этот запрос" : "Успешную публикацию контента повторять нельзя"}><RefreshCcw size={14} /> {retryingId === log.id ? "Повторяем" : "Повторить"}</button>
           ])}
         />
       )}
@@ -7649,9 +7705,12 @@ function PasswordChangeForm({ api }: Pick<ViewProps, "api">) {
 
 function UsersAdminPanel({ api, currentUser, users, onChanged }: ViewProps & { currentUser: User; users: User[] }) {
   const [username, setUsername] = React.useState("");
-  const [password, setPassword] = React.useState("");
+  const [password, setPassword] = React.useState(() => generateSecurePassword());
   const [isAdmin, setIsAdmin] = React.useState(false);
   const [formError, setFormError] = React.useState("");
+  const [passwordActionId, setPasswordActionId] = React.useState("");
+  const [passwordCopiedId, setPasswordCopiedId] = React.useState("");
+  const [generatedPasswordNotice, setGeneratedPasswordNotice] = React.useState("Предложен новый безопасный пароль.");
 
   async function createUser(event: React.FormEvent) {
     event.preventDefault();
@@ -7662,11 +7721,24 @@ function UsersAdminPanel({ api, currentUser, users, onChanged }: ViewProps & { c
         body: JSON.stringify({ username, password, is_admin: isAdmin })
       });
       setUsername("");
-      setPassword("");
+      setPassword(generateSecurePassword());
+      setGeneratedPasswordNotice("Пользователь создан. Подготовлен новый пароль для следующего пользователя.");
       setIsAdmin(false);
       await onChanged();
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Не удалось создать пользователя");
+    }
+  }
+
+  async function generatePasswordForNewUser() {
+    setFormError("");
+    const generatedPassword = generateSecurePassword();
+    setPassword(generatedPassword);
+    try {
+      await copyTextToClipboard(generatedPassword);
+      setGeneratedPasswordNotice("Безопасный пароль сгенерирован и скопирован.");
+    } catch {
+      setGeneratedPasswordNotice("Безопасный пароль сгенерирован и добавлен в поле.");
     }
   }
 
@@ -7683,6 +7755,28 @@ function UsersAdminPanel({ api, currentUser, users, onChanged }: ViewProps & { c
     }
   }
 
+  async function resetAndCopyPassword(user: User) {
+    const confirmed = window.confirm(`Текущий пароль пользователя «${user.username}» нельзя прочитать. Создать новый пароль и скопировать его?`);
+    if (!confirmed) return;
+    setFormError("");
+    setPasswordActionId(user.id);
+    setPasswordCopiedId("");
+    try {
+      const result = await api<{ password: string }>(`/users/${user.id}/reset-password`, { method: "POST" });
+      try {
+        await copyTextToClipboard(result.password);
+        setPasswordCopiedId(user.id);
+        window.setTimeout(() => setPasswordCopiedId((current) => current === user.id ? "" : current), 2400);
+      } catch {
+        window.prompt(`Новый пароль пользователя ${user.username}. Скопируйте его сейчас:`, result.password);
+      }
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось создать новый пароль");
+    } finally {
+      setPasswordActionId("");
+    }
+  }
+
   return (
     <DataPanel title="Пользователи">
       <div className="subPanelTitle"><Users size={18} /><strong>Доступы</strong></div>
@@ -7693,7 +7787,10 @@ function UsersAdminPanel({ api, currentUser, users, onChanged }: ViewProps & { c
         </label>
         <label>
           Пароль
-          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} />
+          <span className="generatedPasswordControl">
+            <input type="text" autoComplete="new-password" value={password} onChange={(event) => { setPassword(event.target.value); setGeneratedPasswordNotice(""); }} required minLength={8} />
+            <button className="button secondary" type="button" onClick={() => void generatePasswordForNewUser()}><KeyRound size={16} /> Сгенерировать пароль</button>
+          </span>
         </label>
         <label className="checkboxRow">
           <input type="checkbox" checked={isAdmin} onChange={(event) => setIsAdmin(event.target.checked)} />
@@ -7703,6 +7800,7 @@ function UsersAdminPanel({ api, currentUser, users, onChanged }: ViewProps & { c
           <button className="button primary" type="submit"><UserPlus size={18} /> Создать пользователя</button>
         </div>
         {formError ? <span className="formError wide">{formError}</span> : null}
+        {generatedPasswordNotice ? <span className="formSuccess wide">{generatedPasswordNotice}</span> : null}
       </form>
 
       <ResponsiveTable
@@ -7728,6 +7826,9 @@ function UsersAdminPanel({ api, currentUser, users, onChanged }: ViewProps & { c
               disabled={user.id === currentUser.id}
             >
               {user.is_active ? "Отключить" : "Включить"}
+            </button>
+            <button className="button compact secondary" type="button" onClick={() => void resetAndCopyPassword(user)} disabled={Boolean(passwordActionId)}>
+              <Copy size={15} /> {passwordActionId === user.id ? "Создаём пароль" : passwordCopiedId === user.id ? "Скопировано" : "Скопировать пароль"}
             </button>
           </div>
         ])}

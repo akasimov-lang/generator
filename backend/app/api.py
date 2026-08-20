@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
+import secrets
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -63,7 +64,7 @@ from app.schemas import (
     UserUpdate,
 )
 from app.menu_templates import MENU_TEMPLATES
-from app.project_cache import ProjectCacheError, fetch_project_cache, fetch_project_menu_capabilities, sync_project_cache
+from app.project_cache import ProjectCacheError, fetch_project_cache, fetch_project_menu_capabilities, project_server_url, sync_project_cache
 from app.security import AdminUser, AuthUser, create_token, hash_password, verify_password
 from app.services import (
     BASE_PROMPT_TEMPLATE_NAME,
@@ -140,6 +141,20 @@ def _normalized_language(value: str | None) -> str:
 def _normalized_menu_path(value: str) -> str:
     path = value.strip().strip("/")
     return f"/{path}/" if path else "/"
+
+
+def _menu_request_endpoint(site: models.Site) -> str:
+    """Return the actual menu API endpoint, with legacy fallback for incomplete projects."""
+    try:
+        return project_server_url(site, "/projects/menu")
+    except ProjectCacheError:
+        return site.sections_endpoint or site.base_url
+
+
+def _request_username(user: Any) -> str | None:
+    if not isinstance(user, dict):
+        return None
+    return str(user.get("username") or "").strip() or None
 
 
 def _cached_menu_item_matches(item: Any, payload: SectionCreate) -> bool:
@@ -361,6 +376,17 @@ def update_user(user_id: str, payload: UserUpdate, current_admin: AdminUser, db:
     return user
 
 
+@router.post("/users/{user_id}/reset-password")
+def reset_user_password(user_id: str, _: AdminUser, db: Session = Depends(get_db)) -> dict[str, str]:
+    user = db.get(models.User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    temporary_password = secrets.token_urlsafe(12)
+    user.password_hash = hash_password(temporary_password)
+    db.commit()
+    return {"password": temporary_password}
+
+
 @router.get("/dashboard")
 def dashboard(_: AdminUser, db: Session = Depends(get_db)) -> dict:
     return get_dashboard(db)
@@ -541,7 +567,7 @@ def list_menu_templates(_: AuthUser, language: str = "") -> list[dict[str, Any]]
 def apply_menu_template(
     site_id: str,
     template_id: str,
-    _: AuthUser,
+    user: AuthUser,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     site = _get_site_or_404(db, site_id)
@@ -585,7 +611,7 @@ def apply_menu_template(
                 updated_count += 1
                 db.add(
                     models.PublicationLog(
-                        endpoint_url=site.sections_endpoint or site.base_url,
+                        endpoint_url=_menu_request_endpoint(site),
                         request_payload={
                             "action": "menu_item_update",
                             "project_name": site.name,
@@ -594,6 +620,7 @@ def apply_menu_template(
                             "menu_type": "header",
                             "parent_id": expected_parent_id,
                             "template_id": template_id,
+                            "username": _request_username(user),
                         },
                         response_status=None,
                         response_body={"section_id": section.id, "synchronized": False},
@@ -618,7 +645,7 @@ def apply_menu_template(
             created_count += 1
             db.add(
                 models.PublicationLog(
-                    endpoint_url=site.sections_endpoint or site.base_url,
+                    endpoint_url=_menu_request_endpoint(site),
                     request_payload={
                         "action": "menu_item_create",
                         "project_name": site.name,
@@ -628,6 +655,7 @@ def apply_menu_template(
                         "menu_type": "header",
                         "parent_id": section.parent_id,
                         "template_id": template_id,
+                        "username": _request_username(user),
                     },
                     response_status=None,
                     response_body={"section_id": section.id, "synchronized": False},
@@ -720,13 +748,13 @@ def get_site_menu_capabilities(site_id: str, _: AuthUser, db: Session = Depends(
 async def sync_site_changes(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> dict[str, Any]:
     site = _get_site_or_404(db, site_id)
     try:
-        return await sync_project_menus(db, site)
+        return await sync_project_menus(db, site, initiator_username=_request_username(_))
     except ProjectCacheError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
 
 
 @router.post("/sites/{site_id}/sections", response_model=SectionResponse)
-def create_section(site_id: str, payload: SectionCreate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+def create_section(site_id: str, payload: SectionCreate, user: AuthUser, db: Session = Depends(get_db)) -> Any:
     site = _get_site_or_404(db, site_id)
     parent = None
     if payload.parent_id:
@@ -747,8 +775,8 @@ def create_section(site_id: str, payload: SectionCreate, _: AuthUser, db: Sessio
     db.flush()
     db.add(
         models.PublicationLog(
-            endpoint_url=site.sections_endpoint or site.base_url,
-            request_payload={"action": "menu_item_create", "project_name": site.name, **payload.model_dump()},
+            endpoint_url=_menu_request_endpoint(site),
+            request_payload={"action": "menu_item_create", "project_name": site.name, "username": _request_username(user), **payload.model_dump()},
             response_status=None,
             response_body={"section_id": section.id, "synchronized": False},
         )
@@ -815,7 +843,7 @@ def release_adopted_section(site_id: str, section_id: str, _: AuthUser, db: Sess
 
 
 @router.patch("/sites/{site_id}/sections/{section_id}", response_model=SectionResponse)
-def update_section(site_id: str, section_id: str, payload: SectionUpdate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+def update_section(site_id: str, section_id: str, payload: SectionUpdate, user: AuthUser, db: Session = Depends(get_db)) -> Any:
     site = _get_site_or_404(db, site_id)
     section = _get_section_for_site(db, site_id, section_id)
     old_name = section.name
@@ -836,7 +864,7 @@ def update_section(site_id: str, section_id: str, payload: SectionUpdate, _: Aut
     ]
     db.add(
         models.PublicationLog(
-            endpoint_url=site.sections_endpoint or site.base_url,
+            endpoint_url=_menu_request_endpoint(site),
             request_payload={
                 "action": "menu_item_update",
                 "project_name": site.name,
@@ -845,6 +873,7 @@ def update_section(site_id: str, section_id: str, payload: SectionUpdate, _: Aut
                 "menu_type": section.menu_type,
                 "previous_name": old_name,
                 "previous_path": old_path,
+                "username": _request_username(user),
             },
             response_status=None,
             response_body={"section_id": section.id, "synchronized": False},
@@ -856,7 +885,7 @@ def update_section(site_id: str, section_id: str, payload: SectionUpdate, _: Aut
 
 
 @router.delete("/sites/{site_id}/sections/{section_id}")
-def delete_section(site_id: str, section_id: str, _: AuthUser, db: Session = Depends(get_db)) -> dict[str, bool]:
+def delete_section(site_id: str, section_id: str, user: AuthUser, db: Session = Depends(get_db)) -> dict[str, bool]:
     site = _get_site_or_404(db, site_id)
     section = _get_section_for_site(db, site_id, section_id)
     task_count = db.scalar(select(func.count(models.GenerationTask.id)).where(models.GenerationTask.section_id == section.id)) or 0
@@ -867,13 +896,14 @@ def delete_section(site_id: str, section_id: str, _: AuthUser, db: Session = Dep
     db.delete(section)
     db.add(
         models.PublicationLog(
-            endpoint_url=site.sections_endpoint or site.base_url,
+            endpoint_url=_menu_request_endpoint(site),
             request_payload={
                 "action": "menu_item_delete",
                 "project_name": site.name,
                 "name": section.name,
                 "path": section.path,
                 "menu_type": section.menu_type,
+                "username": _request_username(user),
             },
             response_status=None,
             response_body={"section_id": section.id, "deleted_from_system": True},
@@ -1675,7 +1705,7 @@ def publish_content_now(content_id: str, _: AdminUser, db: Session = Depends(get
 
 
 @router.post("/content/{content_id}/publish-immediately", response_model=ContentItemResponse)
-async def publish_content_immediately(content_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+async def publish_content_immediately(content_id: str, user: AuthUser, db: Session = Depends(get_db)) -> Any:
     item = db.get(models.ContentItem, content_id)
     if not item:
         raise HTTPException(status_code=404, detail="Content item not found")
@@ -1687,7 +1717,7 @@ async def publish_content_immediately(content_id: str, _: AuthUser, db: Session 
     campaign_id = item.publication_campaign_id
     try:
         validate_content_for_publication(item)
-        await publish_item(db, item, site)
+        await publish_item(db, item, site, initiator_username=_request_username(user))
         if item.status == "published":
             item.scheduled_at = None
             db.commit()
@@ -1849,15 +1879,18 @@ def list_admin_request_logs(_: AdminUser, db: Session = Depends(get_db)) -> list
     db.execute(delete(models.PublicationLog).where(models.PublicationLog.created_at < cutoff))
     db.commit()
     rows = db.execute(
-        select(models.PublicationLog, models.ContentItem.topic, models.Site.name)
+        select(models.PublicationLog, models.ContentItem.topic, models.Site.name, models.User.username, models.ContentItem.status)
         .outerjoin(models.ContentItem, models.ContentItem.id == models.PublicationLog.content_item_id)
         .outerjoin(models.Site, models.Site.id == models.ContentItem.site_id)
+        .outerjoin(models.GenerationTask, models.GenerationTask.id == models.ContentItem.task_id)
+        .outerjoin(models.User, models.User.id == models.GenerationTask.created_by_user_id)
         .where(models.PublicationLog.created_at >= cutoff)
         .order_by(models.PublicationLog.created_at.desc())
         .limit(200)
     ).all()
+    sites_by_name = {site.name: site for site in db.scalars(select(models.Site)).all()}
     result: list[dict[str, Any]] = []
-    for log, topic, site_name in rows:
+    for log, topic, site_name, task_creator_username, content_status in rows:
         payload = log.request_payload if isinstance(log.request_payload, dict) else {}
         action = payload.get("action")
         is_menu_create = action == "menu_item_create"
@@ -1868,22 +1901,67 @@ def list_admin_request_logs(_: AdminUser, db: Session = Depends(get_db)) -> list
         is_campaign_publish_all = action == "campaign_publish_all"
         requested_by = payload.get("requested_by") if isinstance(payload.get("requested_by"), dict) else {}
         project = payload.get("project") if isinstance(payload.get("project"), dict) else {}
+        project_name = str(project.get("name") or payload.get("project_name") or site_name or "Не определён")
+        menu_action = is_menu_create or is_menu_update or is_menu_delete or is_menu_sync or is_menu_confirmation
+        destination = log.endpoint_url
+        if menu_action and (site := sites_by_name.get(project_name)):
+            destination = _menu_request_endpoint(site)
+        actor_username = str(requested_by.get("username") or payload.get("username") or task_creator_username or "").strip() or None
         successful = log.response_status is not None and 200 <= log.response_status < 300 and not log.error_message
         result.append(
             {
                 "id": log.id,
                 "created_at": log.created_at,
-                "project_name": str(project.get("name") or payload.get("project_name") or site_name or "Не определён"),
-                "actor_username": str(requested_by.get("username") or payload.get("username") or "").strip() or None,
+                "project_name": project_name,
+                "actor_username": actor_username,
                 "action": "Публикация всей кампании" if is_campaign_publish_all else "Отправка меню" if is_menu_sync else "Добавление пункта меню" if is_menu_create else "Изменение пункта меню" if is_menu_update else "Удаление пункта меню" if is_menu_delete else "Синхронизация пункта меню" if is_menu_confirmation else "Публикация контента",
                 "item_name": str(payload.get("campaign", {}).get("name") if is_campaign_publish_all and isinstance(payload.get("campaign"), dict) else payload.get("name") or topic or "").strip() or None,
                 "method": "POST",
-                "destination": log.endpoint_url,
+                "destination": destination,
                 "result": "Успешно" if successful else "Ошибка" if log.error_message or (log.response_status or 0) >= 400 else "Ожидает ответа",
                 "status_code": log.response_status,
+                "can_retry": menu_action or bool(log.content_item_id and content_status != "published"),
             }
         )
     return result
+
+
+@router.post("/admin/request-logs/{log_id}/retry")
+async def retry_admin_request_log(log_id: str, user: AdminUser, db: Session = Depends(get_db)) -> dict[str, Any]:
+    log = db.get(models.PublicationLog, log_id)
+    if not log:
+        raise HTTPException(status_code=404, detail="Request log not found")
+    payload = log.request_payload if isinstance(log.request_payload, dict) else {}
+    action = payload.get("action")
+    menu_actions = {"menu_item_create", "menu_item_update", "menu_item_delete", "menu_sync", "menu_item_sync_confirmed"}
+    initiator_username = _request_username(user)
+
+    if action in menu_actions:
+        project = payload.get("project") if isinstance(payload.get("project"), dict) else {}
+        project_name = str(project.get("name") or payload.get("project_name") or "").strip()
+        site = db.scalar(select(models.Site).where(models.Site.name == project_name)) if project_name else None
+        if not site:
+            raise HTTPException(status_code=404, detail="Project for this request was not found")
+        try:
+            result = await sync_project_menus(db, site, initiator_username=initiator_username)
+        except ProjectCacheError as error:
+            raise HTTPException(status_code=502, detail=str(error)) from error
+        return {"operation": "menu_sync", **result}
+
+    if log.content_item_id:
+        item = db.get(models.ContentItem, log.content_item_id)
+        if not item:
+            raise HTTPException(status_code=404, detail="Content for this request was not found")
+        if item.status == "published":
+            raise HTTPException(status_code=409, detail="Content is already published; repeat request is disabled")
+        if not item.site_id:
+            raise HTTPException(status_code=400, detail="Content does not have a project")
+        site = _get_site_or_404(db, item.site_id)
+        await publish_item(db, item, site, initiator_username=initiator_username)
+        db.refresh(item)
+        return {"operation": "content_publication", "success": item.status == "published", "status": item.status}
+
+    raise HTTPException(status_code=400, detail="This request type cannot be repeated")
 
 
 @router.post("/publication/run-due")

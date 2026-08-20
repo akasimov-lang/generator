@@ -1,11 +1,13 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 
+import pytest
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app import models
-from app.api import apply_menu_template, adopt_cached_section, create_menu_library_item, create_section, create_sections_bulk, delete_section, list_admin_request_logs, release_adopted_section, update_menu_library_item, update_section
+from app.api import apply_menu_template, adopt_cached_section, create_menu_library_item, create_section, create_sections_bulk, delete_section, list_admin_request_logs, release_adopted_section, retry_admin_request_log, update_menu_library_item, update_section
 from app.menu_templates import DE_CASINO_REVIEW_HEADER_TEMPLATE
 from app.db import Base
 from app.schemas import MenuLibraryItemCreate, MenuLibraryItemUpdate, SectionCreate, SectionsBulkCreate, SectionUpdate
@@ -23,6 +25,7 @@ def test_menu_create_is_logged_and_old_request_logs_are_removed() -> None:
             name="review.example",
             base_url="https://review.example",
             publication_endpoint="https://review.example/api/content",
+            cache_server_ip="dolphin",
         )
         db.add(site)
         db.flush()
@@ -38,7 +41,7 @@ def test_menu_create_is_logged_and_old_request_logs_are_removed() -> None:
         create_section(
             site.id,
             SectionCreate(external_id="bonuses", name="Bonusy", path="/bonuses/", menu_type="header"),
-            None,  # type: ignore[arg-type]
+            {"username": "anton"},  # type: ignore[arg-type]
             db,
         )
         logs = list_admin_request_logs(None, db)  # type: ignore[arg-type]
@@ -47,9 +50,64 @@ def test_menu_create_is_logged_and_old_request_logs_are_removed() -> None:
         assert logs[0]["project_name"] == "review.example"
         assert logs[0]["action"] == "Добавление пункта меню"
         assert logs[0]["method"] == "POST"
+        assert logs[0]["destination"] == "https://dolphin.slf-hostesting.com/projects/menu"
+        assert logs[0]["actor_username"] == "anton"
+        assert logs[0]["can_retry"] is True
         assert logs[0]["result"] == "Ожидает ответа"
         db.refresh(site)
         assert site.menu_library == [{"name": "Bonusy", "path": "/bonuses/", "external_id": "bonuses", "russian_name": ""}]
+
+
+def test_menu_request_log_can_be_retried_by_current_admin(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, str | None]] = []
+
+    async def fake_sync(db: Session, site: models.Site, initiator_username: str | None = None) -> dict:
+        calls.append((site.name, initiator_username))
+        return {"success": True, "status_codes": [201], "last_status_code": 201, "results": []}
+
+    monkeypatch.setattr("app.api.sync_project_menus", fake_sync)
+    with make_session() as db:
+        site = models.Site(
+            name="review.example",
+            base_url="https://review.example",
+            publication_endpoint="https://review.example/api/content",
+            cache_server_ip="dolphin",
+        )
+        db.add(site)
+        db.commit()
+        create_section(
+            site.id,
+            SectionCreate(external_id="bonuses", name="Bonusy", path="/bonuses/", menu_type="header"),
+            {"username": "anton"},  # type: ignore[arg-type]
+            db,
+        )
+        log = db.scalar(select(models.PublicationLog).order_by(models.PublicationLog.created_at.desc()))
+        assert log is not None
+
+        result = asyncio.run(retry_admin_request_log(log.id, {"username": "arseniy"}, db))  # type: ignore[arg-type]
+
+        assert result["operation"] == "menu_sync"
+        assert result["success"] is True
+        assert calls == [("review.example", "arseniy")]
+
+
+def test_request_logs_use_generation_task_creator_for_legacy_publication() -> None:
+    with make_session() as db:
+        creator = models.User(username="arseniy", password_hash="hash", is_active=True)
+        site = models.Site(name="review.example", base_url="https://review.example", publication_endpoint="https://review.example/api/content")
+        db.add_all([creator, site])
+        db.flush()
+        task = models.GenerationTask(title="Legacy task", created_by=creator, site_id=site.id, geo="DE", language="de", topics_count=1)
+        item = models.ContentItem(task=task, site_id=site.id, topic="Legacy topic", slug="/legacy/", generated_json={}, idempotency_key="legacy-log-actor")
+        db.add_all([task, item])
+        db.flush()
+        db.add(models.PublicationLog(content_item_id=item.id, endpoint_url="https://server.example/projects/create", error_message="timeout"))
+        db.commit()
+
+        logs = list_admin_request_logs(None, db)  # type: ignore[arg-type]
+
+        assert logs[0]["actor_username"] == "arseniy"
+        assert logs[0]["can_retry"] is True
 
 
 def test_project_menu_library_stores_custom_items_without_duplicates() -> None:
@@ -306,6 +364,7 @@ def test_added_menu_item_can_be_deleted() -> None:
             name="review.example",
             base_url="https://review.example",
             publication_endpoint="https://review.example/api/content",
+            cache_server_ip="dolphin",
         )
         section = models.Section(site=site, external_id="bonuses", name="Bonusy", path="/bonuses/", menu_type="header")
         db.add_all([site, section])
@@ -315,6 +374,6 @@ def test_added_menu_item_can_be_deleted() -> None:
 
         assert result == {"deleted": True}
         assert db.scalar(select(models.Section).where(models.Section.id == section.id)) is None
-        log = db.scalar(select(models.PublicationLog).where(models.PublicationLog.endpoint_url == site.base_url))
+        log = db.scalar(select(models.PublicationLog).where(models.PublicationLog.endpoint_url == "https://dolphin.slf-hostesting.com/projects/menu"))
         assert log is not None
         assert log.request_payload["action"] == "menu_item_delete"

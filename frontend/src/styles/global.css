@@ -4772,6 +4772,25 @@ td {
   white-space: nowrap;
 }
 
+.requestLogProjectLink {
+  color: var(--text);
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.requestLogProjectLink:hover,
+.requestLogProjectLink:focus-visible {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.requestLogRetryButton {
+  min-height: 28px;
+  padding: 4px 7px;
+  white-space: nowrap;
+}
+
 .bulkMenuSelect {
   flex: 1 1 280px;
   min-width: 240px;
@@ -5931,6 +5950,23 @@ td {
 
 .compactForm {
   margin-top: 14px;
+}
+
+.generatedPasswordControl {
+  align-items: stretch;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.generatedPasswordControl .button {
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .generatedPasswordControl {
+    grid-template-columns: 1fr;
+  }
 }
 
 label {

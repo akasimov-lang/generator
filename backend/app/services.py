@@ -931,7 +931,15 @@ def analyze_content_quality(payload: dict) -> dict:
 
 
 def validate_content_for_publication(item: models.ContentItem) -> dict:
-    if item.status not in {"generated", "rejected", "approved", "scheduled", "retry_scheduled", "publishing"}:
+    if item.status not in {
+        "generated",
+        "rejected",
+        "approved",
+        "scheduled",
+        "retry_scheduled",
+        "publication_paused",
+        "publication_failed",
+    }:
         raise ValueError(f"Content in status '{item.status}' cannot be approved or published")
     quality = analyze_content_quality(item.generated_json)
     if quality["issues"]:
@@ -2665,8 +2673,8 @@ def schedule_campaign(db: Session, payload: PublicationCampaignCreate) -> models
         item = items_by_id[item_id]
         if item.site_id != payload.site_id:
             raise ValueError("Campaign can include only content from the selected site")
-        if item.status != "approved":
-            raise ValueError("Campaign can include only approved content")
+        if item.status not in {"generated", "rejected", "approved"}:
+            raise ValueError("Campaign can include only publication-ready content")
         validate_content_for_publication(item)
 
     task_ids = {item.task_id for item in items}
@@ -3030,7 +3038,7 @@ def build_project_menu_payload(db: Session, site: models.Site, menu_type: str, n
     return {"type": menu_type, "folder": site.name, "list": items}
 
 
-async def sync_project_menus(db: Session, site: models.Site) -> dict:
+async def sync_project_menus(db: Session, site: models.Site, initiator_username: str | None = None) -> dict:
     endpoint = project_server_url(site, "/projects/menu")
     results: list[dict] = []
     async with httpx.AsyncClient(timeout=45.0) as client:
@@ -3050,7 +3058,7 @@ async def sync_project_menus(db: Session, site: models.Site) -> dict:
                 successful = 200 <= response.status_code < 300
                 log = models.PublicationLog(
                     endpoint_url=endpoint,
-                    request_payload={"action": "menu_sync", "project_name": site.name, **payload},
+                    request_payload={"action": "menu_sync", "project_name": site.name, "username": initiator_username, **payload},
                     response_status=response.status_code,
                     response_body=response_body if isinstance(response_body, dict) else {"data": response_body},
                     error_message=None if successful else f"Menu endpoint returned HTTP {response.status_code}",
@@ -3085,7 +3093,7 @@ async def sync_project_menus(db: Session, site: models.Site) -> dict:
             except Exception as exc:
                 db.add(models.PublicationLog(
                     endpoint_url=endpoint,
-                    request_payload={"action": "menu_sync", "project_name": site.name, **payload},
+                    request_payload={"action": "menu_sync", "project_name": site.name, "username": initiator_username, **payload},
                     error_message=str(exc)[:1000],
                 ))
                 db.commit()
@@ -3146,7 +3154,7 @@ def build_project_page_payload(
     }
 
 
-async def publish_item(db: Session, item: models.ContentItem, site: models.Site) -> None:
+async def publish_item(db: Session, item: models.ContentItem, site: models.Site, initiator_username: str | None = None) -> None:
     try:
         endpoint = project_server_url(site, "/projects/create")
     except ProjectCacheError:
@@ -3158,7 +3166,7 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site)
             models.PublicationLog(
                 content_item_id=item.id,
                 endpoint_url=endpoint,
-                request_payload=item.generated_json,
+                request_payload={**item.generated_json, "requested_by": {"username": initiator_username}} if initiator_username else item.generated_json,
                 error_message=str(exc),
             )
         )
@@ -3184,6 +3192,8 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site)
                 },
             )
         logged_payload = {**request_payload, "token": "[redacted]"}
+        if initiator_username:
+            logged_payload["requested_by"] = {"username": initiator_username}
         response_body = response.json() if response.headers.get("content-type", "").startswith("application/json") else {"raw": response.text}
         log = models.PublicationLog(
             content_item_id=item.id,
@@ -3209,6 +3219,8 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site)
             failed_payload = {**request_payload, "token": "[redacted]"}
         except UnboundLocalError:
             failed_payload = {"folder": site.name, "content_item_id": item.id}
+        if initiator_username:
+            failed_payload["requested_by"] = {"username": initiator_username}
         db.add(
             models.PublicationLog(
                 content_item_id=item.id,

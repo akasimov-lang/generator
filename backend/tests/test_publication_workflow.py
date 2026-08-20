@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app import models
+from app import api as api_module
 from app import project_cache as project_cache_module
 from app import services as service_module
 from app.db import Base
@@ -164,6 +165,32 @@ def test_campaign_preserves_topic_order_and_alternates_menu_sections(db: Session
         .order_by(models.ContentItem.scheduled_at.asc())
     ).all()
     assert [item.topic for item in queued] == ["Casino 1", "Bonus 1", "Casino 2", "Bonus 2"]
+
+
+def test_campaign_accepts_generated_content_as_ready_for_publication(db: Session) -> None:
+    site, item = make_content(db, status="generated")
+    section = models.Section(site=site, external_id="guides", name="Guides", path="/guides/")
+    db.add(section)
+    db.flush()
+    item.section_id = section.id
+    db.commit()
+
+    campaign = schedule_campaign(
+        db,
+        PublicationCampaignCreate(
+            name="Generated content publication",
+            site_id=site.id,
+            content_item_ids=[item.id],
+            start_at=datetime.now(timezone.utc),
+            interval_minutes=1440,
+            items_per_run=1,
+        ),
+    )
+
+    assert campaign.status == "active"
+    assert item.status == "scheduled"
+    assert item.publication_campaign_id == campaign.id
+    assert item.scheduled_at is not None
 
 
 def test_campaign_mode_change_replaces_remaining_queue_and_counts_today_publications(db: Session) -> None:
@@ -426,5 +453,54 @@ def test_campaign_completion_time_is_fixed_when_queue_finishes(db: Session) -> N
     item.published_at = datetime.now(timezone.utc)
     refresh_campaign_status(db, campaign.id)
 
+    assert campaign.status == "completed"
+    assert campaign.completed_at is not None
+
+
+def test_manual_publication_bypasses_queue_and_records_actual_time(db: Session, monkeypatch: pytest.MonkeyPatch) -> None:
+    site, item = make_content(db)
+    section = models.Section(site=site, external_id="guides", name="Guides", path="/guides/")
+    db.add(section)
+    db.flush()
+    item.section_id = section.id
+    campaign = schedule_campaign(
+        db,
+        PublicationCampaignCreate(
+            name="Queued publication",
+            site_id=site.id,
+            content_item_ids=[item.id],
+            start_at=datetime.now(timezone.utc) + timedelta(days=5),
+            interval_minutes=1440,
+            items_per_run=1,
+        ),
+    )
+    planned_at = item.scheduled_at
+    actual_at = datetime.now(timezone.utc)
+
+    async def fake_publish_item(
+        session: Session,
+        queued_item: models.ContentItem,
+        queued_site: models.Site,
+        initiator_username: str | None = None,
+    ) -> None:
+        assert queued_item.status == "scheduled"
+        assert queued_item.scheduled_at == planned_at
+        assert queued_site.id == site.id
+        assert initiator_username == "admin"
+        queued_item.status = "published"
+        queued_item.published_at = actual_at
+        queued_item.published_url = "https://example.test/guides/test/"
+        session.commit()
+
+    monkeypatch.setattr(api_module, "publish_item", fake_publish_item)
+
+    result = asyncio.run(api_module.publish_content_immediately(item.id, {"username": "admin"}, db))
+
+    assert result.status == "published"
+    assert result.scheduled_at is None
+    assert result.published_at is not None
+    assert result.published_at.replace(tzinfo=timezone.utc) == actual_at.replace(tzinfo=timezone.utc)
+    assert result.published_url == "https://example.test/guides/test/"
+    db.refresh(campaign)
     assert campaign.status == "completed"
     assert campaign.completed_at is not None
