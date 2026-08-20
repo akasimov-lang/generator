@@ -16,6 +16,7 @@ import {
   ChevronRight,
   ChevronUp,
   CheckCircle2,
+  CircleAlert,
   Copy,
   CornerDownRight,
   Database,
@@ -41,6 +42,8 @@ import {
   Send,
   Settings,
   ShieldCheck,
+  Sparkles,
+  SquareCheckBig,
   Star,
   Sun,
   Trash2,
@@ -198,6 +201,7 @@ type Site = {
   domains_count: number;
   cache_domains: string[];
   cache_server_ip: string | null;
+  cache_server_host: string | null;
   project_status: "test" | "working" | "not_in_focus" | "duplicate";
   is_test_project: boolean;
   has_menu: boolean;
@@ -215,6 +219,24 @@ type MenuCapabilities = {
   header_menu_nested: boolean | null;
   footer_menu_rendered: boolean | null;
   footer_menu_nested: boolean | null;
+};
+
+type MenuTemplate = {
+  id: string;
+  language: string;
+  name: string;
+  description: string;
+  max_depth: number;
+  items: MenuLibraryItem[];
+};
+
+type MenuTemplateApplyResult = {
+  template_id: string;
+  total_count: number;
+  created_count: number;
+  skipped_count: number;
+  updated_count: number;
+  sections: Section[];
 };
 
 type ProjectCacheItem = {
@@ -238,6 +260,13 @@ type ProjectCacheSyncResult = {
   updated_count: number;
   confirmed_sections_count: number;
   projects: ProjectCacheItem[];
+};
+
+type ProjectChangesSyncResult = {
+  success: boolean;
+  status_codes: number[];
+  last_status_code: number | null;
+  results: Array<{ type: "header" | "footer"; status_code: number | null; success: boolean; error?: string }>;
 };
 
 type DuplicateSitesDeleteResult = {
@@ -322,6 +351,10 @@ type TaskDetails = {
   items: ContentItem[];
 };
 
+type TopicSuggestionsResponse = {
+  topics: string[];
+};
+
 type TaskRegenerateAllOptions = {
   prompt_template_name: string;
   prompt_template: string;
@@ -386,6 +419,7 @@ type AdminRequestLog = {
   method: string;
   destination: string;
   result: "Успешно" | "Ошибка" | "Ожидает ответа";
+  status_code: number | null;
 };
 
 type PublicationCampaign = {
@@ -461,6 +495,18 @@ type AppRoute = {
 };
 
 const API_BASE = "/api";
+
+type ApiRequestError = Error & { statusCode?: number; code?: string };
+
+function requestErrorCode(error: unknown): string {
+  if (error instanceof Error) {
+    const requestError = error as ApiRequestError;
+    if (requestError.statusCode) return `HTTP ${requestError.statusCode}`;
+    if (requestError.code) return requestError.code.toUpperCase();
+    if (error.name === "TypeError" || /failed to fetch|network/i.test(error.message)) return "NETWORK";
+  }
+  return "UNKNOWN";
+}
 const ACTIVE_RESEARCH_STATUSES = ["queued", "collecting_serp", "serp_collected", "serp_empty", "fetching_pages", "pages_fetched"];
 const ACTIVE_GENERATION_STATUSES = ["generation_queued", "generating"];
 const DEFAULT_TARGET_WORDS = 2000;
@@ -811,11 +857,15 @@ function App() {
         setCurrentUser(null);
         setUsers([]);
         setArchivedTasks([]);
-        throw new Error("Нужно войти заново");
+        const authError = new Error("Нужно войти заново") as ApiRequestError;
+        authError.statusCode = response.status;
+        throw authError;
       }
       if (!response.ok) {
         const error = await response.json().catch(() => ({ detail: "Request failed" }));
-        throw new Error(error.detail || "Request failed");
+        const requestError = new Error(error.detail || "Request failed") as ApiRequestError;
+        requestError.statusCode = response.status;
+        throw requestError;
       }
       return response.json();
     },
@@ -1598,6 +1648,8 @@ function ProjectWorkspaceView({
   const [menuCapabilities, setMenuCapabilities] = React.useState<MenuCapabilities | null>(null);
   const [menuCapabilitiesLoading, setMenuCapabilitiesLoading] = React.useState(false);
   const [menuCapabilitiesError, setMenuCapabilitiesError] = React.useState("");
+  const [projectRefreshStatus, setProjectRefreshStatus] = React.useState<"idle" | "loading" | "success" | "error">("idle");
+  const [projectRefreshResponseCode, setProjectRefreshResponseCode] = React.useState("");
   const [publicationWorkflowSection, setPublicationWorkflowSection] = React.useState<PublicationWorkspaceSection>("campaigns");
   const projectLoadRequestRef = React.useRef(0);
   const selectedSite = sites.find((site) => site.id === selectedSiteId) || null;
@@ -1625,17 +1677,21 @@ function ProjectWorkspaceView({
   }, [currentUsername, selectedSiteId]);
 
   const loadProject = React.useCallback(async () => {
-    if (!selectedSiteId) return;
+    if (!selectedSiteId) return { success: false, errorCode: "NO_PROJECT" };
     const requestId = projectLoadRequestRef.current + 1;
     projectLoadRequestRef.current = requestId;
     setWorkspaceError("");
     setMenuCapabilitiesLoading(true);
     setMenuCapabilitiesError("");
-    const requestResource = async <T,>(path: string): Promise<{ value: T | null; error: string }> => {
+    const requestResource = async <T,>(path: string): Promise<{ value: T | null; error: string; errorCode: string }> => {
       try {
-        return { value: await api<T>(path), error: "" };
+        return { value: await api<T>(path), error: "", errorCode: "" };
       } catch (error) {
-        return { value: null, error: error instanceof Error ? error.message : "Не удалось загрузить данные" };
+        return {
+          value: null,
+          error: error instanceof Error ? error.message : "Не удалось загрузить данные",
+          errorCode: requestErrorCode(error)
+        };
       }
     };
     const [nextOverview, nextTasks, nextContent, nextSections, nextPrompts, nextLogs, nextCampaigns, nextMenuCapabilities] = await Promise.all([
@@ -1648,7 +1704,7 @@ function ProjectWorkspaceView({
       requestResource<PublicationCampaign[]>(`/sites/${selectedSiteId}/publication-campaigns`),
       requestResource<MenuCapabilities>(`/sites/${selectedSiteId}/menu-capabilities`)
     ]);
-    if (requestId !== projectLoadRequestRef.current) return;
+    if (requestId !== projectLoadRequestRef.current) return { success: false, errorCode: "CANCELLED" };
     if (nextOverview.value) setOverview(nextOverview.value);
     if (nextTasks.value) setSiteTasks(nextTasks.value);
     if (nextContent.value) setSiteContent(nextContent.value);
@@ -1663,6 +1719,12 @@ function ProjectWorkspaceView({
       .map((result) => result.error)
       .filter(Boolean);
     setWorkspaceError(dataErrors.length ? "Не удалось загрузить часть данных проекта. Повторите попытку через несколько секунд." : "");
+    const failedResource = [nextOverview, nextTasks, nextContent, nextSections, nextPrompts, nextLogs, nextCampaigns, nextMenuCapabilities]
+      .find((result) => Boolean(result.error));
+    return {
+      success: !failedResource,
+      errorCode: failedResource?.errorCode || ""
+    };
   }, [api, selectedSiteId]);
 
   React.useEffect(() => {
@@ -1707,23 +1769,48 @@ function ProjectWorkspaceView({
       setMenuCapabilities(null);
       setMenuCapabilitiesLoading(false);
       setMenuCapabilitiesError("");
+      setProjectRefreshStatus("idle");
+      setProjectRefreshResponseCode("");
       setWorkspaceError("");
       void loadProject();
     }
   }, [loadProject, selectedSiteId, workspaceSiteStorageKey]);
 
   const refreshProject = React.useCallback(async (syncExternal = false) => {
+    let changesResult: ProjectChangesSyncResult | null = null;
     if (syncExternal && selectedSite) {
       await api<ProjectCacheSyncResult>("/sites/cache/sync", {
         method: "POST",
         body: JSON.stringify({ names: [selectedSite.name] })
       });
+      changesResult = await api<ProjectChangesSyncResult>(`/sites/${selectedSite.id}/sync-changes`, { method: "POST" });
       const refreshedCapabilities = await api<MenuCapabilities>(`/sites/${selectedSite.id}/menu-capabilities?refresh=true`);
       setMenuCapabilities(refreshedCapabilities);
     }
     await onChanged();
-    await loadProject();
+    const loaded = await loadProject();
+    return {
+      success: loaded.success && (!changesResult || changesResult.success),
+      errorCode: loaded.errorCode || (changesResult && !changesResult.success ? "TARGET" : ""),
+      statusCode: changesResult?.last_status_code ?? null
+    };
   }, [api, loadProject, onChanged, selectedSite]);
+
+  const handleProjectRefresh = React.useCallback(async () => {
+    if (!selectedSite || projectRefreshStatus === "loading") return;
+    setProjectRefreshStatus("loading");
+    setProjectRefreshResponseCode("");
+    setWorkspaceError("");
+    try {
+      const result = await refreshProject(true);
+      setProjectRefreshStatus(result.success ? "success" : "error");
+      setProjectRefreshResponseCode(result.statusCode ? String(result.statusCode) : result.errorCode.replace(/^HTTP\s+/, ""));
+    } catch (error) {
+      setProjectRefreshStatus("error");
+      setProjectRefreshResponseCode(requestErrorCode(error).replace(/^HTTP\s+/, ""));
+      setWorkspaceError(error instanceof Error ? error.message : "Не удалось обновить проект");
+    }
+  }, [projectRefreshStatus, refreshProject, selectedSite]);
 
   async function retryMenuCapabilities() {
     if (!selectedSite || menuCapabilitiesLoading) return;
@@ -1876,7 +1963,15 @@ function ProjectWorkspaceView({
               </>
             ) : null}
           </div>
-          <button className="button secondary" type="button" onClick={() => refreshProject(true)} disabled={!selectedSite}><RefreshCcw size={18} /> Обновить проект</button>
+          <button className={`button secondary projectRefreshButton ${projectRefreshStatus === "success" ? "isSuccess" : projectRefreshStatus === "error" ? "isError" : ""}`} type="button" onClick={() => void handleProjectRefresh()} disabled={!selectedSite || projectRefreshStatus === "loading"}>
+            <span className="projectRefreshButtonLabel">
+              <span className={`buttonRefreshIcon ${projectRefreshStatus === "loading" ? "isLoading" : projectRefreshStatus === "error" ? "isError" : ""}`}>
+                {projectRefreshStatus === "success" ? <SquareCheckBig size={15} /> : projectRefreshStatus === "error" ? <CircleAlert size={15} /> : <RefreshCcw size={15} />}
+              </span>
+              {projectRefreshStatus === "loading" ? "Обновление" : projectRefreshStatus === "success" ? "Готово" : projectRefreshStatus === "error" ? "Ошибка" : "Обновить проект"}
+            </span>
+            {selectedSite ? <span className="projectRefreshMeta"><small title={selectedSite.cache_server_host || "Сервер не указан"}>{selectedSite.cache_server_host || "—"}</small>{projectRefreshStatus === "success" || projectRefreshStatus === "error" ? <em className={projectRefreshStatus === "success" ? "success" : ""}>Status Code: {projectRefreshResponseCode || "UNKNOWN"}</em> : null}</span> : null}
+          </button>
         </div>
         {selectedSite ? (
           <div className="projectUpdatedAt">
@@ -1938,7 +2033,7 @@ function ProjectWorkspaceView({
           activeSection={publicationWorkflowSection}
           onSectionChange={openPublicationSection}
         />
-      ) : selectedSite && activeTab !== "topics" ? (
+      ) : selectedSite && activeTab === "overview" ? (
         <div className="workspaceAccordionHint" role="note">
           <ChevronDown size={17} />
           <span><strong>Блоки можно сворачивать.</strong> Нажмите на заголовок блока — выбранное положение сохранится отдельно для вашего пользователя и проекта.</span>
@@ -2098,6 +2193,38 @@ function ProjectOverviewPanel({ overview, content, sections, logs }: { overview:
   );
 }
 
+function useSimulatedOperationProgress(active: boolean) {
+  const [progress, setProgress] = React.useState(0);
+  React.useEffect(() => {
+    if (!active) return;
+    const intervalId = window.setInterval(() => {
+      setProgress((current) => {
+        if (current >= 94) return 94;
+        const increment = current < 30 ? 4 : current < 65 ? 2 : 1;
+        return Math.min(94, current + increment);
+      });
+    }, 420);
+    return () => window.clearInterval(intervalId);
+  }, [active]);
+  return [progress, setProgress] as const;
+}
+
+function CircularOperationProgress({ value }: { value: number }) {
+  const normalizedValue = Math.max(0, Math.min(100, Math.round(value)));
+  return (
+    <span
+      className={`circularOperationProgress ${normalizedValue === 100 ? "complete" : ""}`}
+      style={{ "--operation-progress": `${normalizedValue * 3.6}deg` } as React.CSSProperties}
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={normalizedValue}
+    >
+      <i>{normalizedValue}</i>
+    </span>
+  );
+}
+
 function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, tasks, onChanged }: ViewProps & { site: Site; providers: AiProvider[]; sections: Section[]; promptTemplates: PromptTemplate[]; tasks: Task[] }) {
   const [title, setTitle] = React.useState("");
   const [geo, setGeo] = React.useState(() => projectGeoCode(site));
@@ -2110,6 +2237,8 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
   const [shortcode, setShortcode] = React.useState("");
   const [collectCompetitors, setCollectCompetitors] = React.useState(false);
   const [includeCasinoRating, setIncludeCasinoRating] = React.useState(false);
+  const [generatingTopics, setGeneratingTopics] = React.useState(false);
+  const [topicGenerationProgress, setTopicGenerationProgress] = useSimulatedOperationProgress(generatingTopics);
   const [formError, setFormError] = React.useState("");
   const [taskDetails, setTaskDetails] = React.useState<TaskDetails | null>(null);
   const [taskResearch, setTaskResearch] = React.useState<CompetitorResearch[]>([]);
@@ -2138,6 +2267,43 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
       setPromptTemplateId(latestPromptTemplate(promptTemplates)?.id || "");
     }
   }, [promptTemplateId, promptTemplates]);
+
+  async function generateTopicsWithGemini() {
+    setFormError("");
+    if (topicCount > 20) {
+      setFormError("Чтобы добавить ещё 10 тем, оставьте в форме не более 20 тем.");
+      return;
+    }
+    const provider = providers.find((item) => item.id === providerId);
+    if (!provider || provider.provider_type !== "gemini" || !provider.is_active) {
+      setFormError("Для генерации тем выберите активный Gemini provider.");
+      return;
+    }
+    setTopicGenerationProgress(3);
+    setGeneratingTopics(true);
+    try {
+      const response = await api<TopicSuggestionsResponse>(`/sites/${site.id}/topic-suggestions`, {
+        method: "POST",
+        body: JSON.stringify({
+          geo,
+          language,
+          ai_provider_id: provider.id,
+          section_id: sectionId || null,
+          current_topics: topics.split("\n").map((line) => line.trim()).filter(Boolean)
+        })
+      });
+      const currentTopics = topics.split("\n").map((line) => line.trim()).filter(Boolean);
+      setTopics([...currentTopics, ...response.topics].join("\n"));
+      setTopicGenerationProgress(100);
+      await new Promise((resolve) => window.setTimeout(resolve, 350));
+    } catch (error) {
+      setTopicGenerationProgress(0);
+      setFormError(error instanceof Error ? error.message : "Gemini не смог сгенерировать уникальные темы.");
+    } finally {
+      setGeneratingTopics(false);
+      window.setTimeout(() => setTopicGenerationProgress(0), 120);
+    }
+  }
 
   async function createTask(event: React.FormEvent) {
     event.preventDefault();
@@ -2317,7 +2483,19 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
             <span><b>Собрать рейтинг казино</b><small>Добавит в промпт тематический рейтинг из 5–10 казино с оценками и обоснованием мест.</small></span>
           </label>
           <label className="wide">
-            Темы, каждая с новой строки
+            <span className="topicFieldHeader">
+              <span>Темы, каждая с новой строки</span>
+              <button
+                className="button compact topicGenerateButton"
+                type="button"
+                onClick={generateTopicsWithGemini}
+                disabled={generatingTopics || topicCount > 20}
+                title={topicCount > 20 ? "Для добавления 10 тем в форме должно быть не более 20 тем" : "Добавить 10 уникальных тем через Gemini"}
+              >
+                {generatingTopics ? <CircularOperationProgress value={topicGenerationProgress} /> : <Sparkles size={15} />}
+                {generatingTopics ? "Генерация тем" : "Сгенерировать 10 тем"}
+              </button>
+            </span>
             <textarea
               value={topics}
               onChange={(event) => setTopics(event.target.value)}
@@ -2330,7 +2508,7 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
           {formError ? <span className="formError wide">{formError}</span> : null}
           <div className="formActions wide">
             <button className="button primary" type="submit">
-              <Plus size={18} /> {collectCompetitors ? "Создать и перейти к запросам" : "Создать и сгенерировать"}
+              <span className="buttonPlusIcon"><Plus size={15} /></span> {collectCompetitors ? "Создать и перейти к запросам" : "Создать и сгенерировать"}
             </button>
           </div>
         </form>
@@ -2863,7 +3041,7 @@ function ProjectPromptsPanel({ api, site, promptTemplates, basePrompt, isAdmin, 
               ) : null}
               {selectedPrompt && !isNewPrompt ? (
                 <button className="button secondary" type="button" onClick={createPromptFromSelected}>
-                  <Plus size={18} /> Создать на основе
+                  <span className="buttonPlusIcon"><Plus size={15} /></span> Создать на основе
                 </button>
               ) : null}
               {isAdmin && selectedPrompt && !isNewPrompt ? (
@@ -3137,7 +3315,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
             <Send size={15} /> В публикацию ({bulkPublishItems.length})
           </button>
           <button className="button compact secondary createMenuButton" type="button" onClick={() => setCreateMenuVisible((current) => !current)} disabled={bulkBusy}>
-            <Plus size={20} /> Новый пункт меню
+            <span className="buttonPlusIcon"><Plus size={15} /></span> Новый пункт меню
           </button>
         </div>
         {createMenuVisible ? (
@@ -3163,7 +3341,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
             </label>
             <div className="formActions alignEnd">
               <button className="button compact secondary" type="button" onClick={() => setCreateMenuVisible(false)}>Отмена</button>
-              <button className="button compact primary" type="submit" disabled={bulkBusy}><Plus size={15} /> Создать</button>
+              <button className="button compact primary" type="submit" disabled={bulkBusy}><span className="buttonPlusIcon"><Plus size={15} /></span> Создать</button>
             </div>
           </form>
         ) : null}
@@ -3671,6 +3849,9 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
   const [editingLibraryPath, setEditingLibraryPath] = React.useState("");
   const [editingLibraryRussianName, setEditingLibraryRussianName] = React.useState("");
   const [savingLibraryEdit, setSavingLibraryEdit] = React.useState(false);
+  const [menuTemplates, setMenuTemplates] = React.useState<MenuTemplate[]>([]);
+  const [applyingTemplateId, setApplyingTemplateId] = React.useState<string | null>(null);
+  const [templateApplyMessage, setTemplateApplyMessage] = React.useState("");
   const [updatedAt, setUpdatedAt] = React.useState<string | null>(null);
   const [editingSectionId, setEditingSectionId] = React.useState<string | null>(null);
   const [editingSectionName, setEditingSectionName] = React.useState("");
@@ -3684,16 +3865,26 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
   const cachedFooter = Array.isArray(site.default_menu.footer) ? site.default_menu.footer : [];
   const menuLibrary = React.useMemo(() => {
     const itemsById = new Map(getMenuLibrary(site.cache_language).map((item) => [item.external_id, item]));
+    for (const template of menuTemplates) {
+      for (const item of template.items) itemsById.set(item.external_id, item);
+    }
     for (const item of Array.isArray(site.menu_library) ? site.menu_library : []) itemsById.set(item.external_id, item);
     return Array.from(itemsById.values());
-  }, [site.cache_language, site.menu_library]);
+  }, [menuTemplates, site.cache_language, site.menu_library]);
   const existingSectionIds = React.useMemo(() => new Set(sections.map((section) => section.external_id)), [sections]);
+  const existingHeaderSectionPaths = React.useMemo(
+    () => new Set(
+      sections
+        .filter((section) => section.menu_type === "header")
+        .map((section) => {
+          const pathWithoutEdgeSlashes = section.path.trim().replace(/^\/+|\/+$/g, "");
+          return pathWithoutEdgeSlashes ? `/${pathWithoutEdgeSlashes}/` : "/";
+        })
+    ),
+    [sections]
+  );
   const persistedSections = React.useMemo(() => sections.filter((section) => !section.is_temporary_parent), [sections]);
   const pendingSections = React.useMemo(() => sections.filter((section) => section.sync_status !== "synced"), [sections]);
-  const latestPendingChange = React.useMemo(() => pendingSections.reduce<string | null>((latest, section) => {
-    if (!latest || new Date(section.updated_at).getTime() > new Date(latest).getTime()) return section.updated_at;
-    return latest;
-  }, null), [pendingSections]);
   const menuLibraryListId = React.useId();
 
   React.useEffect(() => {
@@ -3708,8 +3899,22 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
     setLibraryName("");
     setLibraryPath("");
     setEditingLibraryItem(null);
+    setMenuTemplates([]);
+    setTemplateApplyMessage("");
     setUpdatedAt(null);
   }, [site.id]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void api<MenuTemplate[]>(`/menu-templates?language=${encodeURIComponent(site.cache_language || "")}`)
+      .then((templates) => {
+        if (!cancelled) setMenuTemplates(templates);
+      })
+      .catch((error) => {
+        if (!cancelled) setFormError(error instanceof Error ? error.message : "Не удалось загрузить шаблоны меню");
+      });
+    return () => { cancelled = true; };
+  }, [api, site.cache_language, site.id]);
 
   function updateMenuName(value: string) {
     setName(value);
@@ -3906,6 +4111,26 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
     }
   }
 
+  async function applyMenuTemplate(template: MenuTemplate) {
+    setApplyingTemplateId(template.id);
+    setTemplateApplyMessage("");
+    setFormError("");
+    try {
+      const result = await api<MenuTemplateApplyResult>(`/sites/${site.id}/menu-templates/${encodeURIComponent(template.id)}/apply`, {
+        method: "POST"
+      });
+      setTemplateApplyMessage(
+        `Структура добавлена: новых пунктов — ${result.created_count}, уже существовало — ${result.skipped_count}, обновлена вложенность — ${result.updated_count}.`
+      );
+      setUpdatedAt(new Date().toISOString());
+      await onChanged();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось добавить готовую структуру меню");
+    } finally {
+      setApplyingTemplateId(null);
+    }
+  }
+
   function openLibraryEdit(item: MenuLibraryItem) {
     setEditingLibraryItem(item);
     setEditingLibraryName(item.name);
@@ -3961,7 +4186,7 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
           Пункт меню
           <input list={menuLibraryListId} value={name} onChange={(event) => updateMenuName(event.target.value)} placeholder="Выберите или введите свой" required />
           <datalist id={menuLibraryListId}>
-            {menuLibrary.map((item) => <option value={item.name} label={`* ${item.russian_name} · ${item.path}`} key={item.external_id} />)}
+            {menuLibrary.map((item) => <option value={item.name} label={item.russian_name ? `* ${item.russian_name} · ${item.path}` : item.path} key={item.external_id} />)}
           </datalist>
         </label>
         <label>
@@ -3987,15 +4212,7 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
 
   return (
     <section className="viewStack">
-      <DataPanel title="Структура меню проекта">
-        <div className={`projectMenuSyncState ${pendingSections.length ? "isPending" : "isSynced"}`}>
-          {pendingSections.length ? <AlertTriangle size={18} /> : <CheckCircle2 size={18} />}
-          <div>
-            <strong>{pendingSections.length ? `Не синхронизировано изменений: ${pendingSections.length}` : "Данные синхронизированы"}</strong>
-            <span>Последняя синхронизация с проектом: {site.cache_synced_at ? formatDate(site.cache_synced_at) : "ещё не выполнялась"}</span>
-            {latestPendingChange ? <small>Последнее изменение в нашей системе: {formatDate(latestPendingChange)}</small> : null}
-          </div>
-        </div>
+      <DataPanel title="Структура меню проекта" allowCollapse={false}>
         <section className={`menuAddPanel embeddedMenuAddPanel ${addExpanded ? "expanded" : ""}`}>
           <button className="menuAddToggle" type="button" onClick={() => { setInlineMenuType(null); setAddExpanded((current) => !current); }} aria-expanded={addExpanded}>
             <span className="menuAddToggleIcon"><Plus size={18} /></span>
@@ -4016,10 +4233,10 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
           </form> : null}
         </section>
         <div className="projectMenuStructureGrid">
-          <SiteMenuPreviewSection key={`${site.id}:header`} title="Меню Header" icon={<HeaderMenuIcon />} items={cachedHeader} sections={sections.filter((section) => section.menu_type === "header")} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "header" ? parentTreeKey : ""} onAddChild={(item, section, treeKey) => openChildForm("header", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("header")}><Plus size={15} /> Добавить пункт в Header</button>}>
+          <SiteMenuPreviewSection key={`${site.id}:header`} title="Меню Header" icon={<HeaderMenuIcon />} items={cachedHeader} sections={sections.filter((section) => section.menu_type === "header")} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "header" ? parentTreeKey : ""} onAddChild={(item, section, treeKey) => openChildForm("header", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("header")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Header</button>}>
             {inlineMenuType === "header" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "header")}>{menuFields("header")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
           </SiteMenuPreviewSection>
-          <SiteMenuPreviewSection key={`${site.id}:footer`} title="Меню Footer" icon={<FooterMenuIcon />} items={cachedFooter} sections={sections.filter((section) => section.menu_type === "footer")} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "footer" ? parentTreeKey : ""} onAddChild={(item, section, treeKey) => openChildForm("footer", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("footer")}><Plus size={15} /> Добавить пункт в Footer</button>}>
+          <SiteMenuPreviewSection key={`${site.id}:footer`} title="Меню Footer" icon={<FooterMenuIcon />} items={cachedFooter} sections={sections.filter((section) => section.menu_type === "footer")} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "footer" ? parentTreeKey : ""} onAddChild={(item, section, treeKey) => openChildForm("footer", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("footer")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Footer</button>}>
             {inlineMenuType === "footer" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "footer")}>{menuFields("footer")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
           </SiteMenuPreviewSection>
         </div>
@@ -4041,13 +4258,39 @@ function ProjectMenuPanel({ api, site, sections, menuCapabilities, onChanged }: 
       </DataPanel>
       <DataPanel
         title={`Библиотека пунктов меню · ${menuLibrary.length}`}
-        actions={<button className="button secondary compact" type="button" onClick={() => setLibraryFormExpanded((current) => !current)}><Plus size={15} /> Новый пункт</button>}
+        allowCollapse={false}
+        actions={<button className="button secondary compact" type="button" onClick={() => setLibraryFormExpanded((current) => !current)}><span className="buttonPlusIcon"><Plus size={15} /></span> Новый пункт</button>}
       >
+          {menuTemplates.map((template) => {
+            const existingCount = template.items.filter((item) => existingSectionIds.has(item.external_id) || existingHeaderSectionPaths.has(item.path)).length;
+            const missingCount = template.items.length - existingCount;
+            const rootCount = template.items.filter((item) => !item.parent_external_id).length;
+            const applying = applyingTemplateId === template.id;
+            return (
+              <article className="menuTemplateCard" key={template.id}>
+                <span className="menuTemplateIcon"><ListChecks size={23} /></span>
+                <div className="menuTemplateCopy">
+                  <strong>{template.name}</strong>
+                  <span>{template.description}</span>
+                  <small>{rootCount} основных разделов · {template.items.length} пунктов · до {template.max_depth} уровней · только Header</small>
+                </div>
+                <div className="menuTemplateProgress">
+                  <b>{existingCount}/{template.items.length}</b>
+                  <span>уже добавлено</span>
+                </div>
+                <button className="button primary menuTemplateApplyButton" type="button" onClick={() => void applyMenuTemplate(template)} disabled={applying || missingCount === 0}>
+                  <span className="buttonPlusIcon"><Plus size={15} /></span>
+                  {applying ? "Добавляем…" : missingCount ? `Добавить всю структуру (${missingCount})` : "Структура добавлена"}
+                </button>
+              </article>
+            );
+          })}
+          {templateApplyMessage ? <div className="formSuccess menuTemplateResult">{templateApplyMessage}</div> : null}
           {libraryFormExpanded ? (
             <form className="menuLibraryCreateForm" onSubmit={addLibraryItem}>
               <label>Название<input value={libraryName} onChange={(event) => setLibraryName(event.target.value)} placeholder="Введите название" required /></label>
               <label>URL<input value={libraryPath} onChange={(event) => setLibraryPath(event.target.value)} placeholder="new-section" required /></label>
-              <button className="button primary compact" type="submit" disabled={savingLibraryItem}><Plus size={15} /> {savingLibraryItem ? "Сохраняем" : "Добавить в библиотеку"}</button>
+              <button className="button primary compact" type="submit" disabled={savingLibraryItem}><span className="buttonPlusIcon"><Plus size={15} /></span> {savingLibraryItem ? "Сохраняем" : "Добавить в библиотеку"}</button>
             </form>
           ) : null}
           <div className="menuItemLibraryHeader">
@@ -4169,6 +4412,8 @@ function TasksView({
   const [includeCasinoRating, setIncludeCasinoRating] = React.useState(taskCheckboxPreferences.includeCasinoRating ?? false);
   const [createFormExpanded, setCreateFormExpanded] = React.useState(false);
   const [creatingTaskAction, setCreatingTaskAction] = React.useState<"draft" | "start" | "">("");
+  const [generatingTopics, setGeneratingTopics] = React.useState(false);
+  const [topicGenerationProgress, setTopicGenerationProgress] = useSimulatedOperationProgress(generatingTopics);
   const [expandedTaskId, setExpandedTaskId] = React.useState("");
   const [expandedDetails, setExpandedDetails] = React.useState<TaskDetails | null>(null);
   const [expandedResearch, setExpandedResearch] = React.useState<CompetitorResearch[]>([]);
@@ -4214,6 +4459,46 @@ function TasksView({
       setPromptTemplateId(latestPromptTemplate(promptTemplates)?.id || "");
     }
   }, [promptTemplateId, promptTemplates]);
+
+  async function generateTopicsWithGemini() {
+    setTaskError("");
+    if (!selectedSite) {
+      setTaskError("Выберите проект для генерации тем.");
+      return;
+    }
+    if (cleanTopics.length > 20) {
+      setTaskError("Чтобы добавить ещё 10 тем, оставьте в форме не более 20 тем.");
+      return;
+    }
+    const provider = providers.find((item) => item.id === providerId);
+    if (!provider || provider.provider_type !== "gemini" || !provider.is_active) {
+      setTaskError("Для генерации тем выберите активный Gemini provider.");
+      return;
+    }
+    setTopicGenerationProgress(3);
+    setGeneratingTopics(true);
+    try {
+      const response = await api<TopicSuggestionsResponse>(`/sites/${selectedSite.id}/topic-suggestions`, {
+        method: "POST",
+        body: JSON.stringify({
+          geo,
+          language,
+          ai_provider_id: provider.id,
+          section_id: sectionId || null,
+          current_topics: cleanTopics
+        })
+      });
+      setTopics([...cleanTopics, ...response.topics].join("\n"));
+      setTopicGenerationProgress(100);
+      await new Promise((resolve) => window.setTimeout(resolve, 350));
+    } catch (error) {
+      setTopicGenerationProgress(0);
+      setTaskError(error instanceof Error ? error.message : "Gemini не смог сгенерировать уникальные темы.");
+    } finally {
+      setGeneratingTopics(false);
+      window.setTimeout(() => setTopicGenerationProgress(0), 120);
+    }
+  }
 
   React.useEffect(() => {
     const taskId = sessionStorage.getItem("workspace_open_task_id");
@@ -4722,7 +5007,19 @@ function TasksView({
             <span><b>Собрать рейтинг казино</b><small>Добавит в промпт тематический рейтинг из 5–10 казино с оценками и обоснованием мест.</small></span>
           </label>
           <label className="wide">
-            Темы, каждая с новой строки
+            <span className="topicFieldHeader">
+              <span>Темы, каждая с новой строки</span>
+              <button
+                className="button compact topicGenerateButton"
+                type="button"
+                onClick={generateTopicsWithGemini}
+                disabled={generatingTopics || !selectedSite || cleanTopics.length > 20}
+                title={cleanTopics.length > 20 ? "Для добавления 10 тем в форме должно быть не более 20 тем" : "Добавить 10 уникальных тем через Gemini"}
+              >
+                {generatingTopics ? <CircularOperationProgress value={topicGenerationProgress} /> : <Sparkles size={15} />}
+                {generatingTopics ? "Генерация тем" : "Сгенерировать 10 тем"}
+              </button>
+            </span>
             <textarea value={topics} onChange={(event) => setTopics(event.target.value)} required rows={8} placeholder="best online casinos in Germany" />
             <span className="fieldHint">Тем в задаче: {cleanTopics.length}</span>
           </label>
@@ -5361,6 +5658,7 @@ function GenerationProgressCell({ item }: { item: ContentItem }) {
         <span style={{ width: `${progress}%` }} />
       </div>
       <b>{progress}%</b>
+      <small className="generationWordCount">Слов: {item.word_count > 0 ? item.word_count.toLocaleString("ru-RU") : "—"}</small>
     </div>
   );
 }
@@ -6046,7 +6344,7 @@ function ProvidersView({ api, providers, onChanged }: ViewProps & { providers: A
               <input value={apiKey} onChange={(event) => setApiKey(event.target.value)} type="password" />
             </label>
           )}
-          <div className="formActions wide"><button className="button primary" type="submit"><Plus size={18} /> Сохранить provider</button></div>
+          <div className="formActions wide"><button className="button primary" type="submit"><span className="buttonPlusIcon"><Plus size={15} /></span> Сохранить provider</button></div>
         </form>
       </DataPanel>
       <DataPanel title="Подключенные API">
@@ -6646,7 +6944,17 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
                 <span className="siteNameCell">
                   <span className="siteNameWithFlag">
                     {localeFlag(localeCountryCode(row.geo || row.language || "")) ? <span aria-hidden="true">{localeFlag(localeCountryCode(row.geo || row.language || ""))}</span> : null}
-                    <strong>{row.name}</strong>
+                    <a
+                      className="siteProjectDomainLink"
+                      href={pathForRoute("workspace", "topics", row.name)}
+                      onClick={() => {
+                        localStorage.setItem(`workspace_site_id:${currentUsername}`, row.id);
+                        localStorage.removeItem("workspace_site_id");
+                      }}
+                      title={`Открыть проект ${row.name}`}
+                    >
+                      <strong>{row.name}</strong>
+                    </a>
                     <ProjectVerificationMedal status={row.medalStatus} />
                   </span>
                   <span className="siteNameActions">
@@ -6969,7 +7277,7 @@ function SiteMenuPreviewSection({ title, items, sections = [], icon, action, chi
               {hasChildren ? <button className="siteMenuTreeToggle hasChildren" type="button" onClick={() => toggleNode(node.key)} aria-label={`${collapsed ? "Развернуть" : "Свернуть"} ${node.item.title}`}>
                 {collapsed ? <ChevronRight size={17} /> : <ChevronDown size={17} />}<span className="siteMenuTreeToggleLabel">{collapsed ? "Показать все" : "Свернуть"}</span><span className="siteMenuTreeNestedCount">{nestedCount}</span>
               </button> : null}
-              {onAddChild ? <button className="siteMenuAddChildButton" type="button" onClick={() => onAddChild(node.item, node.section, node.key)} disabled={Boolean(adoptingParentKey)} title={`Добавить дочерний пункт в «${node.item.title}»`}><Plus size={15} /> {adoptingParentKey === parentKey ? "Открываем…" : "Добавить"}</button> : null}
+              {onAddChild ? <button className="siteMenuAddChildButton" type="button" onClick={() => onAddChild(node.item, node.section, node.key)} disabled={Boolean(adoptingParentKey)} title={`Добавить дочерний пункт в «${node.item.title}»`}><span className="buttonPlusIcon"><Plus size={15} /></span> {adoptingParentKey === parentKey ? "Открываем…" : "Добавить"}</button> : null}
             </div>
             {activeParentTreeKey === node.key && children ? <div className="siteMenuTreeChildForm">{children}</div> : null}
             {hasChildren && !collapsed ? renderNodes(node.children, depth + 1) : null}
@@ -7181,7 +7489,7 @@ function AdminRequestLogsPanel({ api }: Pick<ViewProps, "api">) {
             <span className="requestLogAction"><strong>{log.action}</strong>{log.item_name ? <small>{log.item_name}</small> : null}</span>,
             <code className="requestLogMethod">{log.method}</code>,
             <span className="requestLogDestination" title={log.destination}>{log.destination}</span>,
-            <span className={`requestLogResult ${log.result === "Успешно" ? "success" : log.result === "Ошибка" ? "error" : "pending"}`}>{log.result}</span>
+            <span className={`requestLogResult ${log.result === "Успешно" ? "success" : log.result === "Ошибка" ? "error" : "pending"}`}>{log.result}{log.status_code ? ` · ${log.status_code}` : ""}</span>
           ])}
         />
       )}

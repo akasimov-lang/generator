@@ -240,3 +240,29 @@ def test_task_pipeline_retries_competitor_failure_before_generation(monkeypatch:
         assert attempts == [item.id, item.id]
         assert generated == [item.id]
         assert result.status == "generated"
+
+
+def test_task_pipeline_stops_competitor_collection_after_three_failures(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+    attempts: list[str] = []
+
+    async def fake_collect(db, item):
+        attempts.append(item.id)
+        raise RuntimeError("persistent competitor error")
+
+    monkeypatch.setattr("app.services.collect_competitor_research_for_item", fake_collect)
+
+    with TestingSession() as db:
+        task = models.GenerationTask(title="Failed retry pipeline", geo="DE", language="de", topics_count=1, collect_competitors=True)
+        item = models.ContentItem(task=task, topic="Failed retry topic", slug="/failed-retry/", generated_json={}, idempotency_key="failed-retry-pipeline-item", competitor_research_status="research_failed")
+        db.add(item)
+        db.commit()
+
+        result = run_task_pipeline(db, task)
+
+        assert attempts == [item.id, item.id, item.id]
+        assert result.status == "generation_failed"
+        assert item.competitor_research_status == "research_failed"
+        assert item.competitor_research_error.startswith("Attempt 3/3:")

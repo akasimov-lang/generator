@@ -1131,6 +1131,58 @@ h2 {
   color: var(--danger);
 }
 
+.topicFieldHeader {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.topicGenerateButton {
+  flex: 0 0 auto;
+  font-size: 12px;
+}
+
+.circularOperationProgress {
+  align-items: center;
+  background: conic-gradient(var(--primary) var(--operation-progress), color-mix(in srgb, var(--border) 78%, transparent) 0deg);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 20%, transparent), 0 2px 5px rgba(13, 141, 77, 0.18);
+  display: inline-flex;
+  flex: 0 0 23px;
+  height: 23px;
+  justify-content: center;
+  transition: background 220ms ease, box-shadow 220ms ease;
+  width: 23px;
+}
+
+.circularOperationProgress i {
+  align-items: center;
+  background: var(--surface);
+  border-radius: 50%;
+  color: var(--primary-strong);
+  display: inline-flex;
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 850;
+  height: 17px;
+  justify-content: center;
+  line-height: 1;
+  width: 17px;
+}
+
+.circularOperationProgress.complete {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 16%, transparent), 0 3px 8px rgba(13, 141, 77, 0.28);
+}
+
+@media (max-width: 640px) {
+  .topicFieldHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
 .projectHeader {
   display: grid;
   grid-template-columns: minmax(250px, 360px) minmax(0, 1fr) auto;
@@ -1301,6 +1353,97 @@ h2 {
   text-overflow: clip;
   white-space: normal;
   width: 100%;
+}
+
+.projectRefreshButton {
+  align-content: center;
+  display: grid;
+  gap: 7px;
+  justify-items: center;
+  min-width: 190px;
+}
+
+.projectRefreshButtonLabel {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+}
+
+.projectRefreshMeta {
+  align-items: center;
+  display: grid;
+  gap: 3px;
+  justify-items: center;
+  min-width: 0;
+}
+
+.projectRefreshButton small {
+  color: var(--muted);
+  display: block;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.15;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projectRefreshButton.isSuccess {
+  border-color: color-mix(in srgb, var(--primary) 58%, var(--border));
+  color: var(--primary-strong);
+}
+
+.projectRefreshButton.isError {
+  border-color: var(--danger-border);
+  color: var(--danger);
+}
+
+.projectRefreshMeta em {
+  color: var(--danger);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+.projectRefreshMeta em.success {
+  color: var(--primary-strong);
+}
+
+.buttonRefreshIcon.isError {
+  animation: projectRefreshErrorPulse 1.35s ease-in-out infinite;
+  background: linear-gradient(145deg, #ff6d67 0%, #e7433d 52%, #bd2823 100%);
+  border-color: rgba(153, 31, 26, 0.62);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -2px 4px rgba(113, 17, 13, 0.24),
+    0 3px 8px rgba(189, 40, 35, 0.28),
+    0 0 0 2px rgba(231, 67, 61, 0.09);
+}
+
+@keyframes projectRefreshErrorPulse {
+  0%, 100% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.42),
+      inset 0 -2px 4px rgba(113, 17, 13, 0.24),
+      0 3px 8px rgba(189, 40, 35, 0.28),
+      0 0 0 2px rgba(231, 67, 61, 0.09);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.5),
+      inset 0 -2px 4px rgba(113, 17, 13, 0.2),
+      0 5px 13px rgba(189, 40, 35, 0.4),
+      0 0 0 5px rgba(231, 67, 61, 0.13);
+    transform: scale(1.06);
+  }
+}
+
+.buttonRefreshIcon.isLoading svg {
+  animation: spin 0.85s linear infinite;
 }
 
 .projectCanonValue {
@@ -2866,6 +3009,19 @@ h2 {
   overflow-wrap: anywhere;
 }
 
+.siteProjectDomainLink {
+  color: inherit;
+  min-width: 0;
+  text-decoration: none;
+}
+
+.siteProjectDomainLink:hover,
+.siteProjectDomainLink:focus-visible {
+  color: var(--primary-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .siteMainDomain {
   color: var(--text);
   font-weight: 800;
@@ -3047,11 +3203,12 @@ h2 {
 }
 
 .newGenerationTaskIconPlus {
-  background: #fff;
-  border: 2px solid var(--primary);
+  background: linear-gradient(145deg, #22c978 0%, #16aa62 52%, #0d8d4d 100%);
+  border: 2px solid #fff;
   border-radius: 50%;
   bottom: -3px;
-  color: var(--primary);
+  box-shadow: 0 3px 7px rgba(13, 141, 77, 0.35);
+  color: #fff;
   padding: 1px;
   position: absolute;
   right: -4px;
@@ -3188,13 +3345,35 @@ h2 {
 
 .menuAddToggleIcon {
   align-items: center;
-  background: var(--primary-soft);
+  background: linear-gradient(145deg, #22c978 0%, #16aa62 52%, #0d8d4d 100%);
+  border: 1px solid rgba(8, 117, 61, 0.55);
   border-radius: 9px;
-  color: var(--primary);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -3px 5px rgba(5, 91, 45, 0.22),
+    0 5px 12px rgba(13, 141, 77, 0.3),
+    0 0 0 3px rgba(33, 187, 114, 0.1);
+  color: #fff;
   display: inline-flex;
   height: 34px;
   justify-content: center;
+  text-shadow: 0 1px 2px rgba(0, 78, 39, 0.35);
+  transition: box-shadow 160ms ease, transform 160ms ease;
   width: 34px;
+}
+
+.menuAddToggleIcon svg {
+  filter: drop-shadow(0 1px 1px rgba(0, 78, 39, 0.35));
+  stroke-width: 2.6;
+}
+
+.menuAddToggle:hover .menuAddToggleIcon {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.48),
+    inset 0 -3px 5px rgba(5, 91, 45, 0.2),
+    0 7px 16px rgba(13, 141, 77, 0.36),
+    0 0 0 4px rgba(33, 187, 114, 0.13);
+  transform: translateY(-1px);
 }
 
 .menuAddToggle > span:nth-child(2) {
@@ -3204,7 +3383,47 @@ h2 {
 
 .menuAddToggle small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.buttonPlusIcon,
+.buttonRefreshIcon {
+  align-items: center;
+  background: linear-gradient(145deg, #22c978 0%, #16aa62 52%, #0d8d4d 100%);
+  border: 1px solid rgba(8, 117, 61, 0.55);
+  border-radius: 7px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -2px 4px rgba(5, 91, 45, 0.22),
+    0 3px 8px rgba(13, 141, 77, 0.28),
+    0 0 0 2px rgba(33, 187, 114, 0.09);
+  color: #fff;
+  display: inline-flex;
+  flex: 0 0 24px;
+  height: 24px;
+  justify-content: center;
+  transition: box-shadow 160ms ease, transform 160ms ease;
+  width: 24px;
+}
+
+.buttonPlusIcon svg,
+.buttonRefreshIcon svg {
+  color: #fff;
+  filter: drop-shadow(0 1px 1px rgba(0, 78, 39, 0.35));
+  height: 15px;
+  stroke-width: 2.7;
+  width: 15px;
+}
+
+button:hover:not(:disabled) > .buttonPlusIcon,
+button:hover:not(:disabled) .buttonRefreshIcon {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.48),
+    inset 0 -2px 4px rgba(5, 91, 45, 0.2),
+    0 5px 11px rgba(13, 141, 77, 0.35),
+    0 0 0 3px rgba(33, 187, 114, 0.12);
+  transform: translateY(-1px);
 }
 
 .menuAddForm {
@@ -3362,6 +3581,67 @@ h2 {
   justify-content: space-between;
   margin-bottom: 12px;
   padding: 9px 11px;
+}
+
+.menuTemplateCard {
+  align-items: center;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--primary-soft) 82%, var(--surface)), var(--surface));
+  border: 1px solid color-mix(in srgb, var(--primary) 44%, var(--border));
+  border-radius: 11px;
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--primary) 10%, transparent);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(260px, 1fr) auto auto;
+  margin-bottom: 12px;
+  padding: 13px 14px;
+}
+
+.menuTemplateIcon {
+  align-items: center;
+  background: linear-gradient(145deg, #22c978 0%, #16aa62 52%, #0d8d4d 100%);
+  border-radius: 10px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 5px 13px rgba(13, 141, 77, 0.28);
+  color: #fff;
+  display: inline-flex;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.menuTemplateCopy {
+  display: grid;
+  gap: 3px;
+}
+
+.menuTemplateCopy strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.menuTemplateCopy span,
+.menuTemplateCopy small,
+.menuTemplateProgress span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.menuTemplateProgress {
+  display: grid;
+  min-width: 72px;
+  text-align: center;
+}
+
+.menuTemplateProgress b {
+  color: var(--primary);
+  font-size: 14px;
+}
+
+.menuTemplateApplyButton {
+  white-space: nowrap;
+}
+
+.menuTemplateResult {
+  margin-bottom: 10px;
 }
 
 .menuLibraryCreateForm {
@@ -5507,6 +5787,11 @@ td {
   color: var(--danger);
 }
 
+.generationProgressCell .generationWordCount {
+  color: var(--text);
+  font-weight: 700;
+}
+
 .generationProgress {
   background: var(--border);
   border-radius: 999px;
@@ -6663,6 +6948,21 @@ a {
 }
 
 @media (max-width: 900px) {
+  .menuTemplateCard {
+    align-items: start;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .menuTemplateProgress {
+    align-self: center;
+    grid-column: 1;
+  }
+
+  .menuTemplateApplyButton {
+    grid-column: 2;
+    justify-content: center;
+  }
+
   .projectMenuStructureGrid {
     grid-template-columns: 1fr;
   }

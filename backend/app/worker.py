@@ -11,6 +11,8 @@ from app.services import collect_competitor_research_for_item, generate_content_
 
 settings = get_settings()
 
+COMPETITOR_RESEARCH_MAX_ATTEMPTS = 3
+
 celery_app = Celery("generator", broker=settings.celery_broker_url, backend=settings.celery_result_backend)
 celery_app.conf.timezone = "UTC"
 celery_app.conf.beat_schedule = {
@@ -21,8 +23,12 @@ celery_app.conf.beat_schedule = {
 }
 
 
-@celery_app.task(name="app.worker.collect_competitor_research")
-def collect_competitor_research_job(content_item_id: str) -> dict:
+@celery_app.task(
+    bind=True,
+    max_retries=COMPETITOR_RESEARCH_MAX_ATTEMPTS - 1,
+    name="app.worker.collect_competitor_research",
+)
+def collect_competitor_research_job(self, content_item_id: str) -> dict:
     db = SessionLocal()
     try:
         item = db.get(models.ContentItem, content_item_id)
@@ -33,10 +39,16 @@ def collect_competitor_research_job(content_item_id: str) -> dict:
     except Exception as exc:
         db.rollback()
         item = db.get(models.ContentItem, content_item_id)
+        failed_attempt = self.request.retries + 1
+        has_next_attempt = failed_attempt < COMPETITOR_RESEARCH_MAX_ATTEMPTS
         if item:
-            item.competitor_research_status = "research_failed"
-            item.competitor_research_error = f"{type(exc).__name__}: {exc}"[:500]
+            item.competitor_research_status = "queued" if has_next_attempt else "research_failed"
+            item.competitor_research_error = (
+                f"Attempt {failed_attempt}/{COMPETITOR_RESEARCH_MAX_ATTEMPTS}: {type(exc).__name__}: {exc}"
+            )[:500]
             db.commit()
+        if has_next_attempt:
+            raise self.retry(exc=exc, countdown=failed_attempt * 5)
         raise
     finally:
         db.close()

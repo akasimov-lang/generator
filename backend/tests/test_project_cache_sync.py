@@ -22,6 +22,7 @@ def test_sync_imports_working_project_and_preserves_external_id() -> None:
             {
                 "id": "cache-project-1",
                 "name": "asyl-bilim.kz",
+                "serverId": "crab-primary",
                 "serverIp": "cobra",
                 "settings": {"canon": "pin-kz.pinup-2026.it.com", "lang": "ru_RU", "geo": "ru-KZ", "domains": ["one.test", "two.test"]},
                 "data": {
@@ -57,7 +58,7 @@ def test_sync_imports_working_project_and_preserves_external_id() -> None:
         assert site.internal_pages_count == 1
         assert site.domains_count == 2
         assert site.cache_domains == ["one.test", "two.test"]
-        assert site.cache_server_ip == "cobra"
+        assert site.cache_server_ip == "crab-primary"
         assert site.default_menu["header"][0]["title"] == "App"
         assert site.project_status == "working"
         assert unrelated_site is not None

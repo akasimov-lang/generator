@@ -10,6 +10,7 @@ from sqlalchemy.pool import StaticPool
 
 from app import models
 from app.api import router
+from app.core.config import get_settings
 from app.db import Base, get_db
 from app.security import require_auth
 
@@ -26,6 +27,7 @@ def make_client() -> tuple[TestClient, sessionmaker[Session]]:
             base_url="http://example.test",
             publication_endpoint="http://example.test/api/pages",
             payload_mode="simple_page",
+            cache_server_ip="crab",
         )
         db.add_all([user, site])
         db.commit()
@@ -57,6 +59,7 @@ def test_orm_list_endpoints_serialize_json() -> None:
 
     assert sites_response.status_code == 200
     assert sites_response.json()[0]["name"] == "DE обзорник"
+    assert sites_response.json()[0]["cache_server_host"] == f"crab.{get_settings().alfan_url}"
     assert overview_response.status_code == 200
     assert overview_response.json()["site"]["id"] == site_id
     assert tasks_response.status_code == 200

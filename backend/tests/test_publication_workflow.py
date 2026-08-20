@@ -7,15 +7,19 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app import models
+from app import services as service_module
 from app.db import Base
 from app.schemas import PublicationCampaignCreate
 from app.services import (
     approve_and_schedule_item,
+    build_project_menu_payload,
+    build_project_page_payload,
     build_campaign_publication_bundle,
     publish_item,
     refresh_campaign_status,
     reschedule_campaign,
     schedule_campaign,
+    sync_project_menus,
     update_campaign_status,
     validate_content_for_publication,
 )
@@ -232,6 +236,135 @@ def test_invalid_payload_is_not_sent_by_publication_worker(db: Session) -> None:
     assert log.response_status is None
     assert "Content validation failed" in (log.error_message or "")
     assert db.scalar(select(func.count(models.PublicationLog.id))) == 1
+
+
+def test_project_menu_payload_appends_new_items_after_existing_order(db: Session) -> None:
+    site = models.Site(
+        name="nauchi52.ru",
+        base_url="https://nauchi52.ru",
+        publication_endpoint="https://legacy.example/content",
+        cache_server_ip="crab",
+        default_menu={
+            "header": [
+                {"id": 1787216707470 + index, "title": f"Existing {index + 1}", "slug": f"/existing-{index + 1}/", "order": index}
+                for index in range(6)
+            ],
+            "footer": [],
+        },
+    )
+    db.add(site)
+    db.flush()
+    section = models.Section(site=site, external_id="test", name="test", path="/test/", menu_type="header", sync_status="pending")
+    db.add(section)
+    db.commit()
+
+    payload = build_project_menu_payload(db, site, "header", datetime(2026, 8, 20, 9, 17, 4, 551000, tzinfo=timezone.utc))
+
+    assert payload["type"] == "header"
+    assert payload["folder"] == "nauchi52.ru"
+    assert payload["list"][-1] == {
+        "id": 1787217424557,
+        "title": "test",
+        "slug": "/test/",
+        "order": 7,
+    }
+
+
+def test_project_page_payload_matches_receiver_dto(db: Session) -> None:
+    site, item = make_content(db)
+    site.name = "nauchi52.ru"
+    moment = datetime(2026, 8, 20, 9, 17, 4, 551000, tzinfo=timezone.utc)
+
+    payload = build_project_page_payload(item, site, "fresh-token", moment)
+
+    assert payload["folder"] == "nauchi52.ru"
+    assert payload["id"] == 1787217424551
+    assert isinstance(payload["id"], int)
+    assert payload["page"]["id"] == "Thu Aug 20 2026 12:17:04 GMT+0300 (Москва, стандартное время)"
+    assert payload["page"]["title"] == "Test page"
+    assert payload["page"]["slug"] == "/test/"
+    assert payload["page"]["publishedTime"] == "2026-08-20 09:17:04"
+    assert payload["page"]["content"]["time"] == "2026-08-20T09:17:04.551Z"
+    assert payload["token"] == "fresh-token"
+    assert payload["dateTime"] == "2026-08-20 09:17:04"
+
+
+def test_project_server_requests_refresh_token_and_store_status_codes(db: Session, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict] = []
+
+    class FakeResponse:
+        def __init__(self, status_code: int, body: dict):
+            self.status_code = status_code
+            self._body = body
+            self.headers = {"content-type": "application/json"}
+            self.text = ""
+
+        def json(self) -> dict:
+            return self._body
+
+        def raise_for_status(self) -> None:
+            if self.status_code >= 400:
+                raise RuntimeError(f"HTTP {self.status_code}")
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url: str, json: dict, headers: dict | None = None):
+            calls.append({"url": url, "json": json, "headers": headers or {}})
+            if url.endswith("/auth/login"):
+                return FakeResponse(200, {"token": "fresh-token"})
+            return FakeResponse(201, {"ok": True})
+
+    monkeypatch.setattr(service_module.httpx, "AsyncClient", FakeAsyncClient)
+    site, item = make_content(db)
+    site.name = "nauchi52.ru"
+    site.cache_server_ip = "crab"
+    section = models.Section(site=site, external_id="test", name="test", path="/test/", menu_type="header", sync_status="pending")
+    db.add(section)
+    db.commit()
+
+    menu_result = asyncio.run(sync_project_menus(db, site))
+    asyncio.run(publish_item(db, item, site))
+
+    auth_calls = [call for call in calls if call["url"].endswith("/auth/login")]
+    menu_calls = [call for call in calls if call["url"].endswith("/projects/menu")]
+    page_calls = [call for call in calls if call["url"].endswith("/projects/create")]
+    assert [call["url"].rsplit("/", 1)[-1] for call in calls] == [
+        "login",
+        "menu",
+        "login",
+        "menu",
+        "login",
+        "create",
+    ]
+    assert len(auth_calls) == 3
+    assert len(menu_calls) == 2
+    assert len(page_calls) == 1
+    assert all(call["url"].startswith("https://crab.slf-hostesting.com/") for call in [*menu_calls, *page_calls])
+    assert all(call["headers"]["Authorization"] == "Bearer fresh-token" for call in [*menu_calls, *page_calls])
+    assert all("token" not in call["json"] for call in menu_calls)
+    assert page_calls[0]["json"]["token"] == "fresh-token"
+    assert menu_result["status_codes"] == [201, 201]
+    assert menu_result["last_status_code"] == 201
+    assert section.sync_status == "synced"
+    assert item.status == "published"
+    assert page_calls[0]["json"]["id"] != page_calls[0]["json"]["page"]["id"]
+    page_log = db.scalar(
+        select(models.PublicationLog)
+        .where(models.PublicationLog.content_item_id == item.id)
+        .order_by(models.PublicationLog.created_at.desc())
+    )
+    assert page_log is not None
+    assert page_log.endpoint_url == "https://crab.slf-hostesting.com/projects/create"
+    assert page_log.response_status == 201
+    assert page_log.request_payload["token"] == "[redacted]"
 
 
 def test_campaign_bundle_contains_project_actor_and_ordered_changes(db: Session) -> None:

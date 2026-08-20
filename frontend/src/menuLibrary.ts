@@ -1,8 +1,10 @@
 export type MenuLibraryItem = {
   name: string;
-  russian_name: string;
+  russian_name?: string;
   external_id: string;
   path: string;
+  parent_external_id?: string | null;
+  template_id?: string;
 };
 
 const CONCEPTS = [

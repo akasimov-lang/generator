@@ -1,7 +1,10 @@
 from datetime import datetime
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
+
+from app.core.config import get_settings
 
 
 class LoginRequest(BaseModel):
@@ -110,6 +113,22 @@ class SiteResponse(BaseModel):
     domains_count: int
     cache_domains: list[str]
     cache_server_ip: str | None
+
+    @computed_field
+    @property
+    def cache_server_host(self) -> str | None:
+        raw_server_id = (self.cache_server_ip or "").strip()
+        if not raw_server_id:
+            return None
+        parsed_server = urlsplit(raw_server_id if "://" in raw_server_id else f"//{raw_server_id}")
+        server_id = (parsed_server.hostname or raw_server_id).strip().strip(".")
+        if "." in server_id:
+            return server_id
+        raw_domain = get_settings().alfan_url.strip()
+        parsed_domain = urlsplit(raw_domain if "://" in raw_domain else f"//{raw_domain}")
+        domain = (parsed_domain.hostname or raw_domain).strip().strip(".")
+        return f"{server_id}.{domain}" if domain else server_id
+
     project_status: str
     is_test_project: bool
     has_menu: bool
@@ -190,6 +209,23 @@ class MenuLibraryItemUpdate(BaseModel):
     russian_name: str = Field(default="", max_length=160)
 
 
+class MenuTemplateItemResponse(BaseModel):
+    external_id: str
+    parent_external_id: str | None
+    name: str
+    path: str
+    menu_type: Literal["header", "footer"]
+
+
+class MenuTemplateResponse(BaseModel):
+    id: str
+    language: str
+    name: str
+    description: str
+    max_depth: int
+    items: list[MenuTemplateItemResponse]
+
+
 class SectionsBulkCreate(BaseModel):
     items: list[SectionCreate] = Field(min_length=1, max_length=10)
 
@@ -209,6 +245,15 @@ class SectionResponse(BaseModel):
     synced_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+class MenuTemplateApplyResponse(BaseModel):
+    template_id: str
+    total_count: int
+    created_count: int
+    skipped_count: int
+    updated_count: int
+    sections: list[SectionResponse]
 
 
 class SectionAdoptResponse(BaseModel):
@@ -296,6 +341,18 @@ class GenerationTaskCreate(BaseModel):
     collect_competitors: bool = False
     include_casino_rating: bool = False
     save_as_draft: bool = False
+
+
+class TopicSuggestionsRequest(BaseModel):
+    geo: str = Field(min_length=2, max_length=20)
+    language: str = Field(min_length=2, max_length=20)
+    ai_provider_id: str | None = None
+    section_id: str | None = None
+    current_topics: list[str] = Field(default_factory=list, max_length=30)
+
+
+class TopicSuggestionsResponse(BaseModel):
+    topics: list[str]
 
 
 class GenerationTaskSectionUpdate(BaseModel):
@@ -555,3 +612,4 @@ class AdminRequestLogResponse(BaseModel):
     method: str
     destination: str
     result: str
+    status_code: int | None

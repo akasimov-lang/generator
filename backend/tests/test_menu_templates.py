@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app import models
-from app.api import adopt_cached_section, create_menu_library_item, create_section, create_sections_bulk, delete_section, list_admin_request_logs, release_adopted_section, update_menu_library_item, update_section
+from app.api import apply_menu_template, adopt_cached_section, create_menu_library_item, create_section, create_sections_bulk, delete_section, list_admin_request_logs, release_adopted_section, update_menu_library_item, update_section
+from app.menu_templates import DE_CASINO_REVIEW_HEADER_TEMPLATE
 from app.db import Base
 from app.schemas import MenuLibraryItemCreate, MenuLibraryItemUpdate, SectionCreate, SectionsBulkCreate, SectionUpdate
 
@@ -217,6 +218,49 @@ def test_bulk_create_sections_skips_existing_external_ids() -> None:
         assert result["created_count"] == 1
         assert result["skipped_count"] == 1
         assert len(db.scalars(select(models.Section).where(models.Section.site_id == site.id)).all()) == 2
+
+
+def test_de_casino_review_template_creates_complete_three_level_header_once() -> None:
+    with make_session() as db:
+        site = models.Site(
+            name="casino-review.de",
+            base_url="https://casino-review.de",
+            publication_endpoint="https://casino-review.de/api/content",
+            cache_language="de-DE",
+        )
+        db.add(site)
+        db.commit()
+
+        first = apply_menu_template(
+            site.id,
+            DE_CASINO_REVIEW_HEADER_TEMPLATE["id"],
+            None,  # type: ignore[arg-type]
+            db,
+        )
+        second = apply_menu_template(
+            site.id,
+            DE_CASINO_REVIEW_HEADER_TEMPLATE["id"],
+            None,  # type: ignore[arg-type]
+            db,
+        )
+
+        sections = db.scalars(select(models.Section).where(models.Section.site_id == site.id)).all()
+        by_external_id = {section.external_id: section for section in sections}
+        assert first["created_count"] == len(DE_CASINO_REVIEW_HEADER_TEMPLATE["items"]) == 96
+        assert first["skipped_count"] == 0
+        assert second["created_count"] == 0
+        assert second["skipped_count"] == 96
+        assert len(sections) == 96
+        assert sum(section.parent_id is None for section in sections) == 7
+        assert by_external_id["de-live-roulette"].parent_id == by_external_id["de-live-casino"].id
+        assert by_external_id["de-live-casino"].parent_id == by_external_id["de-casino-games"].id
+        assert all(section.menu_type == "header" for section in sections)
+        db.refresh(site)
+        assert len(site.menu_library) == 96
+        oasis = next(item for item in site.menu_library if item["external_id"] == "de-casinos-without-oasis")
+        assert oasis["name"] == "Casinos ohne OASIS"
+        assert "english_name" not in oasis
+        assert "russian_name" not in oasis
 
 
 def test_menu_item_can_be_edited_and_returns_to_pending_sync() -> None:

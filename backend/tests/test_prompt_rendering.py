@@ -4,9 +4,11 @@ from app import models
 from app.services import (
     CASINO_RATING_PROMPT_MARKER,
     PROMPT_FORMAT_CONTRACT_MARKER,
+    TEXT_VARIABILITY_PROTOCOL_MARKER,
     append_casino_rating_requirement,
     build_gemini_content,
     build_gemini_prompt,
+    variation_profile_for_position,
 )
 
 
@@ -72,6 +74,47 @@ def test_prompt_format_contract_is_appended_once() -> None:
 
     assert prompt.count(PROMPT_FORMAT_CONTRACT_MARKER) == 1
     assert prompt_with_contract.count(PROMPT_FORMAT_CONTRACT_MARKER) == 1
+
+
+def test_task_variability_protocol_is_rendered_once() -> None:
+    profiles = [variation_profile_for_position(index) for index in range(3)]
+    context = {
+        "task_id": "task-1",
+        "task_title": "Three related topics",
+        "topics_count": 3,
+        "current_topic": "Topic B",
+        "current_profile": profiles[1],
+        "assignments": [
+            {"topic": f"Topic {letter}", "profile": profile, "is_current": index == 1}
+            for index, (letter, profile) in enumerate(zip("ABC", profiles))
+        ],
+    }
+
+    prompt = build_gemini_prompt(
+        topic="Topic B",
+        geo="DE",
+        language="de",
+        target_words=1600,
+        site=None,
+        prompt_template="Topic: {{TOPIC}}",
+        shortcode=None,
+        include_toc=True,
+        include_faq=True,
+        variation_context=context,
+    )
+
+    assert prompt.count(TEXT_VARIABILITY_PROTOCOL_MARKER) == 1
+    assert "Current variability passport: V02" in prompt
+    assert "do not reuse a sibling outline" in prompt
+    assert "Topic A" in prompt
+    assert "Topic C" in prompt
+
+
+def test_first_thirty_topics_receive_distinct_structural_blueprints() -> None:
+    profiles = [variation_profile_for_position(index) for index in range(30)]
+
+    assert len({profile["id"] for profile in profiles}) == 30
+    assert len({profile["structure"] for profile in profiles}) == 30
 
 
 def test_competitor_research_placeholders_are_rendered() -> None:

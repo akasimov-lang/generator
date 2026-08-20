@@ -24,6 +24,8 @@ from app.schemas import (
     GenerationTaskResponse,
     GenerationTaskSectionUpdate,
     LoginRequest,
+    MenuTemplateApplyResponse,
+    MenuTemplateResponse,
     MenuLibraryItemCreate,
     MenuLibraryItemResponse,
     MenuLibraryItemUpdate,
@@ -54,10 +56,13 @@ from app.schemas import (
     SiteStatusUpdate,
     TaskDetailsResponse,
     TokenResponse,
+    TopicSuggestionsRequest,
+    TopicSuggestionsResponse,
     UserCreate,
     UserResponse,
     UserUpdate,
 )
+from app.menu_templates import MENU_TEMPLATES
 from app.project_cache import ProjectCacheError, fetch_project_cache, fetch_project_menu_capabilities, sync_project_cache
 from app.security import AdminUser, AuthUser, create_token, hash_password, verify_password
 from app.services import (
@@ -75,12 +80,14 @@ from app.services import (
     ensure_competitor_queries,
     fetch_competitor_pages_for_item,
     get_dashboard,
+    generate_topic_suggestions,
     publish_item,
     refresh_campaign_status,
     regenerate_competitor_queries,
     replace_competitor_queries,
     schedule_campaign,
     reschedule_campaign,
+    sync_project_menus,
     update_campaign_status,
     validate_content_for_publication,
     validate_ai_provider_key,
@@ -109,7 +116,7 @@ def _get_section_for_site(db: Session, site_id: str, section_id: str) -> models.
 
 
 def _add_site_menu_library_item(site: models.Site, payload: MenuLibraryItemCreate) -> dict[str, str]:
-    item = payload.model_dump()
+    item = payload.model_dump(exclude_none=True)
     current = site.menu_library if isinstance(site.menu_library, list) else []
     existing = next(
         (
@@ -124,6 +131,10 @@ def _add_site_menu_library_item(site: models.Site, payload: MenuLibraryItemCreat
         return existing
     site.menu_library = [*current, item]
     return item
+
+
+def _normalized_language(value: str | None) -> str:
+    return (value or "").strip().lower().replace("_", "-").split("-", 1)[0]
 
 
 def _normalized_menu_path(value: str) -> str:
@@ -513,6 +524,153 @@ def get_site_overview(site_id: str, _: AuthUser, db: Session = Depends(get_db)) 
     }
 
 
+@router.get("/menu-templates", response_model=list[MenuTemplateResponse])
+def list_menu_templates(_: AuthUser, language: str = "") -> list[dict[str, Any]]:
+    normalized_language = _normalized_language(language)
+    return [
+        template
+        for template in MENU_TEMPLATES.values()
+        if not normalized_language or template["language"] == normalized_language
+    ]
+
+
+@router.post(
+    "/sites/{site_id}/menu-templates/{template_id}/apply",
+    response_model=MenuTemplateApplyResponse,
+)
+def apply_menu_template(
+    site_id: str,
+    template_id: str,
+    _: AuthUser,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    site = _get_site_or_404(db, site_id)
+    template = MENU_TEMPLATES.get(template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Menu template not found")
+    if _normalized_language(site.cache_language) != template["language"]:
+        raise HTTPException(status_code=400, detail="This menu template is available only for DE projects")
+
+    existing_sections = db.scalars(select(models.Section).where(models.Section.site_id == site_id)).all()
+    existing_by_external_id = {
+        section.external_id.casefold(): section
+        for section in existing_sections
+        if section.menu_type == "header"
+    }
+    existing_by_path = {
+        _normalized_menu_path(section.path): section
+        for section in existing_sections
+        if section.menu_type == "header"
+    }
+    resolved_sections: dict[str, models.Section] = {}
+    ordered_sections: list[models.Section] = []
+    created_count = 0
+    skipped_count = 0
+    updated_count = 0
+
+    current_library = [entry for entry in (site.menu_library or []) if isinstance(entry, dict)]
+    for item in template["items"]:
+        parent_external_id = item["parent_external_id"]
+        parent = resolved_sections.get(parent_external_id) if parent_external_id else None
+        section = existing_by_external_id.get(item["external_id"].casefold()) or existing_by_path.get(
+            _normalized_menu_path(item["path"])
+        )
+        if section:
+            expected_parent_id = parent.id if parent else None
+            if section.parent_id != expected_parent_id:
+                section.parent_id = expected_parent_id
+                section.is_temporary_parent = False
+                section.sync_status = "pending"
+                section.synced_at = None
+                updated_count += 1
+                db.add(
+                    models.PublicationLog(
+                        endpoint_url=site.sections_endpoint or site.base_url,
+                        request_payload={
+                            "action": "menu_item_update",
+                            "project_name": site.name,
+                            "name": section.name,
+                            "path": section.path,
+                            "menu_type": "header",
+                            "parent_id": expected_parent_id,
+                            "template_id": template_id,
+                        },
+                        response_status=None,
+                        response_body={"section_id": section.id, "synchronized": False},
+                    )
+                )
+            else:
+                skipped_count += 1
+        else:
+            section = models.Section(
+                site_id=site_id,
+                external_id=item["external_id"],
+                name=item["name"],
+                path=_normalized_menu_path(item["path"]),
+                menu_type="header",
+                parent_id=parent.id if parent else None,
+                sync_status="pending",
+            )
+            db.add(section)
+            db.flush()
+            existing_by_external_id[section.external_id.casefold()] = section
+            existing_by_path[_normalized_menu_path(section.path)] = section
+            created_count += 1
+            db.add(
+                models.PublicationLog(
+                    endpoint_url=site.sections_endpoint or site.base_url,
+                    request_payload={
+                        "action": "menu_item_create",
+                        "project_name": site.name,
+                        "name": section.name,
+                        "external_id": section.external_id,
+                        "path": section.path,
+                        "menu_type": "header",
+                        "parent_id": section.parent_id,
+                        "template_id": template_id,
+                    },
+                    response_status=None,
+                    response_body={"section_id": section.id, "synchronized": False},
+                )
+            )
+
+        resolved_sections[item["external_id"]] = section
+        ordered_sections.append(section)
+        library_item = {
+            "name": item["name"],
+            "path": _normalized_menu_path(item["path"]),
+            "external_id": item["external_id"],
+            "parent_external_id": item["parent_external_id"],
+            "template_id": template_id,
+        }
+        conflict_index = next(
+            (
+                index
+                for index, entry in enumerate(current_library)
+                if entry.get("external_id") == item["external_id"]
+                or _normalized_menu_path(str(entry.get("path") or "")) == library_item["path"]
+            ),
+            None,
+        )
+        if conflict_index is None:
+            current_library.append(library_item)
+        else:
+            current_library[conflict_index] = library_item
+
+    site.menu_library = current_library
+    db.commit()
+    for section in ordered_sections:
+        db.refresh(section)
+    return {
+        "template_id": template_id,
+        "total_count": len(template["items"]),
+        "created_count": created_count,
+        "skipped_count": skipped_count,
+        "updated_count": updated_count,
+        "sections": ordered_sections,
+    }
+
+
 @router.get("/sites/{site_id}/sections", response_model=list[SectionResponse])
 def list_sections(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     _get_site_or_404(db, site_id)
@@ -528,7 +686,13 @@ def get_site_menu_capabilities(site_id: str, _: AuthUser, db: Session = Depends(
                 projects = fetch_project_cache([site.name])
                 project = next((item for item in projects if str(item.get("name") or "").strip() == site.name), None)
                 if project:
-                    site.cache_server_ip = str(project.get("serverIp") or project.get("server_ip") or "").strip() or None
+                    site.cache_server_ip = str(
+                        project.get("serverId")
+                        or project.get("server_id")
+                        or project.get("serverIp")
+                        or project.get("server_ip")
+                        or ""
+                    ).strip() or None
                     db.commit()
             except ProjectCacheError as error:
                 raise HTTPException(status_code=502, detail=str(error)) from error
@@ -550,6 +714,15 @@ def get_site_menu_capabilities(site_id: str, _: AuthUser, db: Session = Depends(
         "footer_menu_rendered": site.footer_menu_rendered,
         "footer_menu_nested": site.footer_menu_nested,
     }
+
+
+@router.post("/sites/{site_id}/sync-changes")
+async def sync_site_changes(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> dict[str, Any]:
+    site = _get_site_or_404(db, site_id)
+    try:
+        return await sync_project_menus(db, site)
+    except ProjectCacheError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
 
 
 @router.post("/sites/{site_id}/sections", response_model=SectionResponse)
@@ -737,6 +910,11 @@ def update_menu_library_item(
         "russian_name": payload.russian_name.strip(),
     }
     current = [entry for entry in (site.menu_library or []) if isinstance(entry, dict)]
+    existing_item = next((entry for entry in current if entry.get("external_id") == external_id), None)
+    if existing_item and existing_item.get("parent_external_id"):
+        updated_item["parent_external_id"] = existing_item["parent_external_id"]
+    if existing_item and existing_item.get("template_id"):
+        updated_item["template_id"] = existing_item["template_id"]
     conflicting = next(
         (
             entry
@@ -928,6 +1106,46 @@ def list_site_tasks(site_id: str, _: AuthUser, db: Session = Depends(get_db)) ->
         .where(models.GenerationTask.site_id == site_id, models.GenerationTask.archived_at.is_(None))
         .order_by(models.GenerationTask.created_at.desc())
     ).all()
+
+
+@router.post("/sites/{site_id}/topic-suggestions", response_model=TopicSuggestionsResponse)
+def suggest_site_topics(site_id: str, payload: TopicSuggestionsRequest, _: AuthUser, db: Session = Depends(get_db)) -> dict[str, list[str]]:
+    site = _get_site_or_404(db, site_id)
+    provider = db.get(models.AiProvider, payload.ai_provider_id) if payload.ai_provider_id else db.scalar(
+        select(models.AiProvider)
+        .where(models.AiProvider.provider_type == "gemini", models.AiProvider.is_active.is_(True))
+        .order_by(models.AiProvider.created_at.desc())
+        .limit(1)
+    )
+    if not provider or provider.provider_type != "gemini" or not provider.is_active:
+        raise HTTPException(status_code=400, detail="Select an active Gemini provider to generate topics")
+
+    section_context = ""
+    if payload.section_id:
+        section = _get_section_for_site(db, site_id, payload.section_id)
+        section_context = f"{section.name} · {section.path}"
+    stored_topics = db.scalars(
+        select(models.ContentItem.topic)
+        .where(models.ContentItem.site_id == site_id)
+        .order_by(models.ContentItem.created_at.desc())
+    ).all()
+    existing_topics = [*stored_topics, *payload.current_topics]
+    try:
+        topics = asyncio.run(
+            generate_topic_suggestions(
+                provider=provider,
+                site=site,
+                geo=payload.geo,
+                language=payload.language,
+                existing_topics=existing_topics,
+                section_context=section_context,
+            )
+        )
+    except Exception as exc:
+        db.commit()
+        raise HTTPException(status_code=502, detail=str(exc)[:500]) from exc
+    db.commit()
+    return {"topics": topics}
 
 
 @router.post("/sites/{site_id}/tasks", response_model=GenerationTaskResponse)
@@ -1638,6 +1856,7 @@ def list_admin_request_logs(_: AdminUser, db: Session = Depends(get_db)) -> list
         is_menu_create = action == "menu_item_create"
         is_menu_update = action == "menu_item_update"
         is_menu_delete = action == "menu_item_delete"
+        is_menu_sync = action == "menu_sync"
         is_menu_confirmation = action == "menu_item_sync_confirmed"
         is_campaign_publish_all = action == "campaign_publish_all"
         requested_by = payload.get("requested_by") if isinstance(payload.get("requested_by"), dict) else {}
@@ -1649,11 +1868,12 @@ def list_admin_request_logs(_: AdminUser, db: Session = Depends(get_db)) -> list
                 "created_at": log.created_at,
                 "project_name": str(project.get("name") or payload.get("project_name") or site_name or "Не определён"),
                 "actor_username": str(requested_by.get("username") or payload.get("username") or "").strip() or None,
-                "action": "Публикация всей кампании" if is_campaign_publish_all else "Добавление пункта меню" if is_menu_create else "Изменение пункта меню" if is_menu_update else "Удаление пункта меню" if is_menu_delete else "Синхронизация пункта меню" if is_menu_confirmation else "Публикация контента",
+                "action": "Публикация всей кампании" if is_campaign_publish_all else "Отправка меню" if is_menu_sync else "Добавление пункта меню" if is_menu_create else "Изменение пункта меню" if is_menu_update else "Удаление пункта меню" if is_menu_delete else "Синхронизация пункта меню" if is_menu_confirmation else "Публикация контента",
                 "item_name": str(payload.get("campaign", {}).get("name") if is_campaign_publish_all and isinstance(payload.get("campaign"), dict) else payload.get("name") or topic or "").strip() or None,
                 "method": "POST",
                 "destination": log.endpoint_url,
                 "result": "Успешно" if successful else "Ошибка" if log.error_message or (log.response_status or 0) >= 400 else "Ожидает ответа",
+                "status_code": log.response_status,
             }
         )
     return result

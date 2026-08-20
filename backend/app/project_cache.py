@@ -17,6 +17,31 @@ class ProjectCacheError(RuntimeError):
     pass
 
 
+def project_server_url(site: models.Site, path: str) -> str:
+    server_id = (site.cache_server_ip or "").strip()
+    if not server_id or not re.fullmatch(r"[A-Za-z0-9-]+", server_id):
+        raise ProjectCacheError("Project serverId is missing or invalid")
+    domain = get_settings().alfan_url.strip().strip("/")
+    if not domain or not re.fullmatch(r"[A-Za-z0-9.-]+", domain):
+        raise ProjectCacheError("Project server domain is invalid")
+    return f"https://{server_id}.{domain}/{path.lstrip('/')}"
+
+
+async def refresh_project_server_token(client: httpx.AsyncClient) -> str:
+    settings = get_settings()
+    if not settings.project_cache_username or not settings.project_cache_password:
+        raise ProjectCacheError("Project cache credentials are not configured")
+    response = await client.post(
+        f"{settings.project_cache_url.rstrip('/')}/auth/login",
+        json={"username": settings.project_cache_username, "pass": settings.project_cache_password},
+    )
+    response.raise_for_status()
+    token = str(response.json().get("token") or "").strip()
+    if not token:
+        raise ProjectCacheError("Project cache login did not return a token")
+    return token
+
+
 def fetch_project_menu_capabilities(site: models.Site, force: bool = False) -> dict[str, Any]:
     if site.menu_capabilities_checked_at is not None and not force:
         return _site_menu_capabilities(site)
@@ -37,7 +62,7 @@ def fetch_project_menu_capabilities(site: models.Site, force: bool = False) -> d
             if not token:
                 raise ProjectCacheError("Project cache login did not return a token")
             response = client.get(
-                f"https://{site.cache_server_ip}.{settings.alfan_url}/projects/one/{quote(site.name, safe='')}",
+                f"{project_server_url(site, '/projects/one')}/{quote(site.name, safe='')}",
                 headers={"Authorization": f"Bearer {token}"},
             )
             response.raise_for_status()
@@ -119,7 +144,9 @@ def fetch_project_cache(names: list[str] | None = None) -> list[dict[str, Any]]:
             token = login_response.json().get("token")
             if not token:
                 raise ProjectCacheError("Project cache login did not return a token")
-            request_payload: dict[str, Any] = {"fields": {"settings": True, "head": True, "data": True}}
+            request_payload: dict[str, Any] = {
+                "fields": {"settings": True, "head": True, "data": True, "serverId": True}
+            }
             if names:
                 request_payload["names"] = names
             cache_response = client.post(
@@ -259,7 +286,13 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
         canon = _normalize_domain(settings.get("canon"))
         language = str(settings.get("lang") or "").strip() or None
         geo = str(settings.get("geo") or "").strip() or None
-        server_ip = str(project.get("serverIp") or project.get("server_ip") or "").strip() or None
+        server_ip = str(
+            project.get("serverId")
+            or project.get("server_id")
+            or project.get("serverIp")
+            or project.get("server_ip")
+            or ""
+        ).strip() or None
         if not name:
             continue
         raw_external_id = project.get("id") or project.get("_id")
