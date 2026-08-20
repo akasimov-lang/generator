@@ -1462,7 +1462,8 @@ h2 {
 }
 
 .projectCanonOpenButton,
-.projectCanonCopyButton {
+.projectCanonCopyButton,
+.projectUniversalAdminButton {
   align-items: center;
   background: var(--primary-soft);
   border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border));
@@ -1480,7 +1481,9 @@ h2 {
 .projectCanonOpenButton:hover,
 .projectCanonOpenButton:focus-visible,
 .projectCanonCopyButton:hover,
-.projectCanonCopyButton:focus-visible {
+.projectCanonCopyButton:focus-visible,
+.projectUniversalAdminButton:hover,
+.projectUniversalAdminButton:focus-visible {
   background: #d8f6e2;
   box-shadow: 0 3px 8px rgba(20, 112, 59, 0.18);
 }

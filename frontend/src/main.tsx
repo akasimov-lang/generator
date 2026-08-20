@@ -33,6 +33,7 @@ import {
   LogOut,
   Medal,
   Menu,
+  MonitorCog,
   Moon,
   Pause,
   Play,
@@ -1984,6 +1985,16 @@ function ProjectWorkspaceView({
                         <button className="projectCanonCopyButton" type="button" onClick={copyCanon} title={canonCopied ? "Скопировано" : "Скопировать canon"} aria-label="Скопировать canon">
                           {canonCopied ? <CheckCircle2 size={14} /> : <Copy size={14} />}
                         </button>
+                        <a
+                          className="projectUniversalAdminButton"
+                          href={`https://johnny.g4fj2fhghgwg.top/projects/${encodeURIComponent(selectedSite.name)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={`Открыть универсальную админку: ${selectedSite.name}`}
+                          aria-label={`Открыть универсальную админку проекта ${selectedSite.name}`}
+                        >
+                          <MonitorCog size={14} />
+                        </a>
                       </span>
                     </span>
                   </span>
