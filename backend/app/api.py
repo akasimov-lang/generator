@@ -1598,6 +1598,13 @@ def update_content(content_id: str, payload: ContentUpdate, _: AuthUser, db: Ses
             _get_section_for_site(db, item.site_id, payload.section_id)
         item.section_id = payload.section_id
 
+        # The generation tab displays the menu section stored on the parent
+        # task. Keep it aligned with content assignments whenever the whole
+        # task has one unambiguous section. Mixed assignments intentionally
+        # clear the task-level value instead of showing a misleading option.
+        task_section_ids = {task_item.section_id for task_item in item.task.items}
+        item.task.section_id = task_section_ids.pop() if len(task_section_ids) == 1 else None
+
     if "generated_json" in payload.model_fields_set:
         if payload.generated_json is None:
             raise HTTPException(status_code=400, detail="generated_json cannot be null")

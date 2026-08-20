@@ -5,9 +5,9 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app import models
-from app.api import archive_task, collect_content_competitors, generate_content, get_task, list_archived_tasks, list_tasks, regenerate_all_task_content, restore_task, start_task_pipeline, update_task_section
+from app.api import archive_task, collect_content_competitors, generate_content, get_task, list_archived_tasks, list_tasks, regenerate_all_task_content, restore_task, start_task_pipeline, update_content, update_task_section
 from app.db import Base
-from app.schemas import GenerationTaskCreate, GenerationTaskRegenerateAll, GenerationTaskSectionUpdate
+from app.schemas import ContentUpdate, GenerationTaskCreate, GenerationTaskRegenerateAll, GenerationTaskSectionUpdate
 from app.services import create_generation_task, run_task_pipeline
 
 
@@ -202,6 +202,32 @@ def test_task_menu_section_updates_all_mutable_items() -> None:
 
         assert updated.section_id == section.id
         assert item.section_id == section.id
+
+
+def test_content_menu_section_is_reflected_in_generation_task() -> None:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    with TestingSession() as db:
+        site = models.Site(name="menu.example", base_url="https://menu.example", publication_endpoint="https://menu.example/api/content")
+        db.add(site)
+        db.flush()
+        section = models.Section(site=site, external_id="games", name="Games", path="/games/", menu_type="header")
+        task = models.GenerationTask(title="Menu task", site_id=site.id, geo="DK", language="da", topics_count=2)
+        first = models.ContentItem(task=task, site_id=site.id, topic="First", slug="/first/", generated_json={}, idempotency_key="content-menu-first")
+        second = models.ContentItem(task=task, site_id=site.id, topic="Second", slug="/second/", generated_json={}, idempotency_key="content-menu-second")
+        db.add_all([section, task, first, second])
+        db.commit()
+
+        update_content(first.id, ContentUpdate(section_id=section.id), None, db)  # type: ignore[arg-type]
+        assert task.section_id is None
+
+        update_content(second.id, ContentUpdate(section_id=section.id), None, db)  # type: ignore[arg-type]
+        assert task.section_id == section.id
+
+        update_content(first.id, ContentUpdate(section_id=None), None, db)  # type: ignore[arg-type]
+        assert task.section_id is None
 
 
 def test_task_pipeline_retries_competitor_failure_before_generation(monkeypatch: pytest.MonkeyPatch) -> None:

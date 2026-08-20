@@ -1486,13 +1486,13 @@ h2 {
 }
 
 .projectTopDetails > .projectMetricCard {
-  background: var(--primary-soft);
-  border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+  background: var(--surface-3);
+  border-color: var(--border);
   text-align: center;
 }
 
 .projectTopDetails > .projectMetricCard b {
-  color: var(--primary-strong);
+  color: var(--text);
   font-size: 22px;
 }
 
@@ -1761,6 +1761,37 @@ h2 {
   border-top: 1px solid var(--border);
 }
 
+.projectWorkspaceView {
+  gap: 10px;
+}
+
+.projectWorkspaceView > .dataPanel:first-child {
+  padding-bottom: 12px;
+}
+
+.projectWorkspaceView > .dataPanel:first-child .workspaceTabs {
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.projectWorkspaceView .workspaceTabPane > .viewStack,
+.projectWorkspaceView .workspaceTabPane .viewStack {
+  gap: 10px;
+}
+
+.projectWorkspaceView .workspaceTabPane .dataPanel {
+  padding: 12px 14px;
+}
+
+.projectWorkspaceView .workspaceTabPane .panelHeader {
+  margin-bottom: 9px;
+}
+
+.projectWorkspaceView .workspaceTabPane th,
+.projectWorkspaceView .workspaceTabPane td {
+  padding: 8px 7px;
+}
+
 .workspaceTabPane[hidden] {
   display: none !important;
 }
@@ -1848,24 +1879,6 @@ h2 {
   box-shadow: var(--shadow);
   padding: 18px;
   min-width: 0;
-}
-
-.workspaceAccordionHint {
-  align-items: center;
-  background: color-mix(in srgb, var(--primary-soft) 72%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--primary) 34%, var(--border));
-  border-radius: var(--radius);
-  color: var(--muted);
-  display: flex;
-  font-size: 13px;
-  gap: 9px;
-  padding: 10px 14px;
-}
-
-.workspaceAccordionHint svg,
-.workspaceAccordionHint strong {
-  color: var(--primary);
-  flex: 0 0 auto;
 }
 
 .collapsibleDataPanel.collapsed {
@@ -4634,6 +4647,12 @@ td {
   align-items: stretch;
 }
 
+.projectContentPanel .bulkToolbar {
+  gap: 7px;
+  margin-bottom: 7px;
+  padding: 7px 8px;
+}
+
 .projectContentBulkToolbar .bulkSelectAll,
 .projectContentBulkToolbar .fieldHint,
 .projectContentBulkToolbar .button {
@@ -4646,7 +4665,7 @@ td {
 
 .projectContentTable th,
 .projectContentTable td {
-  padding: 7px 6px;
+  padding: 5px 6px;
 }
 
 .projectContentTable .column-select {
@@ -4749,7 +4768,7 @@ td {
 }
 
 .projectContentActions .button {
-  padding: 7px 9px;
+  padding: 5px 8px;
   white-space: nowrap;
 }
 
@@ -5308,9 +5327,9 @@ td {
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   display: grid;
-  gap: 9px;
+  gap: 6px;
   grid-template-columns: repeat(5, minmax(150px, 1fr));
-  padding: 10px;
+  padding: 6px;
   scroll-margin-top: 16px;
 }
 
@@ -5333,10 +5352,10 @@ td {
   display: inline-flex;
   font-size: 12px;
   font-weight: 750;
-  gap: 8px;
+  gap: 7px;
   justify-content: flex-start;
-  min-height: 55px;
-  padding: 7px 10px;
+  min-height: 47px;
+  padding: 5px 9px;
   text-align: left;
   transition: background 150ms ease, border-color 150ms ease, box-shadow 150ms ease, color 150ms ease, transform 150ms ease;
 }

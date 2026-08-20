@@ -460,6 +460,7 @@ type WorkspaceTab = "overview" | "topics" | "content" | "publication" | "menu";
 
 type WorkspaceAccordionContextValue = {
   storagePrefix: string;
+  allowPanelCollapse: boolean;
 };
 
 const WorkspaceAccordionContext = React.createContext<WorkspaceAccordionContextValue | null>(null);
@@ -1655,6 +1656,7 @@ function ProjectWorkspaceView({
   const selectedSite = sites.find((site) => site.id === selectedSiteId) || null;
   const routeProjectName = workspaceProjectNameFromPath(window.location.pathname);
   const pendingSectionsCount = sections.filter((section) => section.sync_status !== "synced").length;
+  const unpublishedGeneratedContentCount = siteContent.filter((item) => Boolean(item.generated_at) && item.status !== "published").length;
   const selectedProjectMedalStatus = menuCapabilities?.checked_at
     ? menuMedalStatus(menuCapabilities.checked_at, menuCapabilities.header_menu_rendered, menuCapabilities.footer_menu_rendered)
     : selectedSite ? projectMenuMedalStatus(selectedSite) : "unchecked";
@@ -1863,12 +1865,13 @@ function ProjectWorkspaceView({
   }
 
   const accordionContextValue = {
-    storagePrefix: `${currentUsername}:${selectedSiteId || "no-project"}:${activeTab}`
+    storagePrefix: `${currentUsername}:${selectedSiteId || "no-project"}:${activeTab}`,
+    allowPanelCollapse: false
   };
 
   return (
     <WorkspaceAccordionContext.Provider value={accordionContextValue}>
-    <section className="viewStack">
+    <section className="viewStack projectWorkspaceView">
       <DataPanel title={(
         <span className="workspaceProjectTitle">
           {selectedSite ? (
@@ -2010,7 +2013,7 @@ function ProjectWorkspaceView({
           <TabButton
             href={pathForRoute("workspace", "content", selectedSite?.name)}
             icon={<span className="tabButtonIcon document" aria-hidden="true"><FileText size={15} /></span>}
-            label="Контент и публикация"
+            label={unpublishedGeneratedContentCount ? `Контент и публикация (${unpublishedGeneratedContentCount})` : "Контент и публикация"}
             active={activeTab === "content" || activeTab === "publication"}
             onClick={() => onTabChange("content", selectedSite?.name)}
           />
@@ -2033,11 +2036,6 @@ function ProjectWorkspaceView({
           activeSection={publicationWorkflowSection}
           onSectionChange={openPublicationSection}
         />
-      ) : selectedSite && activeTab === "overview" ? (
-        <div className="workspaceAccordionHint" role="note">
-          <ChevronDown size={17} />
-          <span><strong>Блоки можно сворачивать.</strong> Нажмите на заголовок блока — выбранное положение сохранится отдельно для вашего пользователя и проекта.</span>
-        </div>
       ) : null}
 
       {!selectedSite ? (
@@ -2090,7 +2088,7 @@ function ProjectWorkspaceView({
 }
 
 function WorkspaceTabPane({ active, storagePrefix, children }: { active: boolean; storagePrefix: string; children: React.ReactNode }) {
-  const accordionContextValue = React.useMemo(() => ({ storagePrefix }), [storagePrefix]);
+  const accordionContextValue = React.useMemo(() => ({ storagePrefix, allowPanelCollapse: false }), [storagePrefix]);
   if (!active) return null;
   return (
     <WorkspaceAccordionContext.Provider value={accordionContextValue}>
@@ -3291,7 +3289,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
 
   return (
     <section className="viewStack">
-      <DataPanel id="workspace-section-content" collapseKey="project-content" title={(
+      <DataPanel id="workspace-section-content" className="projectContentPanel" collapseKey="project-content" title={(
         <span className="workspacePanelTitleWithStats">
           <span>Контент проекта</span>
           <span className="workspacePanelStats">
@@ -7997,7 +7995,7 @@ function DataPanel({ id, title, actions, children, collapseKey, allowCollapse = 
   const accordionContext = React.useContext(WorkspaceAccordionContext);
   const automaticKey = typeof title === "string" ? title.split(" · ")[0].trim().toLowerCase().replace(/[^a-zа-яё0-9]+/gi, "-") : "";
   const effectiveCollapseKey = collapseKey || automaticKey;
-  const collapsible = Boolean(allowCollapse && accordionContext && effectiveCollapseKey);
+  const collapsible = Boolean(allowCollapse && accordionContext?.allowPanelCollapse && effectiveCollapseKey);
   const [expanded, setExpanded] = usePersistentWorkspacePanelState(effectiveCollapseKey || "static-panel", true);
 
   React.useEffect(() => {
