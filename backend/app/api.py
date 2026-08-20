@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 import secrets
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, func, select
@@ -42,6 +43,7 @@ from app.schemas import (
     PromptTemplateUpdate,
     ProjectCacheSyncResponse,
     ProjectCacheSyncRequest,
+    ProjectPagePreviewResponse,
     PublicationCampaignCreate,
     PublicationCampaignQueueResponse,
     SectionCreate,
@@ -142,6 +144,31 @@ def _normalized_language(value: str | None) -> str:
 def _normalized_menu_path(value: str) -> str:
     path = value.strip().strip("/")
     return f"/{path}/" if path else "/"
+
+
+def _normalized_project_page_path(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw or raw.startswith("#"):
+        return "" if raw.startswith("#") else "/"
+    parsed = urlsplit(raw if "://" in raw else f"//placeholder{raw if raw.startswith('/') else f'/{raw}'}")
+    path = parsed.path if parsed.path else raw.split("?", 1)[0].split("#", 1)[0]
+    return _normalized_menu_path(path)
+
+
+def _find_project_page(project: dict[str, Any], requested_slug: str) -> dict[str, Any] | None:
+    normalized_slug = _normalized_project_page_path(requested_slug)
+    if not normalized_slug:
+        return None
+    data = project.get("data") if isinstance(project.get("data"), dict) else {}
+    pages = data.get("pages") if isinstance(data.get("pages"), list) else []
+    return next(
+        (
+            page
+            for page in pages
+            if isinstance(page, dict) and _normalized_project_page_path(page.get("slug")) == normalized_slug
+        ),
+        None,
+    )
 
 
 def _menu_request_endpoint(site: models.Site) -> str:
@@ -548,6 +575,30 @@ def get_site_overview(site_id: str, _: AuthUser, db: Session = Depends(get_db)) 
             "next_publication_at": next_item.scheduled_at if next_item else None,
         },
         "recent_content": recent_content,
+    }
+
+
+@router.get("/sites/{site_id}/pages/preview", response_model=ProjectPagePreviewResponse)
+def get_project_page_preview(site_id: str, slug: str, _: AuthUser, db: Session = Depends(get_db)) -> dict[str, Any]:
+    site = _get_site_or_404(db, site_id)
+    normalized_slug = _normalized_project_page_path(slug)
+    if not normalized_slug:
+        raise HTTPException(status_code=400, detail="У пункта меню нет адреса страницы")
+    try:
+        projects = fetch_project_cache([site.name])
+    except ProjectCacheError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    project = next((item for item in projects if str(item.get("name") or "").strip() == site.name), None)
+    if not project:
+        raise HTTPException(status_code=404, detail="Проект не найден в актуальном JSON")
+    page = _find_project_page(project, normalized_slug)
+    if not page:
+        raise HTTPException(status_code=404, detail="Страница для этого пункта меню не найдена в актуальном JSON проекта")
+    return {
+        "title": str(page.get("title") or normalized_slug).strip(),
+        "slug": normalized_slug,
+        "description": str(page.get("description") or "").strip(),
+        "page": page,
     }
 
 

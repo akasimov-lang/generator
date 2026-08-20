@@ -117,6 +117,13 @@ type ContentItem = {
   updated_at: string;
 };
 
+type ProjectPagePreview = {
+  title: string;
+  slug: string;
+  description: string;
+  page: Record<string, unknown>;
+};
+
 type CompetitorBrief = {
   generated_at?: string;
   search_queries?: string[];
@@ -3934,6 +3941,9 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onCh
   const [adoptingParentKey, setAdoptingParentKey] = React.useState<string | null>(null);
   const [temporaryParentId, setTemporaryParentId] = React.useState<string | null>(null);
   const [releasingTemporaryParent, setReleasingTemporaryParent] = React.useState(false);
+  const [pagePreview, setPagePreview] = React.useState<ProjectPagePreview | null>(null);
+  const [pagePreviewError, setPagePreviewError] = React.useState<{ title: string; slug: string; message: string } | null>(null);
+  const [pagePreviewLoadingKey, setPagePreviewLoadingKey] = React.useState<string | null>(null);
   const cachedHeader = Array.isArray(site.default_menu.header) ? site.default_menu.header : [];
   const cachedFooter = Array.isArray(site.default_menu.footer) ? site.default_menu.footer : [];
   const menuLibrary = React.useMemo(() => {
@@ -3975,7 +3985,28 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onCh
     setMenuTemplates([]);
     setTemplateApplyMessage("");
     setUpdatedAt(null);
+    setPagePreview(null);
+    setPagePreviewError(null);
+    setPagePreviewLoadingKey(null);
   }, [site.id]);
+
+  async function openPagePreview(item: MenuPreviewItem, treeKey: string) {
+    const slug = normalizedTreePath(item.path);
+    setPagePreviewLoadingKey(treeKey);
+    setPagePreviewError(null);
+    try {
+      const preview = await api<ProjectPagePreview>(`/sites/${site.id}/pages/preview?slug=${encodeURIComponent(slug || item.path || "#")}`);
+      setPagePreview(preview);
+    } catch (error) {
+      setPagePreviewError({
+        title: item.title,
+        slug: item.path,
+        message: error instanceof Error ? error.message : "Не удалось загрузить текст страницы"
+      });
+    } finally {
+      setPagePreviewLoadingKey(null);
+    }
+  }
 
   React.useEffect(() => {
     let cancelled = false;
@@ -4306,10 +4337,10 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onCh
           </form> : null}
         </section>
         <div className="projectMenuStructureGrid">
-          <SiteMenuPreviewSection key={`${site.id}:header`} title="Меню Header" icon={<HeaderMenuIcon />} items={cachedHeader} sections={sections.filter((section) => section.menu_type === "header")} content={content} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "header" ? parentTreeKey : ""} onAddChild={(item, section, treeKey) => openChildForm("header", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("header")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Header</button>}>
+          <SiteMenuPreviewSection key={`${site.id}:header`} title="Меню Header" icon={<HeaderMenuIcon />} items={cachedHeader} sections={sections.filter((section) => section.menu_type === "header")} content={content} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "header" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onAddChild={(item, section, treeKey) => openChildForm("header", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("header")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Header</button>}>
             {inlineMenuType === "header" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "header")}>{menuFields("header")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
           </SiteMenuPreviewSection>
-          <SiteMenuPreviewSection key={`${site.id}:footer`} title="Меню Footer" icon={<FooterMenuIcon />} items={cachedFooter} sections={sections.filter((section) => section.menu_type === "footer")} content={content} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "footer" ? parentTreeKey : ""} onAddChild={(item, section, treeKey) => openChildForm("footer", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("footer")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Footer</button>}>
+          <SiteMenuPreviewSection key={`${site.id}:footer`} title="Меню Footer" icon={<FooterMenuIcon />} items={cachedFooter} sections={sections.filter((section) => section.menu_type === "footer")} content={content} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "footer" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onAddChild={(item, section, treeKey) => openChildForm("footer", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("footer")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Footer</button>}>
             {inlineMenuType === "footer" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "footer")}>{menuFields("footer")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
           </SiteMenuPreviewSection>
         </div>
@@ -4328,6 +4359,8 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onCh
             ];
           })}
         /> : null}
+        {pagePreview ? <ProjectPagePreviewModal preview={pagePreview} onClose={() => setPagePreview(null)} /> : null}
+        {pagePreviewError ? <Modal title={`Просмотр страницы: ${pagePreviewError.title}`} subtitle={pagePreviewError.slug || "URL не указан"} onClose={() => setPagePreviewError(null)}><div className="emptyState">{pagePreviewError.message}</div></Modal> : null}
       </DataPanel>
       <DataPanel
         title={`Библиотека пунктов меню · ${menuLibrary.length}`}
@@ -7454,7 +7487,7 @@ function nestedContentSlug(sectionPath: string, contentSlug: string): string {
   return parent === "/" ? `/${leaf}/` : `${parent}${leaf}/`;
 }
 
-function SiteMenuPreviewSection({ title, items, sections = [], content = [], icon, action, children, adoptingParentKey, activeParentTreeKey, onAddChild }: { title: string; items: unknown[]; sections?: Section[]; content?: ContentItem[]; icon?: React.ReactNode; action?: React.ReactNode; children?: React.ReactNode; adoptingParentKey?: string | null; activeParentTreeKey?: string; onAddChild?: (item: MenuPreviewItem, section: Section | undefined, treeKey: string) => void }) {
+function SiteMenuPreviewSection({ title, items, sections = [], content = [], icon, action, children, adoptingParentKey, activeParentTreeKey, pagePreviewLoadingKey, onPreviewPage, onAddChild }: { title: string; items: unknown[]; sections?: Section[]; content?: ContentItem[]; icon?: React.ReactNode; action?: React.ReactNode; children?: React.ReactNode; adoptingParentKey?: string | null; activeParentTreeKey?: string; pagePreviewLoadingKey?: string | null; onPreviewPage?: (item: MenuPreviewItem, treeKey: string) => void; onAddChild?: (item: MenuPreviewItem, section: Section | undefined, treeKey: string) => void }) {
   const menuType = title.includes("Footer") ? "footer" : "header";
   const tree = React.useMemo(() => buildMenuTree(items, sections), [items, sections]);
   const [collapsedKeys, setCollapsedKeys] = React.useState<Set<string>>(() => collapsibleMenuKeys(tree));
@@ -7486,6 +7519,7 @@ function SiteMenuPreviewSection({ title, items, sections = [], content = [], ico
             <div className="siteMenuTreeRow">
               {hasChildren ? <span className="siteMenuTreeBranchSpacer" /> : <button className="siteMenuTreeToggle" type="button" disabled><span /></button>}
               <div className="siteMenuPreviewItemText"><strong>{node.item.title}</strong>{node.item.path ? <code>{node.item.path}</code> : null}</div>
+              {onPreviewPage ? <button className="siteMenuPagePreviewButton" type="button" onClick={() => onPreviewPage(node.item, node.key)} disabled={pagePreviewLoadingKey === node.key} title="Просмотреть текст страницы" aria-label={`Просмотреть текст страницы: ${node.item.title}`}>{pagePreviewLoadingKey === node.key ? <LoaderCircle size={14} /> : <Eye size={14} />}</button> : null}
               {nestedPages.length ? <span className="siteMenuNestedPageCount">Страниц: {nestedPages.length}</span> : null}
               {hasChildren ? <button className="siteMenuTreeToggle hasChildren" type="button" onClick={() => toggleNode(node.key)} aria-label={`${collapsed ? "Развернуть" : "Свернуть"} ${node.item.title}`}>
                 {collapsed ? <ChevronRight size={17} /> : <ChevronDown size={17} />}<span className="siteMenuTreeToggleLabel">{collapsed ? "Показать все" : "Свернуть"}</span><span className="siteMenuTreeNestedCount">{nestedCount}</span>
@@ -8292,6 +8326,21 @@ function ContentPreviewModal({ item, promptName, actions, onClose }: { item: Con
   );
 }
 
+function ProjectPagePreviewModal({ preview, onClose }: { preview: ProjectPagePreview; onClose: () => void }) {
+  return (
+    <Modal title={`Просмотр страницы: ${preview.title}`} subtitle="Текст получен из актуального JSON проекта" onClose={onClose} wide className="contentPreviewModal">
+      <div className="contentPreviewHeader">
+        <div className="contentPreviewInfo">
+          <div className="contentPreviewMetaLine"><span>URL: <code>{preview.slug}</code></span></div>
+          <div className="previewDescriptionCompact"><strong>Meta Description</strong><span>{previewPlainText(preview.description) || "Не заполнен"}</span></div>
+        </div>
+      </div>
+      <div className="previewStructureLegend">Метки H1–H4 показаны только для проверки структуры страницы.</div>
+      <ContentPreviewBody generatedJson={{ pages: [preview.page] }} />
+    </Modal>
+  );
+}
+
 function EmptyState({ text }: { text: string }) {
   return <div className="emptyState">{text}</div>;
 }
@@ -8509,10 +8558,11 @@ function previewPlainText(value: unknown) {
   return String(value ?? "").replace(/<[^>]+>/g, "").trim();
 }
 
-function ContentPreviewBody({ item }: { item: ContentItem }) {
-  const pages = item.generated_json.pages;
+function ContentPreviewBody({ item, generatedJson }: { item?: ContentItem; generatedJson?: Record<string, unknown> }) {
+  const source = generatedJson || item?.generated_json || {};
+  const pages = source.pages;
   if (!Array.isArray(pages) || !pages[0] || typeof pages[0] !== "object") {
-    return <pre className="contentPreviewText modalContentText">{JSON.stringify(item.generated_json, null, 2)}</pre>;
+    return <pre className="contentPreviewText modalContentText">{JSON.stringify(source, null, 2)}</pre>;
   }
   const page = pages[0] as { description?: unknown; content?: { blocks?: Array<Record<string, unknown>> } };
   const blocks = page.content?.blocks || [];

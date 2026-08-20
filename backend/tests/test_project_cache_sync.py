@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app import models
-from app.api import get_site_menu_capabilities
+from app.api import _find_project_page, get_site_menu_capabilities
 from app.db import Base
 from app.project_cache import analyze_menu_templates, sync_project_cache
 
@@ -14,6 +14,24 @@ def make_session() -> Session:
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(bind=engine)
     return Session(engine)
+
+
+def test_find_project_page_normalizes_relative_and_absolute_slugs() -> None:
+    project = {
+        "data": {
+            "pages": [
+                {"slug": "/", "title": "Home"},
+                {"slug": "https://example.com/bonuses/welcome/?ref=menu", "title": "Welcome"},
+            ]
+        }
+    }
+
+    assert _find_project_page(project, "/") == {"slug": "/", "title": "Home"}
+    assert _find_project_page(project, "/bonuses/welcome/") == {
+        "slug": "https://example.com/bonuses/welcome/?ref=menu",
+        "title": "Welcome",
+    }
+    assert _find_project_page(project, "#") is None
 
 
 def test_sync_imports_working_project_and_preserves_external_id() -> None:

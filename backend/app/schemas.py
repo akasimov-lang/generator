@@ -143,6 +143,13 @@ class SiteResponse(BaseModel):
     updated_at: datetime
 
 
+class ProjectPagePreviewResponse(BaseModel):
+    title: str
+    slug: str
+    description: str = ""
+    page: dict[str, Any]
+
+
 class ProjectCacheItemResponse(BaseModel):
     external_project_id: str
     name: str
