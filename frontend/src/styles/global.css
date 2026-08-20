@@ -5502,6 +5502,39 @@ td {
   padding: 7px 8px;
 }
 
+.projectPublicationProcessTable th,
+.projectPublicationProcessTable td {
+  padding: 7px 8px;
+}
+
+.projectPublicationProcessTable th:last-child,
+.projectPublicationProcessTable td:last-child {
+  width: 235px;
+}
+
+.publishedProcessState {
+  align-items: center;
+  background: var(--primary-soft);
+  border: 1px solid color-mix(in srgb, var(--primary) 42%, var(--border));
+  border-radius: 7px;
+  box-sizing: border-box;
+  color: var(--primary);
+  display: inline-flex;
+  font-size: 11px;
+  gap: 4px;
+  height: 28px;
+  line-height: 1;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+
+.publishedProcessState time {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .projectPublicationQueueTable th:first-child,
 .projectPublicationQueueTable td:first-child {
   text-align: center;

@@ -3468,7 +3468,9 @@ function PublicationWorkflowNav({ content, campaigns, activeSection, onSectionCh
   const awaitingPublicationCount = content.filter((item) => Boolean(item.generated_at) && item.status !== "published").length;
   const activeCampaignCount = campaigns.filter((campaign) => ["active", "paused", "created", "publishing_all"].includes(campaign.status)).length;
   const completedCampaignCount = campaigns.filter((campaign) => ["completed", "completed_with_errors"].includes(campaign.status)).length;
-  const processCount = content.filter((item) => Boolean(item.site_id && item.section_id) && ["generated", "rejected", "approved"].includes(item.status)).length;
+  const processReadyCount = content.filter((item) => Boolean(item.site_id && item.section_id) && ["generated", "rejected", "approved"].includes(item.status)).length;
+  const processPublishedCount = content.filter((item) => item.status === "published").length;
+  const processCount = processReadyCount + processPublishedCount;
   const queueCount = content.filter((item) => ["scheduled", "retry_scheduled", "publication_paused", "publishing"].includes(item.status)).length;
   const errorCount = content.filter((item) => item.status === "publication_failed").length;
   return (
@@ -3480,7 +3482,7 @@ function PublicationWorkflowNav({ content, campaigns, activeSection, onSectionCh
         <FileText size={17} /> <span className="publicationWorkflowLabel"><strong>Контент</strong><small>{awaitingPublicationCount} ожидает публикации</small></span><span>{content.length}</span>
       </button>
       <button className={activeSection === "process" ? "active" : ""} type="button" onClick={() => onSectionChange("process")}>
-        <Activity size={17} /> <span className="publicationWorkflowLabel"><strong>Процесс</strong><small>готовы к запуску</small></span><span>{processCount}</span>
+        <Activity size={17} /> <span className="publicationWorkflowLabel"><strong>Процесс</strong><small>Готовы к запуску: {processReadyCount} · Опубликовано: {processPublishedCount}</small></span><span>{processCount}</span>
       </button>
       <button className={activeSection === "queue" ? "active" : ""} type="button" onClick={() => onSectionChange("queue")}>
         <ListChecks size={17} /> <span className="publicationWorkflowLabel"><strong>Очередь</strong><small>ожидают публикации</small></span><span>{queueCount}</span>
@@ -3506,6 +3508,10 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
   const publicationReady = content.filter((item) => Boolean(item.site_id && item.section_id)
     && ["generated", "rejected", "approved"].includes(item.status)
     && (!selectedPublicationSectionIds.length || (item.section_id && selectedPublicationSectionIds.includes(item.section_id))));
+  const publishedContent = content
+    .filter((item) => item.status === "published")
+    .sort((left, right) => new Date(left.published_at || 0).getTime() - new Date(right.published_at || 0).getTime());
+  const publicationProcessItems = [...publicationReady, ...publishedContent];
   const publicationSections = sections
     .map((section) => ({ section, count: content.filter((item) => ["generated", "rejected", "approved"].includes(item.status) && item.section_id === section.id).length }))
     .filter(({ count }) => count > 0);
@@ -3703,17 +3709,24 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
         </div>
         {formError ? <span className="formError">{formError}</span> : null}
       </DataPanel> : null}
-      {mode === "workflow" && workflowSection === "process" ? <DataPanel id="workspace-section-process" collapseKey="publication-process" title={`Процесс публикации · ${publicationReady.length}`}>
+      {mode === "workflow" && workflowSection === "process" ? <DataPanel id="workspace-section-process" collapseKey="publication-process" title={`Процесс публикации · ${publicationProcessItems.length}`}>
         <ResponsiveTable
           columns={["Тема", "Меню", "Slug", "Действия"]}
-          rows={publicationReady.map((item) => [
+          rows={publicationProcessItems.map((item) => [
             <div className="compactContentTopic" title={item.topic}><ContentTopicLabel item={item} /></div>,
             sectionLabel(item.section_id, sections),
             item.slug,
-            <button className="button compact primary publishImmediatelyButton" type="button" onClick={() => void publishImmediately(item)} disabled={publishingNowId === item.id}>
-              <Send size={14} /> {publishingNowId === item.id ? "Публикуем…" : "Опубликовать сейчас"}
-            </button>
+            item.status === "published" ? (
+              <span className="publishedProcessState" title={item.published_at ? `Опубликовано ${formatDate(item.published_at)}` : "Опубликовано"}>
+                <CheckCircle2 size={14} /> <strong>Опубликовано</strong><span>·</span><time>{item.published_at ? formatDate(item.published_at) : "—"}</time>
+              </span>
+            ) : (
+              <button className="button compact primary publishImmediatelyButton" type="button" onClick={() => void publishImmediately(item)} disabled={publishingNowId === item.id}>
+                <Send size={14} /> {publishingNowId === item.id ? "Публикуем…" : "Опубликовать сейчас"}
+              </button>
+            )
           ])}
+          wrapperClassName="projectPublicationProcessTable"
         />
       </DataPanel> : null}
       {mode === "workflow" && workflowSection === "queue" ? <DataPanel id="workspace-section-queue" collapseKey="publication-queue" title={`Очередь публикации · ${publicationQueue.length}`}>
