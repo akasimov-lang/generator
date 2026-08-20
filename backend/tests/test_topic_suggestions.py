@@ -61,6 +61,30 @@ def test_hidden_prompt_contains_project_context_and_existing_topics() -> None:
     assert "best-casino-australia.com" in prompt
     assert "Existing topic" in prompt
     assert "exactly 10" in prompt
+    assert "MANDATORY SELECTED MENU SECTION SCOPE" in prompt
+    assert "natural child page of this exact menu section" in prompt
+    assert "Guides · /guides/" in prompt
+
+
+def test_hidden_prompt_without_section_keeps_project_wide_scope() -> None:
+    site = models.Site(
+        name="best-casino-australia.com",
+        base_url="https://best-casino-australia.com",
+        publication_endpoint="https://example.com/content",
+        payload_mode="simple_page",
+    )
+
+    prompt = build_hidden_topic_generation_prompt(
+        site=site,
+        geo="AU",
+        language="en",
+        existing_topics=[],
+        count=10,
+        section_context="",
+    )
+
+    assert "No menu section is selected" in prompt
+    assert "MANDATORY SELECTED MENU SECTION SCOPE" not in prompt
 
 
 def test_gemini_retries_until_ten_unique_topics(monkeypatch) -> None:

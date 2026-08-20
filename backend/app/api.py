@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
+import json
 import secrets
 from typing import Any
 from urllib.parse import urlsplit
@@ -1213,7 +1214,25 @@ def suggest_site_topics(site_id: str, payload: TopicSuggestionsRequest, _: AuthU
     section_context = ""
     if payload.section_id:
         section = _get_section_for_site(db, site_id, payload.section_id)
-        section_context = f"{section.name} · {section.path}"
+        breadcrumb = [section.name]
+        parent_id = section.parent_id
+        visited_ids = {section.id}
+        while parent_id and len(breadcrumb) < 4:
+            parent = db.get(models.Section, parent_id)
+            if not parent or parent.site_id != site_id or parent.id in visited_ids:
+                break
+            breadcrumb.insert(0, parent.name)
+            visited_ids.add(parent.id)
+            parent_id = parent.parent_id
+        section_context = json.dumps(
+            {
+                "name": section.name,
+                "slug": _normalized_menu_path(section.path),
+                "menu_type": section.menu_type,
+                "breadcrumb": breadcrumb,
+            },
+            ensure_ascii=False,
+        )
     stored_topics = db.scalars(
         select(models.ContentItem.topic)
         .where(models.ContentItem.site_id == site_id)
