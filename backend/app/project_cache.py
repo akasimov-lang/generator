@@ -82,13 +82,20 @@ def analyze_menu_templates(shortcodes: Any) -> dict[str, bool]:
     header_template = templates.get("header.hbs", "")
     footer_template = templates.get("footer.hbs", "")
     def renders_menu(template: str, menu_name: str) -> bool:
-        handlebars_loop = bool(re.search(rf"{{{{#each\s+{menu_name}\b[^}}]*}}}}", template, re.IGNORECASE))
-        scripted_menu = bool(
-            re.search(r"\bmenu\b", template, re.IGNORECASE)
-            and re.search(r"forEach\s*\(|\.map\s*\(|\bfor\s*\(", template)
+        escaped_name = re.escape(menu_name)
+        handlebars_loop = bool(
+            re.search(rf"{{{{#each\s+(?:this\.)?{escaped_name}\b[^}}]*}}}}", template, re.IGNORECASE)
         )
-        html_menu = bool(re.search(r"<(?:nav|ul)\b", template, re.IGNORECASE) and re.search(r"\bmenu\b", template, re.IGNORECASE))
-        return handlebars_loop or scripted_menu or html_menu
+        scripted_menu = bool(
+            re.search(
+                rf"(?:\b{escaped_name}\s*(?:\.|\?\.)\s*(?:forEach|map)\s*\(|"
+                rf"\bfor\s*\([^)]*\b(?:of|in)\s+{escaped_name}\b|"
+                rf"\bArray\.from\s*\(\s*{escaped_name}\s*\)\s*\.\s*(?:forEach|map)\s*\()",
+                template,
+                re.IGNORECASE,
+            )
+        )
+        return handlebars_loop or scripted_menu
 
     def renders_nested_menu(template: str) -> bool:
         return bool(

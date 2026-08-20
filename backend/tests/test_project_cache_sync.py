@@ -81,13 +81,36 @@ def test_menu_capabilities_are_detected_per_template() -> None:
 
 def test_scripted_multilevel_menu_is_detected() -> None:
     capabilities = analyze_menu_templates([
-        {"name": "header.hbs", "data": "<script>const menu = source; menu.forEach(renderDropdown)</script>"},
+        {"name": "header.hbs", "data": "<script>headerMenu.forEach(renderDropdown)</script>"},
         {"name": "footer.hbs", "data": "<footer>Static footer</footer>"},
     ])
 
     assert capabilities["header_menu_rendered"] is True
     assert capabilities["header_menu_nested"] is True
     assert capabilities["footer_menu_rendered"] is False
+
+
+def test_static_nav_and_unrelated_iteration_do_not_count_as_project_menu_rendering() -> None:
+    capabilities = analyze_menu_templates([
+        {
+            "name": "header.hbs",
+            "data": """
+                <nav class="menu"><a class="menu-link" href="#top">Domů</a></nav>
+                <script>
+                  const headings = document.querySelectorAll('.contentMain h2');
+                  headings.forEach((heading) => setAnchor(heading));
+                </script>
+            """,
+        },
+        {"name": "footer.hbs", "data": "<ul class='footer-menu'><li>Terms</li></ul>"},
+    ])
+
+    assert capabilities == {
+        "header_menu_rendered": False,
+        "header_menu_nested": False,
+        "footer_menu_rendered": False,
+        "footer_menu_nested": False,
+    }
 
 
 def test_menu_capabilities_are_fetched_only_once(monkeypatch) -> None:
