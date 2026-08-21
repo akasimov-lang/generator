@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -66,6 +67,51 @@ def test_orm_list_endpoints_serialize_json() -> None:
     assert tasks_response.json() == []
     assert content_response.status_code == 200
     assert content_response.json() == []
+
+
+def test_project_content_and_overview_exclude_archived_task_items() -> None:
+    client, TestingSession = make_client()
+    with TestingSession() as db:
+        site = db.query(models.Site).one()
+        active_task = models.GenerationTask(title="Active", site_id=site.id, geo="CA", language="en", topics_count=1)
+        archived_task = models.GenerationTask(
+            title="Archived",
+            site_id=site.id,
+            geo="AU",
+            language="en",
+            topics_count=1,
+            archived_at=datetime.now(timezone.utc),
+        )
+        active_item = models.ContentItem(
+            task=active_task,
+            site_id=site.id,
+            topic="Current topic",
+            slug="/current-topic/",
+            generated_json={"pages": []},
+            status="generated",
+            idempotency_key="active-content-item",
+        )
+        archived_item = models.ContentItem(
+            task=archived_task,
+            site_id=site.id,
+            topic="Old topic",
+            slug="/old-topic/",
+            generated_json={"pages": []},
+            status="generated",
+            idempotency_key="archived-content-item",
+        )
+        db.add_all([active_task, archived_task, active_item, archived_item])
+        db.commit()
+        site_id = site.id
+
+    content_response = client.get(f"/api/sites/{site_id}/content")
+    overview_response = client.get(f"/api/sites/{site_id}/overview")
+
+    assert content_response.status_code == 200
+    assert [item["topic"] for item in content_response.json()] == ["Current topic"]
+    assert overview_response.status_code == 200
+    assert overview_response.json()["stats"]["generated"] == 1
+    assert [item["topic"] for item in overview_response.json()["recent_content"]] == ["Current topic"]
 
 
 def test_approve_rejects_invalid_payload() -> None:

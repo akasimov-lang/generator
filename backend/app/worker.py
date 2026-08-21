@@ -99,6 +99,8 @@ def publish_due_items() -> dict:
     try:
         items = db.scalars(
             select(models.ContentItem)
+            .join(models.GenerationTask, models.GenerationTask.id == models.ContentItem.task_id)
+            .where(models.GenerationTask.archived_at.is_(None))
             .where(models.ContentItem.status.in_(["scheduled", "retry_scheduled"]))
             .where(models.ContentItem.scheduled_at <= datetime.now(timezone.utc))
             .order_by(models.ContentItem.scheduled_at.asc())

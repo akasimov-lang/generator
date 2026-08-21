@@ -528,20 +528,26 @@ def get_site_overview(site_id: str, _: AuthUser, db: Session = Depends(get_db)) 
     site = _get_site_or_404(db, site_id)
     status_rows = db.execute(
         select(models.ContentItem.status, func.count(models.ContentItem.id))
+        .join(models.GenerationTask, models.GenerationTask.id == models.ContentItem.task_id)
         .where(models.ContentItem.site_id == site_id)
+        .where(models.GenerationTask.archived_at.is_(None))
         .group_by(models.ContentItem.status)
     ).all()
     status_counts = {status: count for status, count in status_rows}
     next_item = db.scalars(
         select(models.ContentItem)
+        .join(models.GenerationTask, models.GenerationTask.id == models.ContentItem.task_id)
         .where(models.ContentItem.site_id == site_id)
+        .where(models.GenerationTask.archived_at.is_(None))
         .where(models.ContentItem.status.in_(["scheduled", "retry_scheduled"]))
         .order_by(models.ContentItem.scheduled_at.asc())
         .limit(1)
     ).first()
     recent_content = db.scalars(
         select(models.ContentItem)
+        .join(models.GenerationTask, models.GenerationTask.id == models.ContentItem.task_id)
         .where(models.ContentItem.site_id == site_id)
+        .where(models.GenerationTask.archived_at.is_(None))
         .order_by(models.ContentItem.updated_at.desc())
         .limit(8)
     ).all()
@@ -553,7 +559,9 @@ def get_site_overview(site_id: str, _: AuthUser, db: Session = Depends(get_db)) 
     error_count = db.scalar(
         select(func.count(models.PublicationLog.id))
         .join(models.ContentItem, models.ContentItem.id == models.PublicationLog.content_item_id)
+        .join(models.GenerationTask, models.GenerationTask.id == models.ContentItem.task_id)
         .where(models.ContentItem.site_id == site_id)
+        .where(models.GenerationTask.archived_at.is_(None))
         .where(models.PublicationLog.error_message.is_not(None))
     ) or 0
 
@@ -1271,13 +1279,25 @@ def create_site_task(site_id: str, payload: GenerationTaskCreate, user: AuthUser
 @router.get("/sites/{site_id}/content", response_model=list[ContentItemResponse])
 def list_site_content(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     _get_site_or_404(db, site_id)
-    return db.scalars(select(models.ContentItem).where(models.ContentItem.site_id == site_id).order_by(models.ContentItem.updated_at.desc()).limit(300)).all()
+    return db.scalars(
+        select(models.ContentItem)
+        .join(models.GenerationTask, models.GenerationTask.id == models.ContentItem.task_id)
+        .where(models.ContentItem.site_id == site_id)
+        .where(models.GenerationTask.archived_at.is_(None))
+        .order_by(models.ContentItem.updated_at.desc())
+        .limit(300)
+    ).all()
 
 
 @router.get("/sites/{site_id}/publication-logs", response_model=list[PublicationLogResponse])
 def list_site_logs(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     _get_site_or_404(db, site_id)
-    content_ids = select(models.ContentItem.id).where(models.ContentItem.site_id == site_id)
+    content_ids = (
+        select(models.ContentItem.id)
+        .join(models.GenerationTask, models.GenerationTask.id == models.ContentItem.task_id)
+        .where(models.ContentItem.site_id == site_id)
+        .where(models.GenerationTask.archived_at.is_(None))
+    )
     return db.scalars(
         select(models.PublicationLog)
         .where(models.PublicationLog.content_item_id.in_(content_ids))
@@ -1531,7 +1551,13 @@ def start_task_pipeline(task_id: str, _: AuthUser, db: Session = Depends(get_db)
 
 @router.get("/content", response_model=list[ContentItemResponse])
 def list_content(_: AdminUser, db: Session = Depends(get_db)) -> Any:
-    return db.scalars(select(models.ContentItem).order_by(models.ContentItem.created_at.desc()).limit(200)).all()
+    return db.scalars(
+        select(models.ContentItem)
+        .join(models.GenerationTask, models.GenerationTask.id == models.ContentItem.task_id)
+        .where(models.GenerationTask.archived_at.is_(None))
+        .order_by(models.ContentItem.created_at.desc())
+        .limit(200)
+    ).all()
 
 
 @router.get("/publication-content", response_model=list[PublicationContentResponse])
@@ -1550,7 +1576,9 @@ def list_publication_content(_: AdminUser, db: Session = Depends(get_db)) -> Any
             models.ContentItem.published_at,
             models.ContentItem.updated_at,
         )
+        .join(models.GenerationTask, models.GenerationTask.id == models.ContentItem.task_id)
         .where(models.ContentItem.site_id.is_not(None))
+        .where(models.GenerationTask.archived_at.is_(None))
         .order_by(models.ContentItem.updated_at.desc())
     ).mappings().all()
     return [dict(row) for row in rows]
