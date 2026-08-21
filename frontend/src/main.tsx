@@ -2297,7 +2297,7 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
   const [detailsLoadingId, setDetailsLoadingId] = React.useState("");
   const [researchAction, setResearchAction] = React.useState("");
   const topicCount = topics.split("\n").map((line) => line.trim()).filter(Boolean).length;
-  const selectedPrompt = promptTemplates.find((prompt) => prompt.id === promptTemplateId) || latestPromptTemplate(promptTemplates);
+  const selectedPrompt = promptTemplates.find((prompt) => prompt.id === promptTemplateId) || defaultPromptTemplate(promptTemplates);
 
   React.useEffect(() => {
     setGeo(projectGeoCode(site));
@@ -2314,7 +2314,7 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
 
   React.useEffect(() => {
     if (!promptTemplateId && promptTemplates.length) {
-      setPromptTemplateId(latestPromptTemplate(promptTemplates)?.id || "");
+      setPromptTemplateId(defaultPromptTemplate(promptTemplates)?.id || "");
     }
   }, [promptTemplateId, promptTemplates]);
 
@@ -2866,7 +2866,7 @@ function PromptsView({ api, sites, isAdmin, onChanged }: ViewProps & { sites: Si
 
 function ProjectPromptsPanel({ api, site, promptTemplates, basePrompt, isAdmin, onChanged }: ViewProps & { site: Site; promptTemplates: PromptTemplate[]; basePrompt: PromptTemplate | null; isAdmin: boolean }) {
   const [selectedId, setSelectedId] = React.useState("");
-  const selectedPrompt = promptTemplates.find((prompt) => prompt.id === selectedId) || latestPromptTemplate(promptTemplates);
+  const selectedPrompt = promptTemplates.find((prompt) => prompt.id === selectedId) || defaultPromptTemplate(promptTemplates);
   const [name, setName] = React.useState("");
   const [content, setContent] = React.useState("");
   const [isDefault, setIsDefault] = React.useState(true);
@@ -2892,7 +2892,7 @@ function ProjectPromptsPanel({ api, site, promptTemplates, basePrompt, isAdmin, 
 
   React.useEffect(() => {
     if (!selectedId && promptTemplates.length) {
-      setSelectedId(latestPromptTemplate(promptTemplates)?.id || "");
+      setSelectedId(defaultPromptTemplate(promptTemplates)?.id || "");
     }
   }, [promptTemplates, selectedId]);
 
@@ -3053,7 +3053,7 @@ function ProjectPromptsPanel({ api, site, promptTemplates, basePrompt, isAdmin, 
             {promptTemplates.map((prompt) => (
               <button key={prompt.id} className={`promptListButton ${selectedId === prompt.id ? "active" : ""}`} type="button" onClick={() => setSelectedId(prompt.id)}>
                 <strong>{prompt.name}</strong>
-                <span>{latestPromptTemplate(promptTemplates)?.id === prompt.id ? "Последняя версия · по умолчанию" : formatDate(prompt.updated_at)}</span>
+                <span>{prompt.is_default ? "По умолчанию для проекта" : formatDate(prompt.updated_at)}</span>
                 <span>Используется: {prompt.used_by_projects}</span>
                 <span>Сгенерировано текстов: {prompt.generated_texts_count}</span>
               </button>
@@ -4603,7 +4603,7 @@ function TasksView({
     ? `${selectedSite.name} · ${cleanTopics.length} тем · ${language.toUpperCase()}-${geo.toUpperCase()}`
     : "Выберите проект — название сформируется автоматически";
   const selectedPrompt = promptTemplates.find((prompt) => prompt.id === promptTemplateId)
-    || latestPromptTemplate(promptTemplates);
+    || defaultPromptTemplate(promptTemplates);
 
   React.useEffect(() => {
     if (fixedSite && siteId !== fixedSite.id) {
@@ -4627,7 +4627,7 @@ function TasksView({
 
   React.useEffect(() => {
     if (!promptTemplateId && promptTemplates.length) {
-      setPromptTemplateId(latestPromptTemplate(promptTemplates)?.id || "");
+      setPromptTemplateId(defaultPromptTemplate(promptTemplates)?.id || "");
     }
   }, [promptTemplateId, promptTemplates]);
 
@@ -5468,7 +5468,7 @@ function AdminTasksAccordion({
   React.useEffect(() => {
     if (!expandedTask) return;
     const matchingPrompt = promptTemplates.find((prompt) => prompt.name === expandedTask.prompt_template_name);
-    setRegeneratePromptId(matchingPrompt?.id || latestPromptTemplate(promptTemplates)?.id || "");
+    setRegeneratePromptId(matchingPrompt?.id || defaultPromptTemplate(promptTemplates)?.id || "");
     setRegenerateIncludeToc(expandedTask.include_toc ?? true);
     setRegenerateIncludeFaq(expandedTask.include_faq ?? true);
     setRegenerateCollectCompetitors(expandedTask.collect_competitors ?? false);
@@ -8676,6 +8676,12 @@ function publicationIntervalLabel(intervalMinutes: number) {
   if (intervalMinutes === 720) return "2 текста/день · 12 ч";
   if (intervalMinutes === 420) return "3 текста/день · 7 ч";
   return `${intervalMinutes} мин.`;
+}
+
+function defaultPromptTemplate(prompts: PromptTemplate[]): PromptTemplate | null {
+  return prompts.find((prompt) => prompt.is_default)
+    || prompts.find((prompt) => prompt.name === "Промт рабочий")
+    || latestPromptTemplate(prompts);
 }
 
 function latestPromptTemplate(prompts: PromptTemplate[]): PromptTemplate | null {

@@ -1476,13 +1476,23 @@ async def generate_topic_suggestions(
     return accepted
 
 
+DEFAULT_PROJECT_PROMPT_NAME = "Промт рабочий"
+
+
 def ensure_default_prompt_template(db: Session, site: models.Site) -> models.PromptTemplate:
     existing = db.scalar(
         select(models.PromptTemplate)
-        .where(models.PromptTemplate.name != BASE_PROMPT_TEMPLATE_NAME)
+        .where(models.PromptTemplate.name == DEFAULT_PROJECT_PROMPT_NAME)
         .order_by(models.PromptTemplate.created_at.desc(), models.PromptTemplate.updated_at.desc())
         .limit(1)
     )
+    if not existing:
+        existing = db.scalar(
+            select(models.PromptTemplate)
+            .where(models.PromptTemplate.name != BASE_PROMPT_TEMPLATE_NAME)
+            .order_by(models.PromptTemplate.created_at.desc(), models.PromptTemplate.updated_at.desc())
+            .limit(1)
+        )
     if existing:
         if not site.default_prompt_template_id:
             site.default_prompt_template_id = existing.id
