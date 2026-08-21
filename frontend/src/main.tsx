@@ -1940,9 +1940,10 @@ function ProjectWorkspaceView({
                 const headerCount = Array.isArray(site.default_menu.header) ? site.default_menu.header.length : 0;
                 const footerCount = Array.isArray(site.default_menu.footer) ? site.default_menu.footer.length : 0;
                 const menuCount = headerCount + footerCount;
+                const searchOption = projectSearchOption(site);
                 return {
-                  ...projectSearchOption(site),
-                  keywords: `${site.cache_canon || ""} ${site.is_test_project ? "тестовый проект" : ""}`,
+                  ...searchOption,
+                  keywords: `${searchOption.keywords || ""} ${site.is_test_project ? "тестовый проект" : ""}`,
                   description: menuCount
                     ? `Пунктов меню: ${menuCount} · Header: ${headerCount} · Footer: ${footerCount}`
                     : "Пункты меню отсутствуют",
@@ -6710,12 +6711,13 @@ function ProjectVerificationMedal({ status }: { status: ProjectMedalStatus }) {
 
 function projectSearchOption(site: Site): SearchableSelectOption {
   const flag = localeFlag(localeCountryCode(site.cache_geo || site.cache_language || ""));
+  const networkDomains = Array.isArray(site.cache_domains) ? site.cache_domains : [];
   return {
     value: site.id,
     label: site.name,
     leading: flag ? <span className="projectSelectFlag" aria-hidden="true">{flag}</span> : undefined,
     indicator: <ProjectVerificationMedal status={projectMenuMedalStatus(site)} />,
-    keywords: `${site.cache_canon || ""} ${site.base_url}`
+    keywords: [site.cache_canon || "", site.base_url, ...networkDomains].filter(Boolean).join(" ")
   };
 }
 
