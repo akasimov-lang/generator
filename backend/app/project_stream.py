@@ -158,10 +158,12 @@ def synchronize_all_projects() -> None:
     with SessionLocal() as db:
         result = sync_project_cache(db, projects)
     logger.info(
-        "Synchronized full project cache projects=%d created=%d updated=%d",
+        "Synchronized full project cache projects=%d created=%d updated=%d duplicates_skipped=%d duplicates_deleted=%d",
         result["cache_count"],
         result["created_count"],
         result["updated_count"],
+        result["skipped_duplicate_count"],
+        result["deleted_duplicate_count"],
     )
 
 

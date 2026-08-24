@@ -371,7 +371,7 @@ def test_sync_updates_existing_project_without_duplicate() -> None:
         assert db.scalar(select(models.Site)).external_project_id == "poland-22bet.com"
 
 
-def test_sync_marks_every_repeated_cache_name_as_duplicate() -> None:
+def test_sync_excludes_identical_repeated_cache_projects() -> None:
     with make_session() as db:
         projects = [
             {"name": "duplicate.example", "settings": {"canon": "one.example"}, "data": {"menu": {}, "pages": []}},
@@ -381,9 +381,44 @@ def test_sync_marks_every_repeated_cache_name_as_duplicate() -> None:
         result = sync_project_cache(db, projects)
         sites = db.scalars(select(models.Site).order_by(models.Site.external_project_id)).all()
 
-        assert result["created_count"] == 2
-        assert [site.external_project_id for site in sites] == ["duplicate.example", "duplicate.example#2"]
-        assert {site.project_status for site in sites} == {"duplicate"}
+        assert result["created_count"] == 1
+        assert result["skipped_duplicate_count"] == 1
+        assert [site.external_project_id for site in sites] == ["duplicate.example"]
+
+
+def test_sync_removes_existing_unlinked_duplicate_rows() -> None:
+    with make_session() as db:
+        db.add_all([
+            models.Site(
+                name="cleanup.example",
+                base_url="https://cleanup.example",
+                publication_endpoint="https://cleanup.example/api/content",
+                external_project_id="cleanup.example",
+                cache_canon="cleanup.example",
+                project_status="duplicate",
+            ),
+            models.Site(
+                name="cleanup.example",
+                base_url="https://cleanup.example",
+                publication_endpoint="https://cleanup.example/api/content",
+                external_project_id="cleanup.example#2",
+                cache_canon="cleanup.example",
+                project_status="duplicate",
+            ),
+        ])
+        db.commit()
+
+        result = sync_project_cache(db, [{
+            "name": "cleanup.example",
+            "settings": {"canon": "cleanup.example"},
+            "data": {"menu": {}, "pages": []},
+        }])
+        sites = db.scalars(select(models.Site).where(models.Site.name == "cleanup.example")).all()
+
+        assert result["deleted_duplicate_count"] == 1
+        assert len(sites) == 1
+        assert sites[0].external_project_id == "cleanup.example"
+        assert sites[0].project_status != "duplicate"
 
 
 def test_sync_marks_project_with_header_only_as_having_menu() -> None:

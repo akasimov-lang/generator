@@ -6,7 +6,7 @@ from typing import Any
 from urllib.parse import quote
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import models
@@ -257,6 +257,69 @@ def _project_domains(project: dict[str, Any]) -> list[str]:
     return normalized_domains
 
 
+def _deduplicate_cache_projects(projects: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    unique_projects: list[dict[str, Any]] = []
+    seen_keys: set[tuple[str, str]] = set()
+    for project in projects:
+        name = str(project.get("name") or "").strip().casefold()
+        settings = project.get("settings") if isinstance(project.get("settings"), dict) else {}
+        canon = _normalize_domain(settings.get("canon"))
+        key = (name, canon)
+        if name and key in seen_keys:
+            continue
+        if name:
+            seen_keys.add(key)
+        unique_projects.append(project)
+    return unique_projects, len(projects) - len(unique_projects)
+
+
+def _site_has_related_data(db: Session, site: models.Site) -> bool:
+    return any(
+        db.scalar(select(func.count()).select_from(model).where(model.site_id == site.id))
+        for model in (
+            models.Section,
+            models.PromptTemplate,
+            models.GenerationTask,
+            models.ContentItem,
+            models.PublicationCampaign,
+        )
+    )
+
+
+def _remove_safe_site_duplicates(db: Session) -> int:
+    sites = db.scalars(select(models.Site)).all()
+    groups: dict[tuple[str, str], list[models.Site]] = {}
+    for site in sites:
+        key = (site.name.strip().casefold(), _normalize_domain(site.cache_canon or site.base_url))
+        groups.setdefault(key, []).append(site)
+
+    deleted_ids: set[str] = set()
+    for group in groups.values():
+        if len(group) < 2:
+            continue
+        ordered = sorted(
+            group,
+            key=lambda site: (
+                bool(re.search(r"#\d+$", site.external_project_id or "")),
+                not _site_has_related_data(db, site),
+                site.created_at,
+            ),
+        )
+        for duplicate in ordered[1:]:
+            if _site_has_related_data(db, duplicate):
+                continue
+            deleted_ids.add(duplicate.id)
+            db.delete(duplicate)
+
+    if deleted_ids:
+        for user in db.scalars(select(models.User)).all():
+            favorite_ids = list(user.favorite_site_ids or [])
+            cleaned_ids = [site_id for site_id in favorite_ids if site_id not in deleted_ids]
+            if cleaned_ids != favorite_ids:
+                user.favorite_site_ids = cleaned_ids
+    return len(deleted_ids)
+
+
 def _normalize_menu_path(value: Any) -> str:
     path = str(value or "").strip().lower()
     if not path:
@@ -363,6 +426,7 @@ def sync_project_data_update(
 
 
 def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str, Any]:
+    projects, skipped_duplicate_count = _deduplicate_cache_projects(projects)
     working_canons = _working_project_canons()
     existing_sites = db.scalars(select(models.Site).where(models.Site.external_project_id.is_not(None))).all()
     sites_by_external_id = {site.external_project_id: site for site in existing_sites if site.external_project_id}
@@ -456,12 +520,16 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
         site.cache_domains = domains
         if is_duplicate:
             site.project_status = "duplicate"
+        elif site.project_status == "duplicate":
+            site.project_status = "working" if is_working_project else "not_in_focus"
         site.default_menu = menu
         confirmed_sections_count += _confirm_synchronized_sections(db, site, menu)
         site.has_menu = has_menu
         site.cache_synced_at = now
         site.is_active = True
 
+    db.flush()
+    deleted_duplicate_count = _remove_safe_site_duplicates(db)
     db.commit()
     cache_projects.sort(key=lambda project: (not project["is_working_project"], not project["has_menu"], project["name"].lower()))
     return {
@@ -470,5 +538,7 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
         "created_count": created_count,
         "updated_count": updated_count,
         "confirmed_sections_count": confirmed_sections_count,
+        "skipped_duplicate_count": skipped_duplicate_count,
+        "deleted_duplicate_count": deleted_duplicate_count,
         "projects": cache_projects,
     }
