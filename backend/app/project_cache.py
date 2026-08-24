@@ -53,18 +53,23 @@ def fetch_project_menu_capabilities(site: models.Site, force: bool = False) -> d
     settings = get_settings()
     try:
         with httpx.Client(timeout=30.0) as client:
-            login_response = client.post(
-                f"{settings.project_cache_url.rstrip('/')}/auth/login",
-                json={"username": settings.project_cache_username, "pass": settings.project_cache_password},
-            )
-            login_response.raise_for_status()
-            token = login_response.json().get("token")
-            if not token:
-                raise ProjectCacheError("Project cache login did not return a token")
-            response = client.get(
-                f"{project_server_url(site, '/projects/one')}/{quote(site.name, safe='')}",
-                headers={"Authorization": f"Bearer {token}"},
-            )
+            def get_token() -> str:
+                login_response = client.post(
+                    f"{settings.project_cache_url.rstrip('/')}/auth/login",
+                    json={"username": settings.project_cache_username, "pass": settings.project_cache_password},
+                )
+                login_response.raise_for_status()
+                token = str(login_response.json().get("token") or "").strip()
+                if not token:
+                    raise ProjectCacheError("Project cache login did not return a token")
+                return token
+
+            project_url = f"{project_server_url(site, '/projects/one')}/{quote(site.name, safe='')}"
+            token = get_token()
+            response = client.get(project_url, headers={"Authorization": f"Bearer {token}"})
+            if response.status_code in {401, 403}:
+                token = get_token()
+                response = client.get(project_url, headers={"Authorization": f"Bearer {token}"})
             response.raise_for_status()
             project = response.json()
     except (httpx.HTTPError, ValueError) as error:

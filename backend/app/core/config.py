@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     app_env: str = "development"
-    app_public_url: str = "http://91.199.133.86"
+    app_public_url: str = "https://ai-seo-content-panel.site"
     secret_key: str = Field(default="change-this-secret-before-production")
     admin_username: str = "admin"
     admin_password: str = "change-this-password"
@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://redis:6379/0"
     celery_broker_url: str = "redis://redis:6379/0"
     celery_result_backend: str = "redis://redis:6379/1"
-    backend_cors_origins: str = "http://91.199.133.86,http://localhost:5173,http://localhost:8080"
+    backend_cors_origins: str = "https://ai-seo-content-panel.site,https://www.ai-seo-content-panel.site,http://212.162.155.97,http://localhost:5173,http://localhost:8080"
 
     @property
     def cors_origins(self) -> list[str]:

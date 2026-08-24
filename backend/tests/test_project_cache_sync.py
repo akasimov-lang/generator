@@ -8,6 +8,7 @@ from app import models
 from app.api import _find_project_page, get_site_menu_capabilities
 from app.db import Base
 from app.project_cache import analyze_menu_templates, sync_project_cache
+from app import project_cache as project_cache_module
 
 
 def make_session() -> Session:
@@ -220,6 +221,135 @@ def test_menu_capabilities_can_be_refreshed(monkeypatch) -> None:
         assert calls == [True]
         assert result["header_menu_rendered"] is True
         assert result["header_menu_nested"] is True
+
+
+def test_menu_capability_refresh_updates_stale_project_server(monkeypatch) -> None:
+    requested_servers: list[str | None] = []
+
+    monkeypatch.setattr(
+        "app.api.fetch_project_cache",
+        lambda names: [{"name": names[0], "serverId": "new-server"}],
+    )
+
+    def fake_fetch(site: models.Site, force: bool = False) -> dict[str, bool]:
+        requested_servers.append(site.cache_server_ip)
+        return {
+            "header_menu_rendered": True,
+            "header_menu_nested": False,
+            "footer_menu_rendered": True,
+            "footer_menu_nested": False,
+        }
+
+    monkeypatch.setattr("app.api.fetch_project_menu_capabilities", fake_fetch)
+    with make_session() as db:
+        site = models.Site(
+            name="moved-project.example",
+            base_url="https://moved-project.example",
+            publication_endpoint="https://moved-project.example/api/content",
+            cache_server_ip="stale-server",
+            menu_capabilities_checked_at=datetime.now(timezone.utc),
+        )
+        db.add(site)
+        db.commit()
+
+        get_site_menu_capabilities(site.id, None, db, refresh=True)  # type: ignore[arg-type]
+
+        assert requested_servers == ["new-server"]
+        assert site.cache_server_ip == "new-server"
+
+
+def test_menu_capability_check_recovers_from_stale_project_server(monkeypatch) -> None:
+    requested_servers: list[str | None] = []
+
+    monkeypatch.setattr(
+        "app.api.fetch_project_cache",
+        lambda names: [{"name": names[0], "serverId": "new-server"}],
+    )
+
+    def fake_fetch(site: models.Site, force: bool = False) -> dict[str, bool]:
+        requested_servers.append(site.cache_server_ip)
+        if site.cache_server_ip == "stale-server":
+            raise project_cache_module.ProjectCacheError("stale project server")
+        return {
+            "header_menu_rendered": True,
+            "header_menu_nested": False,
+            "footer_menu_rendered": True,
+            "footer_menu_nested": False,
+        }
+
+    monkeypatch.setattr("app.api.fetch_project_menu_capabilities", fake_fetch)
+    with make_session() as db:
+        site = models.Site(
+            name="moved-unchecked-project.example",
+            base_url="https://moved-unchecked-project.example",
+            publication_endpoint="https://moved-unchecked-project.example/api/content",
+            cache_server_ip="stale-server",
+        )
+        db.add(site)
+        db.commit()
+
+        result = get_site_menu_capabilities(site.id, None, db)  # type: ignore[arg-type]
+
+        assert requested_servers == ["stale-server", "new-server"]
+        assert site.cache_server_ip == "new-server"
+        assert result["header_menu_rendered"] is True
+        assert result["footer_menu_rendered"] is True
+
+
+def test_menu_capability_check_reauthenticates_after_unauthorized(monkeypatch) -> None:
+    calls: list[tuple[str, str]] = []
+
+    class FakeResponse:
+        def __init__(self, status_code: int, body: dict):
+            self.status_code = status_code
+            self._body = body
+
+        def json(self) -> dict:
+            return self._body
+
+        def raise_for_status(self) -> None:
+            if self.status_code >= 400:
+                raise RuntimeError(f"HTTP {self.status_code}")
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def post(self, url: str, json: dict):
+            token = f"token-{sum(1 for method, _ in calls if method == 'POST') + 1}"
+            calls.append(("POST", token))
+            return FakeResponse(200, {"token": token})
+
+        def get(self, url: str, headers: dict):
+            token = headers["Authorization"].removeprefix("Bearer ")
+            calls.append(("GET", token))
+            if token == "token-1":
+                return FakeResponse(401, {})
+            return FakeResponse(200, {"shortcodes": []})
+
+    monkeypatch.setattr(project_cache_module.httpx, "Client", FakeClient)
+    site = models.Site(
+        name="reauth.example",
+        base_url="https://reauth.example",
+        publication_endpoint="https://reauth.example/api/content",
+        cache_server_ip="crab",
+    )
+
+    capabilities = project_cache_module.fetch_project_menu_capabilities(site, force=True)
+
+    assert calls == [
+        ("POST", "token-1"),
+        ("GET", "token-1"),
+        ("POST", "token-2"),
+        ("GET", "token-2"),
+    ]
+    assert capabilities["header_menu_rendered"] is False
 
 
 def test_sync_updates_existing_project_without_duplicate() -> None:

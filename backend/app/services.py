@@ -1917,7 +1917,7 @@ async def fetch_competitor_pages_for_item(db: Session, item: models.ContentItem)
     db.flush()
 
     headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; ContentGeneratorBot/1.0; +http://91.199.133.86)",
+        "User-Agent": "Mozilla/5.0 (compatible; ContentGeneratorBot/1.0; +https://ai-seo-content-panel.site)",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
     async with httpx.AsyncClient(timeout=25, follow_redirects=True, headers=headers) as client:

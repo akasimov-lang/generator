@@ -20,8 +20,8 @@ docker-compose up -d --build
 
 После запуска:
 
-- UI: `http://91.199.133.86`
-- API health: `http://91.199.133.86/api/health`
+- UI: `https://ai-seo-content-panel.site`
+- API health: `https://ai-seo-content-panel.site/api/health`
 
 ## Доступ
 
@@ -50,7 +50,7 @@ ALFAN_URL=slf-hostesting.com
 Рабочее подключение:
 
 ```bash
-ssh -F .ssh/config generator-server
+ssh -F .ssh/config seotech-web-autocontent
 ```
 
 После настройки production remote:

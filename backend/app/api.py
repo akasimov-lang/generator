@@ -770,25 +770,38 @@ def list_sections(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> A
 def get_site_menu_capabilities(site_id: str, _: AuthUser, db: Session = Depends(get_db), refresh: bool = False) -> dict[str, Any]:
     site = _get_site_or_404(db, site_id)
     if site.menu_capabilities_checked_at is None or refresh:
-        if not site.cache_server_ip:
+        def refresh_server_id() -> None:
+            projects = fetch_project_cache([site.name])
+            project = next((item for item in projects if str(item.get("name") or "").strip() == site.name), None)
+            if not project:
+                return
+            refreshed_server_id = str(
+                project.get("serverId")
+                or project.get("server_id")
+                or project.get("serverIp")
+                or project.get("server_ip")
+                or ""
+            ).strip() or None
+            if refreshed_server_id and refreshed_server_id != site.cache_server_ip:
+                site.cache_server_ip = refreshed_server_id
+                db.commit()
+
+        if not site.cache_server_ip or refresh:
             try:
-                projects = fetch_project_cache([site.name])
-                project = next((item for item in projects if str(item.get("name") or "").strip() == site.name), None)
-                if project:
-                    site.cache_server_ip = str(
-                        project.get("serverId")
-                        or project.get("server_id")
-                        or project.get("serverIp")
-                        or project.get("server_ip")
-                        or ""
-                    ).strip() or None
-                    db.commit()
+                refresh_server_id()
             except ProjectCacheError as error:
-                raise HTTPException(status_code=502, detail=str(error)) from error
+                if not site.cache_server_ip:
+                    raise HTTPException(status_code=502, detail=str(error)) from error
         try:
             capabilities = fetch_project_menu_capabilities(site, force=True) if refresh else fetch_project_menu_capabilities(site)
         except ProjectCacheError as error:
-            raise HTTPException(status_code=502, detail=str(error)) from error
+            if refresh:
+                raise HTTPException(status_code=502, detail=str(error)) from error
+            try:
+                refresh_server_id()
+                capabilities = fetch_project_menu_capabilities(site, force=True)
+            except ProjectCacheError as retry_error:
+                raise HTTPException(status_code=502, detail=str(retry_error)) from retry_error
         site.header_menu_rendered = capabilities["header_menu_rendered"]
         site.header_menu_nested = capabilities["header_menu_nested"]
         site.footer_menu_rendered = capabilities["footer_menu_rendered"]
