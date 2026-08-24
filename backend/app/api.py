@@ -786,12 +786,11 @@ def get_site_menu_capabilities(site_id: str, _: AuthUser, db: Session = Depends(
                 site.cache_server_ip = refreshed_server_id
                 db.commit()
 
-        if not site.cache_server_ip or refresh:
-            try:
-                refresh_server_id()
-            except ProjectCacheError as error:
-                if not site.cache_server_ip:
-                    raise HTTPException(status_code=502, detail=str(error)) from error
+        try:
+            refresh_server_id()
+        except ProjectCacheError as error:
+            if not site.cache_server_ip:
+                raise HTTPException(status_code=502, detail=str(error)) from error
         try:
             capabilities = fetch_project_menu_capabilities(site, force=True) if refresh else fetch_project_menu_capabilities(site)
         except ProjectCacheError as error:

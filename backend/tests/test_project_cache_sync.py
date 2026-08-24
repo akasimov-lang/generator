@@ -258,7 +258,7 @@ def test_menu_capability_refresh_updates_stale_project_server(monkeypatch) -> No
         assert site.cache_server_ip == "new-server"
 
 
-def test_menu_capability_check_recovers_from_stale_project_server(monkeypatch) -> None:
+def test_menu_capability_check_resolves_current_project_server_before_request(monkeypatch) -> None:
     requested_servers: list[str | None] = []
 
     monkeypatch.setattr(
@@ -290,7 +290,7 @@ def test_menu_capability_check_recovers_from_stale_project_server(monkeypatch) -
 
         result = get_site_menu_capabilities(site.id, None, db)  # type: ignore[arg-type]
 
-        assert requested_servers == ["stale-server", "new-server"]
+        assert requested_servers == ["new-server"]
         assert site.cache_server_ip == "new-server"
         assert result["header_menu_rendered"] is True
         assert result["footer_menu_rendered"] is True
