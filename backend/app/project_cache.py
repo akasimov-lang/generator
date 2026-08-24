@@ -259,16 +259,13 @@ def _project_domains(project: dict[str, Any]) -> list[str]:
 
 def _deduplicate_cache_projects(projects: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
     unique_projects: list[dict[str, Any]] = []
-    seen_keys: set[tuple[str, str]] = set()
+    seen_names: set[str] = set()
     for project in projects:
         name = str(project.get("name") or "").strip().casefold()
-        settings = project.get("settings") if isinstance(project.get("settings"), dict) else {}
-        canon = _normalize_domain(settings.get("canon"))
-        key = (name, canon)
-        if name and key in seen_keys:
+        if name and name in seen_names:
             continue
         if name:
-            seen_keys.add(key)
+            seen_names.add(name)
         unique_projects.append(project)
     return unique_projects, len(projects) - len(unique_projects)
 
@@ -288,9 +285,9 @@ def _site_has_related_data(db: Session, site: models.Site) -> bool:
 
 def _remove_safe_site_duplicates(db: Session) -> int:
     sites = db.scalars(select(models.Site)).all()
-    groups: dict[tuple[str, str], list[models.Site]] = {}
+    groups: dict[str, list[models.Site]] = {}
     for site in sites:
-        key = (site.name.strip().casefold(), _normalize_domain(site.cache_canon or site.base_url))
+        key = site.name.strip().casefold()
         groups.setdefault(key, []).append(site)
 
     deleted_ids: set[str] = set()
