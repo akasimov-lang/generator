@@ -10,7 +10,7 @@ import httpx
 
 from app.core.config import get_settings
 from app.db import SessionLocal
-from app.project_cache import ProjectCacheError, sync_project_data_update
+from app.project_cache import ProjectCacheError, fetch_project_cache, sync_project_cache, sync_project_data_update
 
 
 logger = logging.getLogger("project-stream")
@@ -27,6 +27,7 @@ class ServerSentEvent:
 @dataclass
 class StreamCursor:
     last_event_id: str = ""
+    initial_sync_completed: bool = False
 
 
 def iter_sse_events(lines: Iterable[str]) -> Iterator[ServerSentEvent]:
@@ -80,13 +81,24 @@ def _login(client: httpx.Client) -> str:
     return token
 
 
-def _fetch_project_data(client: httpx.Client, token: str, project_name: str) -> dict[str, Any]:
+def _fetch_projects(
+    client: httpx.Client,
+    token: str,
+    project_name: str,
+    *,
+    full: bool = False,
+) -> list[dict[str, Any]]:
     settings = get_settings()
     response = client.post(
         f"{settings.project_cache_url.rstrip('/')}/projects/cache",
         headers={"Authorization": f"Bearer {token}"},
         json={
-            "fields": {"settings": False, "head": False, "data": True},
+            "fields": {
+                "settings": full,
+                "head": full,
+                "data": True,
+                **({"serverId": True} if full else {}),
+            },
             "names": [project_name],
         },
     )
@@ -94,17 +106,18 @@ def _fetch_project_data(client: httpx.Client, token: str, project_name: str) -> 
     payload = response.json()
     if not isinstance(payload, list):
         raise ProjectCacheError("Project stream cache refresh returned an unexpected response")
-    project = next(
-        (
-            item
-            for item in payload
-            if isinstance(item, dict) and str(item.get("name") or "").strip() == project_name
-        ),
-        None,
-    )
-    if not project:
+    projects = [
+        item
+        for item in payload
+        if isinstance(item, dict) and str(item.get("name") or "").strip() == project_name
+    ]
+    if not projects:
         raise ProjectCacheError(f"Stream project '{project_name}' was not found in cache")
-    return project
+    return projects
+
+
+def _fetch_project_data(client: httpx.Client, token: str, project_name: str) -> dict[str, Any]:
+    return _fetch_projects(client, token, project_name)[0]
 
 
 def _handle_event(client: httpx.Client, token: str, event: ServerSentEvent) -> None:
@@ -120,7 +133,10 @@ def _handle_event(client: httpx.Client, token: str, event: ServerSentEvent) -> N
         logger.warning("Ignoring SSE event without projectName id=%s", event.event_id or "-")
         return
     project = _fetch_project_data(client, token, project_name)
+    full_projects = _fetch_projects(client, token, project_name, full=True)
     with SessionLocal() as db:
+        result = sync_project_cache(db, full_projects)
+        created_count = result["created_count"]
         updated_count = sync_project_data_update(
             db,
             project_name,
@@ -128,11 +144,24 @@ def _handle_event(client: httpx.Client, token: str, event: ServerSentEvent) -> N
             server_host=str(payload.get("server") or "").strip() or None,
         )
     logger.info(
-        "Applied project event id=%s project=%s modified_at=%s sites=%d",
+        "Applied project event id=%s project=%s modified_at=%s sites=%d created=%d",
         event.event_id or "-",
         project_name,
         payload.get("modifiedAt") or payload.get("modified_at") or "-",
         updated_count,
+        created_count,
+    )
+
+
+def synchronize_all_projects() -> None:
+    projects = fetch_project_cache()
+    with SessionLocal() as db:
+        result = sync_project_cache(db, projects)
+    logger.info(
+        "Synchronized full project cache projects=%d created=%d updated=%d",
+        result["cache_count"],
+        result["created_count"],
+        result["updated_count"],
     )
 
 
@@ -154,6 +183,13 @@ def consume_stream(cursor: StreamCursor) -> None:
             if "text/event-stream" not in content_type:
                 raise ProjectCacheError(f"Project stream returned unexpected content type: {content_type or 'missing'}")
             logger.info("Connected to project stream")
+            if not cursor.initial_sync_completed:
+                try:
+                    synchronize_all_projects()
+                    cursor.initial_sync_completed = True
+                except Exception as error:
+                    safe_error = TOKEN_QUERY_PATTERN.sub(r"\1[redacted]", str(error))
+                    logger.error("Initial full project synchronization failed (%s: %s)", type(error).__name__, safe_error)
             for event in iter_sse_events(response.iter_lines()):
                 _handle_event(client, token, event)
                 if event.event_id:

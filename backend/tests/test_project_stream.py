@@ -1,12 +1,13 @@
 from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app import models
+from app import project_stream as project_stream_module
 from app.api import adopt_cached_section_for_content, refresh_site_cache, restore_externally_deleted_section
 from app.db import Base
 from app.project_cache import sync_project_data_update
-from app.project_stream import TOKEN_QUERY_PATTERN, iter_sse_events
+from app.project_stream import ServerSentEvent, TOKEN_QUERY_PATTERN, iter_sse_events
 from app.schemas import SectionCreate
 from app.services import build_project_menu_payload
 
@@ -42,6 +43,58 @@ def test_stream_token_is_redacted_from_errors() -> None:
     assert TOKEN_QUERY_PATTERN.sub(r"\1[redacted]", message) == (
         "GET https://example.test/projects/stream?token=[redacted] failed"
     )
+
+
+def test_stream_event_creates_a_project_that_is_not_in_database(monkeypatch) -> None:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    requests: list[dict] = []
+
+    class FakeResponse:
+        def __init__(self, payload: list[dict]):
+            self.payload = payload
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> list[dict]:
+            return self.payload
+
+    class FakeClient:
+        def post(self, url: str, headers: dict, json: dict) -> FakeResponse:
+            requests.append(json)
+            if json["fields"]["settings"]:
+                return FakeResponse([{
+                    "name": "new-project.example",
+                    "settings": {"canon": "new-canon.example", "lang": "en", "geo": "au", "domains": ["alias.example"]},
+                    "data": {"menu": {"header": [], "footer": []}, "pages": []},
+                }])
+            return FakeResponse([{
+                "name": "new-project.example",
+                "data": {"menu": {"header": [], "footer": []}, "pages": []},
+            }])
+
+    monkeypatch.setattr(project_stream_module, "SessionLocal", session_factory)
+
+    project_stream_module._handle_event(
+        FakeClient(),
+        "token",
+        ServerSentEvent(
+            event_id="9",
+            event="message",
+            data='{"projectName":"new-project.example","server":"camel.slf-hostesting.com"}',
+        ),
+    )
+
+    with session_factory() as db:
+        site = db.scalar(select(models.Site).where(models.Site.name == "new-project.example"))
+        assert site is not None
+        assert site.cache_canon == "new-canon.example"
+        assert site.cache_domains == ["alias.example"]
+        assert site.cache_server_ip == "camel"
+    assert requests[0]["fields"] == {"settings": False, "head": False, "data": True}
+    assert requests[1]["fields"] == {"settings": True, "head": True, "data": True, "serverId": True}
 
 
 def test_stream_update_tracks_external_menu_deletions() -> None:

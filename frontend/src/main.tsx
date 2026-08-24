@@ -6818,7 +6818,7 @@ function projectSearchOption(site: Site): SearchableSelectOption {
     label: site.name,
     leading: flag ? <span className="projectSelectFlag" aria-hidden="true">{flag}</span> : undefined,
     indicator: <ProjectVerificationMedal status={projectMenuMedalStatus(site)} />,
-    keywords: [site.cache_canon || "", site.base_url, ...networkDomains].filter(Boolean).join(" ")
+    keywords: [site.name, site.cache_canon || "", site.base_url, ...networkDomains].filter(Boolean).join(" ")
   };
 }
 
