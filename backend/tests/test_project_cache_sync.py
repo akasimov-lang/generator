@@ -227,7 +227,7 @@ def test_menu_capability_refresh_updates_stale_project_server(monkeypatch) -> No
     requested_servers: list[str | None] = []
 
     monkeypatch.setattr(
-        "app.api.fetch_project_cache",
+        "app.project_cache.fetch_project_cache",
         lambda names: [{"name": names[0], "serverId": "new-server"}],
     )
 
@@ -262,7 +262,7 @@ def test_menu_capability_check_resolves_current_project_server_before_request(mo
     requested_servers: list[str | None] = []
 
     monkeypatch.setattr(
-        "app.api.fetch_project_cache",
+        "app.project_cache.fetch_project_cache",
         lambda names: [{"name": names[0], "serverId": "new-server"}],
     )
 

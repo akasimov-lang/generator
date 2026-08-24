@@ -187,6 +187,29 @@ def fetch_project_cache(names: list[str] | None = None) -> list[dict[str, Any]]:
     return [project for project in payload if isinstance(project, dict)]
 
 
+def refresh_project_server_id(db: Session, site: models.Site) -> str:
+    """Resolve and persist the project's current server before a direct request."""
+    if not site.name:
+        raise ProjectCacheError("Project name is not configured")
+    projects = fetch_project_cache([site.name])
+    project = next((item for item in projects if str(item.get("name") or "").strip() == site.name), None)
+    if not project:
+        raise ProjectCacheError(f"Project '{site.name}' was not found in cache")
+    server_id = str(
+        project.get("serverId")
+        or project.get("server_id")
+        or project.get("serverIp")
+        or project.get("server_ip")
+        or ""
+    ).strip()
+    if not server_id:
+        raise ProjectCacheError(f"Project '{site.name}' does not have a serverId in cache")
+    if server_id != site.cache_server_ip:
+        site.cache_server_ip = server_id
+        db.commit()
+    return server_id
+
+
 def _project_menu(project: dict[str, Any]) -> dict[str, list[Any]]:
     data = project.get("data") if isinstance(project.get("data"), dict) else {}
     menu = data.get("menu") if isinstance(data.get("menu"), dict) else {}

@@ -339,6 +339,7 @@ def test_project_page_payload_uses_assigned_menu_path(db: Session) -> None:
 
 def test_project_server_requests_refresh_token_and_store_status_codes(db: Session, monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict] = []
+    server_lookups: list[list[str] | None] = []
     fake_settings = SimpleNamespace(
         project_cache_url="https://auth.example",
         project_cache_username="anton",
@@ -347,6 +348,12 @@ def test_project_server_requests_refresh_token_and_store_status_codes(db: Sessio
     )
     monkeypatch.setattr(project_cache_module, "get_settings", lambda: fake_settings)
     monkeypatch.setattr(service_module, "get_settings", lambda: fake_settings)
+
+    def fake_fetch_project_cache(names: list[str] | None = None) -> list[dict]:
+        server_lookups.append(names)
+        return [{"name": "nauchi52.ru", "serverIp": "bear"}]
+
+    monkeypatch.setattr(project_cache_module, "fetch_project_cache", fake_fetch_project_cache)
 
     class FakeResponse:
         def __init__(self, status_code: int, body: dict):
@@ -381,7 +388,7 @@ def test_project_server_requests_refresh_token_and_store_status_codes(db: Sessio
     monkeypatch.setattr(service_module.httpx, "AsyncClient", FakeAsyncClient)
     site, item = make_content(db)
     site.name = "nauchi52.ru"
-    site.cache_server_ip = "crab"
+    site.cache_server_ip = "stale-server"
     section = models.Section(site=site, external_id="test", name="test", path="/test/", menu_type="header", sync_status="pending")
     db.add(section)
     db.commit()
@@ -403,7 +410,9 @@ def test_project_server_requests_refresh_token_and_store_status_codes(db: Sessio
     assert len(auth_calls) == 3
     assert len(menu_calls) == 2
     assert len(page_calls) == 1
-    assert all(call["url"].startswith("https://crab.slf-hostesting.com/") for call in [*menu_calls, *page_calls])
+    assert server_lookups == [["nauchi52.ru"], ["nauchi52.ru"]]
+    assert site.cache_server_ip == "bear"
+    assert all(call["url"].startswith("https://bear.slf-hostesting.com/") for call in [*menu_calls, *page_calls])
     assert all(call["headers"]["Authorization"] == "Bearer fresh-token" for call in [*menu_calls, *page_calls])
     assert all("token" not in call["json"] for call in menu_calls)
     assert page_calls[0]["json"]["token"] == "fresh-token"
@@ -418,7 +427,7 @@ def test_project_server_requests_refresh_token_and_store_status_codes(db: Sessio
         .order_by(models.PublicationLog.created_at.desc())
     )
     assert page_log is not None
-    assert page_log.endpoint_url == "https://crab.slf-hostesting.com/projects/create"
+    assert page_log.endpoint_url == "https://bear.slf-hostesting.com/projects/create"
     assert page_log.response_status == 201
     assert page_log.request_payload["token"] == "[redacted]"
 
@@ -450,6 +459,7 @@ def test_campaign_bundle_contains_project_actor_and_ordered_changes(db: Session)
     assert payload["requested_by"] == {"id": "user-1", "username": "Арсений"}
     assert payload["project"]["name"] == "Test site"
     assert payload["project"]["main"] == "main.example.test"
+    assert payload["project"]["server_id"] == site.cache_server_ip
     assert payload["campaign"]["id"] == campaign.id
     assert payload["changes"][0]["content_item_id"] == item.id
     assert payload["changes"][0]["payload"]["pages"][0]["slug"] == "/test/"

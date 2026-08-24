@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from app import models
 from app.core.config import get_settings
-from app.project_cache import ProjectCacheError, project_server_url, refresh_project_server_token
+from app.project_cache import ProjectCacheError, project_server_url, refresh_project_server_id, refresh_project_server_token
 from app.schemas import GenerationTaskCreate, PublicationCampaignCreate
 
 SIMPLE_PAGE = "simple_page"
@@ -3094,6 +3094,7 @@ def build_project_menu_payload(db: Session, site: models.Site, menu_type: str, n
 
 
 async def sync_project_menus(db: Session, site: models.Site, initiator_username: str | None = None) -> dict:
+    refresh_project_server_id(db, site)
     endpoint = project_server_url(site, "/projects/menu")
     results: list[dict] = []
     async with httpx.AsyncClient(timeout=45.0) as client:
@@ -3234,6 +3235,7 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
     db.commit()
 
     try:
+        refresh_project_server_id(db, site)
         endpoint = project_server_url(site, "/projects/create")
         async with httpx.AsyncClient(timeout=45.0) as client:
             token = await refresh_project_server_token(client)
@@ -3338,6 +3340,7 @@ def build_campaign_publication_bundle(
             "name": site.name,
             "main": site.cache_canon or site.base_url,
             "base_url": site.base_url,
+            "server_id": site.cache_server_ip,
         },
         "campaign": {
             "id": campaign.id,
@@ -3393,11 +3396,18 @@ async def publish_campaign_bundle(db: Session, campaign_id: str, log_id: str) ->
     results: list[dict] = []
 
     try:
+        site = db.get(models.Site, campaign.site_id)
+        if not site:
+            raise ProjectCacheError("Publication project was not found")
+        refresh_project_server_id(db, site)
+        project_payload = payload.get("project") if isinstance(payload.get("project"), dict) else {}
+        payload = {**payload, "project": {**project_payload, "server_id": site.cache_server_ip}}
+        log.request_payload = payload
+        db.commit()
         headers = {
             "Content-Type": "application/json",
             "Idempotency-Key": f"campaign:{campaign.id}:publish-all:{log.id}",
         }
-        site = db.get(models.Site, campaign.site_id)
         if site and site.api_token:
             headers["Authorization"] = f"Bearer {site.api_token}"
         async with httpx.AsyncClient(timeout=120) as client:
