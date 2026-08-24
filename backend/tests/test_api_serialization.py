@@ -159,18 +159,33 @@ def test_user_can_manage_personal_favorite_sites() -> None:
     assert removed_response.json() == {"site_ids": []}
 
 
-def test_admin_site_list_includes_projects_not_in_focus() -> None:
+def test_regular_user_site_list_includes_all_project_statuses() -> None:
     client, TestingSession = make_client()
     with TestingSession() as db:
-        db.add(models.Site(
-            name="not-in-focus.example",
-            base_url="https://not-in-focus.example",
-            publication_endpoint="https://not-in-focus.example/api/content",
-            project_status="not_in_focus",
-        ))
+        db.add_all([
+            models.Site(
+                name="not-in-focus.example",
+                base_url="https://not-in-focus.example",
+                publication_endpoint="https://not-in-focus.example/api/content",
+                project_status="not_in_focus",
+            ),
+            models.Site(
+                name="duplicate.example",
+                base_url="https://duplicate.example",
+                publication_endpoint="https://duplicate.example/api/content",
+                project_status="duplicate",
+            ),
+        ])
         db.commit()
+    client.app.dependency_overrides[require_auth] = lambda: {
+        "id": "regular-user-id",
+        "username": "regular-user",
+        "is_admin": False,
+    }
 
     response = client.get("/api/sites")
 
     assert response.status_code == 200
-    assert "not-in-focus.example" in {site["name"] for site in response.json()}
+    assert {"DE обзорник", "not-in-focus.example", "duplicate.example"} <= {
+        site["name"] for site in response.json()
+    }
