@@ -354,6 +354,16 @@ def test_project_server_requests_refresh_token_and_store_status_codes(db: Sessio
         return [{"name": "nauchi52.ru", "serverIp": "bear"}]
 
     monkeypatch.setattr(project_cache_module, "fetch_project_cache", fake_fetch_project_cache)
+    monkeypatch.setattr(
+        service_module,
+        "fetch_project_menu_capabilities",
+        lambda site, force=False: {
+            "header_menu_rendered": True,
+            "header_menu_nested": True,
+            "footer_menu_rendered": True,
+            "footer_menu_nested": True,
+        },
+    )
 
     class FakeResponse:
         def __init__(self, status_code: int, body: dict):
@@ -430,6 +440,46 @@ def test_project_server_requests_refresh_token_and_store_status_codes(db: Sessio
     assert page_log.endpoint_url == "https://bear.slf-hostesting.com/projects/create"
     assert page_log.response_status == 201
     assert page_log.request_payload["token"] == "[redacted]"
+
+
+def test_menu_sync_blocks_nested_items_when_template_has_one_level(db: Session, monkeypatch: pytest.MonkeyPatch) -> None:
+    site, _ = make_content(db)
+    site.cache_server_ip = "bear"
+    parent = models.Section(
+        site=site,
+        external_id="parent",
+        name="Parent",
+        path="/parent/",
+        menu_type="header",
+        sync_status="synced",
+    )
+    db.add(parent)
+    db.flush()
+    child = models.Section(
+        site=site,
+        external_id="child",
+        name="Child",
+        path="/parent/child/",
+        menu_type="header",
+        parent_id=parent.id,
+        sync_status="pending",
+    )
+    db.add(child)
+    db.commit()
+    monkeypatch.setattr(service_module, "refresh_project_server_id", lambda db, site: "bear")
+    monkeypatch.setattr(
+        service_module,
+        "fetch_project_menu_capabilities",
+        lambda site, force=False: {
+            "header_menu_rendered": True,
+            "header_menu_nested": False,
+            "footer_menu_rendered": True,
+            "footer_menu_nested": False,
+        },
+    )
+
+    with pytest.raises(project_cache_module.ProjectCacheError, match="веб-разработчику"):
+        asyncio.run(sync_project_menus(db, site))
 
 
 def test_campaign_bundle_contains_project_actor_and_ordered_changes(db: Session) -> None:

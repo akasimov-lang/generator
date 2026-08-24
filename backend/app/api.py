@@ -881,6 +881,39 @@ def adopt_cached_section(site_id: str, payload: SectionCreate, _: AuthUser, db: 
     return {"section": section, "created": True}
 
 
+@router.post("/sites/{site_id}/sections/{section_id}/restore", response_model=SectionResponse)
+def restore_externally_deleted_section(
+    site_id: str,
+    section_id: str,
+    user: AuthUser,
+    db: Session = Depends(get_db),
+) -> Any:
+    site = _get_site_or_404(db, site_id)
+    section = _get_section_for_site(db, site_id, section_id)
+    if section.sync_status != "external_deleted":
+        raise HTTPException(status_code=409, detail="Пункт меню не отмечен как удалённый на проекте")
+    section.sync_status = "pending"
+    section.synced_at = None
+    db.add(
+        models.PublicationLog(
+            endpoint_url=_menu_request_endpoint(site),
+            request_payload={
+                "action": "menu_item_restore",
+                "project_name": site.name,
+                "name": section.name,
+                "path": section.path,
+                "menu_type": section.menu_type,
+                "username": _request_username(user),
+            },
+            response_status=None,
+            response_body={"section_id": section.id, "synchronized": False},
+        )
+    )
+    db.commit()
+    db.refresh(section)
+    return section
+
+
 @router.delete("/sites/{site_id}/sections/{section_id}/adopt")
 def release_adopted_section(site_id: str, section_id: str, _: AuthUser, db: Session = Depends(get_db)) -> dict[str, bool]:
     """Remove an unused local reference created only to prepare a nested menu item form."""
@@ -2004,13 +2037,14 @@ def list_admin_request_logs(_: AdminUser, db: Session = Depends(get_db)) -> list
         is_menu_create = action == "menu_item_create"
         is_menu_update = action == "menu_item_update"
         is_menu_delete = action == "menu_item_delete"
+        is_menu_restore = action == "menu_item_restore"
         is_menu_sync = action == "menu_sync"
         is_menu_confirmation = action == "menu_item_sync_confirmed"
         is_campaign_publish_all = action == "campaign_publish_all"
         requested_by = payload.get("requested_by") if isinstance(payload.get("requested_by"), dict) else {}
         project = payload.get("project") if isinstance(payload.get("project"), dict) else {}
         project_name = str(project.get("name") or payload.get("project_name") or site_name or "Не определён")
-        menu_action = is_menu_create or is_menu_update or is_menu_delete or is_menu_sync or is_menu_confirmation
+        menu_action = is_menu_create or is_menu_update or is_menu_delete or is_menu_restore or is_menu_sync or is_menu_confirmation
         destination = log.endpoint_url
         if menu_action and (site := sites_by_name.get(project_name)):
             destination = _menu_request_endpoint(site)
@@ -2022,7 +2056,7 @@ def list_admin_request_logs(_: AdminUser, db: Session = Depends(get_db)) -> list
                 "created_at": log.created_at,
                 "project_name": project_name,
                 "actor_username": actor_username,
-                "action": "Публикация всей кампании" if is_campaign_publish_all else "Отправка меню" if is_menu_sync else "Добавление пункта меню" if is_menu_create else "Изменение пункта меню" if is_menu_update else "Удаление пункта меню" if is_menu_delete else "Синхронизация пункта меню" if is_menu_confirmation else "Публикация контента",
+                "action": "Публикация всей кампании" if is_campaign_publish_all else "Отправка меню" if is_menu_sync else "Добавление пункта меню" if is_menu_create else "Изменение пункта меню" if is_menu_update else "Удаление пункта меню" if is_menu_delete else "Восстановление пункта меню" if is_menu_restore else "Синхронизация пункта меню" if is_menu_confirmation else "Публикация контента",
                 "item_name": str(payload.get("campaign", {}).get("name") if is_campaign_publish_all and isinstance(payload.get("campaign"), dict) else payload.get("name") or topic or "").strip() or None,
                 "method": "POST",
                 "destination": destination,
@@ -2041,7 +2075,7 @@ async def retry_admin_request_log(log_id: str, user: AdminUser, db: Session = De
         raise HTTPException(status_code=404, detail="Request log not found")
     payload = log.request_payload if isinstance(log.request_payload, dict) else {}
     action = payload.get("action")
-    menu_actions = {"menu_item_create", "menu_item_update", "menu_item_delete", "menu_sync", "menu_item_sync_confirmed"}
+    menu_actions = {"menu_item_create", "menu_item_update", "menu_item_delete", "menu_item_restore", "menu_sync", "menu_item_sync_confirmed"}
     initiator_username = _request_username(user)
 
     if action in menu_actions:

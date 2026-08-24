@@ -4004,6 +4004,8 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onCh
   const [editingSectionPath, setEditingSectionPath] = React.useState("");
   const [savingSectionEdit, setSavingSectionEdit] = React.useState(false);
   const [deletingSectionId, setDeletingSectionId] = React.useState<string | null>(null);
+  const [restoringSectionId, setRestoringSectionId] = React.useState<string | null>(null);
+  const [menuNestingNotice, setMenuNestingNotice] = React.useState("");
   const [adoptingParentKey, setAdoptingParentKey] = React.useState<string | null>(null);
   const [temporaryParentId, setTemporaryParentId] = React.useState<string | null>(null);
   const [releasingTemporaryParent, setReleasingTemporaryParent] = React.useState(false);
@@ -4054,6 +4056,7 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onCh
     setPagePreview(null);
     setPagePreviewError(null);
     setPagePreviewLoadingKey(null);
+    setMenuNestingNotice("");
   }, [site.id]);
 
   async function openPagePreview(item: MenuPreviewItem, treeKey: string) {
@@ -4105,6 +4108,15 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onCh
   }
 
   async function openChildForm(targetMenuType: "header" | "footer", item: MenuPreviewItem, existingParent?: Section, treeKey = "") {
+    const nestingSupported = targetMenuType === "header" ? menuCapabilities?.header_menu_nested : menuCapabilities?.footer_menu_nested;
+    if (nestingSupported === false) {
+      setMenuNestingNotice(
+        `${targetMenuType === "header" ? "Header" : "Footer"}: шаблон проекта поддерживает только один уровень меню. `
+        + "Обратитесь к веб-разработчику, чтобы добавить выпадающее меню, затем повторите добавление вложенного пункта."
+      );
+      return;
+    }
+    setMenuNestingNotice("");
     const parentKey = `${targetMenuType}:${item.externalId}`;
     setAdoptingParentKey(parentKey);
     setFormError("");
@@ -4205,6 +4217,27 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onCh
       setFormError(error instanceof Error ? error.message : "Не удалось удалить пункт меню");
     } finally {
       setDeletingSectionId(null);
+    }
+  }
+
+  async function restoreSection(section: Section) {
+    setRestoringSectionId(section.id);
+    setFormError("");
+    setMenuNestingNotice("");
+    try {
+      await api<Section>(`/sites/${site.id}/sections/${section.id}/restore`, { method: "POST" });
+      const syncResult = await api<ProjectChangesSyncResult>(`/sites/${site.id}/sync-changes`, { method: "POST" });
+      if (!syncResult.success) {
+        const failure = syncResult.results.find((result) => !result.success);
+        throw new Error(failure?.error || "Не удалось восстановить пункт меню на проекте");
+      }
+      setUpdatedAt(new Date().toISOString());
+      await onChanged();
+    } catch (error) {
+      setMenuNestingNotice(error instanceof Error ? error.message : "Не удалось восстановить пункт меню");
+      await onChanged();
+    } finally {
+      setRestoringSectionId(null);
     }
   }
 
@@ -4383,6 +4416,7 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onCh
   return (
     <section className="viewStack">
       <DataPanel title="Структура меню проекта" allowCollapse={false}>
+        {menuNestingNotice ? <div className="notice menuNestingNotice" role="note"><AlertTriangle size={17} /><span>{menuNestingNotice}</span></div> : null}
         <section className={`menuAddPanel embeddedMenuAddPanel ${addExpanded ? "expanded" : ""}`}>
           <button className="menuAddToggle" type="button" onClick={() => { setInlineMenuType(null); setAddExpanded((current) => !current); }} aria-expanded={addExpanded}>
             <span className="menuAddToggleIcon"><Plus size={18} /></span>
@@ -4425,7 +4459,7 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onCh
                 : section.sync_status === "external_deleted"
                   ? <span className="pendingSyncBadge">Удалено на проекте</span>
                   : <span className="pendingSyncBadge">Не синхронизировано</span>,
-              editing ? <div className="menuSectionEditActions"><button className="button compact secondary" type="button" onClick={cancelSectionEdit} disabled={savingSectionEdit}>Отменить</button><button className="button compact primary" type="button" onClick={() => saveSectionEdit(section)} disabled={savingSectionEdit}>Сохранить</button></div> : <div className="menuSectionEditActions"><button className="button compact secondary" type="button" onClick={() => startSectionEdit(section)} disabled={deletingSectionId === section.id}><Edit3 size={14} /> Изменить</button><button className="button compact danger" type="button" onClick={() => deleteSection(section)} disabled={deletingSectionId === section.id}><Trash2 size={14} /> {deletingSectionId === section.id ? "Удаляем" : "Удалить"}</button></div>
+              editing ? <div className="menuSectionEditActions"><button className="button compact secondary" type="button" onClick={cancelSectionEdit} disabled={savingSectionEdit}>Отменить</button><button className="button compact primary" type="button" onClick={() => saveSectionEdit(section)} disabled={savingSectionEdit}>Сохранить</button></div> : <div className="menuSectionEditActions">{section.sync_status === "external_deleted" ? <button className="button compact primary" type="button" onClick={() => restoreSection(section)} disabled={restoringSectionId === section.id}><RefreshCcw size={14} /> {restoringSectionId === section.id ? "Восстанавливаем" : "Восстановить"}</button> : <button className="button compact secondary" type="button" onClick={() => startSectionEdit(section)} disabled={deletingSectionId === section.id}><Edit3 size={14} /> Изменить</button>}<button className="button compact danger" type="button" onClick={() => deleteSection(section)} disabled={deletingSectionId === section.id || restoringSectionId === section.id}><Trash2 size={14} /> {deletingSectionId === section.id ? "Удаляем" : "Удалить"}</button></div>
             ];
           })}
         /> : null}

@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import time
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
@@ -13,6 +14,7 @@ from app.project_cache import ProjectCacheError, sync_project_data_update
 
 
 logger = logging.getLogger("project-stream")
+TOKEN_QUERY_PATTERN = re.compile(r"([?&]token=)[^&\s'\"]+", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -160,6 +162,8 @@ def consume_stream(cursor: StreamCursor) -> None:
 
 def run_forever() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
     cursor = StreamCursor()
     retry_delay = 1
     while True:
@@ -168,8 +172,14 @@ def run_forever() -> None:
             retry_delay = 1
         except KeyboardInterrupt:
             raise
-        except Exception:
-            logger.exception("Project stream disconnected; reconnecting in %ss", retry_delay)
+        except Exception as error:
+            safe_error = TOKEN_QUERY_PATTERN.sub(r"\1[redacted]", str(error))
+            logger.error(
+                "Project stream disconnected (%s: %s); reconnecting in %ss",
+                type(error).__name__,
+                safe_error,
+                retry_delay,
+            )
             time.sleep(retry_delay)
             retry_delay = min(retry_delay * 2, 30)
 

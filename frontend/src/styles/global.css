@@ -530,6 +530,17 @@ h2 {
   margin-bottom: 18px;
 }
 
+.menuNestingNotice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.menuNestingNotice svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
 .permissionOverlay {
   position: fixed;
   inset: 0;
