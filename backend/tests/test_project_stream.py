@@ -90,6 +90,42 @@ def test_stream_update_tracks_external_menu_deletions() -> None:
         assert [item["slug"] for item in payload["list"]] == ["/pending/"]
 
 
+def test_same_menu_title_with_different_path_is_an_external_deletion() -> None:
+    with make_session() as db:
+        site = models.Site(
+            name="renamed-path.example",
+            base_url="https://renamed-path.example",
+            publication_endpoint="https://renamed-path.example/api/content",
+            default_menu={"header": [{"title": "Best Casinos", "slug": "/best-casinos/"}], "footer": []},
+        )
+        old_section = models.Section(
+            site=site,
+            external_id="best-casinos",
+            name="Best Casinos",
+            path="/best-casinos/",
+            menu_type="header",
+            sync_status="synced",
+        )
+        db.add_all([site, old_section])
+        db.commit()
+
+        sync_project_data_update(
+            db,
+            site.name,
+            {
+                "name": site.name,
+                "data": {
+                    "menu": {
+                        "header": [{"id": 1787578037891, "title": "Best casinos", "slug": "/bets-casinos1/"}],
+                        "footer": [],
+                    }
+                },
+            },
+        )
+
+        assert old_section.sync_status == "external_deleted"
+
+
 def test_stream_update_restores_section_when_it_reappears() -> None:
     with make_session() as db:
         site = models.Site(

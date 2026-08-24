@@ -272,12 +272,12 @@ def _menu_item_matches_section(item: Any, section: models.Section) -> bool:
         return False
 
     item_path = _normalize_menu_path(item.get("path") or item.get("url") or item.get("href") or item.get("slug"))
-    if item_path and item_path == _normalize_menu_path(section.path):
-        return True
+    if item_path:
+        return item_path == _normalize_menu_path(section.path)
 
     item_external_id = str(item.get("external_id") or item.get("externalId") or item.get("id") or "").strip().casefold()
-    if item_external_id and item_external_id == section.external_id.strip().casefold():
-        return True
+    if item_external_id:
+        return item_external_id == section.external_id.strip().casefold()
 
     item_name = str(item.get("title") or item.get("name") or item.get("label") or item.get("text") or "").strip().casefold()
     return bool(item_name and item_name == section.name.strip().casefold())

@@ -195,11 +195,11 @@ def _cached_menu_item_matches(item: Any, payload: SectionCreate) -> bool:
         (str(item.get(key)).strip() for key in ("path", "url", "href", "slug") if item.get(key)),
         "",
     )
-    if item_path and _normalized_menu_path(item_path) == _normalized_menu_path(payload.path):
-        return True
+    if item_path:
+        return _normalized_menu_path(item_path) == _normalized_menu_path(payload.path)
     item_id = str(item.get("external_id") or item.get("externalId") or item.get("id") or "").strip()
-    if item_id and item_id.casefold() == payload.external_id.strip().casefold():
-        return True
+    if item_id:
+        return item_id.casefold() == payload.external_id.strip().casefold()
     item_name = str(item.get("title") or item.get("name") or item.get("label") or item.get("text") or "").strip()
     return bool(item_name and item_name.casefold() == payload.name.strip().casefold())
 

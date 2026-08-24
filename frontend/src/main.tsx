@@ -7532,12 +7532,14 @@ function menuPreviewItem(item: unknown, index: number): MenuPreviewItem {
     const value = item as Record<string, unknown>;
     const itemTitle = [value.title, value.name, value.label, value.text].find((entry) => typeof entry === "string" && entry.trim());
     const itemPath = [value.path, value.url, value.href, value.slug].find((entry) => typeof entry === "string" && entry.trim());
-    const externalId = [value.external_id, value.externalId, value.id].find((entry) => typeof entry === "string" && entry.trim());
+    const externalId = [value.external_id, value.externalId, value.id].find((entry) =>
+      (typeof entry === "string" && entry.trim()) || typeof entry === "number"
+    );
     const resolvedTitle = typeof itemTitle === "string" ? itemTitle : `Пункт ${index + 1}`;
     return {
       title: resolvedTitle,
       path: typeof itemPath === "string" ? itemPath : "",
-      externalId: typeof externalId === "string" ? externalId : slugFromText(resolvedTitle)
+      externalId: typeof externalId === "string" || typeof externalId === "number" ? String(externalId) : slugFromText(resolvedTitle)
     };
 }
 
