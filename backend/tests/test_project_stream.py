@@ -3,10 +3,11 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app import models
-from app.api import restore_externally_deleted_section
+from app.api import adopt_cached_section_for_content, refresh_site_cache, restore_externally_deleted_section
 from app.db import Base
 from app.project_cache import sync_project_data_update
 from app.project_stream import TOKEN_QUERY_PATTERN, iter_sse_events
+from app.schemas import SectionCreate
 from app.services import build_project_menu_payload
 
 
@@ -146,3 +147,72 @@ def test_externally_deleted_section_can_be_queued_for_restore() -> None:
         log = db.query(models.PublicationLog).one()
         assert log.request_payload["action"] == "menu_item_restore"
         assert log.request_payload["username"] == "editor"
+
+
+def test_opening_project_refreshes_current_cache(monkeypatch) -> None:
+    with make_session() as db:
+        site = models.Site(
+            name="opened.example",
+            base_url="https://opened.example",
+            publication_endpoint="https://opened.example/api/content",
+            external_project_id="opened-id",
+            cache_server_ip="old-server",
+            default_menu={"header": [{"title": "Removed", "slug": "/removed/"}], "footer": []},
+        )
+        removed = models.Section(
+            site=site,
+            external_id="removed",
+            name="Removed",
+            path="/removed/",
+            menu_type="header",
+            sync_status="synced",
+        )
+        db.add_all([site, removed])
+        db.commit()
+
+        monkeypatch.setattr(
+            "app.api.fetch_project_cache",
+            lambda names: [{
+                "id": "opened-id",
+                "name": "opened.example",
+                "serverId": "new-server",
+                "settings": {"canon": "opened.example", "lang": "en", "geo": "au"},
+                "data": {"menu": {"header": [], "footer": []}, "pages": []},
+            }],
+        )
+
+        result = refresh_site_cache(site.id, {"id": "user", "username": "editor", "is_admin": False}, db)
+
+        assert result["updated_count"] == 1
+        assert site.cache_server_ip == "new-server"
+        assert site.default_menu == {"header": [], "footer": []}
+        assert removed.sync_status == "external_deleted"
+
+
+def test_cached_menu_item_can_be_selected_as_content_target() -> None:
+    with make_session() as db:
+        site = models.Site(
+            name="content-target.example",
+            base_url="https://content-target.example",
+            publication_endpoint="https://content-target.example/api/content",
+            default_menu={"header": [{"title": "Casinos", "slug": "/casinos/"}], "footer": []},
+        )
+        db.add(site)
+        db.commit()
+
+        result = adopt_cached_section_for_content(
+            site.id,
+            SectionCreate(**{
+                "external_id": "casinos",
+                "name": "Casinos",
+                "path": "/casinos/",
+                "menu_type": "header",
+                "parent_id": None,
+            }),
+            {"id": "user", "username": "editor", "is_admin": False},
+            db,
+        )
+
+        assert result["created"] is True
+        assert result["section"].sync_status == "synced"
+        assert result["section"].is_temporary_parent is False

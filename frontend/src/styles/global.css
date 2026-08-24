@@ -3267,6 +3267,29 @@ h2 {
   white-space: nowrap;
 }
 
+.siteMenuAddContentButton {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 750;
+  gap: 5px;
+  min-height: 30px;
+  padding: 5px 8px;
+  white-space: nowrap;
+}
+
+.siteMenuAddContentButton:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
 .siteMenuAddChildButton:hover:not(:disabled) {
   border-color: var(--primary);
   filter: brightness(0.98);

@@ -491,6 +491,19 @@ def synchronize_project_cache(payload: ProjectCacheSyncRequest, _: AdminUser, db
         raise HTTPException(status_code=502, detail=str(error)) from error
 
 
+@router.post("/sites/{site_id}/cache/refresh", response_model=ProjectCacheSyncResponse)
+def refresh_site_cache(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Refresh one project's cache when an authenticated user opens its workspace."""
+    site = _get_site_or_404(db, site_id)
+    try:
+        projects = fetch_project_cache([site.name])
+        if not any(str(project.get("name") or "").strip() == site.name for project in projects):
+            raise ProjectCacheError(f"Project '{site.name}' was not found in cache")
+        return sync_project_cache(db, projects)
+    except ProjectCacheError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
 @router.patch("/sites/{site_id}/status", response_model=SiteResponse)
 def update_site_status(site_id: str, payload: SiteStatusUpdate, _: AdminUser, db: Session = Depends(get_db)) -> Any:
     site = _get_site_or_404(db, site_id)
@@ -879,6 +892,18 @@ def adopt_cached_section(site_id: str, payload: SectionCreate, _: AuthUser, db: 
     db.commit()
     db.refresh(section)
     return {"section": section, "created": True}
+
+
+@router.post("/sites/{site_id}/sections/content-target", response_model=SectionAdoptResponse)
+def adopt_cached_section_for_content(site_id: str, payload: SectionCreate, user: AuthUser, db: Session = Depends(get_db)) -> Any:
+    """Create a durable local reference used to attach content to an existing menu item."""
+    result = adopt_cached_section(site_id, payload, user, db)
+    section = result["section"]
+    if section.is_temporary_parent:
+        section.is_temporary_parent = False
+        db.commit()
+        db.refresh(section)
+    return result
 
 
 @router.post("/sites/{site_id}/sections/{section_id}/restore", response_model=SectionResponse)

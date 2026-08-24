@@ -24,6 +24,7 @@ import {
   Edit3,
   Eye,
   ExternalLink,
+  FilePlus2,
   FileText,
   FolderKanban,
   Globe2,
@@ -1720,7 +1721,7 @@ function ProjectWorkspaceView({
     if (selectedSiteId) window.localStorage.setItem(`publication_workspace_section:${currentUsername}:${selectedSiteId}`, section);
   }, [currentUsername, selectedSiteId]);
 
-  const loadProject = React.useCallback(async () => {
+  const loadProject = React.useCallback(async (refreshCapabilities = false) => {
     if (!selectedSiteId) return { success: false, errorCode: "NO_PROJECT" };
     const requestId = projectLoadRequestRef.current + 1;
     projectLoadRequestRef.current = requestId;
@@ -1746,7 +1747,7 @@ function ProjectWorkspaceView({
       requestResource<PromptTemplate[]>(`/sites/${selectedSiteId}/prompt-templates`),
       requestResource<PublicationLog[]>(`/sites/${selectedSiteId}/publication-logs`),
       requestResource<PublicationCampaign[]>(`/sites/${selectedSiteId}/publication-campaigns`),
-      requestResource<MenuCapabilities>(`/sites/${selectedSiteId}/menu-capabilities`)
+      requestResource<MenuCapabilities>(`/sites/${selectedSiteId}/menu-capabilities${refreshCapabilities ? "?refresh=true" : ""}`)
     ]);
     if (requestId !== projectLoadRequestRef.current) return { success: false, errorCode: "CANCELLED" };
     if (nextOverview.value) setOverview(nextOverview.value);
@@ -1770,6 +1771,19 @@ function ProjectWorkspaceView({
       errorCode: failedResource?.errorCode || ""
     };
   }, [api, selectedSiteId]);
+
+  const openProject = React.useCallback(async () => {
+    if (!selectedSiteId) return;
+    let cacheError = "";
+    try {
+      await api<ProjectCacheSyncResult>(`/sites/${selectedSiteId}/cache/refresh`, { method: "POST" });
+      await onChanged();
+    } catch (error) {
+      cacheError = error instanceof Error ? `Не удалось получить свежий кеш проекта: ${error.message}` : "Не удалось получить свежий кеш проекта";
+    }
+    await loadProject(true);
+    if (cacheError) setWorkspaceError(cacheError);
+  }, [api, loadProject, onChanged, selectedSiteId]);
 
   React.useEffect(() => {
     api<{ site_ids: string[] }>("/me/favorite-sites")
@@ -1816,9 +1830,15 @@ function ProjectWorkspaceView({
       setProjectRefreshStatus("idle");
       setProjectRefreshResponseCode("");
       setWorkspaceError("");
-      void loadProject();
+      void openProject();
     }
-  }, [loadProject, selectedSiteId, workspaceSiteStorageKey]);
+  }, [openProject, selectedSiteId, workspaceSiteStorageKey]);
+
+  const openContentForMenuSection = React.useCallback((section: Section) => {
+    if (!selectedSite) return;
+    window.sessionStorage.setItem(`workspace_add_content_section:${selectedSite.id}`, section.id);
+    onTabChange("topics", selectedSite.name);
+  }, [onTabChange, selectedSite]);
 
   const refreshProject = React.useCallback(async (syncExternal = false) => {
     let changesResult: ProjectChangesSyncResult | null = null;
@@ -2131,7 +2151,7 @@ function ProjectWorkspaceView({
             ) : null}
           </WorkspaceTabPane>
           <WorkspaceTabPane active={activeTab === "menu"} storagePrefix={`${currentUsername}:${selectedSite.id}:menu`}>
-            <FastProjectMenuPanel api={api} site={selectedSite} sections={sections} content={siteContent} menuCapabilities={menuCapabilities} onChanged={refreshProject} />
+            <FastProjectMenuPanel api={api} site={selectedSite} sections={sections} content={siteContent} menuCapabilities={menuCapabilities} onAddContent={openContentForMenuSection} onChanged={refreshProject} />
           </WorkspaceTabPane>
         </>
       ) : null}
@@ -3975,7 +3995,7 @@ function ProjectCampaignTreeItem({
   );
 }
 
-function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onChanged }: ViewProps & { site: Site; sections: Section[]; content: ContentItem[]; menuCapabilities: MenuCapabilities | null }) {
+function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onAddContent, onChanged }: ViewProps & { site: Site; sections: Section[]; content: ContentItem[]; menuCapabilities: MenuCapabilities | null; onAddContent: (section: Section) => void }) {
   const [name, setName] = React.useState("");
   const [path, setPath] = React.useState("");
   const [menuType, setMenuType] = React.useState<"header" | "footer">("header");
@@ -4147,6 +4167,28 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onCh
       setFormError(error instanceof Error ? error.message : "Не удалось выбрать родительский пункт");
     } finally {
       setAdoptingParentKey(null);
+    }
+  }
+
+  async function addContentToMenuItem(targetMenuType: "header" | "footer", item: MenuPreviewItem, existingSection?: Section) {
+    setFormError("");
+    try {
+      const result = existingSection
+        ? { section: existingSection, created: false }
+        : await api<{ section: Section; created: boolean }>(`/sites/${site.id}/sections/content-target`, {
+            method: "POST",
+            body: JSON.stringify({
+              external_id: item.externalId,
+              name: item.title,
+              path: item.path || `/${item.externalId}/`,
+              menu_type: targetMenuType,
+              parent_id: null
+            })
+          });
+      if (result.created) await onChanged();
+      onAddContent(result.section);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось выбрать пункт меню для контента");
     }
   }
 
@@ -4437,10 +4479,10 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onCh
           </form> : null}
         </section>
         <div className="projectMenuStructureGrid">
-          <SiteMenuPreviewSection key={`${site.id}:header`} title="Меню Header" icon={<HeaderMenuIcon />} items={cachedHeader} sections={sections.filter((section) => section.menu_type === "header" && section.sync_status !== "external_deleted")} content={content} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "header" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onAddChild={(item, section, treeKey) => openChildForm("header", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("header")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Header</button>}>
+          <SiteMenuPreviewSection key={`${site.id}:header`} title="Меню Header" icon={<HeaderMenuIcon />} items={cachedHeader} sections={sections.filter((section) => section.menu_type === "header" && section.sync_status !== "external_deleted")} content={content} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "header" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onAddContent={(item, section) => void addContentToMenuItem("header", item, section)} onAddChild={(item, section, treeKey) => openChildForm("header", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("header")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Header</button>}>
             {inlineMenuType === "header" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "header")}>{menuFields("header")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
           </SiteMenuPreviewSection>
-          <SiteMenuPreviewSection key={`${site.id}:footer`} title="Меню Footer" icon={<FooterMenuIcon />} items={cachedFooter} sections={sections.filter((section) => section.menu_type === "footer" && section.sync_status !== "external_deleted")} content={content} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "footer" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onAddChild={(item, section, treeKey) => openChildForm("footer", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("footer")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Footer</button>}>
+          <SiteMenuPreviewSection key={`${site.id}:footer`} title="Меню Footer" icon={<FooterMenuIcon />} items={cachedFooter} sections={sections.filter((section) => section.menu_type === "footer" && section.sync_status !== "external_deleted")} content={content} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "footer" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onAddContent={(item, section) => void addContentToMenuItem("footer", item, section)} onAddChild={(item, section, treeKey) => openChildForm("footer", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("footer")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Footer</button>}>
             {inlineMenuType === "footer" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "footer")}>{menuFields("footer")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
           </SiteMenuPreviewSection>
         </div>
@@ -4649,6 +4691,16 @@ function TasksView({
       setSiteId(fixedSite.id);
     }
   }, [fixedSite, siteId]);
+
+  React.useEffect(() => {
+    if (!selectedSite) return;
+    const storageKey = `workspace_add_content_section:${selectedSite.id}`;
+    const requestedSectionId = window.sessionStorage.getItem(storageKey);
+    if (!requestedSectionId || !sections.some((section) => section.id === requestedSectionId)) return;
+    window.sessionStorage.removeItem(storageKey);
+    setSectionId(requestedSectionId);
+    setCreateFormExpanded(true);
+  }, [sections, selectedSite]);
 
   React.useEffect(() => {
     if (!selectedSite) return;
@@ -7592,7 +7644,7 @@ function nestedContentSlug(sectionPath: string, contentSlug: string): string {
   return parent === "/" ? `/${leaf}/` : `${parent}${leaf}/`;
 }
 
-function SiteMenuPreviewSection({ title, items, sections = [], content = [], icon, action, children, adoptingParentKey, activeParentTreeKey, pagePreviewLoadingKey, onPreviewPage, onAddChild }: { title: string; items: unknown[]; sections?: Section[]; content?: ContentItem[]; icon?: React.ReactNode; action?: React.ReactNode; children?: React.ReactNode; adoptingParentKey?: string | null; activeParentTreeKey?: string; pagePreviewLoadingKey?: string | null; onPreviewPage?: (item: MenuPreviewItem, treeKey: string) => void; onAddChild?: (item: MenuPreviewItem, section: Section | undefined, treeKey: string) => void }) {
+function SiteMenuPreviewSection({ title, items, sections = [], content = [], icon, action, children, adoptingParentKey, activeParentTreeKey, pagePreviewLoadingKey, onPreviewPage, onAddContent, onAddChild }: { title: string; items: unknown[]; sections?: Section[]; content?: ContentItem[]; icon?: React.ReactNode; action?: React.ReactNode; children?: React.ReactNode; adoptingParentKey?: string | null; activeParentTreeKey?: string; pagePreviewLoadingKey?: string | null; onPreviewPage?: (item: MenuPreviewItem, treeKey: string) => void; onAddContent?: (item: MenuPreviewItem, section: Section | undefined) => void; onAddChild?: (item: MenuPreviewItem, section: Section | undefined, treeKey: string) => void }) {
   const menuType = title.includes("Footer") ? "footer" : "header";
   const tree = React.useMemo(() => buildMenuTree(items, sections), [items, sections]);
   const [collapsedKeys, setCollapsedKeys] = React.useState<Set<string>>(() => collapsibleMenuKeys(tree));
@@ -7629,6 +7681,7 @@ function SiteMenuPreviewSection({ title, items, sections = [], content = [], ico
               {hasChildren ? <button className="siteMenuTreeToggle hasChildren" type="button" onClick={() => toggleNode(node.key)} aria-label={`${collapsed ? "Развернуть" : "Свернуть"} ${node.item.title}`}>
                 {collapsed ? <ChevronRight size={17} /> : <ChevronDown size={17} />}<span className="siteMenuTreeToggleLabel">{collapsed ? "Показать все" : "Свернуть"}</span><span className="siteMenuTreeNestedCount">{nestedCount}</span>
               </button> : null}
+              {onAddContent ? <button className="siteMenuAddContentButton" type="button" onClick={() => onAddContent(node.item, node.section)} title={`Добавить контент в «${node.item.title}»`}><FilePlus2 size={15} /> Контент</button> : null}
               {onAddChild ? <button className="siteMenuAddChildButton" type="button" onClick={() => onAddChild(node.item, node.section, node.key)} disabled={Boolean(adoptingParentKey)} title={`Добавить дочерний пункт в «${node.item.title}»`}><span className="buttonPlusIcon"><Plus size={15} /></span> {adoptingParentKey === parentKey ? "Открываем…" : "Добавить"}</button> : null}
             </div>
             {activeParentTreeKey === node.key && children ? <div className="siteMenuTreeChildForm">{children}</div> : null}
