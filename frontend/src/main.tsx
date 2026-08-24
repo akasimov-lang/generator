@@ -292,7 +292,7 @@ type Section = {
   menu_type: "header" | "footer";
   parent_id: string | null;
   is_temporary_parent: boolean;
-  sync_status: "pending" | "synced";
+  sync_status: "pending" | "synced" | "external_deleted";
   synced_at: string | null;
   updated_at: string;
 };
@@ -1697,7 +1697,7 @@ function ProjectWorkspaceView({
   const projectLoadRequestRef = React.useRef(0);
   const selectedSite = sites.find((site) => site.id === selectedSiteId) || null;
   const routeProjectName = workspaceProjectNameFromPath(window.location.pathname);
-  const pendingSectionsCount = sections.filter((section) => section.sync_status !== "synced").length;
+  const pendingSectionsCount = sections.filter((section) => section.sync_status === "pending").length;
   const unpublishedGeneratedContentCount = siteContent.filter((item) => Boolean(item.generated_at) && item.status !== "published").length;
   const selectedProjectMedalStatus = menuCapabilities?.checked_at
     ? menuMedalStatus(menuCapabilities.checked_at, menuCapabilities.header_menu_rendered, menuCapabilities.footer_menu_rendered)
@@ -4033,7 +4033,7 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onCh
     [sections]
   );
   const persistedSections = React.useMemo(() => sections.filter((section) => !section.is_temporary_parent), [sections]);
-  const pendingSections = React.useMemo(() => sections.filter((section) => section.sync_status !== "synced"), [sections]);
+  const pendingSections = React.useMemo(() => sections.filter((section) => section.sync_status === "pending"), [sections]);
   const menuLibraryListId = React.useId();
 
   React.useEffect(() => {
@@ -4403,10 +4403,10 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onCh
           </form> : null}
         </section>
         <div className="projectMenuStructureGrid">
-          <SiteMenuPreviewSection key={`${site.id}:header`} title="Меню Header" icon={<HeaderMenuIcon />} items={cachedHeader} sections={sections.filter((section) => section.menu_type === "header")} content={content} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "header" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onAddChild={(item, section, treeKey) => openChildForm("header", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("header")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Header</button>}>
+          <SiteMenuPreviewSection key={`${site.id}:header`} title="Меню Header" icon={<HeaderMenuIcon />} items={cachedHeader} sections={sections.filter((section) => section.menu_type === "header" && section.sync_status !== "external_deleted")} content={content} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "header" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onAddChild={(item, section, treeKey) => openChildForm("header", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("header")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Header</button>}>
             {inlineMenuType === "header" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "header")}>{menuFields("header")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
           </SiteMenuPreviewSection>
-          <SiteMenuPreviewSection key={`${site.id}:footer`} title="Меню Footer" icon={<FooterMenuIcon />} items={cachedFooter} sections={sections.filter((section) => section.menu_type === "footer")} content={content} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "footer" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onAddChild={(item, section, treeKey) => openChildForm("footer", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("footer")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Footer</button>}>
+          <SiteMenuPreviewSection key={`${site.id}:footer`} title="Меню Footer" icon={<FooterMenuIcon />} items={cachedFooter} sections={sections.filter((section) => section.menu_type === "footer" && section.sync_status !== "external_deleted")} content={content} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "footer" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onAddChild={(item, section, treeKey) => openChildForm("footer", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("footer")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Footer</button>}>
             {inlineMenuType === "footer" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "footer")}>{menuFields("footer")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
           </SiteMenuPreviewSection>
         </div>
@@ -4420,7 +4420,11 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onCh
               section.menu_type === "footer" ? "Footer" : "Header",
               editing ? <input className="menuSectionEditInput" value={editingSectionPath} onChange={(event) => setEditingSectionPath(event.target.value)} aria-label="URL пункта меню" /> : section.path,
               formatDate(section.synced_at || section.updated_at),
-              section.sync_status === "synced" ? <span className="syncedBadge">Синхронизировано</span> : <span className="pendingSyncBadge">Не синхронизировано</span>,
+              section.sync_status === "synced"
+                ? <span className="syncedBadge">Синхронизировано</span>
+                : section.sync_status === "external_deleted"
+                  ? <span className="pendingSyncBadge">Удалено на проекте</span>
+                  : <span className="pendingSyncBadge">Не синхронизировано</span>,
               editing ? <div className="menuSectionEditActions"><button className="button compact secondary" type="button" onClick={cancelSectionEdit} disabled={savingSectionEdit}>Отменить</button><button className="button compact primary" type="button" onClick={() => saveSectionEdit(section)} disabled={savingSectionEdit}>Сохранить</button></div> : <div className="menuSectionEditActions"><button className="button compact secondary" type="button" onClick={() => startSectionEdit(section)} disabled={deletingSectionId === section.id}><Edit3 size={14} /> Изменить</button><button className="button compact danger" type="button" onClick={() => deleteSection(section)} disabled={deletingSectionId === section.id}><Trash2 size={14} /> {deletingSectionId === section.id ? "Удаляем" : "Удалить"}</button></div>
             ];
           })}

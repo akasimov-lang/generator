@@ -67,6 +67,17 @@ services:
         condition: service_healthy
     command: celery -A app.worker.celery_app beat --loglevel=info
 
+  project_stream:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: python -m app.project_stream
+
   frontend:
     build:
       context: ./frontend

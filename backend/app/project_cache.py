@@ -283,14 +283,32 @@ def _menu_item_matches_section(item: Any, section: models.Section) -> bool:
     return bool(item_name and item_name == section.name.strip().casefold())
 
 
+def _flatten_menu_items(items: list[Any]) -> list[Any]:
+    flattened: list[Any] = []
+    for item in items:
+        flattened.append(item)
+        if not isinstance(item, dict):
+            continue
+        children = item.get("children") or item.get("items")
+        if isinstance(children, list):
+            flattened.extend(_flatten_menu_items(children))
+    return flattened
+
+
 def _confirm_synchronized_sections(db: Session, site: models.Site, menu: dict[str, list[Any]]) -> int:
     sections = db.scalars(
-        select(models.Section).where(models.Section.site_id == site.id, models.Section.sync_status == "pending")
+        select(models.Section).where(models.Section.site_id == site.id)
     ).all()
     confirmed_count = 0
     for section in sections:
-        menu_items = menu.get(section.menu_type, [])
-        if not any(_menu_item_matches_section(item, section) for item in menu_items):
+        menu_items = _flatten_menu_items(menu.get(section.menu_type, []))
+        exists_in_project = any(_menu_item_matches_section(item, section) for item in menu_items)
+        if not exists_in_project:
+            if section.sync_status == "synced":
+                section.sync_status = "external_deleted"
+                section.synced_at = datetime.now(timezone.utc)
+            continue
+        if section.sync_status not in {"pending", "external_deleted"}:
             continue
         db.add(
             models.PublicationLog(
@@ -310,6 +328,38 @@ def _confirm_synchronized_sections(db: Session, site: models.Site, menu: dict[st
         section.synced_at = datetime.now(timezone.utc)
         confirmed_count += 1
     return confirmed_count
+
+
+def sync_project_data_update(
+    db: Session,
+    project_name: str,
+    project: dict[str, Any],
+    *,
+    server_host: str | None = None,
+) -> int:
+    """Apply a stream-triggered project data refresh without overwriting settings/head fields."""
+    sites = db.scalars(select(models.Site).where(models.Site.name == project_name)).all()
+    if not sites:
+        return 0
+    menu = _project_menu(project)
+    server_value = (
+        server_host
+        or project.get("serverId")
+        or project.get("server_id")
+        or project.get("serverIp")
+        or project.get("server_ip")
+    )
+    server_id = str(server_value or "").strip().split(".", 1)[0] or None
+    synced_at = datetime.now(timezone.utc)
+    for site in sites:
+        site.default_menu = menu
+        site.has_menu = bool(menu["header"] or menu["footer"])
+        site.cache_synced_at = synced_at
+        if server_id:
+            site.cache_server_ip = server_id
+        _confirm_synchronized_sections(db, site, menu)
+    db.commit()
+    return len(sites)
 
 
 def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str, Any]:

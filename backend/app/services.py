@@ -3071,7 +3071,11 @@ def build_project_menu_payload(db: Session, site: models.Site, menu_type: str, n
 
     sections = db.scalars(
         select(models.Section)
-        .where(models.Section.site_id == site.id, models.Section.menu_type == menu_type)
+        .where(
+            models.Section.site_id == site.id,
+            models.Section.menu_type == menu_type,
+            models.Section.sync_status == "pending",
+        )
         .order_by(models.Section.created_at.asc())
     ).all()
     next_order = 0 if not items else max(max(item["order"] for item in items) + 1, len(items) + 1)
@@ -3125,7 +3129,11 @@ async def sync_project_menus(db: Session, site: models.Site, initiator_username:
                     current_menu[menu_type] = payload["list"]
                     site.default_menu = current_menu
                     sections = db.scalars(
-                        select(models.Section).where(models.Section.site_id == site.id, models.Section.menu_type == menu_type)
+                        select(models.Section).where(
+                            models.Section.site_id == site.id,
+                            models.Section.menu_type == menu_type,
+                            models.Section.sync_status == "pending",
+                        )
                     ).all()
                     synced_at = datetime.now(timezone.utc)
                     for section in sections:
