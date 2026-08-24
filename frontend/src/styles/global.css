@@ -5249,7 +5249,28 @@ td {
 }
 
 .projectContentTable .column-actions {
-  width: 455px;
+  width: 495px;
+}
+
+.viewOnSiteIconButton {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--primary);
+  display: inline-flex;
+  flex: 0 0 32px;
+  height: 32px;
+  justify-content: center;
+  text-decoration: none;
+  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
+  width: 32px;
+}
+
+.viewOnSiteIconButton:hover {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  transform: translateY(-1px);
 }
 
 .compactContentTopic {

@@ -3211,6 +3211,16 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
       : { columnIndex, direction: "asc" });
   }
 
+  function contentSiteUrl(item: ContentItem): string {
+    if (item.published_url) return item.published_url;
+    const projectBaseUrl = site.base_url || `https://${site.cache_canon || site.name}`;
+    try {
+      return new URL(item.slug.replace(/^\/+/, ""), `${projectBaseUrl.replace(/\/+$/, "")}/`).toString();
+    } catch {
+      return `${projectBaseUrl.replace(/\/+$/, "")}/${item.slug.replace(/^\/+/, "")}`;
+    }
+  }
+
   React.useEffect(() => {
     setSelectedIds((current) => current.filter((id) => selectableIds.includes(id)));
   }, [selectableIds]);
@@ -3464,6 +3474,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
               <button className="button compact" type="button" onClick={() => openEditor(item)} disabled={isPublicationLocked(item)} title="Открыть и редактировать JSON payload"><Database size={15} /> JSON</button>
               <button className="button compact approve" type="button" onClick={() => approve(item)} disabled={!canApproveContent(item)} title="Принять текст"><CheckCircle2 size={15} /> Принять</button>
               <button className="button compact primary" type="button" onClick={() => void publishImmediately(item)} disabled={!canPublishContentImmediately(item) || publishingItemId === item.id} title="Сразу отправить JSON текста на сервер проекта"><Send size={15} /> {publishingItemId === item.id ? "Публикуем…" : "Опубликовать"}</button>
+              {item.status === "published" ? <a className="viewOnSiteIconButton" href={contentSiteUrl(item)} target="_blank" rel="noreferrer" title="Посмотреть на сайте" aria-label={`Посмотреть на сайте: ${item.topic}`}><ExternalLink size={16} /></a> : null}
             </div>
           ])}
         />
