@@ -167,19 +167,36 @@ def test_static_multilink_navigation_counts_as_rendered_menu() -> None:
     }
 
 
+def test_live_visibility_controls_the_rendered_menu_status() -> None:
+    capabilities = project_cache_module.combine_menu_capabilities(
+        {
+            "header_menu_rendered": True,
+            "header_menu_nested": True,
+            "footer_menu_rendered": False,
+            "footer_menu_nested": False,
+        },
+        {
+            "header_menu_rendered": False,
+            "footer_menu_rendered": False,
+        },
+    )
+
+    assert capabilities == {
+        "header_menu_template_rendered": True,
+        "header_menu_rendered": False,
+        "header_menu_nested": False,
+        "footer_menu_template_rendered": False,
+        "footer_menu_rendered": False,
+        "footer_menu_nested": False,
+    }
+
+
 def test_menu_capabilities_are_fetched_only_once(monkeypatch) -> None:
     calls: list[str] = []
-
-    def fake_fetch(site: models.Site) -> dict[str, bool]:
-        calls.append(site.id)
-        return {
-            "header_menu_rendered": True,
-            "header_menu_nested": False,
-            "footer_menu_rendered": True,
-            "footer_menu_nested": True,
-        }
-
-    monkeypatch.setattr("app.api.fetch_project_menu_capabilities", fake_fetch)
+    monkeypatch.setattr(
+        "app.api.check_site_menu_visibility_job.apply_async",
+        lambda args, queue: calls.append(args[0]),
+    )
     with make_session() as db:
         site = models.Site(
             name="menu-capabilities.example",
@@ -193,24 +210,17 @@ def test_menu_capabilities_are_fetched_only_once(monkeypatch) -> None:
         first = get_site_menu_capabilities(site.id, None, db)  # type: ignore[arg-type]
         second = get_site_menu_capabilities(site.id, None, db)  # type: ignore[arg-type]
 
-        assert calls == [site.id]
-        assert first["header_menu_rendered"] is True
-        assert second["footer_menu_nested"] is True
+        assert len(calls) == 1
+        assert first["check_status"] == "queued"
+        assert second["check_id"] == first["check_id"]
 
 
 def test_menu_capabilities_can_be_refreshed(monkeypatch) -> None:
-    calls: list[bool] = []
-
-    def fake_fetch(site: models.Site, force: bool = False) -> dict[str, bool]:
-        calls.append(force)
-        return {
-            "header_menu_rendered": True,
-            "header_menu_nested": True,
-            "footer_menu_rendered": False,
-            "footer_menu_nested": False,
-        }
-
-    monkeypatch.setattr("app.api.fetch_project_menu_capabilities", fake_fetch)
+    calls: list[str] = []
+    monkeypatch.setattr(
+        "app.api.check_site_menu_visibility_job.apply_async",
+        lambda args, queue: calls.append(queue),
+    )
     with make_session() as db:
         site = models.Site(
             name="refresh-menu.example",
@@ -226,82 +236,43 @@ def test_menu_capabilities_can_be_refreshed(monkeypatch) -> None:
 
         result = get_site_menu_capabilities(site.id, None, db, refresh=True)  # type: ignore[arg-type]
 
-        assert calls == [True]
-        assert result["header_menu_rendered"] is True
-        assert result["header_menu_nested"] is True
+        assert calls == ["menu_checks"]
+        assert result["check_status"] == "queued"
+        assert result["header_menu_rendered"] is False
 
 
-def test_menu_capability_refresh_updates_stale_project_server(monkeypatch) -> None:
-    requested_servers: list[str | None] = []
-
+def test_failed_menu_capability_check_requires_manual_retry(monkeypatch) -> None:
+    calls: list[str] = []
     monkeypatch.setattr(
-        "app.project_cache.fetch_project_cache",
-        lambda names: [{"name": names[0], "serverId": "new-server"}],
+        "app.api.check_site_menu_visibility_job.apply_async",
+        lambda args, queue: calls.append(args[0]),
     )
-
-    def fake_fetch(site: models.Site, force: bool = False) -> dict[str, bool]:
-        requested_servers.append(site.cache_server_ip)
-        return {
-            "header_menu_rendered": True,
-            "header_menu_nested": False,
-            "footer_menu_rendered": True,
-            "footer_menu_nested": False,
-        }
-
-    monkeypatch.setattr("app.api.fetch_project_menu_capabilities", fake_fetch)
     with make_session() as db:
         site = models.Site(
-            name="moved-project.example",
-            base_url="https://moved-project.example",
-            publication_endpoint="https://moved-project.example/api/content",
-            cache_server_ip="stale-server",
-            menu_capabilities_checked_at=datetime.now(timezone.utc),
+            name="failed-check.example",
+            base_url="https://failed-check.example",
+            publication_endpoint="https://failed-check.example/api/content",
+            cache_server_ip="server",
         )
         db.add(site)
         db.commit()
-
-        get_site_menu_capabilities(site.id, None, db, refresh=True)  # type: ignore[arg-type]
-
-        assert requested_servers == ["new-server"]
-        assert site.cache_server_ip == "new-server"
-
-
-def test_menu_capability_check_resolves_current_project_server_before_request(monkeypatch) -> None:
-    requested_servers: list[str | None] = []
-
-    monkeypatch.setattr(
-        "app.project_cache.fetch_project_cache",
-        lambda names: [{"name": names[0], "serverId": "new-server"}],
-    )
-
-    def fake_fetch(site: models.Site, force: bool = False) -> dict[str, bool]:
-        requested_servers.append(site.cache_server_ip)
-        if site.cache_server_ip == "stale-server":
-            raise project_cache_module.ProjectCacheError("stale project server")
-        return {
-            "header_menu_rendered": True,
-            "header_menu_nested": False,
-            "footer_menu_rendered": True,
-            "footer_menu_nested": False,
-        }
-
-    monkeypatch.setattr("app.api.fetch_project_menu_capabilities", fake_fetch)
-    with make_session() as db:
-        site = models.Site(
-            name="moved-unchecked-project.example",
-            base_url="https://moved-unchecked-project.example",
-            publication_endpoint="https://moved-unchecked-project.example/api/content",
-            cache_server_ip="stale-server",
+        failed = models.MenuVisibilityCheck(
+            site_id=site.id,
+            status="failed",
+            error_code="LIVE_BROWSER_TIMEOUT",
+            error_message="Timed out",
+            finished_at=datetime.now(timezone.utc),
         )
-        db.add(site)
+        db.add(failed)
         db.commit()
 
-        result = get_site_menu_capabilities(site.id, None, db)  # type: ignore[arg-type]
+        unchanged = get_site_menu_capabilities(site.id, None, db)  # type: ignore[arg-type]
+        retried = get_site_menu_capabilities(site.id, None, db, refresh=True)  # type: ignore[arg-type]
 
-        assert requested_servers == ["new-server"]
-        assert site.cache_server_ip == "new-server"
-        assert result["header_menu_rendered"] is True
-        assert result["footer_menu_rendered"] is True
+        assert unchanged["check_status"] == "failed"
+        assert unchanged["check_error_code"] == "LIVE_BROWSER_TIMEOUT"
+        assert retried["check_status"] == "queued"
+        assert len(calls) == 1
 
 
 def test_menu_capability_check_reauthenticates_after_unauthorized(monkeypatch) -> None:
@@ -342,6 +313,11 @@ def test_menu_capability_check_reauthenticates_after_unauthorized(monkeypatch) -
             return FakeResponse(200, {"shortcodes": []})
 
     monkeypatch.setattr(project_cache_module.httpx, "Client", FakeClient)
+    monkeypatch.setattr(
+        project_cache_module,
+        "fetch_live_menu_capabilities",
+        lambda site: {"header_menu_rendered": False, "footer_menu_rendered": False},
+    )
     site = models.Site(
         name="reauth.example",
         base_url="https://reauth.example",

@@ -58,8 +58,10 @@ def apply_lightweight_migrations() -> None:
             "has_menu": "BOOLEAN DEFAULT FALSE NOT NULL",
             "cache_synced_at": "TIMESTAMP WITH TIME ZONE",
             "menu_capabilities_checked_at": "TIMESTAMP WITH TIME ZONE",
+            "header_menu_template_rendered": "BOOLEAN",
             "header_menu_rendered": "BOOLEAN",
             "header_menu_nested": "BOOLEAN",
+            "footer_menu_template_rendered": "BOOLEAN",
             "footer_menu_rendered": "BOOLEAN",
             "footer_menu_nested": "BOOLEAN",
         }

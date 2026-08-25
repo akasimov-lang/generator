@@ -370,7 +370,7 @@ def test_project_server_requests_refresh_token_and_store_status_codes(db: Sessio
     monkeypatch.setattr(project_cache_module, "fetch_project_cache", fake_fetch_project_cache)
     monkeypatch.setattr(
         service_module,
-        "fetch_project_menu_capabilities",
+        "fetch_project_template_capabilities",
         lambda site, force=False: {
             "header_menu_rendered": True,
             "header_menu_nested": True,
@@ -483,7 +483,7 @@ def test_menu_sync_blocks_nested_items_when_template_has_one_level(db: Session, 
     monkeypatch.setattr(service_module, "refresh_project_server_id", lambda db, site: "bear")
     monkeypatch.setattr(
         service_module,
-        "fetch_project_menu_capabilities",
+        "fetch_project_template_capabilities",
         lambda site, force=False: {
             "header_menu_rendered": True,
             "header_menu_nested": False,

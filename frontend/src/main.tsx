@@ -218,18 +218,40 @@ type Site = {
   has_menu: boolean;
   cache_synced_at: string | null;
   menu_capabilities_checked_at: string | null;
+  header_menu_template_rendered: boolean | null;
   header_menu_rendered: boolean | null;
   header_menu_nested: boolean | null;
+  footer_menu_template_rendered: boolean | null;
   footer_menu_rendered: boolean | null;
   footer_menu_nested: boolean | null;
 };
 
 type MenuCapabilities = {
   checked_at: string | null;
+  header_menu_template_rendered: boolean | null;
   header_menu_rendered: boolean | null;
   header_menu_nested: boolean | null;
+  footer_menu_template_rendered: boolean | null;
   footer_menu_rendered: boolean | null;
   footer_menu_nested: boolean | null;
+  check_id: string | null;
+  check_status: "not_checked" | "queued" | "running" | "completed" | "failed" | string;
+  check_error_code: string | null;
+  check_error_message: string | null;
+};
+
+type MenuVisibilityCheck = {
+  id: string;
+  site_id: string;
+  site_name: string;
+  requested_by_username: string | null;
+  status: string;
+  error_code: string | null;
+  error_message: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 type MenuTemplate = {
@@ -1704,6 +1726,10 @@ function ProjectWorkspaceView({
   const selectedProjectMedalStatus = menuCapabilities?.checked_at
     ? menuMedalStatus(menuCapabilities.checked_at, menuCapabilities.header_menu_rendered, menuCapabilities.footer_menu_rendered)
     : selectedSite ? projectMenuMedalStatus(selectedSite) : "unchecked";
+  const menuCheckPending = menuCapabilities?.check_status === "queued" || menuCapabilities?.check_status === "running";
+  const menuCheckError = menuCapabilities?.check_status === "failed"
+    ? [menuCapabilities.check_error_code, menuCapabilities.check_error_message].filter(Boolean).join(": ")
+    : "";
 
   React.useLayoutEffect(() => {
     if ("scrollRestoration" in window.history) window.history.scrollRestoration = "manual";
@@ -1782,7 +1808,7 @@ function ProjectWorkspaceView({
     } catch (error) {
       cacheError = error instanceof Error ? `Не удалось получить свежий кеш проекта: ${error.message}` : "Не удалось получить свежий кеш проекта";
     }
-    await loadProject(true);
+    await loadProject();
     if (cacheError) setWorkspaceError(cacheError);
   }, [api, loadProject, onChanged, selectedSiteId]);
 
@@ -1791,6 +1817,26 @@ function ProjectWorkspaceView({
       .then((result) => setFavoriteSiteIds(result.site_ids))
       .catch((error: unknown) => setWorkspaceError(error instanceof Error ? error.message : "Не удалось загрузить избранное"));
   }, [api]);
+
+  React.useEffect(() => {
+    if (!selectedSite || !menuCheckPending) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const result = await api<MenuCapabilities>(`/sites/${selectedSite.id}/menu-capabilities`);
+        if (cancelled) return;
+        setMenuCapabilities(result);
+        if (result.check_status === "completed" || result.check_status === "failed") await onChanged();
+      } catch (error) {
+        if (!cancelled) setMenuCapabilitiesError(error instanceof Error ? error.message : "Не удалось обновить очередь проверки меню");
+      }
+    };
+    const intervalId = window.setInterval(() => void poll(), 2500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [api, menuCheckPending, onChanged, selectedSite]);
 
   React.useEffect(() => {
     const routeSite = routeProjectName ? sites.find((site) => site.name === routeProjectName) : null;
@@ -2034,8 +2080,8 @@ function ProjectWorkspaceView({
                   <span className="projectTitleCard"><small>Title</small><b title={selectedSite.homepage_title || "Title не указан"}>{selectedSite.homepage_title || "—"}</b></span>
                   <span className="projectMetricCard"><small>Доменов в сетке</small><b>{formatNumber(selectedSite.domains_count)}</b></span>
                   <span className="projectMetricCard"><small>Страниц</small><b>{formatNumber(selectedSite.internal_pages_count)}</b></span>
-                  <MenuCapabilityCard label="Header" rendered={menuCapabilities?.header_menu_rendered} nested={menuCapabilities?.header_menu_nested} icon="header" loading={menuCapabilitiesLoading} error={menuCapabilitiesError} onRetry={retryMenuCapabilities} />
-                  <MenuCapabilityCard label="Footer" rendered={menuCapabilities?.footer_menu_rendered} nested={menuCapabilities?.footer_menu_nested} icon="footer" loading={menuCapabilitiesLoading} error={menuCapabilitiesError} onRetry={retryMenuCapabilities} />
+                  <MenuCapabilityCard label="Header" templateRendered={menuCapabilities?.header_menu_template_rendered} rendered={menuCapabilities?.header_menu_rendered} nested={menuCapabilities?.header_menu_nested} icon="header" loading={menuCapabilitiesLoading || menuCheckPending} error={menuCapabilitiesError || menuCheckError} onRetry={retryMenuCapabilities} />
+                  <MenuCapabilityCard label="Footer" templateRendered={menuCapabilities?.footer_menu_template_rendered} rendered={menuCapabilities?.footer_menu_rendered} nested={menuCapabilities?.footer_menu_nested} icon="footer" loading={menuCapabilitiesLoading || menuCheckPending} error={menuCapabilitiesError || menuCheckError} onRetry={retryMenuCapabilities} />
                 </div>
               </>
             ) : null}
@@ -2194,10 +2240,13 @@ function AutoFitDomain({ value }: { value: string }) {
   return <b ref={domainRef} className="projectCanonDomain" title={value}>{value}</b>;
 }
 
-function MenuCapabilityCard({ label, rendered, nested, icon, loading, error, onRetry }: { label: string; rendered: boolean | null | undefined; nested: boolean | null | undefined; icon: "header" | "footer"; loading: boolean; error: string; onRetry: () => void }) {
+function MenuCapabilityCard({ label, templateRendered, rendered, nested, icon, loading, error, onRetry }: { label: string; templateRendered: boolean | null | undefined; rendered: boolean | null | undefined; nested: boolean | null | undefined; icon: "header" | "footer"; loading: boolean; error: string; onRetry: () => void }) {
   const statusText = loading ? "Проверяем" : error ? "Ошибка сервера" : rendered == null ? "Не проверено" : rendered ? "Меню реализовано" : "Меню не реализовано";
+  const renderingDetails = rendered === false
+    ? templateRendered ? "Шаблон поддерживает меню, но на сайте оно не отображается" : "В шаблоне и на сайте меню не отображается"
+    : rendered ? nested ? "Вложенность поддерживается" : "Только один уровень" : "";
   return (
-    <span className={`projectMenuCapability ${error ? "isError" : rendered === true ? "isReady" : rendered === false ? "isMissing" : "isChecking"}`} title={error || `${label}: ${statusText}${rendered ? nested ? ". Вложенность поддерживается" : ". Только один уровень" : ""}`}>
+    <span className={`projectMenuCapability ${error ? "isError" : rendered === true ? "isReady" : rendered === false ? "isMissing" : "isChecking"}`} title={error || `${label}: ${statusText}${renderingDetails ? `. ${renderingDetails}` : ""}`}>
       <span className="projectMenuCapabilityHeader">
         <small>{label}</small>
         <button className="projectMenuCapabilityRetry" type="button" onClick={onRetry} disabled={loading} title={`Повторить проверку ${label}`} aria-label={`Повторить проверку ${label}`}>
@@ -2208,7 +2257,7 @@ function MenuCapabilityCard({ label, rendered, nested, icon, loading, error, onR
         {rendered === true ? <MenuReadyMedal /> : rendered === false ? <MenuReadyMedal tone="red" /> : icon === "header" ? <HeaderMenuIcon /> : <FooterMenuIcon />}
         <b>{statusText}</b>
       </span>
-      {rendered ? <em>{nested ? "Есть вложенность" : "Один уровень"}</em> : null}
+      {error ? <em className="projectMenuCapabilityError">{error}</em> : rendered ? <em>{nested ? "Есть вложенность" : "Один уровень"}</em> : rendered === false ? <em>Не отображается на сайте</em> : null}
     </span>
   );
 }
@@ -8068,6 +8117,7 @@ function SettingsView({ api, currentUser, users, inputStyle, onInputStyleChange,
       {currentUser?.is_admin ? (
         <>
           <UsersAdminPanel api={api} currentUser={currentUser} users={users} onChanged={onChanged} />
+          <AdminMenuVisibilityQueuePanel api={api} />
           <AdminRequestLogsPanel api={api} />
         </>
       ) : null}
@@ -8126,6 +8176,63 @@ function SettingsView({ api, currentUser, users, inputStyle, onInputStyleChange,
         ) : null}
       </section>
     </section>
+  );
+}
+
+function AdminMenuVisibilityQueuePanel({ api }: Pick<ViewProps, "api">) {
+  const [checks, setChecks] = React.useState<MenuVisibilityCheck[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState("");
+
+  const loadChecks = React.useCallback(async (showLoading = false) => {
+    if (showLoading) setLoading(true);
+    setError("");
+    try {
+      setChecks(await api<MenuVisibilityCheck[]>("/admin/menu-visibility-checks"));
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить очередь проверок меню");
+    } finally {
+      setLoading(false);
+    }
+  }, [api]);
+
+  React.useEffect(() => {
+    void loadChecks(true);
+    const intervalId = window.setInterval(() => void loadChecks(), 5000);
+    return () => window.clearInterval(intervalId);
+  }, [loadChecks]);
+
+  const statusLabel = (status: string) => ({
+    queued: "Ожидает",
+    running: "Выполняется",
+    completed: "Завершено",
+    failed: "Ошибка"
+  }[status] || status);
+
+  return (
+    <DataPanel
+      title="Очередь проверок отображения меню"
+      actions={<button className="button secondary compact" type="button" onClick={() => void loadChecks(true)} disabled={loading}><RefreshCcw size={15} /> {loading ? "Обновляем" : "Обновить"}</button>}
+    >
+      <p className="panelHint">Chromium выполняет не более одной проверки одновременно. Результаты сохраняются до изменения проекта или ручного повторного запуска.</p>
+      {error ? <div className="formError">{error}</div> : null}
+      {!loading && !checks.length ? <EmptyState text="Проверок пока нет." /> : (
+        <ResponsiveTable
+          columns={["Создано", "Проект", "Пользователь", "Статус", "Начало", "Завершение", "Код / ошибка"]}
+          rows={checks.map((check) => [
+            formatDate(check.created_at),
+            <a className="requestLogProjectLink" href={pathForRoute("workspace", "overview", check.site_name)}>{check.site_name}</a>,
+            check.requested_by_username || "Система",
+            <span className={`requestLogResult ${check.status === "completed" ? "success" : check.status === "failed" ? "error" : "pending"}`}>{statusLabel(check.status)}</span>,
+            check.started_at ? formatDate(check.started_at) : "—",
+            check.finished_at ? formatDate(check.finished_at) : "—",
+            check.error_code
+              ? <span className="menuCheckError" title={check.error_message || check.error_code}><code>{check.error_code}</code>{check.error_message ? <small>{check.error_message}</small> : null}</span>
+              : "—"
+          ])}
+        />
+      )}
+    </DataPanel>
   );
 }
 

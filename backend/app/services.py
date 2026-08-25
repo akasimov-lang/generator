@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from app import models
 from app.core.config import get_settings
-from app.project_cache import ProjectCacheError, fetch_project_menu_capabilities, project_server_url, refresh_project_server_id, refresh_project_server_token
+from app.project_cache import ProjectCacheError, fetch_project_template_capabilities, project_server_url, refresh_project_server_id, refresh_project_server_token
 from app.schemas import GenerationTaskCreate, PublicationCampaignCreate
 
 SIMPLE_PAGE = "simple_page"
@@ -3104,12 +3104,11 @@ def build_project_menu_payload(db: Session, site: models.Site, menu_type: str, n
 
 async def sync_project_menus(db: Session, site: models.Site, initiator_username: str | None = None) -> dict:
     refresh_project_server_id(db, site)
-    capabilities = fetch_project_menu_capabilities(site, force=True)
-    site.header_menu_rendered = capabilities["header_menu_rendered"]
+    capabilities = fetch_project_template_capabilities(site)
+    site.header_menu_template_rendered = capabilities["header_menu_rendered"]
     site.header_menu_nested = capabilities["header_menu_nested"]
-    site.footer_menu_rendered = capabilities["footer_menu_rendered"]
+    site.footer_menu_template_rendered = capabilities["footer_menu_rendered"]
     site.footer_menu_nested = capabilities["footer_menu_nested"]
-    site.menu_capabilities_checked_at = datetime.now(timezone.utc)
     db.commit()
     pending_nested_sections = db.scalars(
         select(models.Section).where(

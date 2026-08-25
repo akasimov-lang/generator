@@ -2,6 +2,7 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 import re
+import threading
 from typing import Any
 from urllib.parse import quote
 
@@ -14,7 +15,9 @@ from app.core.config import get_settings
 
 
 class ProjectCacheError(RuntimeError):
-    pass
+    def __init__(self, message: str, code: str = "PROJECT_CACHE_ERROR") -> None:
+        super().__init__(message)
+        self.code = code
 
 
 def project_server_url(site: models.Site, path: str) -> str:
@@ -45,10 +48,16 @@ async def refresh_project_server_token(client: httpx.AsyncClient) -> str:
 def fetch_project_menu_capabilities(site: models.Site, force: bool = False) -> dict[str, Any]:
     if site.menu_capabilities_checked_at is not None and not force:
         return _site_menu_capabilities(site)
+    template_capabilities = fetch_project_template_capabilities(site)
+    live_capabilities = fetch_live_menu_capabilities(site)
+    return combine_menu_capabilities(template_capabilities, live_capabilities)
+
+
+def fetch_project_template_capabilities(site: models.Site) -> dict[str, bool]:
     if not site.cache_server_ip or not site.name:
-        raise ProjectCacheError("Project server is not available in cache")
+        raise ProjectCacheError("Project server is not available in cache", "PROJECT_SERVER_MISSING")
     if not re.fullmatch(r"[A-Za-z0-9-]+", site.cache_server_ip):
-        raise ProjectCacheError("Project server name is invalid")
+        raise ProjectCacheError("Project server name is invalid", "PROJECT_SERVER_INVALID")
 
     settings = get_settings()
     try:
@@ -72,11 +81,129 @@ def fetch_project_menu_capabilities(site: models.Site, force: bool = False) -> d
                 response = client.get(project_url, headers={"Authorization": f"Bearer {token}"})
             response.raise_for_status()
             project = response.json()
+    except httpx.HTTPStatusError as error:
+        raise ProjectCacheError(
+            f"Project template request returned HTTP {error.response.status_code}",
+            f"PROJECT_TEMPLATE_HTTP_{error.response.status_code}",
+        ) from error
     except (httpx.HTTPError, ValueError) as error:
-        raise ProjectCacheError(f"Project menu capability request failed: {error}") from error
+        raise ProjectCacheError(
+            f"Project menu template request failed: {error}", "PROJECT_TEMPLATE_REQUEST_FAILED"
+        ) from error
 
     shortcodes = project.get("shortcodes") if isinstance(project, dict) else []
     return analyze_menu_templates(shortcodes)
+
+
+def combine_menu_capabilities(
+    template_capabilities: dict[str, bool], live_capabilities: dict[str, bool]
+) -> dict[str, bool]:
+    return {
+        "header_menu_template_rendered": template_capabilities["header_menu_rendered"],
+        "header_menu_rendered": live_capabilities["header_menu_rendered"],
+        "header_menu_nested": (
+            live_capabilities["header_menu_rendered"] and template_capabilities["header_menu_nested"]
+        ),
+        "footer_menu_template_rendered": template_capabilities["footer_menu_rendered"],
+        "footer_menu_rendered": live_capabilities["footer_menu_rendered"],
+        "footer_menu_nested": (
+            live_capabilities["footer_menu_rendered"] and template_capabilities["footer_menu_nested"]
+        ),
+    }
+
+
+_LIVE_MENU_VISIBILITY_SCRIPT = r"""
+() => {
+  const isVisible = (element) => {
+    if (!(element instanceof HTMLElement)) return false;
+    let current = element;
+    while (current) {
+      const style = window.getComputedStyle(current);
+      if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse" || Number(style.opacity) <= 0.01) {
+        return false;
+      }
+      current = current.parentElement;
+    }
+    const rect = element.getBoundingClientRect();
+    return rect.width > 1 && rect.height > 1;
+  };
+
+  const meaningfulVisibleLinks = (element) => Array.from(element.querySelectorAll("a[href]"))
+    .filter((link) => isVisible(link) && (link.getAttribute("href") || "").trim() !== "#");
+
+  const inspectRegion = (tagName) => {
+    const regions = Array.from(document.querySelectorAll(tagName)).filter(isVisible);
+    for (const region of regions) {
+      const candidates = [
+        ...Array.from(region.querySelectorAll('nav, [role="navigation"], [class*="menu" i], [id*="menu" i]')),
+      ].filter(isVisible);
+      if (candidates.some((candidate) => meaningfulVisibleLinks(candidate).length > 0)) return true;
+      if (meaningfulVisibleLinks(region).length >= 2) return true;
+    }
+    return false;
+  };
+
+  return {
+    header_menu_rendered: inspectRegion("header"),
+    footer_menu_rendered: inspectRegion("footer"),
+  };
+}
+"""
+
+_LIVE_MENU_CHECK_LOCK = threading.BoundedSemaphore(value=1)
+
+
+def fetch_live_menu_capabilities(site: models.Site) -> dict[str, bool]:
+    try:
+        from playwright.sync_api import Error as PlaywrightError
+        from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+        from playwright.sync_api import sync_playwright
+    except ImportError as error:
+        raise ProjectCacheError("Live menu browser is not installed", "LIVE_BROWSER_NOT_INSTALLED") from error
+    project_url = f"https://{_normalize_domain(site.name)}/"
+    if not _LIVE_MENU_CHECK_LOCK.acquire(timeout=30):
+        raise ProjectCacheError("Live menu browser is busy; repeat the check shortly", "LIVE_BROWSER_BUSY")
+    try:
+        try:
+            with sync_playwright() as playwright:
+                browser = playwright.chromium.launch(
+                    headless=True,
+                    args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+                )
+                try:
+                    page = browser.new_page(
+                        viewport={"width": 1440, "height": 1000},
+                        user_agent=(
+                            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                            "(KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
+                        ),
+                    )
+                    response = page.goto(project_url, wait_until="domcontentloaded", timeout=25_000)
+                    if response is None or response.status >= 400:
+                        status = response.status if response is not None else "NO_RESPONSE"
+                        raise ProjectCacheError(
+                            f"Project homepage returned HTTP {status}", f"HOMEPAGE_HTTP_{status}"
+                        )
+                    page.wait_for_timeout(1_000)
+                    result = page.evaluate(_LIVE_MENU_VISIBILITY_SCRIPT)
+                finally:
+                    browser.close()
+        except ProjectCacheError:
+            raise
+        except PlaywrightTimeoutError as error:
+            raise ProjectCacheError(
+                f"Live project menu visibility check timed out: {error}", "LIVE_BROWSER_TIMEOUT"
+            ) from error
+        except (PlaywrightError, ValueError) as error:
+            raise ProjectCacheError(
+                f"Live project menu visibility check failed: {error}", "LIVE_BROWSER_ERROR"
+            ) from error
+    finally:
+        _LIVE_MENU_CHECK_LOCK.release()
+    return {
+        "header_menu_rendered": bool(result.get("header_menu_rendered")),
+        "footer_menu_rendered": bool(result.get("footer_menu_rendered")),
+    }
 
 
 def analyze_menu_templates(shortcodes: Any) -> dict[str, bool]:
@@ -132,8 +259,10 @@ def analyze_menu_templates(shortcodes: Any) -> dict[str, bool]:
 def _site_menu_capabilities(site: models.Site) -> dict[str, Any]:
     return {
         "checked_at": site.menu_capabilities_checked_at,
+        "header_menu_template_rendered": site.header_menu_template_rendered,
         "header_menu_rendered": site.header_menu_rendered,
         "header_menu_nested": site.header_menu_nested,
+        "footer_menu_template_rendered": site.footer_menu_template_rendered,
         "footer_menu_rendered": site.footer_menu_rendered,
         "footer_menu_nested": site.footer_menu_nested,
     }
@@ -415,6 +544,7 @@ def sync_project_data_update(
         site.default_menu = menu
         site.has_menu = bool(menu["header"] or menu["footer"])
         site.cache_synced_at = synced_at
+        site.menu_capabilities_checked_at = None
         if server_id:
             site.cache_server_ip = server_id
         _confirm_synchronized_sections(db, site, menu)

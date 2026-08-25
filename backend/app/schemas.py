@@ -134,8 +134,10 @@ class SiteResponse(BaseModel):
     has_menu: bool
     cache_synced_at: datetime | None
     menu_capabilities_checked_at: datetime | None
+    header_menu_template_rendered: bool | None
     header_menu_rendered: bool | None
     header_menu_nested: bool | None
+    footer_menu_template_rendered: bool | None
     footer_menu_rendered: bool | None
     footer_menu_nested: bool | None
     is_active: bool
@@ -171,6 +173,20 @@ class ProjectCacheSyncResponse(BaseModel):
     updated_count: int
     confirmed_sections_count: int = 0
     projects: list[ProjectCacheItemResponse]
+
+
+class MenuVisibilityCheckResponse(BaseModel):
+    id: str
+    site_id: str
+    site_name: str
+    requested_by_username: str | None
+    status: str
+    error_code: str | None
+    error_message: str | None
+    started_at: datetime | None
+    finished_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
 
 
 class ProjectCacheSyncRequest(BaseModel):

@@ -76,13 +76,31 @@ class Site(Base, TimestampMixin):
     has_menu: Mapped[bool] = mapped_column(Boolean, default=False)
     cache_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     menu_capabilities_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    header_menu_template_rendered: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     header_menu_rendered: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     header_menu_nested: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    footer_menu_template_rendered: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     footer_menu_rendered: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     footer_menu_nested: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     sections: Mapped[list["Section"]] = relationship(back_populates="site", cascade="all, delete-orphan")
+
+
+class MenuVisibilityCheck(Base, TimestampMixin):
+    __tablename__ = "menu_visibility_checks"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id"), nullable=False, index=True)
+    requested_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    status: Mapped[str] = mapped_column(String(24), default="queued", index=True)
+    error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    site: Mapped[Site] = relationship()
+    requested_by: Mapped[User | None] = relationship()
 
 
 class Section(Base, TimestampMixin):

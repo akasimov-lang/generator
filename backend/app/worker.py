@@ -7,6 +7,7 @@ from sqlalchemy import select
 from app import models
 from app.core.config import get_settings
 from app.db import SessionLocal
+from app.project_cache import ProjectCacheError, fetch_project_menu_capabilities, refresh_project_server_id
 from app.services import COMPETITOR_RESEARCH_MAX_ATTEMPTS, collect_competitor_research_for_item, generate_content_item, generate_task_items, publish_campaign_bundle, publish_item, refresh_campaign_status, run_task_pipeline
 
 settings = get_settings()
@@ -19,6 +20,55 @@ celery_app.conf.beat_schedule = {
         "schedule": 60.0,
     }
 }
+
+
+@celery_app.task(name="app.worker.check_site_menu_visibility")
+def check_site_menu_visibility_job(check_id: str) -> dict:
+    db = SessionLocal()
+    try:
+        check = db.get(models.MenuVisibilityCheck, check_id)
+        if not check:
+            return {"status": "missing", "check_id": check_id}
+        if check.status not in {"queued", "running"}:
+            return {"status": check.status, "check_id": check_id}
+        check.status = "running"
+        check.started_at = datetime.now(timezone.utc)
+        check.error_code = None
+        check.error_message = None
+        db.commit()
+
+        site = db.get(models.Site, check.site_id)
+        if not site:
+            raise ProjectCacheError("Project was not found", "PROJECT_NOT_FOUND")
+        refresh_project_server_id(db, site)
+        capabilities = fetch_project_menu_capabilities(site, force=True)
+        site.header_menu_template_rendered = capabilities["header_menu_template_rendered"]
+        site.header_menu_rendered = capabilities["header_menu_rendered"]
+        site.header_menu_nested = capabilities["header_menu_nested"]
+        site.footer_menu_template_rendered = capabilities["footer_menu_template_rendered"]
+        site.footer_menu_rendered = capabilities["footer_menu_rendered"]
+        site.footer_menu_nested = capabilities["footer_menu_nested"]
+        site.menu_capabilities_checked_at = datetime.now(timezone.utc)
+        check.status = "completed"
+        check.finished_at = datetime.now(timezone.utc)
+        db.commit()
+        return {"status": "completed", "check_id": check_id, "site_id": site.id}
+    except Exception as error:
+        db.rollback()
+        check = db.get(models.MenuVisibilityCheck, check_id)
+        if check:
+            check.status = "failed"
+            check.error_code = getattr(error, "code", "TECHNICAL_ERROR")
+            check.error_message = f"{type(error).__name__}: {error}"[:1000]
+            check.finished_at = datetime.now(timezone.utc)
+            db.commit()
+        return {
+            "status": "failed",
+            "check_id": check_id,
+            "error_code": getattr(error, "code", "TECHNICAL_ERROR"),
+        }
+    finally:
+        db.close()
 
 
 @celery_app.task(

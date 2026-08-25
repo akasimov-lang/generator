@@ -32,6 +32,7 @@ from app.schemas import (
     MenuLibraryItemCreate,
     MenuLibraryItemResponse,
     MenuLibraryItemUpdate,
+    MenuVisibilityCheckResponse,
     PasswordChange,
     PublicationCampaignResponse,
     PublicationCampaignReschedule,
@@ -67,7 +68,7 @@ from app.schemas import (
     UserUpdate,
 )
 from app.menu_templates import MENU_TEMPLATES
-from app.project_cache import ProjectCacheError, fetch_project_cache, fetch_project_menu_capabilities, project_server_url, refresh_project_server_id, sync_project_cache
+from app.project_cache import ProjectCacheError, fetch_project_cache, project_server_url, refresh_project_server_id, sync_project_cache
 from app.security import AdminUser, AuthUser, create_token, hash_password, verify_password
 from app.services import (
     BASE_PROMPT_TEMPLATE_NAME,
@@ -97,7 +98,7 @@ from app.services import (
     validate_content_for_publication,
     validate_ai_provider_key,
 )
-from app.worker import collect_competitor_research_job, generate_content_item_job, generate_task_content_job, publish_campaign_bundle_job, run_task_pipeline_job
+from app.worker import check_site_menu_visibility_job, collect_competitor_research_job, generate_content_item_job, generate_task_content_job, publish_campaign_bundle_job, run_task_pipeline_job
 
 router = APIRouter()
 
@@ -789,38 +790,89 @@ def list_sections(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> A
 
 
 @router.get("/sites/{site_id}/menu-capabilities")
-def get_site_menu_capabilities(site_id: str, _: AuthUser, db: Session = Depends(get_db), refresh: bool = False) -> dict[str, Any]:
+def get_site_menu_capabilities(site_id: str, user: AuthUser, db: Session = Depends(get_db), refresh: bool = False) -> dict[str, Any]:
     site = _get_site_or_404(db, site_id)
-    if site.menu_capabilities_checked_at is None or refresh:
-        try:
-            refresh_project_server_id(db, site)
-        except ProjectCacheError as error:
-            if not site.cache_server_ip:
-                raise HTTPException(status_code=502, detail=str(error)) from error
-        try:
-            capabilities = fetch_project_menu_capabilities(site, force=True) if refresh else fetch_project_menu_capabilities(site)
-        except ProjectCacheError as error:
-            if refresh:
-                raise HTTPException(status_code=502, detail=str(error)) from error
-            try:
-                refresh_project_server_id(db, site)
-                capabilities = fetch_project_menu_capabilities(site, force=True)
-            except ProjectCacheError as retry_error:
-                raise HTTPException(status_code=502, detail=str(retry_error)) from retry_error
-        site.header_menu_rendered = capabilities["header_menu_rendered"]
-        site.header_menu_nested = capabilities["header_menu_nested"]
-        site.footer_menu_rendered = capabilities["footer_menu_rendered"]
-        site.footer_menu_nested = capabilities["footer_menu_nested"]
-        site.menu_capabilities_checked_at = datetime.now(timezone.utc)
+    latest_check = db.scalar(
+        select(models.MenuVisibilityCheck)
+        .where(models.MenuVisibilityCheck.site_id == site.id)
+        .order_by(models.MenuVisibilityCheck.created_at.desc())
+        .limit(1)
+    )
+    active_check = db.scalar(
+        select(models.MenuVisibilityCheck)
+        .where(
+            models.MenuVisibilityCheck.site_id == site.id,
+            models.MenuVisibilityCheck.status.in_(("queued", "running")),
+        )
+        .order_by(models.MenuVisibilityCheck.created_at.asc())
+        .limit(1)
+    )
+    failed_unchecked = (
+        site.menu_capabilities_checked_at is None
+        and latest_check is not None
+        and latest_check.status == "failed"
+    )
+    if active_check is None and (refresh or (site.menu_capabilities_checked_at is None and not failed_unchecked)):
+        active_check = models.MenuVisibilityCheck(
+            site_id=site.id,
+            requested_by_user_id=user["id"] if user else None,
+            status="queued",
+        )
+        db.add(active_check)
         db.commit()
-        db.refresh(site)
+        db.refresh(active_check)
+        try:
+            check_site_menu_visibility_job.apply_async(args=[active_check.id], queue="menu_checks")
+        except Exception as error:
+            active_check.status = "failed"
+            active_check.error_code = "QUEUE_DISPATCH_FAILED"
+            active_check.error_message = f"{type(error).__name__}: {error}"[:1000]
+            active_check.finished_at = datetime.now(timezone.utc)
+            db.commit()
+        latest_check = active_check
+    elif active_check is not None:
+        latest_check = active_check
+    check_status = latest_check.status if latest_check is not None else (
+        "completed" if site.menu_capabilities_checked_at is not None else "not_checked"
+    )
     return {
         "checked_at": site.menu_capabilities_checked_at,
+        "header_menu_template_rendered": site.header_menu_template_rendered,
         "header_menu_rendered": site.header_menu_rendered,
         "header_menu_nested": site.header_menu_nested,
+        "footer_menu_template_rendered": site.footer_menu_template_rendered,
         "footer_menu_rendered": site.footer_menu_rendered,
         "footer_menu_nested": site.footer_menu_nested,
+        "check_id": latest_check.id if latest_check is not None else None,
+        "check_status": check_status,
+        "check_error_code": latest_check.error_code if latest_check is not None else None,
+        "check_error_message": latest_check.error_message if latest_check is not None else None,
     }
+
+
+@router.get("/admin/menu-visibility-checks", response_model=list[MenuVisibilityCheckResponse])
+def list_menu_visibility_checks(_: AdminUser, db: Session = Depends(get_db), limit: int = 100) -> list[dict[str, Any]]:
+    checks = db.scalars(
+        select(models.MenuVisibilityCheck)
+        .order_by(models.MenuVisibilityCheck.created_at.desc())
+        .limit(max(1, min(limit, 500)))
+    ).all()
+    return [
+        {
+            "id": check.id,
+            "site_id": check.site_id,
+            "site_name": check.site.name if check.site else "—",
+            "requested_by_username": check.requested_by.username if check.requested_by else None,
+            "status": check.status,
+            "error_code": check.error_code,
+            "error_message": check.error_message,
+            "started_at": check.started_at,
+            "finished_at": check.finished_at,
+            "created_at": check.created_at,
+            "updated_at": check.updated_at,
+        }
+        for check in checks
+    ]
 
 
 @router.post("/sites/{site_id}/sync-changes")
