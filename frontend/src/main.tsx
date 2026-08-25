@@ -3685,7 +3685,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
                 value={item.section_id || ""}
                 onChange={(value) => void changeItemSection(item, value)}
                 options={rowContentTargetOptions}
-                searchPlaceholder="Найти пункт меню по названию или пути"
+                searchPlaceholder="Выбрать пункт меню"
                 disabled={isPublicationLocked(item) || sectionSavingItemId === item.id}
                 ariaLabel={`Пункт меню для ${item.topic}`}
               />
