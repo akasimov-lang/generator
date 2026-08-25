@@ -137,6 +137,10 @@ def test_delete_published_item_targets_current_server_and_waits_for_cache_confir
             return FakeResponse()
 
     monkeypatch.setattr(service_module, "refresh_project_server_id", fake_refresh_server_id)
+    monkeypatch.setattr(service_module, "fetch_project_cache", lambda names: [{
+        "name": "manual-delete.example",
+        "data": {"pages": [{"id": "current-page-id", "slug": "/test/"}]},
+    }])
     monkeypatch.setattr(service_module, "refresh_project_server_token", lambda client: asyncio.sleep(0, result="fresh-token"))
     monkeypatch.setattr(service_module.httpx, "AsyncClient", FakeAsyncClient)
 
@@ -147,8 +151,8 @@ def test_delete_published_item_targets_current_server_and_waits_for_cache_confir
     assert item.deletion_confirmed_at is None
     assert calls[0]["url"] == "https://camel.slf-hostesting.com/projects/delete"
     assert calls[0]["json"]["folder"] == "manual-delete.example"
-    assert calls[0]["json"]["id"] == 1725000000000
-    assert calls[0]["json"]["pageId"] == "published-page-id"
+    assert calls[0]["json"]["id"] == "current-page-id"
+    assert calls[0]["json"]["pageId"] == "current-page-id"
     assert calls[0]["json"]["slug"] == "/test/"
     assert calls[0]["headers"]["Authorization"] == "Bearer fresh-token"
     deletion_log = db.scalar(

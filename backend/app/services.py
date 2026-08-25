@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from app import models
 from app.core.config import get_settings
-from app.project_cache import ProjectCacheError, fetch_project_template_capabilities, project_server_url, refresh_project_server_id, refresh_project_server_token
+from app.project_cache import ProjectCacheError, fetch_project_cache, fetch_project_template_capabilities, project_server_url, refresh_project_server_id, refresh_project_server_token
 from app.schemas import GenerationTaskCreate, PublicationCampaignCreate
 
 SIMPLE_PAGE = "simple_page"
@@ -3346,22 +3346,28 @@ async def delete_published_item(
     initiator_username: str | None = None,
 ) -> None:
     """Request page deletion on the project's current server and await cache confirmation."""
-    if item.status != "published":
+    if item.status not in {"published", "deletion_pending"}:
         raise ValueError("Only published content can be deleted from a project")
     refresh_project_server_id(db, site)
     endpoint = project_server_url(site, "/projects/delete")
-    published_log = db.scalar(
-        select(models.PublicationLog)
-        .where(
-            models.PublicationLog.content_item_id == item.id,
-            models.PublicationLog.response_status >= 200,
-            models.PublicationLog.response_status < 300,
-        )
-        .order_by(models.PublicationLog.created_at.desc())
-        .limit(1)
+    projects = fetch_project_cache([site.name])
+    project = next((entry for entry in projects if str(entry.get("name") or "").strip() == site.name), None)
+    data = project.get("data") if isinstance(project, dict) and isinstance(project.get("data"), dict) else {}
+    current_pages = data.get("pages") if isinstance(data.get("pages"), list) else []
+    target_slug = _normalized_project_slug(item.slug)
+    current_page = next(
+        (
+            page for page in current_pages
+            if isinstance(page, dict) and _normalized_project_slug(page.get("slug")) == target_slug
+        ),
+        None,
     )
-    original_payload = published_log.request_payload if published_log and isinstance(published_log.request_payload, dict) else {}
-    original_page = original_payload.get("page") if isinstance(original_payload.get("page"), dict) else {}
+    if current_page is None:
+        item.status = "deleted"
+        item.deletion_confirmed_at = datetime.now(timezone.utc)
+        item.deletion_error = None
+        db.commit()
+        return
     requested_at = datetime.now(timezone.utc)
     timestamp = requested_at.strftime("%Y-%m-%d %H:%M:%S")
     try:
@@ -3369,11 +3375,11 @@ async def delete_published_item(
             token = await refresh_project_server_token(client)
             request_payload = {
                 "folder": site.name,
-                "id": original_payload.get("id") or original_page.get("id"),
-                "pageId": original_page.get("id"),
+                "id": current_page.get("id"),
+                "pageId": current_page.get("id"),
                 "slug": item.slug,
                 "path": item.slug,
-                "page": {"id": original_page.get("id"), "slug": item.slug},
+                "page": {"id": current_page.get("id"), "slug": item.slug},
                 "token": token,
                 "initiator": get_settings().project_cache_username,
                 "dateTime": timestamp,
