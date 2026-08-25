@@ -3828,11 +3828,62 @@ h2 {
   outline-offset: 2px;
 }
 
+.modalDialog.wide.createGenerationTaskModal {
+  grid-template-rows: auto minmax(0, 1fr);
+  max-height: calc(100vh - 32px);
+  padding: 14px;
+  width: min(960px, calc(100vw - 32px));
+}
+
 .createGenerationTaskModal .createTaskForm {
   border-top: 0;
+  gap: 10px 12px;
   margin: 0;
+  min-height: 0;
   overflow-y: auto;
-  padding: 2px 4px 2px 0;
+  overscroll-behavior: contain;
+  padding: 2px 6px 4px 0;
+}
+
+.createGenerationTaskModal .createTaskForm > label {
+  gap: 5px;
+}
+
+.generationOptionsGroup {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin: 0;
+  min-width: 0;
+  padding: 5px 9px 8px;
+}
+
+.generationOptionsGroup legend {
+  color: var(--field-label);
+  font-size: 11px;
+  font-weight: 750;
+  padding: 0 5px;
+}
+
+.generationOptionsGrid {
+  display: grid;
+  gap: 4px 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.generationOptionsGrid .checkboxRow {
+  min-height: 32px;
+  padding: 3px 5px;
+}
+
+.generationOptionsGrid .casinoRatingOption {
+  padding: 4px 6px;
+}
+
+@media (max-width: 760px) {
+  .generationOptionsGrid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .publicationLaunchPanel {

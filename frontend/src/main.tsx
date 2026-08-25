@@ -668,7 +668,7 @@ function pathForRoute(view: AppView, workspaceTab: WorkspaceTab = DEFAULT_WORKSP
 }
 
 function isAdminOnlyView(view: AppView) {
-  return !["workspace", "prompts", "sites", "favorites", "guide", "settings"].includes(view);
+  return ["dashboard", "providers"].includes(view);
 }
 
 const DEFAULT_PROMPT_DRAFT = `Рабочий промпт для конкретной задачи.
@@ -922,14 +922,12 @@ function App() {
       api<Site[]>("/sites"),
       api<AiProvider[]>("/ai-providers")
     ]);
-    const [nextDashboard, nextTasks, nextArchivedTasks, nextContent] = nextUser.is_admin
-      ? await Promise.all([
-        api<Dashboard>("/dashboard"),
-        api<Task[]>("/tasks"),
-        api<Task[]>("/tasks-archive"),
-        api<ContentItem[]>("/content")
-      ])
-      : [null, [], [], []] as [Dashboard | null, Task[], Task[], ContentItem[]];
+    const [nextTasks, nextArchivedTasks, nextContent] = await Promise.all([
+      api<Task[]>("/tasks"),
+      api<Task[]>("/tasks-archive"),
+      api<ContentItem[]>("/content")
+    ]);
+    const nextDashboard = nextUser.is_admin ? await api<Dashboard>("/dashboard") : null;
     const nextUsers = nextUser.is_admin ? await api<User[]>("/users") : [];
     setCurrentUser(nextUser);
     setDashboard(nextDashboard);
@@ -1081,6 +1079,8 @@ function App() {
             <>
               <NavButton href={pathForRoute("workspace", DEFAULT_WORKSPACE_TAB)} icon={<FolderKanban />} label="Рабочий экран" active={activeView === "workspace"} onClick={() => navigateTo("workspace", DEFAULT_WORKSPACE_TAB)} />
               <NavButton href={pathForRoute("prompts")} icon={<Edit3 />} label="Промпты" active={activeView === "prompts"} onClick={() => navigateTo("prompts")} />
+              <NavButton href={pathForRoute("taskArchive")} icon={<Archive />} label="Архив" active={activeView === "taskArchive"} onClick={() => navigateTo("taskArchive")} />
+              <NavButton href={pathForRoute("publications")} icon={<Send />} label="Контент и публикации" active={activeView === "publications"} onClick={() => navigateTo("publications")} />
               <NavButton href={pathForRoute("sites")} icon={<Globe2 />} label="Сайты" active={activeView === "sites"} onClick={() => navigateTo("sites")} />
               <NavButton href={pathForRoute("favorites")} icon={<Star className="favoriteNavIcon" fill="currentColor" />} label="Избранное" active={activeView === "favorites"} onClick={() => navigateTo("favorites")} />
             </>
@@ -1160,10 +1160,10 @@ function App() {
           localStorage.setItem(`workspace_site_id:${currentUser.username}`, site.id);
           navigateTo("workspace", "topics", false, site.name);
         }} onChanged={loadAll} />}
-        {isAdmin && activeView === "tasks" && <TasksView api={api} sites={sites} providers={providers} tasks={tasks} onChanged={loadAll} />}
-        {isAdmin && activeView === "taskArchive" && <TaskArchiveView api={api} tasks={archivedTasks} onChanged={loadAll} />}
-        {isAdmin && activeView === "content" && <ContentView api={api} sites={sites} content={content} onChanged={loadAll} />}
-        {isAdmin && activeView === "publications" && <PublicationsView api={api} sites={sites} content={content} onOpenProject={(site) => {
+        {activeView === "tasks" && <TasksView api={api} sites={sites} providers={providers} tasks={tasks} onChanged={loadAll} />}
+        {activeView === "taskArchive" && <TaskArchiveView api={api} tasks={archivedTasks} onChanged={loadAll} />}
+        {activeView === "content" && <ContentView api={api} sites={sites} content={content} onChanged={loadAll} />}
+        {activeView === "publications" && <PublicationsView api={api} sites={sites} content={content} onOpenProject={(site) => {
           localStorage.setItem(`workspace_site_id:${currentUser.username}`, site.id);
           navigateTo("workspace", "content", false, site.name);
         }} onChanged={loadAll} />}
@@ -5392,22 +5392,27 @@ function TasksView({
               />
             </label>
           ) : null}
-          <label className="checkboxRow">
-            <input type="checkbox" checked={includeToc} onChange={(event) => setIncludeToc(event.target.checked)} />
-            Добавить содержание
-          </label>
-          <label className="checkboxRow">
-            <input type="checkbox" checked={includeFaq} onChange={(event) => setIncludeFaq(event.target.checked)} />
-            Создавать FAQ
-          </label>
-          <label className="checkboxRow wide">
-            <input type="checkbox" checked={collectCompetitors} onChange={(event) => setCollectCompetitors(event.target.checked)} />
-            Собрать конкурентов
-          </label>
-          <label className="checkboxRow wide casinoRatingOption">
-            <input type="checkbox" checked={includeCasinoRating} onChange={(event) => setIncludeCasinoRating(event.target.checked)} />
-            <span><b>Собрать рейтинг казино</b><small>Добавит в промпт тематический рейтинг из 5–10 казино с оценками и обоснованием мест.</small></span>
-          </label>
+          <fieldset className="generationOptionsGroup wide">
+            <legend>Параметры генерации</legend>
+            <div className="generationOptionsGrid">
+              <label className="checkboxRow">
+                <input type="checkbox" checked={includeToc} onChange={(event) => setIncludeToc(event.target.checked)} />
+                Добавить содержание
+              </label>
+              <label className="checkboxRow">
+                <input type="checkbox" checked={includeFaq} onChange={(event) => setIncludeFaq(event.target.checked)} />
+                Создавать FAQ
+              </label>
+              <label className="checkboxRow">
+                <input type="checkbox" checked={collectCompetitors} onChange={(event) => setCollectCompetitors(event.target.checked)} />
+                Собрать конкурентов
+              </label>
+              <label className="checkboxRow casinoRatingOption">
+                <input type="checkbox" checked={includeCasinoRating} onChange={(event) => setIncludeCasinoRating(event.target.checked)} />
+                <span><b>Собрать рейтинг казино</b><small>Рейтинг из 5–10 казино с оценками и обоснованием мест.</small></span>
+              </label>
+            </div>
+          </fieldset>
           <label className="wide">
             <span className="topicFieldHeader">
               <span>Темы, каждая с новой строки</span>
@@ -5422,7 +5427,7 @@ function TasksView({
                 {generatingTopics ? "Генерация тем" : "Сгенерировать 10 тем"}
               </button>
             </span>
-            <textarea value={topics} onChange={(event) => setTopics(event.target.value)} required rows={8} placeholder="best online casinos in Germany" />
+            <textarea value={topics} onChange={(event) => setTopics(event.target.value)} required rows={5} placeholder="best online casinos in Germany" />
             <span className="fieldHint">Тем в задаче: {cleanTopics.length}</span>
           </label>
           {taskError ? <span className="formError wide">{taskError}</span> : null}
@@ -8883,7 +8888,7 @@ function publicationIntervalLabel(intervalMinutes: number) {
 
 function defaultPromptTemplate(prompts: PromptTemplate[]): PromptTemplate | null {
   return prompts.find((prompt) => prompt.is_default)
-    || prompts.find((prompt) => prompt.name === "Промт рабочий")
+    || prompts.find((prompt) => prompt.name === "Промпт рабочий")
     || latestPromptTemplate(prompts);
 }
 

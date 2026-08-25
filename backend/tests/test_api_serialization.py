@@ -189,3 +189,44 @@ def test_regular_user_site_list_includes_all_project_statuses() -> None:
     assert {"DE обзорник", "not-in-focus.example", "duplicate.example"} <= {
         site["name"] for site in response.json()
     }
+
+
+def test_regular_user_can_create_and_manage_generation_tasks() -> None:
+    client, TestingSession = make_client()
+    with TestingSession() as db:
+        site_id = db.query(models.Site.id).scalar()
+        user = models.User(id="regular-user-id", username="regular-user", password_hash="test", is_admin=False, is_active=True)
+        db.add(user)
+        db.commit()
+    client.app.dependency_overrides[require_auth] = lambda: {
+        "id": "regular-user-id",
+        "username": "regular-user",
+        "is_admin": False,
+    }
+
+    section = client.post(f"/api/sites/{site_id}/sections", json={
+        "external_id": "guides",
+        "name": "Guides",
+        "path": "/guides/",
+        "menu_type": "header",
+    })
+    assert section.status_code == 200
+
+    created = client.post("/api/tasks", json={
+        "geo": "DK",
+        "language": "da",
+        "topics": ["Danske online casinoer"],
+        "site_id": site_id,
+        "save_as_draft": True,
+    })
+
+    assert created.status_code == 200
+    task_id = created.json()["id"]
+    assert client.get("/api/tasks").status_code == 200
+    assert client.delete(f"/api/tasks/{task_id}").status_code == 200
+    assert client.get(f"/api/tasks/{task_id}").status_code == 200
+    assert client.post(f"/api/tasks/{task_id}/restore").status_code == 200
+    assert client.get("/api/publication-content").status_code == 200
+    assert client.get("/api/publication-campaigns").status_code == 200
+    assert client.get("/api/publication-logs").status_code == 200
+    assert client.post("/api/content/missing/publish-now").status_code == 404

@@ -11,7 +11,7 @@ from app.schemas import ContentUpdate, GenerationTaskCreate, GenerationTaskRegen
 from app.services import create_generation_task, run_task_pipeline
 
 
-def test_task_archive_is_admin_only_and_reversible() -> None:
+def test_task_archive_is_available_to_regular_users_and_reversible() -> None:
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     Base.metadata.create_all(bind=engine)
@@ -31,12 +31,10 @@ def test_task_archive_is_admin_only_and_reversible() -> None:
         assert list_tasks(admin_user, db) == []
         assert [row.id for row in list_archived_tasks(admin_user, db)] == [task.id]
 
-        with pytest.raises(HTTPException) as exc:
-            get_task(task.id, regular_user, db)
-        assert exc.value.status_code == 404
+        assert get_task(task.id, regular_user, db)["task"].id == task.id
         assert get_task(task.id, admin_user, db)["task"].id == task.id
 
-        restored = restore_task(task.id, admin_user, db)
+        restored = restore_task(task.id, regular_user, db)
         assert restored.archived_at is None
         assert [row.id for row in list_tasks(admin_user, db)] == [task.id]
 

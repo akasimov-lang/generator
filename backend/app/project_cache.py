@@ -424,6 +424,12 @@ def sync_project_data_update(
 
 def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str, Any]:
     projects, skipped_duplicate_count = _deduplicate_cache_projects(projects)
+    default_prompt = db.scalar(
+        select(models.PromptTemplate)
+        .where(models.PromptTemplate.name.in_(("Промпт рабочий", "Промт рабочий", "Промпт тест 1 v6")))
+        .order_by(models.PromptTemplate.created_at.desc(), models.PromptTemplate.updated_at.desc())
+        .limit(1)
+    )
     working_canons = _working_project_canons()
     existing_sites = db.scalars(select(models.Site).where(models.Site.external_project_id.is_not(None))).all()
     sites_by_external_id = {site.external_project_id: site for site in existing_sites if site.external_project_id}
@@ -515,6 +521,8 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
         site.internal_pages_count = internal_pages_count
         site.domains_count = domains_count
         site.cache_domains = domains
+        if default_prompt and not site.default_prompt_template_id:
+            site.default_prompt_template_id = default_prompt.id
         if is_duplicate:
             site.project_status = "duplicate"
         elif site.project_status == "duplicate":

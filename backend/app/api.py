@@ -1410,7 +1410,7 @@ def list_site_campaigns(site_id: str, _: AuthUser, db: Session = Depends(get_db)
 
 
 @router.get("/tasks", response_model=list[GenerationTaskResponse])
-def list_tasks(_: AdminUser, db: Session = Depends(get_db)) -> Any:
+def list_tasks(_: AuthUser, db: Session = Depends(get_db)) -> Any:
     return db.scalars(
         select(models.GenerationTask)
         .where(models.GenerationTask.archived_at.is_(None))
@@ -1419,7 +1419,7 @@ def list_tasks(_: AdminUser, db: Session = Depends(get_db)) -> Any:
 
 
 @router.get("/tasks-archive", response_model=list[GenerationTaskResponse])
-def list_archived_tasks(_: AdminUser, db: Session = Depends(get_db)) -> Any:
+def list_archived_tasks(_: AuthUser, db: Session = Depends(get_db)) -> Any:
     return db.scalars(
         select(models.GenerationTask)
         .where(models.GenerationTask.archived_at.is_not(None))
@@ -1428,13 +1428,13 @@ def list_archived_tasks(_: AdminUser, db: Session = Depends(get_db)) -> Any:
 
 
 @router.post("/tasks", response_model=GenerationTaskResponse)
-def create_task(payload: GenerationTaskCreate, user: AdminUser, db: Session = Depends(get_db)) -> Any:
+def create_task(payload: GenerationTaskCreate, user: AuthUser, db: Session = Depends(get_db)) -> Any:
     _validate_task_topics(payload)
     return create_generation_task(db, payload, created_by_user_id=user["id"])
 
 
 @router.delete("/tasks/{task_id}")
-def archive_task(task_id: str, user: AdminUser, db: Session = Depends(get_db)) -> dict:
+def archive_task(task_id: str, user: AuthUser, db: Session = Depends(get_db)) -> dict:
     task = db.get(models.GenerationTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -1446,7 +1446,7 @@ def archive_task(task_id: str, user: AdminUser, db: Session = Depends(get_db)) -
 
 
 @router.post("/tasks/{task_id}/restore", response_model=GenerationTaskResponse)
-def restore_task(task_id: str, _: AdminUser, db: Session = Depends(get_db)) -> Any:
+def restore_task(task_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     task = db.get(models.GenerationTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -1478,17 +1478,17 @@ def update_task_section(task_id: str, payload: GenerationTaskSectionUpdate, _: A
 
 
 @router.get("/tasks/{task_id}", response_model=TaskDetailsResponse)
-def get_task(task_id: str, user: AuthUser, db: Session = Depends(get_db)) -> dict:
+def get_task(task_id: str, _: AuthUser, db: Session = Depends(get_db)) -> dict:
     task = db.get(models.GenerationTask, task_id)
-    if not task or (task.archived_at is not None and not user["is_admin"]):
+    if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     return {"task": task, "items": task.items}
 
 
 @router.get("/tasks/{task_id}/competitor-research", response_model=list[CompetitorResearchResponse])
-def get_task_competitor_research(task_id: str, user: AuthUser, db: Session = Depends(get_db)) -> Any:
+def get_task_competitor_research(task_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     task = db.get(models.GenerationTask, task_id)
-    if not task or (task.archived_at is not None and not user["is_admin"]):
+    if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     return [_competitor_research_response(db, item) for item in task.items]
 
@@ -1615,7 +1615,7 @@ def start_task_pipeline(task_id: str, _: AuthUser, db: Session = Depends(get_db)
 
 
 @router.get("/content", response_model=list[ContentItemResponse])
-def list_content(_: AdminUser, db: Session = Depends(get_db)) -> Any:
+def list_content(_: AuthUser, db: Session = Depends(get_db)) -> Any:
     return db.scalars(
         select(models.ContentItem)
         .join(models.GenerationTask, models.GenerationTask.id == models.ContentItem.task_id)
@@ -1626,7 +1626,7 @@ def list_content(_: AdminUser, db: Session = Depends(get_db)) -> Any:
 
 
 @router.get("/publication-content", response_model=list[PublicationContentResponse])
-def list_publication_content(_: AdminUser, db: Session = Depends(get_db)) -> Any:
+def list_publication_content(_: AuthUser, db: Session = Depends(get_db)) -> Any:
     rows = db.execute(
         select(
             models.ContentItem.id,
@@ -1880,7 +1880,7 @@ def approve_content(content_id: str, _: AuthUser, db: Session = Depends(get_db))
 
 
 @router.post("/content/{content_id}/publish-now", response_model=PublicationCampaignResponse)
-def publish_content_now(content_id: str, _: AdminUser, db: Session = Depends(get_db)) -> Any:
+def publish_content_now(content_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     item = db.get(models.ContentItem, content_id)
     if not item:
         raise HTTPException(status_code=404, detail="Content item not found")
@@ -1931,7 +1931,7 @@ def reject_content(content_id: str, _: AuthUser, db: Session = Depends(get_db)) 
 
 
 @router.post("/publication-campaigns", response_model=PublicationCampaignResponse)
-def create_campaign(payload: PublicationCampaignCreate, _: AdminUser, db: Session = Depends(get_db)) -> Any:
+def create_campaign(payload: PublicationCampaignCreate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     try:
         return schedule_campaign(db, payload)
     except ValueError as exc:
@@ -1939,7 +1939,7 @@ def create_campaign(payload: PublicationCampaignCreate, _: AdminUser, db: Sessio
 
 
 @router.get("/publication-campaigns", response_model=list[PublicationCampaignResponse])
-def list_campaigns(_: AdminUser, db: Session = Depends(get_db)) -> Any:
+def list_campaigns(_: AuthUser, db: Session = Depends(get_db)) -> Any:
     return db.scalars(select(models.PublicationCampaign).order_by(models.PublicationCampaign.created_at.desc())).all()
 
 
@@ -2056,7 +2056,7 @@ def publish_all_campaign_items(campaign_id: str, user: AuthUser, db: Session = D
 
 
 @router.get("/publication-logs", response_model=list[PublicationLogResponse])
-def list_logs(_: AdminUser, db: Session = Depends(get_db)) -> Any:
+def list_logs(_: AuthUser, db: Session = Depends(get_db)) -> Any:
     return db.scalars(select(models.PublicationLog).order_by(models.PublicationLog.created_at.desc()).limit(200)).all()
 
 
@@ -2153,7 +2153,7 @@ async def retry_admin_request_log(log_id: str, user: AdminUser, db: Session = De
 
 
 @router.post("/publication/run-due")
-def run_due_publication(_: AdminUser) -> dict:
+def run_due_publication(_: AuthUser) -> dict:
     from app.worker import publish_due_items
 
     result = publish_due_items.delay()

@@ -37,6 +37,12 @@ def test_find_project_page_normalizes_relative_and_absolute_slugs() -> None:
 
 def test_sync_imports_working_project_and_preserves_external_id() -> None:
     with make_session() as db:
+        working_prompt = models.PromptTemplate(
+            name="Промпт рабочий",
+            content="Working prompt content for every synchronized project.",
+            is_default=False,
+        )
+        db.add(working_prompt)
         projects = [
             {
                 "id": "cache-project-1",
@@ -79,8 +85,10 @@ def test_sync_imports_working_project_and_preserves_external_id() -> None:
         assert site.cache_domains == ["one.test", "two.test"]
         assert site.cache_server_ip == "crab-primary"
         assert site.default_menu["header"][0]["title"] == "App"
+        assert site.default_prompt_template_id == working_prompt.id
         assert site.project_status == "working"
         assert unrelated_site is not None
+        assert unrelated_site.default_prompt_template_id == working_prompt.id
         assert unrelated_site.project_status == "not_in_focus"
 
 

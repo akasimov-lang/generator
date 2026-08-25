@@ -1476,7 +1476,7 @@ async def generate_topic_suggestions(
     return accepted
 
 
-DEFAULT_PROJECT_PROMPT_NAME = "Промт рабочий"
+DEFAULT_PROJECT_PROMPT_NAME = "Промпт рабочий"
 
 
 def ensure_default_prompt_template(db: Session, site: models.Site) -> models.PromptTemplate:

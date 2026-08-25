@@ -6,7 +6,7 @@ from app import models
 from app.db import SessionLocal
 
 
-TARGET_PROMPT_NAME = "Промт рабочий"
+TARGET_PROMPT_NAME = "Промпт рабочий"
 SOURCE_PROMPT_NAMES = ("Промпт тест 1 v6", "Промпт тест 1 v5", "Промпт тест 1 v4")
 PROMPT_FILE = Path(__file__).resolve().parents[2] / "prompts" / "prompt_test_1_v6.txt"
 
