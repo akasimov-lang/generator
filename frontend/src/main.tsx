@@ -107,6 +107,7 @@ type ContentItem = {
   scheduled_at: string | null;
   published_at: string | null;
   published_url: string | null;
+  last_publication_status_code: number | null;
   deletion_requested_at: string | null;
   deletion_confirmed_at: string | null;
   deletion_error: string | null;
@@ -379,6 +380,7 @@ type PublicationContentItem = {
   include_casino_rating: boolean;
   generated_at: string | null;
   published_at: string | null;
+  last_publication_status_code: number | null;
   updated_at: string;
 };
 
@@ -483,6 +485,7 @@ type PublicationQueueItem = {
   include_casino_rating: boolean;
   scheduled_at: string | null;
   published_at: string | null;
+  last_publication_status_code: number | null;
 };
 
 type PublicationCampaignQueue = {
@@ -3692,7 +3695,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
               {item.section_id ? <small>{item.section_content_mode === "menu_page" ? "Контент пункта меню" : "Вложенная страница"}</small> : null}
             </span>,
             item.word_count,
-            <StatusBadge status={item.status} />,
+            <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} />,
             item.published_url ? <a href={item.published_url} target="_blank" rel="noreferrer"><ExternalLink size={15} /> URL</a> : item.published_at ? formatDate(item.published_at) : "-",
             <div className="userActions projectContentActions">
               <button className="button compact" type="button" onClick={() => openEditor(item)} disabled={isPublicationLocked(item)} title="Открыть и редактировать JSON payload"><Database size={15} /> JSON</button>
@@ -4137,7 +4140,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
             <div className="compactContentTopic" title={item.topic}><ContentTopicLabel item={item} /></div>,
             sectionLabel(item.section_id, sections),
             item.scheduled_at ? formatDate(item.scheduled_at) : "—",
-            <StatusBadge status={item.status} />,
+            <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} />,
             <button className="button compact primary publishImmediatelyButton" type="button" onClick={() => void publishImmediately(item)} disabled={publishingNowId === item.id || item.status === "publishing"}>
               <Send size={14} /> {publishingNowId === item.id ? "Отправляем…" : "Отправить"}
             </button>
@@ -4157,7 +4160,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
               sectionLabel(item.section_id, sections),
               <span className="publicationBacklogError">{errorLog?.error_message || (errorLog?.response_status ? `HTTP ${errorLog.response_status}` : "Ошибка публикации")}</span>,
               errorLog ? formatDate(errorLog.created_at) : formatDate(item.updated_at),
-              <StatusBadge status={item.status} />
+              <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} />
             ];
           })}
           rowClassNames={publicationBacklog.map(() => "publicationBacklogRow")}
@@ -4272,7 +4275,7 @@ function ProjectCampaignTreeItem({
               </span>,
               sectionLabel(item.section_id, sections),
               item.published_at ? formatDate(item.published_at) : item.scheduled_at ? formatDate(item.scheduled_at) : "—",
-              <StatusBadge status={item.status} />,
+              <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} />,
               <span className="projectCampaignRowActions">
                 {item.status !== "published" ? (
                   <button className="button compact primary publishImmediatelyButton" type="button" onClick={() => void onPublishImmediately(item)} disabled={publishingNowId === item.id || item.status === "publishing"}>
@@ -6901,7 +6904,7 @@ function PublicationsView({ api, sites, content, onOpenProject, onChanged }: Vie
               <button className="compactContentTopic publicationTopicButton" type="button" onClick={() => void openContentPreview(item.id)} disabled={previewLoadingId === item.id} title="Просмотреть текст и метаданные"><ContentTopicLabel item={item} /></button>,
               item.section_name || "Не выбран",
               item.published_at ? `Опубликовано ${formatDate(item.published_at)}` : item.scheduled_at ? formatDate(item.scheduled_at) : "—",
-              <StatusBadge status={item.status} />,
+              <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} />,
               ["scheduled", "retry_scheduled", "publication_paused", "approved"].includes(item.status) ? (
                 <button className="button compact primary publishImmediatelyButton" type="button" onClick={() => void publishCampaignQueueItem(item)} disabled={publishingQueueItemId === item.id}>
                   <Send size={14} /> {publishingQueueItemId === item.id ? "Отправляем…" : "Отправить"}
@@ -6950,7 +6953,7 @@ function PublicationsView({ api, sites, content, onOpenProject, onChanged }: Vie
                       columns={["Тема", "Статус", "Slug", "Слова", "Сгенерировано", "Опубликовано"]}
                       rows={items.map((item) => [
                         <button className="compactContentTopic publicationTopicButton" type="button" onClick={() => void openContentPreview(item.id)} disabled={previewLoadingId === item.id} title="Просмотреть текст и метаданные"><ContentTopicLabel item={item} /></button>,
-                        <StatusBadge status={item.status} />,
+                        <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} />,
                         <code>{item.slug}</code>,
                         item.word_count,
                         item.generated_at ? formatDate(item.generated_at) : "—",
@@ -9152,6 +9155,16 @@ function StatusBadge({ status }: { status: string }) {
     valid: "Готово"
   };
   return <span className={`status status-${status.replaceAll("_", "-")}`}>{labels[status] || status}</span>;
+}
+
+function PublicationStatus({ status, statusCode }: { status: string; statusCode?: number | null }) {
+  const responseClass = statusCode && statusCode >= 200 && statusCode < 300 ? "success" : "error";
+  return (
+    <span className="publicationStatusCell">
+      <StatusBadge status={status} />
+      {statusCode != null ? <small className={`publicationResponseCode ${responseClass}`} title={`Код ответа сервера: HTTP ${statusCode}`}>HTTP {statusCode}</small> : null}
+    </span>
+  );
 }
 
 function CampaignStatusBadge({ status }: { status: string }) {

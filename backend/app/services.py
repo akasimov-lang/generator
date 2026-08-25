@@ -2,6 +2,7 @@ import asyncio
 import copy
 import html
 import json
+import logging
 import re
 import uuid
 from collections import Counter
@@ -39,6 +40,7 @@ MAX_COMPETITOR_PAGE_CHARS = 1_200_000
 MAX_COMPETITOR_TEXT_CHARS = 60_000
 DATAFORSEO_COUNTRY_ALIASES = {"UK": "GB"}
 DATAFORSEO_LOCATION_CACHE: dict[tuple[str, str], dict[str, int]] = {}
+logger = logging.getLogger(__name__)
 
 
 class DataForSEOTransientError(ValueError):
@@ -3260,6 +3262,7 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
         endpoint = project_server_url(site, "/projects/create")
     except ProjectCacheError:
         endpoint = site.publication_endpoint
+    item.last_publication_status_code = None
     try:
         validate_content_for_publication(item)
     except ValueError as exc:
@@ -3295,6 +3298,13 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
                     "Idempotency-Key": item.idempotency_key,
                 },
             )
+        item.last_publication_status_code = response.status_code
+        logger.info(
+            "Content publication response: content_item_id=%s endpoint=%s status_code=%s",
+            item.id,
+            endpoint,
+            response.status_code,
+        )
         logged_payload = {**request_payload, "token": "[redacted]"}
         if initiator_username:
             logged_payload["requested_by"] = {"username": initiator_username}
@@ -3534,6 +3544,8 @@ async def publish_campaign_bundle(db: Session, campaign_id: str, log_id: str) ->
     endpoint = get_settings().bulk_publication_endpoint.strip()
     completed_at = datetime.now(timezone.utc)
     results: list[dict] = []
+    for item in items:
+        item.last_publication_status_code = None
 
     try:
         site = db.get(models.Site, campaign.site_id)
@@ -3569,6 +3581,13 @@ async def publish_campaign_bundle(db: Session, campaign_id: str, log_id: str) ->
             item = items_by_id.get(item_id)
             if not item:
                 continue
+            item.last_publication_status_code = response.status_code
+            logger.info(
+                "Bulk content publication response: content_item_id=%s endpoint=%s status_code=%s",
+                item.id,
+                endpoint,
+                response.status_code,
+            )
             item_result = response_items.get(item.id) or response_items.get(item.slug) or {}
             item_status = str(item_result.get("status") or "").lower()
             item_succeeded = request_succeeded and item_result.get("success") is not False and item_status not in {"failed", "error", "publication_failed"}

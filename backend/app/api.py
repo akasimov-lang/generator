@@ -1724,6 +1724,7 @@ def list_publication_content(_: AuthUser, db: Session = Depends(get_db)) -> Any:
             models.ContentItem.include_casino_rating,
             models.ContentItem.generated_at,
             models.ContentItem.published_at,
+            models.ContentItem.last_publication_status_code,
             models.ContentItem.updated_at,
         )
         .join(models.GenerationTask, models.GenerationTask.id == models.ContentItem.task_id)
@@ -2108,6 +2109,7 @@ def get_campaign_queue(campaign_id: str, _: AuthUser, db: Session = Depends(get_
                 "include_casino_rating": item.include_casino_rating,
                 "scheduled_at": item.scheduled_at,
                 "published_at": item.published_at,
+                "last_publication_status_code": item.last_publication_status_code,
             }
             for item, section_name in rows
         ],

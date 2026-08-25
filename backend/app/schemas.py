@@ -343,6 +343,7 @@ class PublicationContentResponse(BaseModel):
     include_casino_rating: bool
     generated_at: datetime | None
     published_at: datetime | None
+    last_publication_status_code: int | None
     updated_at: datetime
 
 
@@ -446,6 +447,7 @@ class ContentItemResponse(BaseModel):
     scheduled_at: datetime | None
     published_at: datetime | None
     published_url: str | None
+    last_publication_status_code: int | None
     deletion_requested_at: datetime | None
     deletion_confirmed_at: datetime | None
     deletion_error: str | None
@@ -613,6 +615,7 @@ class PublicationQueueItemResponse(BaseModel):
     include_casino_rating: bool
     scheduled_at: datetime | None
     published_at: datetime | None
+    last_publication_status_code: int | None
 
 
 class PublicationCampaignQueueResponse(BaseModel):

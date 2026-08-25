@@ -517,6 +517,7 @@ def test_project_server_requests_refresh_token_and_store_status_codes(db: Sessio
     assert menu_result["last_status_code"] == 201
     assert section.sync_status == "synced"
     assert item.status == "published"
+    assert item.last_publication_status_code == 201
     assert page_calls[0]["json"]["id"] != page_calls[0]["json"]["page"]["id"]
     page_log = db.scalar(
         select(models.PublicationLog)

@@ -191,6 +191,7 @@ class ContentItem(Base, TimestampMixin):
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     published_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_publication_status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
     deletion_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     deletion_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     deletion_error: Mapped[str | None] = mapped_column(Text, nullable=True)

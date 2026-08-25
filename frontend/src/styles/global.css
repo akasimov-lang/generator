@@ -6487,6 +6487,38 @@ td {
   white-space: nowrap;
 }
 
+.publicationStatusCell {
+  align-items: flex-start;
+  display: inline-flex;
+  flex-direction: column;
+  height: 32px;
+  justify-content: center;
+  min-width: 0;
+}
+
+.publicationStatusCell .status {
+  font-size: 11px;
+  line-height: 14px;
+  padding: 2px 8px;
+}
+
+.publicationResponseCode {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 11px;
+  padding-left: 8px;
+  white-space: nowrap;
+}
+
+.publicationResponseCode.success {
+  color: var(--success);
+}
+
+.publicationResponseCode.error {
+  color: var(--danger);
+}
+
 .status-generated,
 .status-approved,
 .status-published,
