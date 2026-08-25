@@ -2,6 +2,7 @@
 .ssh/
 PROJECT_MEMORY.local.md
 .env
+infra/nginx/certs/
 .env.*
 !.env.example
 node_modules/
