@@ -1991,8 +1991,6 @@ def approve_content(content_id: str, _: AuthUser, db: Session = Depends(get_db))
         raise HTTPException(status_code=404, detail="Content item not found")
     if item.status not in {"generated", "rejected", "approved"}:
         raise HTTPException(status_code=400, detail=f"Content in status '{item.status}' cannot be approved")
-    if item.site_id and not item.section_id:
-        raise HTTPException(status_code=400, detail="Select a menu item before approval")
     if item.site_id and item.section_id:
         _get_section_for_site(db, item.site_id, item.section_id)
     try:

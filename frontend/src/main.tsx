@@ -1386,6 +1386,7 @@ function DashboardView({ api, dashboard, tasks, content, sites, onOpenTask, onCh
   const awaitingItems = content.filter((item) => item.status === "generated");
   const awaitingItemIds = awaitingItems.map((item) => item.id);
   const selectedReviewItems = awaitingItems.filter((item) => selectedReviewIds.includes(item.id));
+  const selectedApprovableItems = selectedReviewItems.filter(canApproveContent);
   const selectedReadyItems = selectedReviewItems.filter((item) => Boolean(item.site_id && item.section_id));
   const allReviewSelected = awaitingItemIds.length > 0 && awaitingItemIds.every((id) => selectedReviewIds.includes(id));
   const bulkReviewBusy = actionId.startsWith("bulk:");
@@ -1517,14 +1518,14 @@ function DashboardView({ api, dashboard, tasks, content, sites, onOpenTask, onCh
   }
 
   async function bulkApproveReviewItems() {
-    if (!selectedReadyItems.length) return;
+    if (!selectedApprovableItems.length) return;
     setActionId("bulk:approve");
     setReviewError("");
     try {
-      const results = await Promise.allSettled(selectedReadyItems.map((item) => api(`/content/${item.id}/approve`, { method: "POST" })));
+      const results = await Promise.allSettled(selectedApprovableItems.map((item) => api(`/content/${item.id}/approve`, { method: "POST" })));
       const failed = results.filter((result) => result.status === "rejected").length;
       setSelectedReviewIds([]);
-      setSelectedPreview((current) => current && selectedReadyItems.some((item) => item.id === current.id) ? null : current);
+      setSelectedPreview((current) => current && selectedApprovableItems.some((item) => item.id === current.id) ? null : current);
       await onChanged();
       if (failed) setReviewError(`Не удалось согласовать часть текстов: ${failed}.`);
     } catch (error) {
@@ -1589,8 +1590,8 @@ function DashboardView({ api, dashboard, tasks, content, sites, onOpenTask, onCh
               Выбрать все
             </label>
             <span className="fieldHint">Выбрано: {selectedReviewItems.length}</span>
-            <button className="button compact approve" type="button" onClick={bulkApproveReviewItems} disabled={!selectedReadyItems.length || bulkReviewBusy} title={selectedReviewItems.length && !selectedReadyItems.length ? "Для выбранных текстов сначала назначьте проект и раздел" : undefined}>
-              <CheckCircle2 size={15} /> {actionId === "bulk:approve" ? "Согласовываю" : `Согласовать (${selectedReadyItems.length})`}
+            <button className="button compact approve" type="button" onClick={bulkApproveReviewItems} disabled={!selectedApprovableItems.length || bulkReviewBusy}>
+              <CheckCircle2 size={15} /> {actionId === "bulk:approve" ? "Согласовываю" : `Согласовать (${selectedApprovableItems.length})`}
             </button>
             <button className="button compact primary" type="button" onClick={bulkPublishReviewItems} disabled={!selectedReadyItems.length || bulkReviewBusy} title={selectedReviewItems.length && !selectedReadyItems.length ? "Для выбранных текстов сначала назначьте проект и раздел" : undefined}>
               <Send size={15} /> {actionId === "bulk:publish" ? "Отправляю" : `В публикацию (${selectedReadyItems.length})`}
@@ -1624,7 +1625,7 @@ function DashboardView({ api, dashboard, tasks, content, sites, onOpenTask, onCh
                 <div className="userActions dashboardReviewActions">
                   <button className="button compact" type="button" onClick={() => setSelectedPreview(item)} disabled={itemBusy}><Eye size={15} /> Просмотр</button>
                   <button className="button compact danger" type="button" onClick={() => deleteItem(item)} disabled={itemBusy}><Trash2 size={15} /> Удалить</button>
-                  <button className="button compact approve" type="button" onClick={() => approveItem(item)} disabled={itemBusy || !publicationReady} title={publicationReady ? undefined : "Сначала выберите раздел"}><CheckCircle2 size={15} /> Согласовать</button>
+                  <button className="button compact approve" type="button" onClick={() => approveItem(item)} disabled={itemBusy}><CheckCircle2 size={15} /> Согласовать</button>
                   <button className="button compact primary" type="button" onClick={() => sendToPublication(item)} disabled={itemBusy || !publicationReady} title={publicationReady ? "Согласовать и поставить в очередь публикации" : "Сначала выберите раздел"}><Send size={15} /> В публикацию</button>
                 </div>
               ];
@@ -1671,7 +1672,7 @@ function DashboardView({ api, dashboard, tasks, content, sites, onOpenTask, onCh
                 <RefreshCcw size={15} /> {actionId === `${selectedPreview.id}:generate` ? "Запускаю…" : "Сгенерировать заново"}
               </button>
               <button className="button compact danger" type="button" onClick={() => deleteItem(selectedPreview)} disabled={actionId.startsWith(selectedPreview.id)}><Trash2 size={15} /> Удалить</button>
-              <button className="button compact approve" type="button" onClick={() => approveItem(selectedPreview)} disabled={actionId.startsWith(selectedPreview.id) || !selectedPreview.section_id}><CheckCircle2 size={15} /> Согласовать</button>
+              <button className="button compact approve" type="button" onClick={() => approveItem(selectedPreview)} disabled={actionId.startsWith(selectedPreview.id)}><CheckCircle2 size={15} /> Согласовать</button>
               <button className="button compact primary" type="button" onClick={() => sendToPublication(selectedPreview)} disabled={actionId.startsWith(selectedPreview.id) || !selectedPreview.site_id || !selectedPreview.section_id}><Send size={15} /> В публикацию</button>
             </>
           }
@@ -3242,7 +3243,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
   const selectableIds = React.useMemo(() => content.filter((item) => !isPublicationLocked(item)).map((item) => item.id), [content]);
   const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.includes(id));
   const selectedItems = content.filter((item) => selectedIds.includes(item.id));
-  const bulkApproveItems = selectedItems.filter((item) => Boolean(item.section_id) && canApproveContent(item));
+  const bulkApproveItems = selectedItems.filter(canApproveContent);
   const bulkPublishItems = selectedItems.filter(canPublishContentImmediately);
   const awaitingPublicationCount = content.filter((item) => Boolean(item.generated_at) && item.status !== "published").length;
   const sectionContentCounts = React.useMemo(() => {
@@ -3471,13 +3472,12 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
 
   async function approve(item: ContentItem) {
     setEditorError("");
-    if (!item.section_id) {
-      setEditorError("Перед принятием выберите пункт меню.");
-      openEditor(item);
-      return;
+    try {
+      await api(`/content/${item.id}/approve`, { method: "POST" });
+      await onChanged();
+    } catch (error) {
+      setEditorError(error instanceof Error ? error.message : "Не удалось принять текст.");
     }
-    await api(`/content/${item.id}/approve`, { method: "POST" });
-    await onChanged();
   }
 
   async function publishImmediately(item: ContentItem) {
@@ -3530,7 +3530,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
           <button className="button compact primary" type="button" onClick={applyBulkSection} disabled={!selectedIds.length || !bulkSectionId || bulkBusy}>
             <CheckCircle2 size={15} /> {bulkBusy ? "Сохраняю" : `Назначить выбранным (${selectedIds.length})`}
           </button>
-          <button className="button compact approve" type="button" onClick={approveSelected} disabled={!bulkApproveItems.length || bulkBusy} title={selectedIds.length && !bulkApproveItems.length ? "Сначала назначьте пункт меню текстам со статусом generated" : undefined}>
+          <button className="button compact approve" type="button" onClick={approveSelected} disabled={!bulkApproveItems.length || bulkBusy}>
             <CheckCircle2 size={15} /> Принять ({bulkApproveItems.length})
           </button>
           <button className="button compact primary" type="button" onClick={publishSelected} disabled={!bulkPublishItems.length || bulkBusy} title={selectedIds.length && !bulkPublishItems.length ? "Сначала назначьте пункт меню" : "Сразу отправить JSON выбранных текстов на сервер проекта"}>
@@ -5244,7 +5244,7 @@ function TasksView({
       const failed = results.filter((result) => result.status === "rejected").length;
       await refreshExpandedTask();
       if (failed) {
-        setTaskError(`Не удалось принять часть текстов: ${failed}. Проверьте, выбран ли пункт меню.`);
+        setTaskError(`Не удалось принять часть текстов: ${failed}.`);
       }
     } catch (error) {
       setTaskError(error instanceof Error ? error.message : "Не удалось принять выбранные тексты.");
@@ -6416,7 +6416,7 @@ function ContentView({ api, sites, content, onChanged }: ViewProps & { sites: Si
       setSelectedIds([]);
       await onChanged();
       if (failed) {
-        setContentError(`Не удалось согласовать часть текстов: ${failed}. Проверьте, выбран ли пункт меню.`);
+        setContentError(`Не удалось согласовать часть текстов: ${failed}.`);
       }
     } catch (error) {
       setContentError(error instanceof Error ? error.message : "Не удалось согласовать выбранные тексты.");

@@ -3,12 +3,14 @@ from __future__ import annotations
 from collections.abc import Generator
 from datetime import datetime, timezone
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app import api as api_module
 from app import models
 from app.api import router
 from app.core.config import get_settings
@@ -140,6 +142,96 @@ def test_approve_rejects_invalid_payload() -> None:
 
     assert response.status_code == 400
     assert "Content validation failed" in response.json()["detail"]
+
+
+def test_regular_user_can_approve_valid_content_without_menu_item() -> None:
+    client, TestingSession = make_client()
+    client.app.dependency_overrides[require_auth] = lambda: {
+        "id": "regular-user-id",
+        "username": "Vitalina",
+        "is_admin": False,
+    }
+    with TestingSession() as db:
+        site = db.query(models.Site).one()
+        task = models.GenerationTask(title="Test", site_id=site.id, geo="LV", language="lv", topics_count=1)
+        item = models.ContentItem(
+            task=task,
+            site_id=site.id,
+            section_id=None,
+            topic="Valid",
+            slug="/valid/",
+            generated_json={
+                "pages": [{
+                    "slug": "/valid/",
+                    "title": "Valid",
+                    "content": {"blocks": [
+                        {"type": "header", "data": {"text": "Valid", "level": 1}},
+                        {"type": "header", "data": {"text": "Details", "level": 2}},
+                        {"type": "paragraph", "data": {"text": "Reviewed content."}},
+                    ]},
+                }],
+            },
+            status="generated",
+            idempotency_key="regular-user-valid-approve",
+        )
+        db.add_all([task, item])
+        db.commit()
+        item_id = item.id
+
+    response = client.post(f"/api/content/{item_id}/approve")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "approved"
+    assert response.json()["section_id"] is None
+
+
+def test_regular_user_can_publish_content(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, TestingSession = make_client()
+    client.app.dependency_overrides[require_auth] = lambda: {
+        "id": "regular-user-id",
+        "username": "Vitalina",
+        "is_admin": False,
+    }
+    with TestingSession() as db:
+        site = db.query(models.Site).one()
+        section = models.Section(site_id=site.id, external_id="main", name="Main", path="/")
+        db.add(section)
+        db.flush()
+        task = models.GenerationTask(title="Test", site_id=site.id, geo="LV", language="lv", topics_count=1)
+        item = models.ContentItem(
+            task=task,
+            site_id=site.id,
+            section_id=section.id,
+            topic="Publishable",
+            slug="/publishable/",
+            generated_json={
+                "pages": [{
+                    "slug": "/publishable/",
+                    "title": "Publishable",
+                    "content": {"blocks": [
+                        {"type": "header", "data": {"text": "Publishable", "level": 1}},
+                        {"type": "header", "data": {"text": "Details", "level": 2}},
+                        {"type": "paragraph", "data": {"text": "Reviewed content."}},
+                    ]},
+                }],
+            },
+            status="approved",
+            idempotency_key="regular-user-publish",
+        )
+        db.add_all([task, item])
+        db.commit()
+        item_id = item.id
+
+    async def fake_publish_item(db: Session, item: models.ContentItem, site: models.Site, *, initiator_username: str = "system") -> None:
+        assert initiator_username == "Vitalina"
+        item.status = "published"
+
+    monkeypatch.setattr(api_module, "publish_item", fake_publish_item)
+
+    response = client.post(f"/api/content/{item_id}/publish-immediately")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "published"
 
 
 def test_user_can_manage_personal_favorite_sites() -> None:
