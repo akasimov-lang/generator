@@ -20,6 +20,7 @@ from app.services import (
     build_nested_page_slug,
     build_campaign_publication_bundle,
     publish_item,
+    delete_published_item,
     refresh_campaign_status,
     reschedule_campaign,
     schedule_campaign,
@@ -89,6 +90,74 @@ def test_publication_validation_rejects_invalid_payload_and_state(db: Session) -
     _, draft_item = make_content(db, status="draft")
     with pytest.raises(ValueError, match="cannot be approved or published"):
         validate_content_for_publication(draft_item)
+
+
+def test_delete_published_item_targets_current_server_and_waits_for_cache_confirmation(
+    db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    site, item = make_content(db, status="published")
+    site.name = "manual-delete.example"
+    site.cache_server_ip = "stale"
+    item.published_at = datetime.now(timezone.utc)
+    db.add(models.PublicationLog(
+        content_item_id=item.id,
+        endpoint_url="https://old.example/projects/create",
+        request_payload={"id": 1725000000000, "page": {"id": "published-page-id", "slug": "/test/"}},
+        response_status=201,
+        response_body={"ok": True},
+    ))
+    db.commit()
+    calls: list[dict] = []
+
+    def fake_refresh_server_id(_db: Session, target_site: models.Site) -> str:
+        target_site.cache_server_ip = "camel"
+        _db.commit()
+        return "camel"
+
+    class FakeResponse:
+        status_code = 200
+        text = ""
+
+        @staticmethod
+        def json() -> dict:
+            return {"ok": True}
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url: str, json: dict, headers: dict | None = None):
+            calls.append({"url": url, "json": json, "headers": headers or {}})
+            return FakeResponse()
+
+    monkeypatch.setattr(service_module, "refresh_project_server_id", fake_refresh_server_id)
+    monkeypatch.setattr(service_module, "refresh_project_server_token", lambda client: asyncio.sleep(0, result="fresh-token"))
+    monkeypatch.setattr(service_module.httpx, "AsyncClient", FakeAsyncClient)
+
+    asyncio.run(delete_published_item(db, item, site, initiator_username="editor"))
+
+    assert item.status == "deletion_pending"
+    assert item.deletion_requested_at is not None
+    assert item.deletion_confirmed_at is None
+    assert calls[0]["url"] == "https://camel.slf-hostesting.com/projects/delete"
+    assert calls[0]["json"]["folder"] == "manual-delete.example"
+    assert calls[0]["json"]["id"] == 1725000000000
+    assert calls[0]["json"]["pageId"] == "published-page-id"
+    assert calls[0]["json"]["slug"] == "/test/"
+    assert calls[0]["headers"]["Authorization"] == "Bearer fresh-token"
+    deletion_log = db.scalar(
+        select(models.PublicationLog)
+        .where(models.PublicationLog.content_item_id == item.id)
+        .order_by(models.PublicationLog.created_at.desc())
+    )
+    assert deletion_log.request_payload["action"] == "content_delete"
+    assert deletion_log.request_payload["token"] == "[redacted]"
 
 
 def test_campaign_pause_resume_and_stop_updates_queued_content(db: Session) -> None:

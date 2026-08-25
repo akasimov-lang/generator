@@ -107,6 +107,9 @@ type ContentItem = {
   scheduled_at: string | null;
   published_at: string | null;
   published_url: string | null;
+  deletion_requested_at: string | null;
+  deletion_confirmed_at: string | null;
+  deletion_error: string | null;
   generated_json: Record<string, unknown>;
   generation_prompt_name: string | null;
   generated_at: string | null;
@@ -3688,6 +3691,8 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
   const [publishingNowId, setPublishingNowId] = React.useState("");
   const [selectedProcessIds, setSelectedProcessIds] = React.useState<string[]>([]);
   const [publishingProcessSelection, setPublishingProcessSelection] = React.useState(false);
+  const [deletingProcessSelection, setDeletingProcessSelection] = React.useState(false);
+  const [deletingProcessItemId, setDeletingProcessItemId] = React.useState("");
   const [publishingAllCampaignId, setPublishingAllCampaignId] = React.useState("");
   const [reschedulingCampaignId, setReschedulingCampaignId] = React.useState("");
   const [previewItem, setPreviewItem] = React.useState<ContentItem | null>(null);
@@ -3695,12 +3700,16 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
     && ["generated", "rejected", "approved"].includes(item.status)
     && (!selectedPublicationSectionIds.length || (item.section_id && selectedPublicationSectionIds.includes(item.section_id))));
   const publishedContent = content
-    .filter((item) => item.status === "published")
-    .sort((left, right) => new Date(left.published_at || 0).getTime() - new Date(right.published_at || 0).getTime());
+    .filter((item) => ["published", "deletion_pending", "deleted"].includes(item.status))
+    .sort((left, right) => new Date(left.published_at || left.deletion_requested_at || 0).getTime() - new Date(right.published_at || right.deletion_requested_at || 0).getTime());
   const publicationProcessItems = [...publicationReady, ...publishedContent];
-  const processSelectableIds = publicationProcessItems.filter(canPublishContentImmediately).map((item) => item.id);
+  const processSelectableIds = publicationProcessItems
+    .filter((item) => canPublishContentImmediately(item) || item.status === "published")
+    .map((item) => item.id);
   const allProcessItemsSelected = processSelectableIds.length > 0 && processSelectableIds.every((id) => selectedProcessIds.includes(id));
-  const selectedProcessItems = publicationProcessItems.filter((item) => selectedProcessIds.includes(item.id) && canPublishContentImmediately(item));
+  const selectedProcessItems = publicationProcessItems.filter((item) => selectedProcessIds.includes(item.id));
+  const selectedPublishableProcessItems = selectedProcessItems.filter(canPublishContentImmediately);
+  const selectedDeletableProcessItems = selectedProcessItems.filter((item) => item.status === "published");
   const publicationSections = sections
     .map((section) => ({ section, count: content.filter((item) => ["generated", "rejected", "approved"].includes(item.status) && item.section_id === section.id).length }))
     .filter(({ count }) => count > 0);
@@ -3781,12 +3790,12 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
   }
 
   async function publishSelectedProcessItems() {
-    if (!selectedProcessItems.length) return;
-    if (!window.confirm(`Опубликовать выбранные тексты (${selectedProcessItems.length}) сейчас, без ожидания очереди?`)) return;
+    if (!selectedPublishableProcessItems.length) return;
+    if (!window.confirm(`Опубликовать выбранные тексты (${selectedPublishableProcessItems.length}) сейчас, без ожидания очереди?`)) return;
     setPublishingProcessSelection(true);
     setFormError("");
     try {
-      const results = await Promise.allSettled(selectedProcessItems.map((item) => api(`/content/${item.id}/publish-immediately`, { method: "POST" })));
+      const results = await Promise.allSettled(selectedPublishableProcessItems.map((item) => api(`/content/${item.id}/publish-immediately`, { method: "POST" })));
       const failed = results.filter((result) => result.status === "rejected").length;
       setSelectedProcessIds([]);
       await onChanged();
@@ -3795,6 +3804,41 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
       setFormError(error instanceof Error ? error.message : "Не удалось опубликовать выбранные тексты.");
     } finally {
       setPublishingProcessSelection(false);
+    }
+  }
+
+  async function deletePublishedItem(item: ContentItem) {
+    if (!window.confirm(`Удалить опубликованный текст «${item.topic}» с проекта? После запроса потребуется обновить проект.`)) return;
+    setDeletingProcessItemId(item.id);
+    setFormError("");
+    try {
+      await api<ContentItem>(`/content/${item.id}/delete-published`, { method: "POST" });
+      setSelectedProcessIds((current) => current.filter((id) => id !== item.id));
+      await onChanged();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось удалить опубликованный текст.");
+    } finally {
+      setDeletingProcessItemId("");
+    }
+  }
+
+  async function deleteSelectedPublishedItems() {
+    if (!selectedDeletableProcessItems.length) return;
+    if (!window.confirm(`Удалить выбранные опубликованные тексты с проекта: ${selectedDeletableProcessItems.length}? После запроса потребуется обновить проект.`)) return;
+    setDeletingProcessSelection(true);
+    setFormError("");
+    try {
+      const result = await api<{ accepted_count: number; failed_count: number; errors: string[] }>(`/sites/${site.id}/content/delete-published`, {
+        method: "POST",
+        body: JSON.stringify({ content_item_ids: selectedDeletableProcessItems.map((item) => item.id) })
+      });
+      setSelectedProcessIds([]);
+      await onChanged();
+      if (result.failed_count) setFormError(`Не удалось удалить часть текстов: ${result.failed_count}. ${result.errors.slice(0, 2).join("; ")}`);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось удалить выбранные опубликованные тексты.");
+    } finally {
+      setDeletingProcessSelection(false);
     }
   }
 
@@ -3933,8 +3977,11 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
       {mode === "workflow" && workflowSection === "process" ? <DataPanel id="workspace-section-process" collapseKey="publication-process" title={`Процесс публикации · ${publicationProcessItems.length}`}>
         <div className="publicationProcessBulkToolbar">
           <span>Выбрано: <strong>{selectedProcessItems.length}</strong></span>
-          <button className="button compact primary" type="button" onClick={() => void publishSelectedProcessItems()} disabled={!selectedProcessItems.length || publishingProcessSelection}>
-            <Send size={15} /> {publishingProcessSelection ? "Публикуем…" : `Опубликовать (${selectedProcessItems.length})`}
+          <button className="button compact primary" type="button" onClick={() => void publishSelectedProcessItems()} disabled={!selectedPublishableProcessItems.length || publishingProcessSelection || deletingProcessSelection}>
+            <Send size={15} /> {publishingProcessSelection ? "Публикуем…" : `Опубликовать (${selectedPublishableProcessItems.length})`}
+          </button>
+          <button className="button compact danger" type="button" onClick={() => void deleteSelectedPublishedItems()} disabled={!selectedDeletableProcessItems.length || deletingProcessSelection || publishingProcessSelection}>
+            <Trash2 size={15} /> {deletingProcessSelection ? "Удаляем…" : `Удалить (${selectedDeletableProcessItems.length})`}
           </button>
         </div>
         <ResponsiveTable
@@ -3953,17 +4000,26 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
               type="checkbox"
               checked={selectedProcessIds.includes(item.id)}
               onChange={() => toggleProcessItem(item.id)}
-              disabled={!canPublishContentImmediately(item) || publishingProcessSelection}
+              disabled={(!canPublishContentImmediately(item) && item.status !== "published") || publishingProcessSelection || deletingProcessSelection}
               aria-label={`Выбрать ${item.topic}`}
-              title={item.status === "published" ? "Текст уже опубликован" : undefined}
+              title={item.status === "deletion_pending" ? "Удаление уже отправлено, требуется обновить проект" : item.status === "deleted" ? "Текст удалён с проекта" : undefined}
             />,
             <div className="compactContentTopic" title={item.topic}><ContentTopicLabel item={item} /></div>,
             sectionLabel(item.section_id, sections),
             item.slug,
             item.status === "published" ? (
-              <span className="publishedProcessState" title={item.published_at ? `Опубликовано ${formatDate(item.published_at)}` : "Опубликовано"}>
-                <CheckCircle2 size={14} /> <strong>Опубликовано</strong><span>·</span><time>{item.published_at ? formatDate(item.published_at) : "—"}</time>
+              <span className="publicationProcessActions">
+                <span className="publishedProcessState" title={item.published_at ? `Опубликовано ${formatDate(item.published_at)}` : "Опубликовано"}>
+                  <CheckCircle2 size={14} /> <strong>Опубликовано</strong><span>·</span><time>{item.published_at ? formatDate(item.published_at) : "—"}</time>
+                </span>
+                <button className="button icon compact danger" type="button" onClick={() => void deletePublishedItem(item)} disabled={deletingProcessItemId === item.id || deletingProcessSelection} title="Удалить текст с проекта" aria-label={`Удалить ${item.topic} с проекта`}>
+                  {deletingProcessItemId === item.id ? <LoaderCircle className="spin" size={14} /> : <Trash2 size={14} />}
+                </button>
               </span>
+            ) : item.status === "deletion_pending" ? (
+              <span className="deletedProcessState pending"><RefreshCcw size={14} /><strong>Удалено, требуется обновить проект</strong></span>
+            ) : item.status === "deleted" ? (
+              <span className="deletedProcessState"><Trash2 size={14} /><strong>Удалено</strong><span>·</span><time>{item.deletion_confirmed_at ? formatDate(item.deletion_confirmed_at) : "—"}</time></span>
             ) : (
               <button className="button compact primary publishImmediatelyButton" type="button" onClick={() => void publishImmediately(item)} disabled={publishingNowId === item.id}>
                 <Send size={14} /> {publishingNowId === item.id ? "Публикуем…" : "Опубликовать сейчас"}

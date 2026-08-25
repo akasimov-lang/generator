@@ -34,6 +34,8 @@ from app.schemas import (
     MenuLibraryItemUpdate,
     MenuVisibilityCheckResponse,
     PasswordChange,
+    PublishedContentBulkDeleteRequest,
+    PublishedContentBulkDeleteResponse,
     PublicationCampaignResponse,
     PublicationCampaignReschedule,
     PublicationCampaignUpdate,
@@ -78,6 +80,7 @@ from app.services import (
     build_competitor_brief_for_item,
     collect_competitor_serp_for_item,
     count_words,
+    delete_published_item,
     append_casino_rating_requirement,
     compose_prompt_with_base,
     create_generation_task,
@@ -1922,6 +1925,63 @@ def delete_content(content_id: str, _: AuthUser, db: Session = Depends(get_db)) 
             task.status = "empty"
     db.commit()
     return {"status": "ok"}
+
+
+@router.post("/content/{content_id}/delete-published", response_model=ContentItemResponse)
+async def delete_published_content(content_id: str, user: AuthUser, db: Session = Depends(get_db)) -> Any:
+    item = db.get(models.ContentItem, content_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Content item not found")
+    if not item.site_id:
+        raise HTTPException(status_code=400, detail="Published content does not have a project")
+    site = _get_site_or_404(db, item.site_id)
+    try:
+        await delete_published_item(db, item, site, initiator_username=_request_username(user))
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except ProjectCacheError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    db.refresh(item)
+    return item
+
+
+@router.post(
+    "/sites/{site_id}/content/delete-published",
+    response_model=PublishedContentBulkDeleteResponse,
+)
+async def delete_published_content_bulk(
+    site_id: str,
+    payload: PublishedContentBulkDeleteRequest,
+    user: AuthUser,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    site = _get_site_or_404(db, site_id)
+    unique_ids = list(dict.fromkeys(payload.content_item_ids))
+    items = db.scalars(
+        select(models.ContentItem).where(
+            models.ContentItem.site_id == site.id,
+            models.ContentItem.id.in_(unique_ids),
+        )
+    ).all()
+    items_by_id = {item.id: item for item in items}
+    errors: list[str] = []
+    accepted_count = 0
+    for content_id in unique_ids:
+        item = items_by_id.get(content_id)
+        if not item:
+            errors.append(f"{content_id}: текст не найден в выбранном проекте")
+            continue
+        try:
+            await delete_published_item(db, item, site, initiator_username=_request_username(user))
+            accepted_count += 1
+        except (ValueError, ProjectCacheError) as error:
+            errors.append(f"{item.topic}: {error}")
+    return {
+        "requested_count": len(unique_ids),
+        "accepted_count": accepted_count,
+        "failed_count": len(errors),
+        "errors": errors,
+    }
 
 
 @router.post("/content/{content_id}/approve", response_model=ContentItemResponse)

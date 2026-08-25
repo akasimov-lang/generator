@@ -396,6 +396,41 @@ def _internal_pages_count(project: dict[str, Any]) -> int:
     )
 
 
+def _normalized_page_slug(value: Any) -> str:
+    slug = str(value or "").strip().split("?", 1)[0].split("#", 1)[0]
+    if not slug:
+        return "/"
+    slug = "/" + slug.strip("/")
+    return slug if slug == "/" else f"{slug}/"
+
+
+def _confirm_deleted_content(db: Session, site: models.Site, project: dict[str, Any], now: datetime) -> int:
+    """Confirm a requested deletion only after fresh project data no longer contains its slug."""
+    data = project.get("data") if isinstance(project.get("data"), dict) else None
+    if not isinstance(data, dict) or not isinstance(data.get("pages"), list):
+        return 0
+    project_slugs = {
+        _normalized_page_slug(page.get("slug"))
+        for page in data["pages"]
+        if isinstance(page, dict)
+    }
+    pending_items = db.scalars(
+        select(models.ContentItem).where(
+            models.ContentItem.site_id == site.id,
+            models.ContentItem.status == "deletion_pending",
+        )
+    ).all()
+    confirmed = 0
+    for item in pending_items:
+        if _normalized_page_slug(item.slug) in project_slugs:
+            continue
+        item.status = "deleted"
+        item.deletion_confirmed_at = now
+        item.deletion_error = None
+        confirmed += 1
+    return confirmed
+
+
 def _project_domains(project: dict[str, Any]) -> list[str]:
     settings = project.get("settings") if isinstance(project.get("settings"), dict) else {}
     domains = settings.get("domains") if isinstance(settings.get("domains"), list) else []
@@ -682,6 +717,7 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
         elif site.project_status == "duplicate":
             site.project_status = "working" if is_working_project else "not_in_focus"
         site.default_menu = menu
+        _confirm_deleted_content(db, site, project, now)
         confirmed_sections_count += _confirm_synchronized_sections(db, site, menu)
         site.has_menu = has_menu
         site.cache_synced_at = now

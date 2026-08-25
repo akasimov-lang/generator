@@ -92,6 +92,58 @@ def test_sync_imports_working_project_and_preserves_external_id() -> None:
         assert unrelated_site.project_status == "not_in_focus"
 
 
+def test_fresh_cache_confirms_requested_page_deletion_only_when_slug_is_absent() -> None:
+    with make_session() as db:
+        site = models.Site(
+            name="delete-confirmation.example",
+            base_url="https://delete-confirmation.example",
+            publication_endpoint="https://delete-confirmation.example/api/content",
+            external_project_id="delete-confirmation",
+        )
+        db.add(site)
+        db.flush()
+        task = models.GenerationTask(title="Delete", site_id=site.id, geo="DK", language="da", topics_count=2)
+        db.add(task)
+        db.flush()
+        absent = models.ContentItem(
+            task=task,
+            site_id=site.id,
+            topic="Absent page",
+            slug="/guides/absent/",
+            generated_json={"pages": []},
+            status="deletion_pending",
+            idempotency_key="delete-absent",
+            deletion_requested_at=datetime.now(timezone.utc),
+        )
+        present = models.ContentItem(
+            task=task,
+            site_id=site.id,
+            topic="Present page",
+            slug="/guides/present/",
+            generated_json={"pages": []},
+            status="deletion_pending",
+            idempotency_key="delete-present",
+            deletion_requested_at=datetime.now(timezone.utc),
+        )
+        db.add_all([absent, present])
+        db.commit()
+
+        sync_project_cache(db, [{
+            "id": "delete-confirmation",
+            "name": site.name,
+            "serverId": "camel",
+            "settings": {"canon": site.name},
+            "data": {"menu": {"header": [], "footer": []}, "pages": [{"slug": "/guides/present/"}]},
+        }])
+
+        db.refresh(absent)
+        db.refresh(present)
+        assert absent.status == "deleted"
+        assert absent.deletion_confirmed_at is not None
+        assert present.status == "deletion_pending"
+        assert present.deletion_confirmed_at is None
+
+
 def test_menu_capabilities_are_detected_per_template() -> None:
     capabilities = analyze_menu_templates([
         {"name": "header.hbs", "data": "{{#each headerMenu}}<a>{{title}}</a>{{#if this.children}}{{/if}}{{/each}}"},

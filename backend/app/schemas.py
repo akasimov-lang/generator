@@ -446,8 +446,22 @@ class ContentItemResponse(BaseModel):
     scheduled_at: datetime | None
     published_at: datetime | None
     published_url: str | None
+    deletion_requested_at: datetime | None
+    deletion_confirmed_at: datetime | None
+    deletion_error: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class PublishedContentBulkDeleteRequest(BaseModel):
+    content_item_ids: list[str] = Field(min_length=1, max_length=200)
+
+
+class PublishedContentBulkDeleteResponse(BaseModel):
+    requested_count: int
+    accepted_count: int
+    failed_count: int
+    errors: list[str] = Field(default_factory=list)
 
 
 class SiteOverviewSiteResponse(BaseModel):

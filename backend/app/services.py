@@ -3339,6 +3339,89 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
         db.commit()
 
 
+async def delete_published_item(
+    db: Session,
+    item: models.ContentItem,
+    site: models.Site,
+    initiator_username: str | None = None,
+) -> None:
+    """Request page deletion on the project's current server and await cache confirmation."""
+    if item.status != "published":
+        raise ValueError("Only published content can be deleted from a project")
+    refresh_project_server_id(db, site)
+    endpoint = project_server_url(site, "/projects/delete")
+    published_log = db.scalar(
+        select(models.PublicationLog)
+        .where(
+            models.PublicationLog.content_item_id == item.id,
+            models.PublicationLog.response_status >= 200,
+            models.PublicationLog.response_status < 300,
+        )
+        .order_by(models.PublicationLog.created_at.desc())
+        .limit(1)
+    )
+    original_payload = published_log.request_payload if published_log and isinstance(published_log.request_payload, dict) else {}
+    original_page = original_payload.get("page") if isinstance(original_payload.get("page"), dict) else {}
+    requested_at = datetime.now(timezone.utc)
+    timestamp = requested_at.strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            token = await refresh_project_server_token(client)
+            request_payload = {
+                "folder": site.name,
+                "id": original_payload.get("id") or original_page.get("id"),
+                "pageId": original_page.get("id"),
+                "slug": item.slug,
+                "path": item.slug,
+                "page": {"id": original_page.get("id"), "slug": item.slug},
+                "token": token,
+                "initiator": get_settings().project_cache_username,
+                "dateTime": timestamp,
+            }
+            response = await client.post(
+                endpoint,
+                json=request_payload,
+                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            )
+        try:
+            response_body = response.json()
+        except Exception:
+            response_body = {"raw": response.text}
+        logged_payload = {**request_payload, "token": "[redacted]"}
+        if initiator_username:
+            logged_payload["requested_by"] = {"username": initiator_username}
+        successful = 200 <= response.status_code < 300
+        db.add(models.PublicationLog(
+            content_item_id=item.id,
+            endpoint_url=endpoint,
+            request_payload={"action": "content_delete", **logged_payload},
+            response_status=response.status_code,
+            response_body=response_body if isinstance(response_body, dict) else {"data": response_body},
+            error_message=None if successful else f"Delete endpoint returned HTTP {response.status_code}",
+        ))
+        if not successful:
+            item.deletion_error = f"HTTP {response.status_code}"
+            db.commit()
+            raise ProjectCacheError(f"Delete endpoint returned HTTP {response.status_code}")
+        item.status = "deletion_pending"
+        item.deletion_requested_at = requested_at
+        item.deletion_confirmed_at = None
+        item.deletion_error = None
+        db.commit()
+    except ProjectCacheError:
+        raise
+    except Exception as exc:
+        item.deletion_error = str(exc)[:1000]
+        db.add(models.PublicationLog(
+            content_item_id=item.id,
+            endpoint_url=endpoint,
+            request_payload={"action": "content_delete", "folder": site.name, "slug": item.slug, "requested_by": {"username": initiator_username}},
+            error_message=str(exc)[:1000],
+        ))
+        db.commit()
+        raise ProjectCacheError(f"Content deletion request failed: {exc}") from exc
+
+
 def build_publication_payload(db: Session, item: models.ContentItem) -> dict:
     payload = copy.deepcopy(item.generated_json)
     if not item.section_id:

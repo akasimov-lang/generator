@@ -6231,7 +6231,14 @@ td {
 
 .projectPublicationProcessTable th:last-child,
 .projectPublicationProcessTable td:last-child {
-  width: 235px;
+  width: 300px;
+}
+
+.publicationProcessActions {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  max-width: 100%;
 }
 
 .publishedProcessState {
@@ -6255,6 +6262,27 @@ td {
 .publishedProcessState time {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.deletedProcessState {
+  align-items: center;
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
+  border-radius: 7px;
+  color: var(--danger);
+  display: inline-flex;
+  font-size: 11px;
+  gap: 4px;
+  min-height: 28px;
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+
+.deletedProcessState.pending {
+  background: color-mix(in srgb, #d79300 9%, var(--surface));
+  border-color: color-mix(in srgb, #d79300 40%, var(--border));
+  color: #9a6500;
+  white-space: normal;
 }
 
 .projectPublicationQueueTable th:first-child,
