@@ -3233,14 +3233,24 @@ h2 {
 }
 
 .siteMenuNestedPageCount {
+  align-items: center;
   background: color-mix(in srgb, var(--primary) 11%, white);
+  border: 1px solid transparent;
   border-radius: 999px;
   color: var(--primary);
+  cursor: pointer;
+  display: inline-flex;
   flex: 0 0 auto;
   font-size: 9px;
   font-weight: 750;
+  gap: 3px;
   padding: 3px 7px;
   white-space: nowrap;
+}
+
+.siteMenuNestedPageCount:hover {
+  background: var(--primary-soft);
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
 }
 
 .siteMenuPreviewItemText code {

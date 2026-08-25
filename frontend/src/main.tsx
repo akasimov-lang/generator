@@ -7746,8 +7746,15 @@ function SiteMenuPreviewSection({ title, items, sections = [], content = [], ico
   const menuType = title.includes("Footer") ? "footer" : "header";
   const tree = React.useMemo(() => buildMenuTree(items, sections), [items, sections]);
   const [collapsedKeys, setCollapsedKeys] = React.useState<Set<string>>(() => collapsibleMenuKeys(tree));
+  const [collapsedPageKeys, setCollapsedPageKeys] = React.useState<Set<string>>(() => new Set());
   const itemCount = countMenuTree(tree);
   const toggleNode = (key: string) => setCollapsedKeys((current) => {
+    const next = new Set(current);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  });
+  const togglePages = (key: string) => setCollapsedPageKeys((current) => {
     const next = new Set(current);
     if (next.has(key)) next.delete(key);
     else next.add(key);
@@ -7760,6 +7767,7 @@ function SiteMenuPreviewSection({ title, items, sections = [], content = [], ico
         const hasChildren = node.children.length > 0;
         const nestedCount = countMenuTree(node.children);
         const collapsed = collapsedKeys.has(node.key);
+        const pagesCollapsed = collapsedPageKeys.has(node.key);
         const nestedPages = node.section
           ? content
               .filter((item) => item.section_id === node.section?.id && (Boolean(item.generated_at) || item.status === "published"))
@@ -7775,7 +7783,11 @@ function SiteMenuPreviewSection({ title, items, sections = [], content = [], ico
               {hasChildren ? <span className="siteMenuTreeBranchSpacer" /> : <button className="siteMenuTreeToggle" type="button" disabled><span /></button>}
               <div className="siteMenuPreviewItemText"><strong>{node.item.title}</strong>{node.item.path ? <code>{node.item.path}</code> : null}</div>
               {onPreviewPage ? <button className="siteMenuPagePreviewButton" type="button" onClick={() => onPreviewPage(node.item, node.key)} disabled={pagePreviewLoadingKey === node.key} title="Просмотреть текст страницы" aria-label={`Просмотреть текст страницы: ${node.item.title}`}>{pagePreviewLoadingKey === node.key ? <LoaderCircle size={14} /> : <Eye size={14} />}</button> : null}
-              {nestedPages.length ? <span className="siteMenuNestedPageCount">Страниц: {nestedPages.length}</span> : null}
+              {nestedPages.length ? (
+                <button className="siteMenuNestedPageCount" type="button" onClick={() => togglePages(node.key)} aria-expanded={!pagesCollapsed} aria-label={`${pagesCollapsed ? "Развернуть" : "Свернуть"} вложенные страницы пункта ${node.item.title}`}>
+                  {pagesCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />} Страниц: {nestedPages.length}
+                </button>
+              ) : null}
               {hasChildren ? <button className="siteMenuTreeToggle hasChildren" type="button" onClick={() => toggleNode(node.key)} aria-label={`${collapsed ? "Развернуть" : "Свернуть"} ${node.item.title}`}>
                 {collapsed ? <ChevronRight size={17} /> : <ChevronDown size={17} />}<span className="siteMenuTreeToggleLabel">{collapsed ? "Показать все" : "Свернуть"}</span><span className="siteMenuTreeNestedCount">{nestedCount}</span>
               </button> : null}
@@ -7783,7 +7795,7 @@ function SiteMenuPreviewSection({ title, items, sections = [], content = [], ico
               {onAddChild ? <button className="siteMenuAddChildButton" type="button" onClick={() => onAddChild(node.item, node.section, node.key)} disabled={Boolean(adoptingParentKey)} title={`Добавить дочерний пункт в «${node.item.title}»`}><span className="buttonPlusIcon"><Plus size={15} /></span> {adoptingParentKey === parentKey ? "Открываем…" : "Добавить"}</button> : null}
             </div>
             {activeParentTreeKey === node.key && children ? <div className="siteMenuTreeChildForm">{children}</div> : null}
-            {nestedPages.length ? (
+            {nestedPages.length && !pagesCollapsed ? (
               <ul className="siteMenuNestedPages" aria-label={`Страницы в пункте ${node.item.title}`}>
                 {nestedPages.map((page) => (
                   <li key={page.id}>
