@@ -7205,6 +7205,35 @@ textarea:focus {
   font-weight: 700;
 }
 
+.menuMainChoiceButton {
+  align-items: center;
+  background: #f0fbf4;
+  border: 1px solid #78b88f;
+  border-radius: 6px;
+  color: #176b39;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 9px;
+  font-weight: 850;
+  gap: 3px;
+  height: 23px;
+  letter-spacing: 0.04em;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+.menuMainChoiceButton:hover,
+.menuMainChoiceButton.active {
+  background: #176b39;
+  border-color: #176b39;
+  color: #fff;
+}
+
+.menuMainChoiceButton:focus-visible {
+  outline: 2px solid rgba(23, 107, 57, 0.28);
+  outline-offset: 1px;
+}
+
 .searchableSelectOption svg {
   flex: 0 0 auto;
 }

@@ -3318,13 +3318,6 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
   const bulkApproveItems = selectedItems.filter(canApproveContent);
   const bulkPublishItems = selectedItems.filter(canPublishContentImmediately);
   const awaitingPublicationCount = content.filter((item) => Boolean(item.generated_at) && item.status !== "published").length;
-  const sectionContentCounts = React.useMemo(() => {
-    const counts = new Map<string, number>();
-    content.forEach((item) => {
-      if (item.section_id && item.generated_at) counts.set(item.section_id, (counts.get(item.section_id) || 0) + 1);
-    });
-    return counts;
-  }, [content]);
   const cachedContentTargets = React.useMemo(() => {
     const targets = new Map<string, { externalId: string; name: string; path: string; menuType: "header" | "footer" }>();
     const collect = (items: unknown[], menuType: "header" | "footer") => {
@@ -3354,16 +3347,14 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
     { value: "", label: "Выберите пункт меню" },
     ...sections.filter((section) => section.sync_status !== "external_deleted").map((section) => ({
       value: section.id,
-      label: `${section.name} · ${section.path}`,
-      badge: String(sectionContentCounts.get(section.id) || 0),
-      badgeTone: "neutral" as const
+      label: `${section.name} · ${section.path}`
     })),
     ...Array.from(cachedContentTargets.entries()).map(([value, target]) => ({
       value,
       label: `${target.name} · ${target.path}`,
       description: `Существующий ${target.menuType === "header" ? "Header" : "Footer"}`
     }))
-  ], [cachedContentTargets, sectionContentCounts, sections]);
+  ], [cachedContentTargets, sections]);
   const rowContentTargetOptions = React.useMemo(() => [
     { value: "", label: "Не выбран" },
     ...contentTargetOptions.filter((option) => option.value)
@@ -3453,7 +3444,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
     }
   }
 
-  async function changeItemSection(item: ContentItem, nextSectionId: string) {
+  async function changeItemSection(item: ContentItem, nextSectionId: string, contentMode: "nested" | "menu_page" = "nested") {
     if (isPublicationLocked(item)) return;
     setEditorError("");
     setSectionSavingItemId(item.id);
@@ -3461,7 +3452,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
       const resolvedSectionId = nextSectionId ? await resolveContentSectionId(nextSectionId) : null;
       await api(`/content/${item.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ section_id: resolvedSectionId })
+        body: JSON.stringify({ section_id: resolvedSectionId, section_content_mode: contentMode })
       });
       await onChanged();
     } catch (error) {
@@ -3611,10 +3602,28 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
           <div className="bulkMenuSelect">
             <SearchableSelect
               value={bulkSectionId}
-              onChange={setBulkSectionId}
+              onChange={(value) => {
+                setBulkSectionId(value);
+                setBulkSectionContentMode("nested");
+              }}
               options={contentTargetOptions}
               searchPlaceholder="Найти пункт меню"
               disabled={bulkBusy}
+              renderOptionAction={(option, closeDropdown) => option.value ? (
+                <button
+                  className="menuMainChoiceButton"
+                  type="button"
+                  onClick={() => {
+                    setBulkSectionId(option.value);
+                    setBulkSectionContentMode("menu_page");
+                    closeDropdown();
+                  }}
+                  title="Назначить выбранные тексты контентом этого пункта меню"
+                  aria-label={`MAIN — контент пункта меню ${option.label}`}
+                >
+                  <FileText size={11} /> MAIN
+                </button>
+              ) : null}
             />
           </div>
           <select className="contentPlacementSelect" value={bulkSectionContentMode} onChange={(event) => setBulkSectionContentMode(event.target.value as "nested" | "menu_page")} disabled={bulkBusy} title="Способ размещения контента">
@@ -3691,6 +3700,20 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
                 searchPlaceholder="Выбрать пункт меню"
                 disabled={isPublicationLocked(item) || sectionSavingItemId === item.id}
                 ariaLabel={`Пункт меню для ${item.topic}`}
+                renderOptionAction={(option, closeDropdown) => option.value ? (
+                  <button
+                    className={`menuMainChoiceButton ${item.section_id === option.value && item.section_content_mode === "menu_page" ? "active" : ""}`}
+                    type="button"
+                    onClick={() => {
+                      closeDropdown();
+                      void changeItemSection(item, option.value, "menu_page");
+                    }}
+                    title="Сделать текст контентом самого пункта меню"
+                    aria-label={`MAIN — назначить ${item.topic} контентом пункта меню ${option.label}`}
+                  >
+                    <FileText size={11} /> MAIN
+                  </button>
+                ) : null}
               />
               {item.section_id ? <small>{item.section_content_mode === "menu_page" ? "Контент пункта меню" : "Вложенная страница"}</small> : null}
             </span>,
@@ -8766,7 +8789,7 @@ function SearchableSelect({
   showSelectedIndicator?: boolean;
   optionPredicate?: (option: SearchableSelectOption) => boolean;
   dropdownToolbar?: React.ReactNode;
-  renderOptionAction?: (option: SearchableSelectOption) => React.ReactNode;
+  renderOptionAction?: (option: SearchableSelectOption, closeDropdown: () => void) => React.ReactNode;
 }) {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
@@ -8836,6 +8859,10 @@ function SearchableSelect({
 
   function chooseOption(option: SearchableSelectOption) {
     onChange(option.value);
+    closeDropdown();
+  }
+
+  function closeDropdown() {
     setQuery("");
     setOpen(false);
     window.requestAnimationFrame(() => controlRef.current?.focus());
@@ -8927,7 +8954,7 @@ function SearchableSelect({
                   {option.value === value ? <CheckCircle2 size={16} /> : null}
                   {renderOptionAction ? (
                     <span onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
-                      {renderOptionAction(option)}
+                      {renderOptionAction(option, closeDropdown)}
                     </span>
                   ) : null}
                 </span>
