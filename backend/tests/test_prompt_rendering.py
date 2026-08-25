@@ -120,6 +120,24 @@ def test_prompt_format_contract_is_appended_once() -> None:
     assert prompt_with_contract.count(PROMPT_FORMAT_CONTRACT_MARKER) == 1
 
 
+def test_generated_title_option_allows_title_to_differ_from_topic() -> None:
+    prompt = build_gemini_prompt(
+        topic="Legale Online Casinos",
+        geo="DE",
+        language="de",
+        target_words=1600,
+        site=None,
+        prompt_template="Topic: {{TOPIC}}",
+        shortcode=None,
+        include_toc=True,
+        include_faq=True,
+        generate_title=True,
+    )
+
+    assert "must not repeat the Topic verbatim" in prompt
+    assert "must repeat the Topic exactly" not in prompt
+
+
 def test_task_variability_protocol_is_rendered_once() -> None:
     profiles = [variation_profile_for_position(index) for index in range(3)]
     context = {
@@ -254,3 +272,23 @@ def test_gemini_content_generation_passes_competitor_brief_to_prompt(monkeypatch
     assert "Mehr Details zu KYC und Limits" in captured["prompt"]
     assert generated["pages"][0]["title"] == "Beste Online Casinos in Deutschland 2026: Legale Anbieter im Vergleich"
     assert generated["pages"][0]["content"]["blocks"][0]["data"]["text"] == "Beste Online Casinos in Deutschland 2026"
+
+    generated_with_separate_title = asyncio.run(
+        build_gemini_content(
+            provider=provider,
+            topic="Beste Online Casinos in Deutschland 2026: Legale Anbieter im Vergleich",
+            geo="DE",
+            language="de",
+            target_words=1600,
+            site=None,
+            payload_mode="simple_page",
+            prompt_template="Write an article about {{TOPIC}}",
+            shortcode=None,
+            include_toc=True,
+            include_faq=True,
+            generate_title=True,
+        )
+    )
+
+    assert generated_with_separate_title["pages"][0]["title"] == "A different and overly long title invented by the model"
+    assert generated_with_separate_title["pages"][0]["breadcrumb"] == "Beste Online Casinos in Deutschland 2026: Legale Anbieter im Vergleich"

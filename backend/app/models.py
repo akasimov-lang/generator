@@ -149,6 +149,7 @@ class GenerationTask(Base, TimestampMixin):
     prompt_template: Mapped[str | None] = mapped_column(Text, nullable=True)
     include_toc: Mapped[bool] = mapped_column(Boolean, default=True)
     include_faq: Mapped[bool] = mapped_column(Boolean, default=True)
+    generate_title: Mapped[bool] = mapped_column(Boolean, default=False)
     collect_competitors: Mapped[bool] = mapped_column(Boolean, default=False)
     include_casino_rating: Mapped[bool] = mapped_column(Boolean, default=False)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)

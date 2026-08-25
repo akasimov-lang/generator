@@ -82,6 +82,7 @@ type Task = {
   status: string;
   include_toc: boolean;
   include_faq: boolean;
+  generate_title: boolean;
   collect_competitors: boolean;
   include_casino_rating: boolean;
   archived_at: string | null;
@@ -398,6 +399,7 @@ type TaskRegenerateAllOptions = {
   prompt_template: string;
   include_toc: boolean;
   include_faq: boolean;
+  generate_title: boolean;
   collect_competitors: boolean;
   include_casino_rating: boolean;
 };
@@ -3301,6 +3303,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
   const [bulkSectionContentMode, setBulkSectionContentMode] = React.useState<"nested" | "menu_page">("nested");
   const [bulkBusy, setBulkBusy] = React.useState(false);
   const [publishingItemId, setPublishingItemId] = React.useState("");
+  const [deletingItemId, setDeletingItemId] = React.useState("");
   const [sectionSavingItemId, setSectionSavingItemId] = React.useState("");
   const [createMenuVisible, setCreateMenuVisible] = React.useState(false);
   const [menuName, setMenuName] = React.useState("");
@@ -3582,6 +3585,31 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
     }
   }
 
+  async function deleteItem(item: ContentItem) {
+    const isPublished = item.status === "published";
+    const confirmation = isPublished
+      ? `Удалить опубликованный текст «${item.topic}» с проекта? После отправки удаления потребуется обновить проект.`
+      : `Удалить текст «${item.topic}»?`;
+    if (!window.confirm(confirmation)) return;
+    setEditorError("");
+    setDeletingItemId(item.id);
+    try {
+      if (isPublished) {
+        await api<ContentItem>(`/content/${item.id}/delete-published`, { method: "POST" });
+      } else {
+        await api(`/content/${item.id}`, { method: "DELETE" });
+      }
+      setSelectedIds((current) => current.filter((id) => id !== item.id));
+      setSelectedItem((current) => current?.id === item.id ? null : current);
+      setPreviewItem((current) => current?.id === item.id ? null : current);
+      await onChanged();
+    } catch (error) {
+      setEditorError(error instanceof Error ? error.message : "Не удалось удалить текст.");
+    } finally {
+      setDeletingItemId("");
+    }
+  }
+
   return (
     <section className="viewStack">
       <DataPanel id="workspace-section-content" className="projectContentPanel" collapseKey="project-content" title={(
@@ -3724,6 +3752,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
               <button className="button compact" type="button" onClick={() => openEditor(item)} disabled={isPublicationLocked(item)} title="Открыть и редактировать JSON payload"><Database size={15} /> JSON</button>
               <button className="button compact approve" type="button" onClick={() => approve(item)} disabled={!canApproveContent(item)} title="Принять текст"><CheckCircle2 size={15} /> Принять</button>
               <button className="button compact primary" type="button" onClick={() => void publishImmediately(item)} disabled={!canPublishContentImmediately(item) || publishingItemId === item.id} title="Сразу отправить JSON текста на сервер проекта"><Send size={15} /> {publishingItemId === item.id ? "Публикуем…" : "Опубликовать"}</button>
+              <button className="button compact danger" type="button" onClick={() => void deleteItem(item)} disabled={(isPublicationLocked(item) && item.status !== "published") || deletingItemId === item.id || publishingItemId === item.id} title={isPublicationLocked(item) && item.status !== "published" ? "Дождитесь завершения публикации или обновления проекта" : item.status === "published" ? "Удалить опубликованный текст с проекта" : "Удалить текст"}><Trash2 size={15} /> {deletingItemId === item.id ? "Удаляем…" : "Удалить"}</button>
               {item.status === "published" ? <a className="viewOnSiteIconButton" href={contentSiteUrl(item)} target="_blank" rel="noreferrer" title="Посмотреть на сайте" aria-label={`Посмотреть на сайте: ${item.topic}`}><ExternalLink size={16} /></a> : null}
             </div>
           ])}
@@ -5024,13 +5053,14 @@ function TasksView({
   const [targetWords, setTargetWords] = React.useState(DEFAULT_TARGET_WORDS);
   const taskCheckboxPreferences = React.useMemo(() => {
     try {
-      return JSON.parse(localStorage.getItem("task_create_checkbox_preferences") || "{}") as Partial<Record<"includeToc" | "includeFaq" | "collectCompetitors" | "includeCasinoRating", boolean>>;
+      return JSON.parse(localStorage.getItem("task_create_checkbox_preferences") || "{}") as Partial<Record<"includeToc" | "includeFaq" | "generateTitle" | "collectCompetitors" | "includeCasinoRating", boolean>>;
     } catch {
       return {};
     }
   }, []);
   const [includeToc, setIncludeToc] = React.useState(taskCheckboxPreferences.includeToc ?? true);
   const [includeFaq, setIncludeFaq] = React.useState(taskCheckboxPreferences.includeFaq ?? true);
+  const [generateTitle, setGenerateTitle] = React.useState(taskCheckboxPreferences.generateTitle ?? false);
   const [collectCompetitors, setCollectCompetitors] = React.useState(taskCheckboxPreferences.collectCompetitors ?? false);
   const [includeCasinoRating, setIncludeCasinoRating] = React.useState(taskCheckboxPreferences.includeCasinoRating ?? false);
   const [createFormExpanded, setCreateFormExpanded] = React.useState(false);
@@ -5051,9 +5081,6 @@ function TasksView({
   const hasGenerationInProgress = (expandedDetails?.items || []).some((item) => ACTIVE_GENERATION_STATUSES.includes(item.status));
   const cleanTopics = topics.split("\n").map((line) => line.trim()).filter(Boolean);
   const selectedSite = sites.find((site) => site.id === siteId);
-  const automaticTaskTitle = selectedSite
-    ? `${selectedSite.name} · ${cleanTopics.length} тем · ${language.toUpperCase()}-${geo.toUpperCase()}`
-    : "Выберите проект — название сформируется автоматически";
   const selectedPrompt = promptTemplates.find((prompt) => prompt.id === promptTemplateId)
     || defaultPromptTemplate(promptTemplates);
 
@@ -5141,8 +5168,8 @@ function TasksView({
   }, [fixedSite?.id, tasks]);
 
   React.useEffect(() => {
-    localStorage.setItem("task_create_checkbox_preferences", JSON.stringify({ includeToc, includeFaq, collectCompetitors, includeCasinoRating }));
-  }, [includeToc, includeFaq, collectCompetitors, includeCasinoRating]);
+    localStorage.setItem("task_create_checkbox_preferences", JSON.stringify({ includeToc, includeFaq, generateTitle, collectCompetitors, includeCasinoRating }));
+  }, [includeToc, includeFaq, generateTitle, collectCompetitors, includeCasinoRating]);
 
   React.useEffect(() => {
     if (!expandedTaskId || (!hasResearchInProgress && !hasGenerationInProgress)) return;
@@ -5194,6 +5221,7 @@ function TasksView({
       shortcode: null,
       include_toc: includeToc,
       include_faq: includeFaq,
+      generate_title: generateTitle,
       collect_competitors: collectCompetitors,
       include_casino_rating: includeCasinoRating,
       save_as_draft: action === "draft",
@@ -5643,8 +5671,8 @@ function TasksView({
           )}
         >
         <form id="create-generation-task-form" className="formGrid createTaskForm" onSubmit={createTask}>
-          <label>
-            {fixedSite ? "Проект" : "Выберите проект"}
+          {!fixedSite ? <label>
+            Выберите проект
             <SearchableSelect
               value={siteId}
               onChange={(nextSiteId) => {
@@ -5652,12 +5680,12 @@ function TasksView({
                 onProjectChange?.(nextSiteId);
               }}
               options={[
-                ...(fixedSite ? [] : [{ value: "", label: "Проект не выбран" }]),
+                { value: "", label: "Проект не выбран" },
                 ...sites.map(projectSearchOption)
               ]}
               searchPlaceholder="Введите название проекта"
             />
-          </label>
+          </label> : null}
           <label>
             Гео
             <SearchableSelect
@@ -5666,11 +5694,6 @@ function TasksView({
               options={COUNTRIES.map((country) => ({ value: country.code, label: `${country.flag} ${country.name} (${country.code})` }))}
               searchPlaceholder="Введите страну или код"
             />
-          </label>
-          <label className="automaticTaskTitleField">
-            Название задачи
-            <input value={automaticTaskTitle} readOnly aria-readonly="true" />
-            <span className="fieldHint">Формируется автоматически: проект · количество тем · язык-гео</span>
           </label>
           <label>
             Язык
@@ -5728,6 +5751,10 @@ function TasksView({
                 Создавать FAQ
               </label>
               <label className="checkboxRow">
+                <input type="checkbox" checked={generateTitle} onChange={(event) => setGenerateTitle(event.target.checked)} />
+                Генерировать Title
+              </label>
+              <label className="checkboxRow">
                 <input type="checkbox" checked={collectCompetitors} onChange={(event) => setCollectCompetitors(event.target.checked)} />
                 Собрать конкурентов
               </label>
@@ -5751,7 +5778,7 @@ function TasksView({
                 {generatingTopics ? "Генерация тем" : "Сгенерировать 10 тем"}
               </button>
             </span>
-            <textarea value={topics} onChange={(event) => setTopics(event.target.value)} required rows={5} placeholder="best online casinos in Germany" />
+            <textarea value={topics} onChange={(event) => setTopics(event.target.value)} required rows={10} placeholder="best online casinos in Germany" />
             <span className="fieldHint">Тем в задаче: {cleanTopics.length}</span>
           </label>
           {taskError ? <span className="formError wide">{taskError}</span> : null}
@@ -5952,6 +5979,7 @@ function AdminTasksAccordion({
   const [regeneratePromptId, setRegeneratePromptId] = React.useState("");
   const [regenerateIncludeToc, setRegenerateIncludeToc] = React.useState(true);
   const [regenerateIncludeFaq, setRegenerateIncludeFaq] = React.useState(true);
+  const [regenerateGenerateTitle, setRegenerateGenerateTitle] = React.useState(false);
   const [regenerateCollectCompetitors, setRegenerateCollectCompetitors] = React.useState(false);
   const [regenerateIncludeCasinoRating, setRegenerateIncludeCasinoRating] = React.useState(false);
   const [summaryDialog, setSummaryDialog] = React.useState<"queries" | "competitors" | null>(null);
@@ -5987,6 +6015,7 @@ function AdminTasksAccordion({
     setRegeneratePromptId(matchingPrompt?.id || defaultPromptTemplate(promptTemplates)?.id || "");
     setRegenerateIncludeToc(expandedTask.include_toc ?? true);
     setRegenerateIncludeFaq(expandedTask.include_faq ?? true);
+    setRegenerateGenerateTitle(expandedTask.generate_title ?? false);
     setRegenerateCollectCompetitors(expandedTask.collect_competitors ?? false);
     setRegenerateIncludeCasinoRating(expandedTask.include_casino_rating ?? false);
   }, [expandedTask?.id, promptTemplates]);
@@ -6027,6 +6056,7 @@ function AdminTasksAccordion({
       prompt_template: selectedPrompt.content,
       include_toc: regenerateIncludeToc,
       include_faq: regenerateIncludeFaq,
+      generate_title: regenerateGenerateTitle,
       collect_competitors: regenerateCollectCompetitors,
       include_casino_rating: regenerateIncludeCasinoRating
     });
@@ -6247,6 +6277,10 @@ function AdminTasksAccordion({
                               <label className="checkboxRow">
                                 <input type="checkbox" checked={regenerateIncludeFaq} onChange={(event) => setRegenerateIncludeFaq(event.target.checked)} />
                                 Создавать FAQ
+                              </label>
+                              <label className="checkboxRow">
+                                <input type="checkbox" checked={regenerateGenerateTitle} onChange={(event) => setRegenerateGenerateTitle(event.target.checked)} />
+                                Генерировать Title
                               </label>
                               <label className="checkboxRow">
                                 <input type="checkbox" checked={regenerateCollectCompetitors} onChange={(event) => setRegenerateCollectCompetitors(event.target.checked)} />

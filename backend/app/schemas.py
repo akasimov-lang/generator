@@ -362,6 +362,7 @@ class GenerationTaskCreate(BaseModel):
     shortcode: str | None = None
     include_toc: bool = True
     include_faq: bool = True
+    generate_title: bool = False
     collect_competitors: bool = False
     include_casino_rating: bool = False
     save_as_draft: bool = False
@@ -388,6 +389,7 @@ class GenerationTaskRegenerateAll(BaseModel):
     prompt_template: str | None = None
     include_toc: bool = True
     include_faq: bool = True
+    generate_title: bool = False
     collect_competitors: bool = False
     include_casino_rating: bool = False
 
@@ -412,6 +414,7 @@ class GenerationTaskResponse(BaseModel):
     prompt_template: str | None
     include_toc: bool
     include_faq: bool
+    generate_title: bool
     collect_competitors: bool
     include_casino_rating: bool
     archived_at: datetime | None = None

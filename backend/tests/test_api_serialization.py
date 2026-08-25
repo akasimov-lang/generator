@@ -234,6 +234,39 @@ def test_regular_user_can_publish_content(monkeypatch: pytest.MonkeyPatch) -> No
     assert response.json()["status"] == "published"
 
 
+def test_regular_user_can_delete_generated_content() -> None:
+    client, TestingSession = make_client()
+    client.app.dependency_overrides[require_auth] = lambda: {
+        "id": "regular-user-id",
+        "username": "Vitalina",
+        "is_admin": False,
+    }
+    with TestingSession() as db:
+        site = db.query(models.Site).one()
+        task = models.GenerationTask(title="Delete", site_id=site.id, geo="LV", language="lv", topics_count=1)
+        item = models.ContentItem(
+            task=task,
+            site_id=site.id,
+            topic="Delete me",
+            slug="/delete-me/",
+            generated_json={"pages": [{"slug": "/delete-me/"}]},
+            status="generated",
+            idempotency_key="regular-user-delete-content",
+        )
+        db.add_all([task, item])
+        db.commit()
+        item_id = item.id
+        task_id = task.id
+
+    response = client.delete(f"/api/content/{item_id}")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+    with TestingSession() as db:
+        assert db.get(models.ContentItem, item_id) is None
+        assert db.get(models.GenerationTask, task_id).status == "empty"
+
+
 def test_user_can_manage_personal_favorite_sites() -> None:
     client, TestingSession = make_client()
     with TestingSession() as db:

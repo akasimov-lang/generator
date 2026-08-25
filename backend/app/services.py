@@ -1020,6 +1020,7 @@ async def build_ai_content(
     include_faq: bool = True,
     competitor_brief: dict | None = None,
     variation_context: dict | None = None,
+    generate_title: bool = False,
 ) -> dict:
     if provider.provider_type == "gemini":
         return await build_gemini_content(
@@ -1036,6 +1037,7 @@ async def build_ai_content(
             include_faq=include_faq,
             competitor_brief=competitor_brief,
             variation_context=variation_context,
+            generate_title=generate_title,
         )
     return build_stub_content(
         topic=topic,
@@ -1066,6 +1068,7 @@ async def build_gemini_content(
     include_faq: bool,
     competitor_brief: dict | None = None,
     variation_context: dict | None = None,
+    generate_title: bool = False,
 ) -> dict:
     if not provider.api_key:
         raise ValueError("Gemini API key is not configured")
@@ -1082,6 +1085,7 @@ async def build_gemini_content(
         include_faq=include_faq,
         competitor_brief=competitor_brief,
         variation_context=variation_context,
+        generate_title=generate_title,
     )
     page = base_payload["pages"][0]
     prompt = build_gemini_prompt(
@@ -1115,10 +1119,10 @@ async def build_gemini_content(
         raise ValueError("Gemini returned an empty response")
 
     article_parts = extract_ai_article_parts(generated_text, topic)
-    page_title = topic.strip()
+    page_title = article_parts["title"].strip() if generate_title else topic.strip()
     page_h1 = concise_h1_from_topic(topic)
     page["title"] = page_title
-    page["breadcrumb"] = page_title
+    page["breadcrumb"] = topic.strip()
     page["description"] = article_parts["meta_description"] or clean_text(article_parts["body"])[:155] or page["description"]
     page["content"]["blocks"] = build_blocks_from_ai_text(
         generated_text=article_parts["body"] or generated_text,
@@ -1162,6 +1166,7 @@ def build_gemini_prompt(
     include_faq: bool,
     competitor_brief: dict | None = None,
     variation_context: dict | None = None,
+    generate_title: bool = False,
 ) -> str:
     template = prompt_template.strip() if prompt_template and prompt_template.strip() else DEFAULT_CONTENT_PROMPT_TEMPLATE
     slug = normalize_slug(topic)
@@ -1187,10 +1192,15 @@ def build_gemini_prompt(
         prompt = prompt.replace("{{" + key.upper() + "}}", value)
     if PROMPT_FORMAT_CONTRACT_MARKER not in prompt:
         prompt = f"{prompt.rstrip()}\n\n{PROMPT_FORMAT_CONTRACT}"
+    title_constraint = (
+        "- Title must be an original, concise SEO page title relevant to the Topic and must not repeat the Topic verbatim.\n"
+        if generate_title
+        else "- Title must repeat the Topic exactly, without additions, rewriting, or a year that is absent from the Topic.\n"
+    )
     prompt += (
         "\n\nGeneration constraints:\n"
         f"- Topic: {topic}\n"
-        "- Title must repeat the Topic exactly, without additions, rewriting, or a year that is absent from the Topic.\n"
+        f"{title_constraint}"
         "- H1 must be a concise, informative version of the Topic: use its primary part before a colon and avoid subtitles.\n"
         f"- Country/geo: {geo}\n"
         f"- Language: {language}\n"
@@ -2460,6 +2470,7 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
         prompt_template=prompt_template,
         include_toc=payload.include_toc,
         include_faq=payload.include_faq,
+        generate_title=payload.generate_title,
         collect_competitors=payload.collect_competitors,
         include_casino_rating=payload.include_casino_rating,
         status="draft" if payload.save_as_draft else ("research_queries_ready" if payload.collect_competitors else "created"),
@@ -2535,6 +2546,7 @@ def generate_task_items(db: Session, task: models.GenerationTask) -> models.Gene
                         include_faq=task.include_faq,
                         competitor_brief=item.competitor_brief,
                         variation_context=build_task_variation_context(db, item),
+                        generate_title=task.generate_title,
                     )
                 )
                 item.word_count = count_words(item.generated_json)
@@ -2658,6 +2670,7 @@ def generate_content_item(db: Session, item: models.ContentItem) -> models.Conte
                     include_faq=task.include_faq,
                     competitor_brief=item.competitor_brief,
                     variation_context=build_task_variation_context(db, item),
+                    generate_title=task.generate_title,
                 )
             )
             item.word_count = count_words(item.generated_json)

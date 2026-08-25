@@ -108,6 +108,7 @@ def apply_lightweight_migrations() -> None:
                 "prompt_template": "TEXT",
                 "include_toc": "BOOLEAN DEFAULT TRUE NOT NULL",
                 "include_faq": "BOOLEAN DEFAULT TRUE NOT NULL",
+                "generate_title": "BOOLEAN DEFAULT FALSE NOT NULL",
                 "collect_competitors": "BOOLEAN DEFAULT FALSE NOT NULL",
                 "include_casino_rating": "BOOLEAN DEFAULT FALSE NOT NULL",
                 "archived_at": "TIMESTAMP WITH TIME ZONE",

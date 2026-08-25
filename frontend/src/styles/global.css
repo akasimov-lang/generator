@@ -3940,7 +3940,7 @@ h2 {
 .generationOptionsGrid {
   display: grid;
   gap: 4px 12px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .generationOptionsGrid .checkboxRow {
@@ -3949,6 +3949,7 @@ h2 {
 }
 
 .generationOptionsGrid .casinoRatingOption {
+  grid-column: span 2;
   padding: 4px 6px;
 }
 

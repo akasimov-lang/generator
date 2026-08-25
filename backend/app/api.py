@@ -1677,6 +1677,7 @@ def regenerate_all_task_content(
     task.prompt_template = append_casino_rating_requirement(prompt_template, payload.include_casino_rating)
     task.include_toc = payload.include_toc
     task.include_faq = payload.include_faq
+    task.generate_title = payload.generate_title
     task.collect_competitors = payload.collect_competitors
     task.include_casino_rating = payload.include_casino_rating
     task.status = "generating"
