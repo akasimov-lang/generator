@@ -70,7 +70,7 @@ from app.schemas import (
     UserUpdate,
 )
 from app.menu_templates import MENU_TEMPLATES
-from app.project_cache import ProjectCacheError, fetch_project_cache, project_server_url, refresh_project_server_id, sync_project_cache
+from app.project_cache import ProjectCacheError, fetch_project_cache, fetch_project_template_capabilities, project_server_url, refresh_project_server_id, sync_project_cache
 from app.security import AdminUser, AuthUser, create_token, hash_password, verify_password
 from app.services import (
     BASE_PROMPT_TEMPLATE_NAME,
@@ -826,10 +826,10 @@ def _site_menu_capabilities_payload(
         "checked_at": site.menu_capabilities_checked_at,
         "header_menu_template_rendered": site.header_menu_template_rendered,
         "header_menu_rendered": site.header_menu_rendered if result_is_current else None,
-        "header_menu_nested": site.header_menu_nested if result_is_current else None,
+        "header_menu_nested": site.header_menu_nested if result_is_current or site.header_menu_template_rendered is not None else None,
         "footer_menu_template_rendered": site.footer_menu_template_rendered,
         "footer_menu_rendered": site.footer_menu_rendered if result_is_current else None,
-        "footer_menu_nested": site.footer_menu_nested if result_is_current else None,
+        "footer_menu_nested": site.footer_menu_nested if result_is_current or site.footer_menu_template_rendered is not None else None,
         "check_id": latest_check.id if latest_check is not None else None,
         "check_status": check_status,
         "check_error_code": latest_check.error_code if latest_check is not None else None,
@@ -840,6 +840,22 @@ def _site_menu_capabilities_payload(
 @router.get("/sites/{site_id}/menu-capabilities")
 def get_site_menu_capabilities(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> dict[str, Any]:
     site = _get_site_or_404(db, site_id)
+    return _site_menu_capabilities_payload(site, _latest_site_menu_visibility_check(db, site.id))
+
+
+@router.post("/sites/{site_id}/menu-capabilities/template-check")
+def check_site_menu_template_capabilities(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> dict[str, Any]:
+    site = _get_site_or_404(db, site_id)
+    try:
+        capabilities = fetch_project_template_capabilities(site)
+    except ProjectCacheError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    site.header_menu_template_rendered = capabilities["header_menu_rendered"]
+    site.header_menu_nested = capabilities["header_menu_nested"]
+    site.footer_menu_template_rendered = capabilities["footer_menu_rendered"]
+    site.footer_menu_nested = capabilities["footer_menu_nested"]
+    db.commit()
+    db.refresh(site)
     return _site_menu_capabilities_payload(site, _latest_site_menu_visibility_check(db, site.id))
 
 

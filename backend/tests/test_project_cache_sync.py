@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app import models
-from app.api import _find_project_page, enqueue_site_menu_capabilities_check, get_site_menu_capabilities
+from app.api import _find_project_page, check_site_menu_template_capabilities, enqueue_site_menu_capabilities_check, get_site_menu_capabilities
 from app.db import Base
 from app.project_cache import analyze_menu_templates, sync_project_cache
 from app import project_cache as project_cache_module
@@ -269,6 +269,37 @@ def test_menu_capabilities_are_queued_only_by_manual_action(monkeypatch) -> None
         assert len(calls) == 1
         assert queued["check_status"] == "queued"
         assert duplicate["check_id"] == queued["check_id"]
+
+
+def test_template_menu_check_does_not_queue_chromium(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.api.fetch_project_template_capabilities",
+        lambda site: {
+            "header_menu_rendered": True,
+            "header_menu_nested": True,
+            "footer_menu_rendered": False,
+            "footer_menu_nested": False,
+        },
+    )
+    with make_session() as db:
+        site = models.Site(
+            name="template-check.example",
+            base_url="https://template-check.example",
+            publication_endpoint="https://template-check.example/api/content",
+            cache_server_ip="cobra",
+        )
+        db.add(site)
+        db.commit()
+
+        result = check_site_menu_template_capabilities(site.id, None, db)  # type: ignore[arg-type]
+
+        assert result["check_status"] == "not_checked"
+        assert result["checked_at"] is None
+        assert result["header_menu_template_rendered"] is True
+        assert result["header_menu_rendered"] is None
+        assert result["header_menu_nested"] is True
+        assert result["footer_menu_template_rendered"] is False
+        assert db.scalar(select(models.MenuVisibilityCheck)) is None
 
 
 def test_menu_capabilities_can_be_refreshed(monkeypatch) -> None:

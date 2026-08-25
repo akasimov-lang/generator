@@ -880,6 +880,7 @@ function App() {
   const [message, setMessage] = React.useState("");
   const [notificationPromptVisible, setNotificationPromptVisible] = React.useState(false);
   const [viewAsUser, setViewAsUser] = React.useState(false);
+  const [workspaceContentOpenRequest, setWorkspaceContentOpenRequest] = React.useState(0);
   const isAdmin = Boolean(currentUser?.is_admin && !viewAsUser);
 
   const navigateTo = React.useCallback((view: AppView, nextWorkspaceTab: WorkspaceTab = workspaceTab, replace = false, projectName?: string | null) => {
@@ -894,6 +895,11 @@ function App() {
       window.history[method](null, "", nextPath);
     }
   }, [workspaceTab]);
+
+  const openWorkspaceContent = React.useCallback(() => {
+    setWorkspaceContentOpenRequest((request) => request + 1);
+    navigateTo("workspace", "content");
+  }, [navigateTo]);
 
   const api = React.useCallback(
     async <T,>(path: string, options: RequestInit = {}): Promise<T> => {
@@ -1092,20 +1098,20 @@ function App() {
           {isAdmin ? (
             <>
               <NavButton href={pathForRoute("dashboard")} icon={<LayoutDashboard />} label="Dashboard" active={activeView === "dashboard"} onClick={() => navigateTo("dashboard")} />
-              <NavButton href={pathForRoute("workspace", DEFAULT_WORKSPACE_TAB)} icon={<FolderKanban />} label="Рабочий экран" active={activeView === "workspace"} onClick={() => navigateTo("workspace", DEFAULT_WORKSPACE_TAB)} />
+              <NavButton href={pathForRoute("workspace", DEFAULT_WORKSPACE_TAB)} icon={<FolderKanban />} label="Рабочий экран" active={activeView === "workspace" && workspaceTab !== "content" && workspaceTab !== "publication"} onClick={() => navigateTo("workspace", DEFAULT_WORKSPACE_TAB)} />
               <NavButton href={pathForRoute("prompts")} icon={<Edit3 />} label="Промпты" active={activeView === "prompts"} onClick={() => navigateTo("prompts")} />
               <NavButton href={pathForRoute("taskArchive")} icon={<Archive />} label="Архив" active={activeView === "taskArchive"} onClick={() => navigateTo("taskArchive")} />
-              <NavButton href={pathForRoute("publications")} icon={<Send />} label="Контент и публикации" active={activeView === "publications"} onClick={() => navigateTo("publications")} />
+              <NavButton href={pathForRoute("workspace", "content")} icon={<Send />} label="Контент и публикации" active={activeView === "workspace" && (workspaceTab === "content" || workspaceTab === "publication")} onClick={openWorkspaceContent} />
               <NavButton href={pathForRoute("providers")} icon={<Bot />} label="API Providers" active={activeView === "providers"} onClick={() => navigateTo("providers")} />
               <NavButton href={pathForRoute("sites")} icon={<Globe2 />} label="Сайты" active={activeView === "sites"} onClick={() => navigateTo("sites")} />
               <NavButton href={pathForRoute("favorites")} icon={<Star className="favoriteNavIcon" fill="currentColor" />} label="Избранное" active={activeView === "favorites"} onClick={() => navigateTo("favorites")} />
             </>
           ) : (
             <>
-              <NavButton href={pathForRoute("workspace", DEFAULT_WORKSPACE_TAB)} icon={<FolderKanban />} label="Рабочий экран" active={activeView === "workspace"} onClick={() => navigateTo("workspace", DEFAULT_WORKSPACE_TAB)} />
+              <NavButton href={pathForRoute("workspace", DEFAULT_WORKSPACE_TAB)} icon={<FolderKanban />} label="Рабочий экран" active={activeView === "workspace" && workspaceTab !== "content" && workspaceTab !== "publication"} onClick={() => navigateTo("workspace", DEFAULT_WORKSPACE_TAB)} />
               <NavButton href={pathForRoute("prompts")} icon={<Edit3 />} label="Промпты" active={activeView === "prompts"} onClick={() => navigateTo("prompts")} />
               <NavButton href={pathForRoute("taskArchive")} icon={<Archive />} label="Архив" active={activeView === "taskArchive"} onClick={() => navigateTo("taskArchive")} />
-              <NavButton href={pathForRoute("publications")} icon={<Send />} label="Контент и публикации" active={activeView === "publications"} onClick={() => navigateTo("publications")} />
+              <NavButton href={pathForRoute("workspace", "content")} icon={<Send />} label="Контент и публикации" active={activeView === "workspace" && (workspaceTab === "content" || workspaceTab === "publication")} onClick={openWorkspaceContent} />
               <NavButton href={pathForRoute("sites")} icon={<Globe2 />} label="Сайты" active={activeView === "sites"} onClick={() => navigateTo("sites")} />
               <NavButton href={pathForRoute("favorites")} icon={<Star className="favoriteNavIcon" fill="currentColor" />} label="Избранное" active={activeView === "favorites"} onClick={() => navigateTo("favorites")} />
             </>
@@ -1173,7 +1179,7 @@ function App() {
 
         {message ? <div className="notice">{message}</div> : null}
 
-        {activeView === "workspace" && <ProjectWorkspaceView api={api} sites={sites} providers={providers} currentUsername={currentUser.username} activeTab={workspaceTab} onTabChange={(tab, projectName) => navigateTo("workspace", tab, false, projectName)} onChanged={loadAll} />}
+        {activeView === "workspace" && <ProjectWorkspaceView api={api} sites={sites} providers={providers} currentUsername={currentUser.username} activeTab={workspaceTab} contentOpenRequest={workspaceContentOpenRequest} onTabChange={(tab, projectName) => navigateTo("workspace", tab, false, projectName)} onChanged={loadAll} />}
         {activeView === "prompts" && <PromptsView api={api} sites={sites} isAdmin={isAdmin} onChanged={loadAll} />}
         {isAdmin && activeView === "dashboard" && dashboard && <DashboardView api={api} dashboard={dashboard} tasks={tasks} content={content} sites={sites} onOpenTask={(task) => {
           const site = sites.find((candidate) => candidate.id === task.site_id);
@@ -1694,6 +1700,7 @@ function ProjectWorkspaceView({
   providers,
   currentUsername,
   activeTab,
+  contentOpenRequest,
   onTabChange,
   onChanged
 }: ViewProps & {
@@ -1701,6 +1708,7 @@ function ProjectWorkspaceView({
   providers: AiProvider[];
   currentUsername: string;
   activeTab: WorkspaceTab;
+  contentOpenRequest: number;
   onTabChange: (tab: WorkspaceTab, projectName?: string) => void;
 }) {
   const workspaceSiteStorageKey = `workspace_site_id:${currentUsername}`;
@@ -1718,11 +1726,13 @@ function ProjectWorkspaceView({
   const [favoritesOnly, setFavoritesOnly] = React.useState(false);
   const [menuCapabilities, setMenuCapabilities] = React.useState<MenuCapabilities | null>(null);
   const [menuCapabilitiesLoading, setMenuCapabilitiesLoading] = React.useState(false);
+  const [templateCapabilitiesLoading, setTemplateCapabilitiesLoading] = React.useState(false);
   const [menuCapabilitiesError, setMenuCapabilitiesError] = React.useState("");
   const [projectRefreshStatus, setProjectRefreshStatus] = React.useState<"idle" | "loading" | "success" | "error">("idle");
   const [projectRefreshResponseCode, setProjectRefreshResponseCode] = React.useState("");
   const [publicationWorkflowSection, setPublicationWorkflowSection] = React.useState<PublicationWorkspaceSection>("campaigns");
   const projectLoadRequestRef = React.useRef(0);
+  const automaticTemplateChecksRef = React.useRef(new Set<string>());
   const selectedSite = sites.find((site) => site.id === selectedSiteId) || null;
   const routeProjectName = workspaceProjectNameFromPath(window.location.pathname);
   const pendingSectionsCount = sections.filter((section) => section.sync_status === "pending").length;
@@ -1751,6 +1761,12 @@ function ProjectWorkspaceView({
     setPublicationWorkflowSection(section);
     if (selectedSiteId) window.localStorage.setItem(`publication_workspace_section:${currentUsername}:${selectedSiteId}`, section);
   }, [currentUsername, selectedSiteId]);
+
+  React.useEffect(() => {
+    if (!contentOpenRequest) return;
+    setPublicationWorkflowSection("content");
+    if (selectedSiteId) window.localStorage.setItem(`publication_workspace_section:${currentUsername}:${selectedSiteId}`, "content");
+  }, [contentOpenRequest, currentUsername, selectedSiteId]);
 
   const loadProject = React.useCallback(async (refreshCapabilities = false) => {
     if (!selectedSiteId) return { success: false, errorCode: "NO_PROJECT" };
@@ -1843,6 +1859,26 @@ function ProjectWorkspaceView({
   }, [api, menuCheckPending, onChanged, selectedSite]);
 
   React.useEffect(() => {
+    if (!selectedSite || !menuCapabilities || menuCapabilities.checked_at) return;
+    if (menuCapabilities.header_menu_template_rendered != null || menuCapabilities.footer_menu_template_rendered != null) return;
+    if (automaticTemplateChecksRef.current.has(selectedSite.id)) return;
+    automaticTemplateChecksRef.current.add(selectedSite.id);
+    let cancelled = false;
+    setTemplateCapabilitiesLoading(true);
+    void api<MenuCapabilities>(`/sites/${selectedSite.id}/menu-capabilities/template-check`, { method: "POST" })
+      .then((result) => {
+        if (!cancelled) setMenuCapabilities(result);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setMenuCapabilitiesError(error instanceof Error ? error.message : "Не удалось проверить шаблоны меню");
+      })
+      .finally(() => {
+        if (!cancelled) setTemplateCapabilitiesLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [api, menuCapabilities, selectedSite]);
+
+  React.useEffect(() => {
     const routeSite = routeProjectName ? sites.find((site) => site.name === routeProjectName) : null;
     if (routeSite && routeSite.id !== selectedSiteId) {
       setSelectedSiteId(routeSite.id);
@@ -1877,6 +1913,7 @@ function ProjectWorkspaceView({
       setCampaigns([]);
       setMenuCapabilities(null);
       setMenuCapabilitiesLoading(false);
+      setTemplateCapabilitiesLoading(false);
       setMenuCapabilitiesError("");
       setProjectRefreshStatus("idle");
       setProjectRefreshResponseCode("");
@@ -1939,6 +1976,21 @@ function ProjectWorkspaceView({
       setMenuCapabilitiesError(error instanceof Error ? error.message : "Не удалось проверить меню");
     } finally {
       setMenuCapabilitiesLoading(false);
+    }
+  }
+
+  async function refreshTemplateMenuCapabilities() {
+    if (!selectedSite || templateCapabilitiesLoading) return;
+    setTemplateCapabilitiesLoading(true);
+    setMenuCapabilitiesError("");
+    try {
+      const result = await api<MenuCapabilities>(`/sites/${selectedSite.id}/menu-capabilities/template-check`, { method: "POST" });
+      setMenuCapabilities(result);
+      await onChanged();
+    } catch (error) {
+      setMenuCapabilitiesError(error instanceof Error ? error.message : "Не удалось проверить шаблоны меню");
+    } finally {
+      setTemplateCapabilitiesLoading(false);
     }
   }
 
@@ -2006,7 +2058,7 @@ function ProjectWorkspaceView({
               type="button"
               onClick={() => void retryMenuCapabilities()}
               disabled={menuCapabilitiesLoading || menuCheckPending}
-              title="Точная проверка отображения меню на сайте — Desktop 1440×1000"
+              title={menuCheckError || "Точная проверка отображения меню на сайте — Desktop 1440×1000"}
               aria-label={`Запустить точную desktop-проверку меню проекта ${selectedSite.name}`}
             >
               <RefreshCcw className={menuCapabilitiesLoading || menuCheckPending ? "spin" : ""} size={15} />
@@ -2096,8 +2148,8 @@ function ProjectWorkspaceView({
                   <span className="projectTitleCard"><small>Title</small><b title={selectedSite.homepage_title || "Title не указан"}>{selectedSite.homepage_title || "—"}</b></span>
                   <span className="projectMetricCard"><small>Доменов в сетке</small><b>{formatNumber(selectedSite.domains_count)}</b></span>
                   <span className="projectMetricCard"><small>Страниц</small><b>{formatNumber(selectedSite.internal_pages_count)}</b></span>
-                  <MenuCapabilityCard label="Header" templateRendered={menuCapabilities?.header_menu_template_rendered} rendered={menuCapabilities?.header_menu_rendered} nested={menuCapabilities?.header_menu_nested} icon="header" loading={menuCapabilitiesLoading || menuCheckPending} error={menuCapabilitiesError || menuCheckError} />
-                  <MenuCapabilityCard label="Footer" templateRendered={menuCapabilities?.footer_menu_template_rendered} rendered={menuCapabilities?.footer_menu_rendered} nested={menuCapabilities?.footer_menu_nested} icon="footer" loading={menuCapabilitiesLoading || menuCheckPending} error={menuCapabilitiesError || menuCheckError} />
+                  <MenuCapabilityCard label="Header" templateRendered={menuCapabilities?.header_menu_template_rendered} rendered={menuCapabilities?.header_menu_rendered} nested={menuCapabilities?.header_menu_nested} icon="header" loading={menuCapabilitiesLoading || templateCapabilitiesLoading || menuCheckPending} error={menuCapabilitiesError} onRetry={refreshTemplateMenuCapabilities} />
+                  <MenuCapabilityCard label="Footer" templateRendered={menuCapabilities?.footer_menu_template_rendered} rendered={menuCapabilities?.footer_menu_rendered} nested={menuCapabilities?.footer_menu_nested} icon="footer" loading={menuCapabilitiesLoading || templateCapabilitiesLoading || menuCheckPending} error={menuCapabilitiesError} onRetry={refreshTemplateMenuCapabilities} />
                 </div>
               </>
             ) : null}
@@ -2256,21 +2308,37 @@ function AutoFitDomain({ value }: { value: string }) {
   return <b ref={domainRef} className="projectCanonDomain" title={value}>{value}</b>;
 }
 
-function MenuCapabilityCard({ label, templateRendered, rendered, nested, icon, loading, error }: { label: string; templateRendered: boolean | null | undefined; rendered: boolean | null | undefined; nested: boolean | null | undefined; icon: "header" | "footer"; loading: boolean; error: string }) {
-  const statusText = loading ? "Проверяем" : error ? "Ошибка сервера" : rendered == null ? "Не проверено" : rendered ? "Меню реализовано" : "Меню не реализовано";
-  const renderingDetails = rendered === false
-    ? templateRendered ? "Шаблон поддерживает меню, но на сайте оно не отображается" : "В шаблоне и на сайте меню не отображается"
-    : rendered ? nested ? "Вложенность поддерживается" : "Только один уровень" : "";
+function MenuCapabilityCard({ label, templateRendered, rendered, nested, icon, loading, error, onRetry }: { label: string; templateRendered: boolean | null | undefined; rendered: boolean | null | undefined; nested: boolean | null | undefined; icon: "header" | "footer"; loading: boolean; error: string; onRetry: () => void }) {
+  const effectiveRendered = rendered ?? templateRendered;
+  const statusText = loading
+    ? "Проверяем"
+    : error
+      ? "Ошибка сервера"
+      : effectiveRendered == null
+        ? "Не проверено"
+        : rendered != null
+          ? rendered ? "Меню реализовано" : "Меню не реализовано"
+          : templateRendered ? "Шаблон поддерживает" : "Нет в шаблоне";
+  const renderingDetails = effectiveRendered == null
+    ? ""
+    : rendered != null
+      ? rendered === false
+        ? templateRendered ? "Шаблон поддерживает меню, но на сайте оно не отображается" : "В шаблоне и на сайте меню не отображается"
+        : nested ? "Вложенность поддерживается" : "Только один уровень"
+      : templateRendered ? nested ? "Шаблон поддерживает вложенность" : "Шаблон поддерживает один уровень" : "Шаблон не содержит меню";
   return (
-    <span className={`projectMenuCapability ${error ? "isError" : rendered === true ? "isReady" : rendered === false ? "isMissing" : "isChecking"}`} title={error || `${label}: ${statusText}${renderingDetails ? `. ${renderingDetails}` : ""}`}>
+    <span className={`projectMenuCapability ${error ? "isError" : effectiveRendered === true ? "isReady" : effectiveRendered === false ? "isMissing" : "isChecking"}`} title={error || `${label}: ${statusText}${renderingDetails ? `. ${renderingDetails}` : ""}`}>
       <span className="projectMenuCapabilityHeader">
         <small>{label}</small>
+        <button className="projectMenuCapabilityRetry" type="button" onClick={onRetry} disabled={loading} title={`Обновить проверку шаблона ${label}`} aria-label={`Обновить проверку шаблона ${label}`}>
+          <RefreshCcw className={loading ? "spin" : ""} size={13} />
+        </button>
       </span>
       <span className="projectMenuCapabilityValue">
-        {rendered === true ? <MenuReadyMedal /> : rendered === false ? <MenuReadyMedal tone="red" /> : icon === "header" ? <HeaderMenuIcon /> : <FooterMenuIcon />}
+        {effectiveRendered === true ? <MenuReadyMedal /> : effectiveRendered === false ? <MenuReadyMedal tone="red" /> : icon === "header" ? <HeaderMenuIcon /> : <FooterMenuIcon />}
         <b>{statusText}</b>
       </span>
-      {error ? <em className="projectMenuCapabilityError">{error}</em> : rendered ? <em>{nested ? "Есть вложенность" : "Один уровень"}</em> : rendered === false ? <em>Не отображается на сайте</em> : null}
+      {error ? <em className="projectMenuCapabilityError">{error}</em> : effectiveRendered ? <em>{nested ? "Есть вложенность" : "Один уровень"}</em> : effectiveRendered === false ? <em>{rendered == null ? "Не найдено в шаблоне" : "Не отображается на сайте"}</em> : null}
     </span>
   );
 }
@@ -3230,6 +3298,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
   const [bulkSectionContentMode, setBulkSectionContentMode] = React.useState<"nested" | "menu_page">("nested");
   const [bulkBusy, setBulkBusy] = React.useState(false);
   const [publishingItemId, setPublishingItemId] = React.useState("");
+  const [sectionSavingItemId, setSectionSavingItemId] = React.useState("");
   const [createMenuVisible, setCreateMenuVisible] = React.useState(false);
   const [menuName, setMenuName] = React.useState("");
   const [menuExternalId, setMenuExternalId] = React.useState("");
@@ -3292,6 +3361,10 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
       description: `Существующий ${target.menuType === "header" ? "Header" : "Footer"}`
     }))
   ], [cachedContentTargets, sectionContentCounts, sections]);
+  const rowContentTargetOptions = React.useMemo(() => [
+    { value: "", label: "Не выбран", description: "Назначить пункт меню" },
+    ...contentTargetOptions.filter((option) => option.value)
+  ], [contentTargetOptions]);
   const sortedContent = React.useMemo(() => {
     if (!contentSort) return content;
     const direction = contentSort.direction === "asc" ? 1 : -1;
@@ -3374,6 +3447,24 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
       setEditorError(error instanceof Error ? error.message : "Не удалось применить пункт меню.");
     } finally {
       setBulkBusy(false);
+    }
+  }
+
+  async function changeItemSection(item: ContentItem, nextSectionId: string) {
+    if (isPublicationLocked(item)) return;
+    setEditorError("");
+    setSectionSavingItemId(item.id);
+    try {
+      const resolvedSectionId = nextSectionId ? await resolveContentSectionId(nextSectionId) : null;
+      await api(`/content/${item.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ section_id: resolvedSectionId })
+      });
+      await onChanged();
+    } catch (error) {
+      setEditorError(error instanceof Error ? error.message : "Не удалось назначить пункт меню.");
+    } finally {
+      setSectionSavingItemId("");
     }
   }
 
@@ -3589,8 +3680,15 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
               <span className="compactContentTopic" title={item.topic}><ContentTopicLabel item={item} /></span>
               <button className="contentPreviewIconButton" type="button" onClick={() => setPreviewItem(item)} title="Просмотреть текст и метаданные" aria-label={`Просмотреть текст: ${item.topic}`}><Eye size={14} /></button>
             </span>,
-            <span className="contentSectionPlacement">
-              <span>{sectionLabel(item.section_id, sections)}</span>
+            <span className={`contentSectionPlacement contentRowMenuSelect ${item.section_id ? "hasValue" : "isEmpty"}`} onClick={(event) => event.stopPropagation()}>
+              <SearchableSelect
+                value={item.section_id || ""}
+                onChange={(value) => void changeItemSection(item, value)}
+                options={rowContentTargetOptions}
+                searchPlaceholder="Найти пункт меню по названию или пути"
+                disabled={isPublicationLocked(item) || sectionSavingItemId === item.id}
+                ariaLabel={`Пункт меню для ${item.topic}`}
+              />
               {item.section_id ? <small>{item.section_content_mode === "menu_page" ? "Контент пункта меню" : "Вложенная страница"}</small> : null}
             </span>,
             item.word_count,
@@ -5120,6 +5218,28 @@ function TasksView({
     }
   }
 
+  async function approveAllTaskContent(task: Task) {
+    setTaskError("");
+    setTaskActionId(`${task.id}:approve-all`);
+    try {
+      const details = await api<TaskDetails>(`/tasks/${task.id}`);
+      const actionable = details.items.filter(canApproveContent);
+      if (!actionable.length) {
+        setTaskError(`В задаче «${task.title}» нет текстов, доступных для принятия.`);
+        return;
+      }
+      const results = await Promise.allSettled(actionable.map((item) => api(`/content/${item.id}/approve`, { method: "POST" })));
+      const failed = results.filter((result) => result.status === "rejected").length;
+      if (expandedTaskId === task.id) await loadTaskDetails(task.id);
+      await onChanged();
+      if (failed) setTaskError(`Принято ${actionable.length - failed} из ${actionable.length} текстов задачи. Ошибок: ${failed}.`);
+    } catch (error) {
+      setTaskError(error instanceof Error ? error.message : "Не удалось принять тексты задачи.");
+    } finally {
+      setTaskActionId("");
+    }
+  }
+
   async function changeTaskSection(task: Task, nextSectionId: string) {
     setTaskError("");
     setTaskActionId(`${task.id}:section`);
@@ -5592,6 +5712,7 @@ function TasksView({
           actionId={taskActionId}
           onToggle={toggleTask}
           onStart={startTaskPipeline}
+          onApproveAll={approveAllTaskContent}
           onSectionChange={changeTaskSection}
           onArchive={archiveTask}
           onEditQueries={openQueryEditor}
@@ -5707,6 +5828,7 @@ function AdminTasksAccordion({
   actionId,
   onToggle,
   onStart,
+  onApproveAll,
   onSectionChange,
   onArchive,
   onEditQueries,
@@ -5736,6 +5858,7 @@ function AdminTasksAccordion({
   actionId: string;
   onToggle: (task: Task) => Promise<void>;
   onStart: (task: Task) => Promise<void>;
+  onApproveAll: (task: Task) => Promise<void>;
   onSectionChange: (task: Task, sectionId: string) => Promise<void>;
   onArchive: (task: Task) => Promise<void>;
   onEditQueries: (item: ContentItem) => Promise<void>;
@@ -5958,6 +6081,18 @@ function AdminTasksAccordion({
                         title="Собрать или повторно собрать конкурентов и запустить генерацию всех незавершённых тем"
                       >
                         <Play size={15} /> {actionId === `${task.id}:start` ? "Запускаю" : "Запустить"}
+                      </button>
+                      <button
+                        className="button compact approve"
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onApproveAll(task);
+                        }}
+                        disabled={loading || actionId === `${task.id}:approve-all` || ["generation_queued", "generating"].includes(task.status)}
+                        title="Принять все готовые тексты этой задачи"
+                      >
+                        <CheckCircle2 size={15} /> {actionId === `${task.id}:approve-all` ? "Принимаю" : "Принять"}
                       </button>
                       <button
                         className="button compact danger"

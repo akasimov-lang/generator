@@ -1956,6 +1956,33 @@ h2 {
   width: 100%;
 }
 
+.projectMenuCapabilityRetry {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  height: 20px;
+  justify-content: center;
+  padding: 0;
+  position: absolute;
+  right: -4px;
+  width: 20px;
+}
+
+.projectMenuCapabilityRetry:hover:not(:disabled),
+.projectMenuCapabilityRetry:focus-visible {
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  color: var(--primary);
+}
+
+.projectMenuCapabilityRetry:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .projectMenuCapabilityValue {
   align-items: center;
   display: grid;
@@ -5494,6 +5521,31 @@ td {
 .contentSectionPlacement small {
   color: var(--muted);
   font-size: 10px;
+}
+
+.contentRowMenuSelect {
+  max-width: 320px;
+  min-width: 210px;
+}
+
+.contentRowMenuSelect .searchableSelectControl {
+  border-color: color-mix(in srgb, var(--primary) 42%, var(--border));
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  min-height: 34px;
+  padding: 6px 9px;
+}
+
+.contentRowMenuSelect.hasValue .searchableSelectControl {
+  background: color-mix(in srgb, var(--primary-soft) 68%, var(--surface));
+  color: var(--primary-strong);
+}
+
+.contentRowMenuSelect.isEmpty .searchableSelectControl {
+  background: color-mix(in srgb, var(--warning-soft) 58%, var(--surface));
+  border-color: color-mix(in srgb, var(--warning) 52%, var(--border));
+  color: color-mix(in srgb, var(--warning) 72%, var(--text));
 }
 
 .createMenuButton {
