@@ -4587,16 +4587,26 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onAd
   }
 
   async function deleteSection(section: Section) {
-    if (!window.confirm(`Удалить пункт меню «${section.name}» из нашей системы?`)) return;
+    const requiresProjectSync = section.sync_status === "synced";
+    if (requiresProjectSync && !window.confirm(`Удалить пункт меню «${section.name}» из проекта? Связанные неопубликованные тексты сохранятся без назначения пункта меню.`)) return;
     setDeletingSectionId(section.id);
     setFormError("");
+    setMenuNestingNotice("");
     try {
       await api(`/sites/${site.id}/sections/${section.id}`, { method: "DELETE" });
+      if (requiresProjectSync) {
+        const syncResult = await api<ProjectChangesSyncResult>(`/sites/${site.id}/sync-changes`, { method: "POST" });
+        if (!syncResult.success) {
+          const failure = syncResult.results.find((result) => !result.success);
+          throw new Error(failure?.error || "Пункт удалён локально, но меню проекта не удалось обновить");
+        }
+      }
       if (editingSectionId === section.id) cancelSectionEdit();
       setUpdatedAt(new Date().toISOString());
       await onChanged();
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : "Не удалось удалить пункт меню");
+      setMenuNestingNotice(error instanceof Error ? error.message : "Не удалось удалить пункт меню");
+      await onChanged();
     } finally {
       setDeletingSectionId(null);
     }

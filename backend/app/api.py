@@ -1107,11 +1107,31 @@ def update_section(site_id: str, section_id: str, payload: SectionUpdate, user: 
 def delete_section(site_id: str, section_id: str, user: AuthUser, db: Session = Depends(get_db)) -> dict[str, bool]:
     site = _get_site_or_404(db, site_id)
     section = _get_section_for_site(db, site_id, section_id)
-    task_count = db.scalar(select(func.count(models.GenerationTask.id)).where(models.GenerationTask.section_id == section.id)) or 0
-    content_count = db.scalar(select(func.count(models.ContentItem.id)).where(models.ContentItem.section_id == section.id)) or 0
     child_count = db.scalar(select(func.count(models.Section.id)).where(models.Section.parent_id == section.id)) or 0
-    if task_count or content_count or child_count:
-        raise HTTPException(status_code=409, detail="Пункт используется в задачах, контенте или содержит дочерние пункты и не может быть удалён")
+    if child_count:
+        raise HTTPException(status_code=409, detail="Сначала удалите дочерние пункты меню")
+    assigned_content = db.scalars(
+        select(models.ContentItem).where(models.ContentItem.section_id == section.id)
+    ).all()
+    locked_content = [item for item in assigned_content if item.status in {
+        "scheduled",
+        "retry_scheduled",
+        "publication_paused",
+        "publishing",
+        "publication_pending_confirmation",
+        "published",
+        "deletion_pending",
+    }]
+    if locked_content:
+        raise HTTPException(status_code=409, detail="Пункт связан с публикацией. Сначала завершите или удалите опубликованные тексты")
+    for task in db.scalars(
+        select(models.GenerationTask).where(models.GenerationTask.section_id == section.id)
+    ).all():
+        task.section_id = None
+    for item in assigned_content:
+        item.section_id = None
+        item.section_content_mode = "nested"
+        apply_content_section_slug(item, None)
     db.delete(section)
     db.add(
         models.PublicationLog(

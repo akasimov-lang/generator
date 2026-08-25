@@ -283,6 +283,69 @@ def test_regular_user_site_list_includes_all_project_statuses() -> None:
     }
 
 
+def test_regular_user_can_delete_menu_item_with_unpublished_content() -> None:
+    client, TestingSession = make_client()
+    with TestingSession() as db:
+        site = db.query(models.Site).one()
+        section = models.Section(
+            site_id=site.id,
+            external_id="unused-menu-item",
+            name="Unused menu item",
+            path="/unused-menu-item/",
+            menu_type="header",
+        )
+        db.add(section)
+        db.flush()
+        task = models.GenerationTask(
+            title="Regular user task",
+            site_id=site.id,
+            section_id=section.id,
+            geo="LV",
+            language="lv",
+            topics_count=1,
+        )
+        db.add(task)
+        db.flush()
+        item = models.ContentItem(
+            task_id=task.id,
+            site_id=site.id,
+            section_id=section.id,
+            topic="Generated text",
+            slug="/unused-menu-item/generated-text/",
+            generated_json={"pages": [{"slug": "/unused-menu-item/generated-text/"}]},
+            status="generated",
+            idempotency_key="regular-user-menu-delete",
+            section_source_slug="/generated-text/",
+        )
+        db.add(item)
+        db.commit()
+        site_id = site.id
+        section_id = section.id
+        task_id = task.id
+        item_id = item.id
+
+    client.app.dependency_overrides[require_auth] = lambda: {
+        "id": "regular-user-id",
+        "username": "Vitalina",
+        "is_admin": False,
+    }
+
+    response = client.delete(f"/api/sites/{site_id}/sections/{section_id}")
+
+    assert response.status_code == 200
+    assert response.json() == {"deleted": True}
+    with TestingSession() as db:
+        assert db.get(models.Section, section_id) is None
+        assert db.get(models.GenerationTask, task_id).section_id is None
+        unassigned_item = db.get(models.ContentItem, item_id)
+        assert unassigned_item.section_id is None
+        assert unassigned_item.slug == "/generated-text/"
+        log = db.scalar(select(models.PublicationLog).where(models.PublicationLog.content_item_id.is_(None)))
+        assert log is not None
+        assert log.request_payload["action"] == "menu_item_delete"
+        assert log.request_payload["username"] == "Vitalina"
+
+
 def test_regular_user_can_create_and_manage_generation_tasks() -> None:
     client, TestingSession = make_client()
     with TestingSession() as db:
