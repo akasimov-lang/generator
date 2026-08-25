@@ -5317,6 +5317,30 @@ function TasksView({
           onClose={() => setCreateFormExpanded(false)}
           wide
           className="createGenerationTaskModal"
+          headerActions={(
+            <div className="generationModalHeaderActions">
+              <button
+                className="button secondary compact"
+                type="submit"
+                form="create-generation-task-form"
+                name="taskAction"
+                value="draft"
+                disabled={Boolean(creatingTaskAction)}
+              >
+                <FileText size={16} /> {creatingTaskAction === "draft" ? "Сохраняем" : "Сохранить как черновик"}
+              </button>
+              <button
+                className="button primary compact"
+                type="submit"
+                form="create-generation-task-form"
+                name="taskAction"
+                value="start"
+                disabled={Boolean(creatingTaskAction)}
+              >
+                <Play size={16} /> {creatingTaskAction === "start" ? "Запускаем" : "Запустить"}
+              </button>
+            </div>
+          )}
         >
         <form id="create-generation-task-form" className="formGrid createTaskForm" onSubmit={createTask}>
           <label>
@@ -8667,7 +8691,7 @@ function ResponsiveTable({ columns, columnKeys = [], rows, rowClassNames, wrappe
   );
 }
 
-function Modal({ title, subtitle, children, onClose, wide, className = "" }: { title: string; subtitle?: string; children: React.ReactNode; onClose: () => void; wide?: boolean; className?: string }) {
+function Modal({ title, subtitle, children, onClose, wide, className = "", headerActions }: { title: string; subtitle?: string; children: React.ReactNode; onClose: () => void; wide?: boolean; className?: string; headerActions?: React.ReactNode }) {
   return (
     <div className="modalOverlay" role="dialog" aria-modal="true" aria-labelledby="modal-title" onMouseDown={onClose}>
       <div className={`modalDialog ${wide ? "wide" : ""} ${className}`.trim()} onMouseDown={(event) => event.stopPropagation()}>
@@ -8676,7 +8700,10 @@ function Modal({ title, subtitle, children, onClose, wide, className = "" }: { t
             <h2 id="modal-title">{title}</h2>
             {subtitle ? <small>{subtitle}</small> : null}
           </div>
-          <button className="iconButton" type="button" onClick={onClose} aria-label="Закрыть окно"><X size={18} /></button>
+          <div className="modalHeaderControls">
+            {headerActions}
+            <button className="iconButton" type="button" onClick={onClose} aria-label="Закрыть окно"><X size={18} /></button>
+          </div>
         </div>
         {children}
       </div>
