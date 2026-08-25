@@ -98,6 +98,7 @@ type ContentItem = {
   site_id: string | null;
   publication_campaign_id: string | null;
   section_id: string | null;
+  section_content_mode: "nested" | "menu_page";
   topic: string;
   slug: string;
   status: string;
@@ -3164,6 +3165,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
   const [previewItem, setPreviewItem] = React.useState<ContentItem | null>(null);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [bulkSectionId, setBulkSectionId] = React.useState("");
+  const [bulkSectionContentMode, setBulkSectionContentMode] = React.useState<"nested" | "menu_page">("nested");
   const [bulkBusy, setBulkBusy] = React.useState(false);
   const [publishingItemId, setPublishingItemId] = React.useState("");
   const [createMenuVisible, setCreateMenuVisible] = React.useState(false);
@@ -3173,6 +3175,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
   const [menuType, setMenuType] = React.useState<"header" | "footer">("header");
   const [jsonDraft, setJsonDraft] = React.useState("");
   const [sectionId, setSectionId] = React.useState("");
+  const [sectionContentMode, setSectionContentMode] = React.useState<"nested" | "menu_page">("nested");
   const [editorError, setEditorError] = React.useState("");
   const [contentSort, setContentSort] = React.useState<{ columnIndex: number; direction: "asc" | "desc" } | null>(null);
   const selectableIds = React.useMemo(() => content.filter((item) => !isPublicationLocked(item)).map((item) => item.id), [content]);
@@ -3188,6 +3191,41 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
     });
     return counts;
   }, [content]);
+  const cachedContentTargets = React.useMemo(() => {
+    const targets = new Map<string, { externalId: string; name: string; path: string; menuType: "header" | "footer" }>();
+    const collect = (items: unknown[], menuType: "header" | "footer") => {
+      items.forEach((rawItem, index) => {
+        const item = menuPreviewItem(rawItem, index);
+        const normalizedPath = normalizedTreePath(item.path);
+        const existing = sections.find((section) => section.menu_type === menuType && (
+          section.external_id.toLocaleLowerCase() === item.externalId.toLocaleLowerCase()
+          || Boolean(normalizedPath && normalizedTreePath(section.path) === normalizedPath)
+        ));
+        if (!existing) {
+          const key = `cached:${menuType}:${item.externalId}:${normalizedPath}`;
+          targets.set(key, { externalId: item.externalId, name: item.title, path: normalizedPath || `/${item.externalId}/`, menuType });
+        }
+        collect(nestedPreviewItems(rawItem), menuType);
+      });
+    };
+    collect(Array.isArray(site.default_menu.header) ? site.default_menu.header : [], "header");
+    collect(Array.isArray(site.default_menu.footer) ? site.default_menu.footer : [], "footer");
+    return targets;
+  }, [sections, site.default_menu]);
+  const contentTargetOptions = React.useMemo(() => [
+    { value: "", label: "Выберите пункт меню" },
+    ...sections.filter((section) => section.sync_status !== "external_deleted").map((section) => ({
+      value: section.id,
+      label: `${section.name} · ${section.path}`,
+      badge: String(sectionContentCounts.get(section.id) || 0),
+      badgeTone: "neutral" as const
+    })),
+    ...Array.from(cachedContentTargets.entries()).map(([value, target]) => ({
+      value,
+      label: `${target.name} · ${target.path}`,
+      description: `Существующий ${target.menuType === "header" ? "Header" : "Footer"}`
+    }))
+  ], [cachedContentTargets, sectionContentCounts, sections]);
   const sortedContent = React.useMemo(() => {
     if (!contentSort) return content;
     const direction = contentSort.direction === "asc" ? 1 : -1;
@@ -3233,6 +3271,23 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
     setSelectedIds(allSelected ? [] : selectableIds);
   }
 
+  async function resolveContentSectionId(value: string): Promise<string> {
+    if (sections.some((section) => section.id === value)) return value;
+    const target = cachedContentTargets.get(value);
+    if (!target) throw new Error("Выбранный пункт меню не найден в актуальном меню проекта");
+    const result = await api<{ section: Section; created: boolean }>(`/sites/${site.id}/sections/content-target`, {
+      method: "POST",
+      body: JSON.stringify({
+        external_id: target.externalId,
+        name: target.name,
+        path: target.path,
+        menu_type: target.menuType,
+        parent_id: null
+      })
+    });
+    return result.section.id;
+  }
+
   async function applyBulkSection() {
     if (!selectedIds.length || !bulkSectionId) {
       setEditorError(!selectedIds.length ? "Выберите хотя бы один текст." : "Выберите пункт меню.");
@@ -3241,9 +3296,10 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
     setEditorError("");
     setBulkBusy(true);
     try {
+      const resolvedSectionId = await resolveContentSectionId(bulkSectionId);
       const results = await Promise.allSettled(selectedIds.map((id) => api(`/content/${id}`, {
         method: "PATCH",
-        body: JSON.stringify({ section_id: bulkSectionId })
+        body: JSON.stringify({ section_id: resolvedSectionId, section_content_mode: bulkSectionContentMode })
       })));
       const failed = results.filter((result) => result.status === "rejected").length;
       await onChanged();
@@ -3320,6 +3376,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
     setSelectedItem(item);
     setJsonDraft(JSON.stringify(item.generated_json, null, 2));
     setSectionId(item.section_id || "");
+    setSectionContentMode(item.section_content_mode || "nested");
     setEditorError("");
   }
 
@@ -3334,12 +3391,17 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
       setEditorError("JSON невалидный.");
       return;
     }
-    await api(`/content/${selectedItem.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ generated_json: parsed, section_id: sectionId || null })
-    });
-    setSelectedItem(null);
-    await onChanged();
+    try {
+      const resolvedSectionId = sectionId ? await resolveContentSectionId(sectionId) : null;
+      await api(`/content/${selectedItem.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ generated_json: parsed, section_id: resolvedSectionId, section_content_mode: sectionContentMode })
+      });
+      setSelectedItem(null);
+      await onChanged();
+    } catch (error) {
+      setEditorError(error instanceof Error ? error.message : "Не удалось сохранить контент.");
+    }
   }
 
   async function approve(item: ContentItem) {
@@ -3391,19 +3453,15 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
             <SearchableSelect
               value={bulkSectionId}
               onChange={setBulkSectionId}
-              options={[
-                { value: "", label: "Выберите пункт меню" },
-                ...sections.map((section) => ({
-                  value: section.id,
-                  label: `${section.name} · ${section.path}`,
-                  badge: String(sectionContentCounts.get(section.id) || 0),
-                  badgeTone: "neutral" as const
-                }))
-              ]}
+              options={contentTargetOptions}
               searchPlaceholder="Найти пункт меню"
               disabled={bulkBusy}
             />
           </div>
+          <select className="contentPlacementSelect" value={bulkSectionContentMode} onChange={(event) => setBulkSectionContentMode(event.target.value as "nested" | "menu_page")} disabled={bulkBusy} title="Способ размещения контента">
+            <option value="nested">Вложенная страница</option>
+            <option value="menu_page">Контент пункта меню</option>
+          </select>
           <button className="button compact primary" type="button" onClick={applyBulkSection} disabled={!selectedIds.length || !bulkSectionId || bulkBusy}>
             <CheckCircle2 size={15} /> {bulkBusy ? "Сохраняю" : `Назначить выбранным (${selectedIds.length})`}
           </button>
@@ -3466,7 +3524,10 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
               <span className="compactContentTopic" title={item.topic}><ContentTopicLabel item={item} /></span>
               <button className="contentPreviewIconButton" type="button" onClick={() => setPreviewItem(item)} title="Просмотреть текст и метаданные" aria-label={`Просмотреть текст: ${item.topic}`}><Eye size={14} /></button>
             </span>,
-            sectionLabel(item.section_id, sections),
+            <span className="contentSectionPlacement">
+              <span>{sectionLabel(item.section_id, sections)}</span>
+              {item.section_id ? <small>{item.section_content_mode === "menu_page" ? "Контент пункта меню" : "Вложенная страница"}</small> : null}
+            </span>,
             item.word_count,
             <StatusBadge status={item.status} />,
             item.published_url ? <a href={item.published_url} target="_blank" rel="noreferrer"><ExternalLink size={15} /> URL</a> : item.published_at ? formatDate(item.published_at) : "-",
@@ -3489,9 +3550,16 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
               <SearchableSelect
                 value={sectionId}
                 onChange={setSectionId}
-                options={[{ value: "", label: "Не выбран" }, ...sections.map((section) => ({ value: section.id, label: `${section.name} · ${section.path}` }))]}
+                options={[{ value: "", label: "Не выбран" }, ...contentTargetOptions.filter((option) => option.value)]}
                 searchPlaceholder="Найти пункт меню"
               />
+            </label>
+            <label>
+              Размещение
+              <select value={sectionContentMode} onChange={(event) => setSectionContentMode(event.target.value as "nested" | "menu_page")}>
+                <option value="nested">Вложенная страница</option>
+                <option value="menu_page">Контент самого пункта меню</option>
+              </select>
             </label>
             <label>
               Slug

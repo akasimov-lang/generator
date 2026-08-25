@@ -131,6 +131,8 @@ def apply_lightweight_migrations() -> None:
                 "competitor_research_error": "TEXT",
                 "competitor_brief": "JSON",
                 "competitor_brief_text": "TEXT",
+                "section_content_mode": "VARCHAR(24) DEFAULT 'nested' NOT NULL",
+                "section_source_slug": "VARCHAR(240)",
             },
         )
         backfill_content_site_ids()

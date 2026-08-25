@@ -157,6 +157,8 @@ class ContentItem(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(40), default="draft")
     word_count: Mapped[int] = mapped_column(Integer, default=0)
     section_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    section_content_mode: Mapped[str] = mapped_column(String(24), default="nested", server_default="nested")
+    section_source_slug: Mapped[str | None] = mapped_column(String(240), nullable=True)
     generation_prompt_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
     include_casino_rating: Mapped[bool] = mapped_column(Boolean, default=False)
     generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

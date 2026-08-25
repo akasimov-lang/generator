@@ -204,6 +204,18 @@ def _cached_menu_item_matches(item: Any, payload: SectionCreate) -> bool:
     return bool(item_name and item_name.casefold() == payload.name.strip().casefold())
 
 
+def _flatten_cached_menu_items(items: list[Any]) -> list[Any]:
+    flattened: list[Any] = []
+    for item in items:
+        flattened.append(item)
+        if not isinstance(item, dict):
+            continue
+        children = item.get("children") or item.get("items") or item.get("submenu") or item.get("subMenu")
+        if isinstance(children, list):
+            flattened.extend(_flatten_cached_menu_items(children))
+    return flattened
+
+
 def _validate_task_topics(payload: GenerationTaskCreate) -> None:
     clean_topics = [topic.strip() for topic in payload.topics if topic.strip()]
     if not clean_topics:
@@ -859,7 +871,9 @@ def adopt_cached_section(site_id: str, payload: SectionCreate, _: AuthUser, db: 
     site = _get_site_or_404(db, site_id)
     cached_menu = site.default_menu if isinstance(site.default_menu, dict) else {}
     cached_items = cached_menu.get(payload.menu_type, [])
-    if not isinstance(cached_items, list) or not any(_cached_menu_item_matches(item, payload) for item in cached_items):
+    if not isinstance(cached_items, list) or not any(
+        _cached_menu_item_matches(item, payload) for item in _flatten_cached_menu_items(cached_items)
+    ):
         raise HTTPException(status_code=404, detail="Menu item was not found in the synchronized project menu")
 
     normalized_path = _normalized_menu_path(payload.path)
@@ -1798,13 +1812,20 @@ def update_content(content_id: str, payload: ContentUpdate, _: AuthUser, db: Ses
         task_section_ids = {task_item.section_id for task_item in item.task.items}
         item.task.section_id = task_section_ids.pop() if len(task_section_ids) == 1 else None
 
+    if "section_content_mode" in payload.model_fields_set and payload.section_content_mode:
+        item.section_content_mode = payload.section_content_mode
+
     if "generated_json" in payload.model_fields_set:
         if payload.generated_json is None:
             raise HTTPException(status_code=400, detail="generated_json cannot be null")
         item.generated_json = payload.generated_json
         item.word_count = count_words(payload.generated_json)
 
-    if "section_id" in payload.model_fields_set or "generated_json" in payload.model_fields_set:
+    if (
+        "section_id" in payload.model_fields_set
+        or "section_content_mode" in payload.model_fields_set
+        or "generated_json" in payload.model_fields_set
+    ):
         apply_content_section_slug(item, selected_section)
 
     if item.status in {"draft", "generated", "approved", "rejected", "scheduled", "publication_failed"}:

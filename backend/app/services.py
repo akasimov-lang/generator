@@ -3007,8 +3007,13 @@ def apply_content_section_slug(item: models.ContentItem, section: models.Section
     payload = copy.deepcopy(item.generated_json) if isinstance(item.generated_json, dict) else {}
     pages = payload.get("pages") if isinstance(payload.get("pages"), list) else []
     page = pages[0] if pages and isinstance(pages[0], dict) else None
-    source_slug = page.get("slug") if page else item.slug
-    full_slug = build_nested_page_slug(section.path if section else None, source_slug or item.slug)
+    source_slug = item.section_source_slug or (page.get("slug") if page else item.slug) or item.slug
+    if not item.section_source_slug:
+        item.section_source_slug = _normalized_project_slug(source_slug)
+    if section and item.section_content_mode == "menu_page":
+        full_slug = _normalized_project_slug(section.path)
+    else:
+        full_slug = build_nested_page_slug(section.path if section else None, source_slug)
     item.slug = full_slug
     if page is not None:
         page["slug"] = full_slug
@@ -3235,7 +3240,14 @@ def build_project_page_payload(
             "description": str(page.get("description") or ""),
             "publishedTime": timestamp,
             "updatedTime": timestamp,
-            "slug": build_nested_page_slug(section.path if section else None, page.get("slug") or item.slug),
+            "slug": (
+                _normalized_project_slug(section.path)
+                if section and item.section_content_mode == "menu_page"
+                else build_nested_page_slug(
+                    section.path if section else None,
+                    item.section_source_slug or page.get("slug") or item.slug,
+                )
+            ),
             "content": content,
         },
         "token": token,
@@ -3342,13 +3354,19 @@ def build_publication_payload(db: Session, item: models.ContentItem) -> dict:
         "section_name": section.name,
         "section_path": section.path,
         "menu_type": section.menu_type,
+        "content_mode": item.section_content_mode,
     }
     payload["publication_target"] = publication_target
     for page in payload.get("pages", []):
         if isinstance(page, dict):
-            page["slug"] = build_nested_page_slug(section.path, page.get("slug") or item.slug)
+            page["slug"] = (
+                _normalized_project_slug(section.path)
+                if item.section_content_mode == "menu_page"
+                else build_nested_page_slug(section.path, item.section_source_slug or page.get("slug") or item.slug)
+            )
             page["sectionId"] = section.external_id
             page["sectionPath"] = section.path
+            page["sectionContentMode"] = item.section_content_mode
     return payload
 
 
@@ -3388,6 +3406,7 @@ def build_campaign_publication_bundle(
                 "topic": item.topic,
                 "slug": item.slug,
                 "section_id": item.section_id,
+                "section_content_mode": item.section_content_mode,
                 "scheduled_at": item.scheduled_at.isoformat() if item.scheduled_at else None,
                 "payload": build_publication_payload(db, item),
             }

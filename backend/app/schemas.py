@@ -411,6 +411,7 @@ class ContentItemResponse(BaseModel):
     site_id: str | None
     publication_campaign_id: str | None
     section_id: str | None
+    section_content_mode: Literal["nested", "menu_page"] = "nested"
     topic: str
     slug: str
     generated_json: dict[str, Any]
@@ -535,6 +536,7 @@ class CompetitorResearchResponse(BaseModel):
 class ContentUpdate(BaseModel):
     generated_json: dict[str, Any] | None = None
     section_id: str | None = None
+    section_content_mode: Literal["nested", "menu_page"] | None = None
 
 
 class PublicationCampaignCreate(BaseModel):

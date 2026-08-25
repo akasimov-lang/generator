@@ -337,6 +337,20 @@ def test_project_page_payload_uses_assigned_menu_path(db: Session) -> None:
     assert payload["page"]["slug"] == "/best-casinos/test/"
 
 
+def test_project_page_payload_can_update_the_menu_page_itself(db: Session) -> None:
+    site, item = make_content(db)
+    section = models.Section(site=site, external_id="best-casinos", name="Best Casinos", path="/best-casinos/")
+    db.add(section)
+    db.flush()
+    item.section_id = section.id
+    item.section_content_mode = "menu_page"
+    item.section_source_slug = item.slug
+
+    payload = build_project_page_payload(item, site, "fresh-token", section=section)
+
+    assert payload["page"]["slug"] == "/best-casinos/"
+
+
 def test_project_server_requests_refresh_token_and_store_status_codes(db: Session, monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict] = []
     server_lookups: list[list[str] | None] = []

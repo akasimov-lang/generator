@@ -5374,6 +5374,22 @@ td {
   max-width: 420px;
 }
 
+.contentPlacementSelect {
+  flex: 0 0 190px;
+  min-height: 38px;
+  white-space: nowrap;
+}
+
+.contentSectionPlacement {
+  display: grid;
+  gap: 2px;
+}
+
+.contentSectionPlacement small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
 .createMenuButton {
   border-width: 2px;
   font-weight: 800;
