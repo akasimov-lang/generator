@@ -1,6 +1,6 @@
 """Store the latest publication HTTP status on each content item.
 
-Revision ID: 0029_content_publication_status_code
+Revision ID: 0029_publication_status_code
 Revises: 0028_published_content_deletion
 Create Date: 2026-08-25
 """
@@ -8,7 +8,7 @@ Create Date: 2026-08-25
 from alembic import op
 
 
-revision = "0029_content_publication_status_code"
+revision = "0029_publication_status_code"
 down_revision = "0028_published_content_deletion"
 branch_labels = None
 depends_on = None
