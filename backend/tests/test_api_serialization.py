@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -344,6 +344,52 @@ def test_regular_user_can_delete_menu_item_with_unpublished_content() -> None:
         assert log is not None
         assert log.request_payload["action"] == "menu_item_delete"
         assert log.request_payload["username"] == "Vitalina"
+
+
+def test_regular_user_can_send_menu_item_to_project(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, TestingSession = make_client()
+    with TestingSession() as db:
+        site = db.query(models.Site).one()
+        section = models.Section(
+            site_id=site.id,
+            external_id="footer-contact",
+            name="Contact",
+            path="/contact/",
+            menu_type="footer",
+        )
+        db.add(section)
+        db.commit()
+        site_id = site.id
+        section_id = section.id
+
+    client.app.dependency_overrides[require_auth] = lambda: {
+        "id": "regular-user-id",
+        "username": "Vitalina",
+        "is_admin": False,
+    }
+    received: dict[str, object] = {}
+
+    async def fake_sync_project_menus(
+        db: Session,
+        site: models.Site,
+        initiator_username: str | None = None,
+        menu_types: tuple[str, ...] = ("header", "footer"),
+    ) -> dict:
+        received.update(username=initiator_username, menu_types=menu_types, site_id=site.id)
+        return {
+            "success": True,
+            "status_codes": [200],
+            "last_status_code": 200,
+            "results": [{"type": "footer", "status_code": 200, "success": True}],
+        }
+
+    monkeypatch.setattr(api_module, "sync_project_menus", fake_sync_project_menus)
+
+    response = client.post(f"/api/sites/{site_id}/sections/{section_id}/sync")
+
+    assert response.status_code == 200
+    assert response.json()["section_id"] == section_id
+    assert received == {"username": "Vitalina", "menu_types": ("footer",), "site_id": site_id}
 
 
 def test_regular_user_can_create_and_manage_generation_tasks() -> None:

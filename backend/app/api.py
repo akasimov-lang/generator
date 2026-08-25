@@ -917,6 +917,29 @@ async def sync_site_changes(site_id: str, _: AuthUser, db: Session = Depends(get
         raise HTTPException(status_code=502, detail=str(error)) from error
 
 
+@router.post("/sites/{site_id}/sections/{section_id}/sync")
+async def sync_site_section(
+    site_id: str,
+    section_id: str,
+    user: AuthUser,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    site = _get_site_or_404(db, site_id)
+    section = _get_section_for_site(db, site_id, section_id)
+    if section.sync_status == "external_deleted":
+        raise HTTPException(status_code=409, detail="Restore the menu item before sending it")
+    try:
+        result = await sync_project_menus(
+            db,
+            site,
+            initiator_username=_request_username(user),
+            menu_types=(section.menu_type,),
+        )
+        return {"section_id": section.id, **result}
+    except ProjectCacheError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
 @router.post("/sites/{site_id}/sections", response_model=SectionResponse)
 def create_section(site_id: str, payload: SectionCreate, user: AuthUser, db: Session = Depends(get_db)) -> Any:
     site = _get_site_or_404(db, site_id)

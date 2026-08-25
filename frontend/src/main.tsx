@@ -4355,6 +4355,7 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onAd
   const [savingSectionEdit, setSavingSectionEdit] = React.useState(false);
   const [deletingSectionId, setDeletingSectionId] = React.useState<string | null>(null);
   const [restoringSectionId, setRestoringSectionId] = React.useState<string | null>(null);
+  const [sendingSectionId, setSendingSectionId] = React.useState<string | null>(null);
   const [menuNestingNotice, setMenuNestingNotice] = React.useState("");
   const [adoptingParentKey, setAdoptingParentKey] = React.useState<string | null>(null);
   const [temporaryParentId, setTemporaryParentId] = React.useState<string | null>(null);
@@ -4633,6 +4634,26 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onAd
     }
   }
 
+  async function sendSection(section: Section) {
+    setSendingSectionId(section.id);
+    setFormError("");
+    setMenuNestingNotice("");
+    try {
+      const syncResult = await api<ProjectChangesSyncResult>(`/sites/${site.id}/sections/${section.id}/sync`, { method: "POST" });
+      if (!syncResult.success) {
+        const failure = syncResult.results.find((result) => !result.success);
+        throw new Error(failure?.error || `Не удалось отправить пункт меню «${section.name}»`);
+      }
+      setUpdatedAt(new Date().toISOString());
+      await onChanged();
+    } catch (error) {
+      setMenuNestingNotice(error instanceof Error ? error.message : "Не удалось отправить пункт меню");
+      await onChanged();
+    } finally {
+      setSendingSectionId(null);
+    }
+  }
+
   async function saveMenuItem(targetMenuType: "header" | "footer", item?: MenuLibraryItem) {
     const itemName = (item?.name || name).trim();
     const itemPath = (item?.path || path).trim();
@@ -4851,7 +4872,7 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onAd
                 : section.sync_status === "external_deleted"
                   ? <span className="pendingSyncBadge">Удалено на проекте</span>
                   : <span className="pendingSyncBadge">Не синхронизировано</span>,
-              editing ? <div className="menuSectionEditActions"><button className="button compact secondary" type="button" onClick={cancelSectionEdit} disabled={savingSectionEdit}>Отменить</button><button className="button compact primary" type="button" onClick={() => saveSectionEdit(section)} disabled={savingSectionEdit}>Сохранить</button></div> : <div className="menuSectionEditActions">{section.sync_status === "external_deleted" ? <button className="button compact primary" type="button" onClick={() => restoreSection(section)} disabled={restoringSectionId === section.id}><RefreshCcw size={14} /> {restoringSectionId === section.id ? "Восстанавливаем" : "Восстановить"}</button> : <button className="button compact secondary" type="button" onClick={() => startSectionEdit(section)} disabled={deletingSectionId === section.id}><Edit3 size={14} /> Изменить</button>}<button className="button compact danger" type="button" onClick={() => deleteSection(section)} disabled={deletingSectionId === section.id || restoringSectionId === section.id}><Trash2 size={14} /> {deletingSectionId === section.id ? "Удаляем" : "Удалить"}</button></div>
+              editing ? <div className="menuSectionEditActions"><button className="button compact secondary" type="button" onClick={cancelSectionEdit} disabled={savingSectionEdit}>Отменить</button><button className="button compact primary" type="button" onClick={() => saveSectionEdit(section)} disabled={savingSectionEdit}>Сохранить</button></div> : <div className="menuSectionEditActions">{section.sync_status === "external_deleted" ? <button className="button compact primary" type="button" onClick={() => restoreSection(section)} disabled={restoringSectionId === section.id || sendingSectionId === section.id}><RefreshCcw size={14} /> {restoringSectionId === section.id ? "Восстанавливаем" : "Восстановить"}</button> : <><button className="button compact primary" type="button" onClick={() => sendSection(section)} disabled={sendingSectionId === section.id || deletingSectionId === section.id}><Send size={14} /> {sendingSectionId === section.id ? "Отправляем" : "Отправить"}</button><button className="button compact secondary" type="button" onClick={() => startSectionEdit(section)} disabled={deletingSectionId === section.id || sendingSectionId === section.id}><Edit3 size={14} /> Изменить</button></>}<button className="button compact danger" type="button" onClick={() => deleteSection(section)} disabled={deletingSectionId === section.id || restoringSectionId === section.id || sendingSectionId === section.id}><Trash2 size={14} /> {deletingSectionId === section.id ? "Удаляем" : "Удалить"}</button></div>
             ];
           })}
         /> : null}

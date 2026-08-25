@@ -3104,7 +3104,15 @@ def build_project_menu_payload(db: Session, site: models.Site, menu_type: str, n
     return {"type": menu_type, "folder": site.name, "list": items}
 
 
-async def sync_project_menus(db: Session, site: models.Site, initiator_username: str | None = None) -> dict:
+async def sync_project_menus(
+    db: Session,
+    site: models.Site,
+    initiator_username: str | None = None,
+    menu_types: tuple[str, ...] = ("header", "footer"),
+) -> dict:
+    invalid_menu_types = set(menu_types) - {"header", "footer"}
+    if invalid_menu_types or not menu_types:
+        raise ValueError("Menu types must contain header and/or footer")
     refresh_project_server_id(db, site)
     capabilities = fetch_project_template_capabilities(site)
     site.header_menu_template_rendered = capabilities["header_menu_rendered"]
@@ -3115,6 +3123,7 @@ async def sync_project_menus(db: Session, site: models.Site, initiator_username:
     pending_nested_sections = db.scalars(
         select(models.Section).where(
             models.Section.site_id == site.id,
+            models.Section.menu_type.in_(menu_types),
             models.Section.sync_status == "pending",
             models.Section.parent_id.is_not(None),
         )
@@ -3133,7 +3142,7 @@ async def sync_project_menus(db: Session, site: models.Site, initiator_username:
     endpoint = project_server_url(site, "/projects/menu")
     results: list[dict] = []
     async with httpx.AsyncClient(timeout=45.0) as client:
-        for menu_type in ("header", "footer"):
+        for menu_type in menu_types:
             payload = build_project_menu_payload(db, site, menu_type)
             try:
                 token = await refresh_project_server_token(client)
