@@ -1085,7 +1085,6 @@ async def build_gemini_content(
         include_faq=include_faq,
         competitor_brief=competitor_brief,
         variation_context=variation_context,
-        generate_title=generate_title,
     )
     page = base_payload["pages"][0]
     prompt = build_gemini_prompt(
@@ -1100,6 +1099,7 @@ async def build_gemini_content(
         include_faq=include_faq,
         competitor_brief=competitor_brief,
         variation_context=variation_context,
+        generate_title=generate_title,
     )
     try:
         response = await call_gemini(provider, prompt)
