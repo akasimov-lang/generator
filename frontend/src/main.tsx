@@ -3362,7 +3362,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
     }))
   ], [cachedContentTargets, sectionContentCounts, sections]);
   const rowContentTargetOptions = React.useMemo(() => [
-    { value: "", label: "Не выбран", description: "Назначить пункт меню" },
+    { value: "", label: "Не выбран" },
     ...contentTargetOptions.filter((option) => option.value)
   ], [contentTargetOptions]);
   const sortedContent = React.useMemo(() => {
