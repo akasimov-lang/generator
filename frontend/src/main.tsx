@@ -3197,13 +3197,17 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
       items.forEach((rawItem, index) => {
         const item = menuPreviewItem(rawItem, index);
         const normalizedPath = normalizedTreePath(item.path);
+        if (!normalizedPath) {
+          collect(nestedPreviewItems(rawItem), menuType);
+          return;
+        }
         const existing = sections.find((section) => section.menu_type === menuType && (
           section.external_id.toLocaleLowerCase() === item.externalId.toLocaleLowerCase()
           || Boolean(normalizedPath && normalizedTreePath(section.path) === normalizedPath)
         ));
         if (!existing) {
           const key = `cached:${menuType}:${item.externalId}:${normalizedPath}`;
-          targets.set(key, { externalId: item.externalId, name: item.title, path: normalizedPath || `/${item.externalId}/`, menuType });
+          targets.set(key, { externalId: item.externalId, name: item.title, path: normalizedPath, menuType });
         }
         collect(nestedPreviewItems(rawItem), menuType);
       });
@@ -4215,6 +4219,11 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onAd
       );
       return;
     }
+    const itemPath = normalizedTreePath(item.path) || normalizedTreePath(existingParent?.path || "");
+    if (!itemPath) {
+      setFormError(`У пункта «${item.title}» отсутствует корректный URL. Обновите проект и повторите попытку.`);
+      return;
+    }
     setMenuNestingNotice("");
     const parentKey = `${targetMenuType}:${item.externalId}`;
     setAdoptingParentKey(parentKey);
@@ -4227,7 +4236,7 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onAd
             body: JSON.stringify({
               external_id: item.externalId,
               name: item.title,
-              path: item.path || `/${item.externalId}/`,
+              path: itemPath,
               menu_type: targetMenuType,
               parent_id: null
             })
@@ -4251,6 +4260,11 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onAd
 
   async function addContentToMenuItem(targetMenuType: "header" | "footer", item: MenuPreviewItem, existingSection?: Section) {
     setFormError("");
+    const itemPath = normalizedTreePath(item.path) || normalizedTreePath(existingSection?.path || "");
+    if (!itemPath) {
+      setFormError(`У пункта «${item.title}» отсутствует корректный URL. Обновите проект и повторите попытку.`);
+      return;
+    }
     try {
       const result = existingSection
         ? { section: existingSection, created: false }
@@ -4259,7 +4273,7 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onAd
             body: JSON.stringify({
               external_id: item.externalId,
               name: item.title,
-              path: item.path || `/${item.externalId}/`,
+              path: itemPath,
               menu_type: targetMenuType,
               parent_id: null
             })
@@ -7623,9 +7637,12 @@ function menuPreviewItem(item: unknown, index: number): MenuPreviewItem {
 }
 
 function normalizedTreePath(value: string): string {
-  const withoutQuery = value.trim().split(/[?#]/, 1)[0];
+  const rawValue = value.trim();
+  if (!rawValue) return "";
+  const withoutQuery = rawValue.split(/[?#]/, 1)[0];
+  if (!withoutQuery) return "";
   const path = withoutQuery.replace(/^https?:\/\/[^/]+/i, "").replace(/^\/+|\/+$/g, "");
-  return path ? `/${path}/` : "";
+  return path ? `/${path}/` : "/";
 }
 
 function nestedPreviewItems(item: unknown): unknown[] {
