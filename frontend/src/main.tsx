@@ -1895,7 +1895,7 @@ function ProjectWorkspaceView({
         body: JSON.stringify({ names: [selectedSite.name] })
       });
       changesResult = await api<ProjectChangesSyncResult>(`/sites/${selectedSite.id}/sync-changes`, { method: "POST" });
-      const refreshedCapabilities = await api<MenuCapabilities>(`/sites/${selectedSite.id}/menu-capabilities?refresh=true`);
+      const refreshedCapabilities = await api<MenuCapabilities>(`/sites/${selectedSite.id}/menu-capabilities`);
       setMenuCapabilities(refreshedCapabilities);
     }
     await onChanged();
@@ -1928,7 +1928,7 @@ function ProjectWorkspaceView({
     setMenuCapabilitiesLoading(true);
     setMenuCapabilitiesError("");
     try {
-      const refreshedCapabilities = await api<MenuCapabilities>(`/sites/${selectedSite.id}/menu-capabilities?refresh=true`);
+      const refreshedCapabilities = await api<MenuCapabilities>(`/sites/${selectedSite.id}/menu-capabilities/check`, { method: "POST" });
       setMenuCapabilities(refreshedCapabilities);
       await onChanged();
     } catch (error) {
@@ -1996,6 +1996,18 @@ function ProjectWorkspaceView({
           ) : null}
           <strong>{selectedSite?.name || "Выберите проект"}</strong>
           {selectedSite ? <ProjectVerificationMedal status={selectedProjectMedalStatus} /> : null}
+          {selectedSite ? (
+            <button
+              className="workspaceMenuCheckButton"
+              type="button"
+              onClick={() => void retryMenuCapabilities()}
+              disabled={menuCapabilitiesLoading || menuCheckPending}
+              title="Точная проверка отображения меню на сайте — Desktop 1440×1000"
+              aria-label={`Запустить точную desktop-проверку меню проекта ${selectedSite.name}`}
+            >
+              <RefreshCcw className={menuCapabilitiesLoading || menuCheckPending ? "spin" : ""} size={15} />
+            </button>
+          ) : null}
         </span>
       )}>
         <div className="projectHeader">
@@ -2080,8 +2092,8 @@ function ProjectWorkspaceView({
                   <span className="projectTitleCard"><small>Title</small><b title={selectedSite.homepage_title || "Title не указан"}>{selectedSite.homepage_title || "—"}</b></span>
                   <span className="projectMetricCard"><small>Доменов в сетке</small><b>{formatNumber(selectedSite.domains_count)}</b></span>
                   <span className="projectMetricCard"><small>Страниц</small><b>{formatNumber(selectedSite.internal_pages_count)}</b></span>
-                  <MenuCapabilityCard label="Header" templateRendered={menuCapabilities?.header_menu_template_rendered} rendered={menuCapabilities?.header_menu_rendered} nested={menuCapabilities?.header_menu_nested} icon="header" loading={menuCapabilitiesLoading || menuCheckPending} error={menuCapabilitiesError || menuCheckError} onRetry={retryMenuCapabilities} />
-                  <MenuCapabilityCard label="Footer" templateRendered={menuCapabilities?.footer_menu_template_rendered} rendered={menuCapabilities?.footer_menu_rendered} nested={menuCapabilities?.footer_menu_nested} icon="footer" loading={menuCapabilitiesLoading || menuCheckPending} error={menuCapabilitiesError || menuCheckError} onRetry={retryMenuCapabilities} />
+                  <MenuCapabilityCard label="Header" templateRendered={menuCapabilities?.header_menu_template_rendered} rendered={menuCapabilities?.header_menu_rendered} nested={menuCapabilities?.header_menu_nested} icon="header" loading={menuCapabilitiesLoading || menuCheckPending} error={menuCapabilitiesError || menuCheckError} />
+                  <MenuCapabilityCard label="Footer" templateRendered={menuCapabilities?.footer_menu_template_rendered} rendered={menuCapabilities?.footer_menu_rendered} nested={menuCapabilities?.footer_menu_nested} icon="footer" loading={menuCapabilitiesLoading || menuCheckPending} error={menuCapabilitiesError || menuCheckError} />
                 </div>
               </>
             ) : null}
@@ -2240,7 +2252,7 @@ function AutoFitDomain({ value }: { value: string }) {
   return <b ref={domainRef} className="projectCanonDomain" title={value}>{value}</b>;
 }
 
-function MenuCapabilityCard({ label, templateRendered, rendered, nested, icon, loading, error, onRetry }: { label: string; templateRendered: boolean | null | undefined; rendered: boolean | null | undefined; nested: boolean | null | undefined; icon: "header" | "footer"; loading: boolean; error: string; onRetry: () => void }) {
+function MenuCapabilityCard({ label, templateRendered, rendered, nested, icon, loading, error }: { label: string; templateRendered: boolean | null | undefined; rendered: boolean | null | undefined; nested: boolean | null | undefined; icon: "header" | "footer"; loading: boolean; error: string }) {
   const statusText = loading ? "Проверяем" : error ? "Ошибка сервера" : rendered == null ? "Не проверено" : rendered ? "Меню реализовано" : "Меню не реализовано";
   const renderingDetails = rendered === false
     ? templateRendered ? "Шаблон поддерживает меню, но на сайте оно не отображается" : "В шаблоне и на сайте меню не отображается"
@@ -2249,9 +2261,6 @@ function MenuCapabilityCard({ label, templateRendered, rendered, nested, icon, l
     <span className={`projectMenuCapability ${error ? "isError" : rendered === true ? "isReady" : rendered === false ? "isMissing" : "isChecking"}`} title={error || `${label}: ${statusText}${renderingDetails ? `. ${renderingDetails}` : ""}`}>
       <span className="projectMenuCapabilityHeader">
         <small>{label}</small>
-        <button className="projectMenuCapabilityRetry" type="button" onClick={onRetry} disabled={loading} title={`Повторить проверку ${label}`} aria-label={`Повторить проверку ${label}`}>
-          <RefreshCcw className={loading ? "spin" : ""} size={13} />
-        </button>
       </span>
       <span className="projectMenuCapabilityValue">
         {rendered === true ? <MenuReadyMedal /> : rendered === false ? <MenuReadyMedal tone="red" /> : icon === "header" ? <HeaderMenuIcon /> : <FooterMenuIcon />}

@@ -153,6 +153,24 @@ _LIVE_MENU_VISIBILITY_SCRIPT = r"""
 _LIVE_MENU_CHECK_LOCK = threading.BoundedSemaphore(value=1)
 
 
+def _block_unneeded_browser_resource(route: Any) -> None:
+    request = route.request
+    resource_type = request.resource_type
+    url = request.url.casefold()
+    blocked_hosts = (
+        "google-analytics.com",
+        "googletagmanager.com",
+        "doubleclick.net",
+        "facebook.net",
+        "hotjar.com",
+        "clarity.ms",
+    )
+    if resource_type in {"image", "media", "font"} or any(host in url for host in blocked_hosts):
+        route.abort()
+    else:
+        route.continue_()
+
+
 def fetch_live_menu_capabilities(site: models.Site) -> dict[str, bool]:
     try:
         from playwright.sync_api import Error as PlaywrightError
@@ -171,21 +189,27 @@ def fetch_live_menu_capabilities(site: models.Site) -> dict[str, bool]:
                     args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
                 )
                 try:
-                    page = browser.new_page(
+                    context = browser.new_context(
                         viewport={"width": 1440, "height": 1000},
                         user_agent=(
                             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
                             "(KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
                         ),
+                        service_workers="block",
                     )
-                    response = page.goto(project_url, wait_until="domcontentloaded", timeout=25_000)
-                    if response is None or response.status >= 400:
-                        status = response.status if response is not None else "NO_RESPONSE"
-                        raise ProjectCacheError(
-                            f"Project homepage returned HTTP {status}", f"HOMEPAGE_HTTP_{status}"
-                        )
-                    page.wait_for_timeout(1_000)
-                    result = page.evaluate(_LIVE_MENU_VISIBILITY_SCRIPT)
+                    try:
+                        page = context.new_page()
+                        page.route("**/*", _block_unneeded_browser_resource)
+                        response = page.goto(project_url, wait_until="domcontentloaded", timeout=20_000)
+                        if response is None or response.status >= 400:
+                            status = response.status if response is not None else "NO_RESPONSE"
+                            raise ProjectCacheError(
+                                f"Project homepage returned HTTP {status}", f"HOMEPAGE_HTTP_{status}"
+                            )
+                        page.wait_for_timeout(1_000)
+                        result = page.evaluate(_LIVE_MENU_VISIBILITY_SCRIPT)
+                    finally:
+                        context.close()
                 finally:
                     browser.close()
         except ProjectCacheError:

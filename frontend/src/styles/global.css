@@ -1614,6 +1614,33 @@ h2 {
   width: 30px;
 }
 
+.workspaceMenuCheckButton {
+  align-items: center;
+  background: var(--primary-soft);
+  border: 1px solid color-mix(in srgb, var(--primary) 38%, var(--border));
+  border-radius: 7px;
+  color: var(--primary);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 30px;
+  justify-content: center;
+  margin-left: 2px;
+  padding: 0;
+  width: 30px;
+}
+
+.workspaceMenuCheckButton:hover:not(:disabled),
+.workspaceMenuCheckButton:focus-visible {
+  background: #d8f6e2;
+  box-shadow: 0 3px 8px rgba(20, 112, 59, 0.18);
+}
+
+.workspaceMenuCheckButton:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .workspaceProjectTitle strong {
   font: inherit;
   font-weight: 800;
@@ -1927,33 +1954,6 @@ h2 {
   min-width: 0;
   position: relative;
   width: 100%;
-}
-
-.projectMenuCapabilityRetry {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  border-radius: 5px;
-  color: var(--muted);
-  cursor: pointer;
-  display: inline-flex;
-  height: 20px;
-  justify-content: center;
-  padding: 0;
-  position: absolute;
-  right: -4px;
-  width: 20px;
-}
-
-.projectMenuCapabilityRetry:hover:not(:disabled),
-.projectMenuCapabilityRetry:focus-visible {
-  background: color-mix(in srgb, var(--primary) 12%, transparent);
-  color: var(--primary);
-}
-
-.projectMenuCapabilityRetry:disabled {
-  cursor: wait;
-  opacity: 0.65;
 }
 
 .projectMenuCapabilityValue {

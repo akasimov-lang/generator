@@ -789,30 +789,62 @@ def list_sections(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> A
     return db.scalars(select(models.Section).where(models.Section.site_id == site_id).order_by(models.Section.name.asc())).all()
 
 
-@router.get("/sites/{site_id}/menu-capabilities")
-def get_site_menu_capabilities(site_id: str, user: AuthUser, db: Session = Depends(get_db), refresh: bool = False) -> dict[str, Any]:
-    site = _get_site_or_404(db, site_id)
-    latest_check = db.scalar(
+def _latest_site_menu_visibility_check(db: Session, site_id: str) -> models.MenuVisibilityCheck | None:
+    return db.scalar(
         select(models.MenuVisibilityCheck)
-        .where(models.MenuVisibilityCheck.site_id == site.id)
+        .where(models.MenuVisibilityCheck.site_id == site_id)
         .order_by(models.MenuVisibilityCheck.created_at.desc())
         .limit(1)
     )
-    active_check = db.scalar(
+
+
+def _active_site_menu_visibility_check(db: Session, site_id: str) -> models.MenuVisibilityCheck | None:
+    return db.scalar(
         select(models.MenuVisibilityCheck)
         .where(
-            models.MenuVisibilityCheck.site_id == site.id,
+            models.MenuVisibilityCheck.site_id == site_id,
             models.MenuVisibilityCheck.status.in_(("queued", "running")),
         )
         .order_by(models.MenuVisibilityCheck.created_at.asc())
         .limit(1)
     )
-    failed_unchecked = (
-        site.menu_capabilities_checked_at is None
-        and latest_check is not None
-        and latest_check.status == "failed"
+
+
+def _site_menu_capabilities_payload(
+    site: models.Site, latest_check: models.MenuVisibilityCheck | None
+) -> dict[str, Any]:
+    result_is_current = site.menu_capabilities_checked_at is not None
+    check_status = (
+        latest_check.status
+        if latest_check is not None and latest_check.status in {"queued", "running", "failed"}
+        else "completed" if result_is_current else "not_checked"
     )
-    if active_check is None and (refresh or (site.menu_capabilities_checked_at is None and not failed_unchecked)):
+    return {
+        "checked_at": site.menu_capabilities_checked_at,
+        "header_menu_template_rendered": site.header_menu_template_rendered,
+        "header_menu_rendered": site.header_menu_rendered if result_is_current else None,
+        "header_menu_nested": site.header_menu_nested if result_is_current else None,
+        "footer_menu_template_rendered": site.footer_menu_template_rendered,
+        "footer_menu_rendered": site.footer_menu_rendered if result_is_current else None,
+        "footer_menu_nested": site.footer_menu_nested if result_is_current else None,
+        "check_id": latest_check.id if latest_check is not None else None,
+        "check_status": check_status,
+        "check_error_code": latest_check.error_code if latest_check is not None else None,
+        "check_error_message": latest_check.error_message if latest_check is not None else None,
+    }
+
+
+@router.get("/sites/{site_id}/menu-capabilities")
+def get_site_menu_capabilities(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> dict[str, Any]:
+    site = _get_site_or_404(db, site_id)
+    return _site_menu_capabilities_payload(site, _latest_site_menu_visibility_check(db, site.id))
+
+
+@router.post("/sites/{site_id}/menu-capabilities/check")
+def enqueue_site_menu_capabilities_check(site_id: str, user: AuthUser, db: Session = Depends(get_db)) -> dict[str, Any]:
+    site = _get_site_or_404(db, site_id)
+    active_check = _active_site_menu_visibility_check(db, site.id)
+    if active_check is None:
         active_check = models.MenuVisibilityCheck(
             site_id=site.id,
             requested_by_user_id=user["id"] if user else None,
@@ -829,25 +861,7 @@ def get_site_menu_capabilities(site_id: str, user: AuthUser, db: Session = Depen
             active_check.error_message = f"{type(error).__name__}: {error}"[:1000]
             active_check.finished_at = datetime.now(timezone.utc)
             db.commit()
-        latest_check = active_check
-    elif active_check is not None:
-        latest_check = active_check
-    check_status = latest_check.status if latest_check is not None else (
-        "completed" if site.menu_capabilities_checked_at is not None else "not_checked"
-    )
-    return {
-        "checked_at": site.menu_capabilities_checked_at,
-        "header_menu_template_rendered": site.header_menu_template_rendered,
-        "header_menu_rendered": site.header_menu_rendered,
-        "header_menu_nested": site.header_menu_nested,
-        "footer_menu_template_rendered": site.footer_menu_template_rendered,
-        "footer_menu_rendered": site.footer_menu_rendered,
-        "footer_menu_nested": site.footer_menu_nested,
-        "check_id": latest_check.id if latest_check is not None else None,
-        "check_status": check_status,
-        "check_error_code": latest_check.error_code if latest_check is not None else None,
-        "check_error_message": latest_check.error_message if latest_check is not None else None,
-    }
+    return _site_menu_capabilities_payload(site, active_check)
 
 
 @router.get("/admin/menu-visibility-checks", response_model=list[MenuVisibilityCheckResponse])

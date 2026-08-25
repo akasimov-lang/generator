@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app import models
-from app.api import _find_project_page, get_site_menu_capabilities
+from app.api import _find_project_page, enqueue_site_menu_capabilities_check, get_site_menu_capabilities
 from app.db import Base
 from app.project_cache import analyze_menu_templates, sync_project_cache
 from app import project_cache as project_cache_module
@@ -191,7 +191,7 @@ def test_live_visibility_controls_the_rendered_menu_status() -> None:
     }
 
 
-def test_menu_capabilities_are_fetched_only_once(monkeypatch) -> None:
+def test_menu_capabilities_are_queued_only_by_manual_action(monkeypatch) -> None:
     calls: list[str] = []
     monkeypatch.setattr(
         "app.api.check_site_menu_visibility_job.apply_async",
@@ -209,10 +209,14 @@ def test_menu_capabilities_are_fetched_only_once(monkeypatch) -> None:
 
         first = get_site_menu_capabilities(site.id, None, db)  # type: ignore[arg-type]
         second = get_site_menu_capabilities(site.id, None, db)  # type: ignore[arg-type]
+        queued = enqueue_site_menu_capabilities_check(site.id, None, db)  # type: ignore[arg-type]
+        duplicate = enqueue_site_menu_capabilities_check(site.id, None, db)  # type: ignore[arg-type]
 
+        assert first["check_status"] == "not_checked"
+        assert second["check_status"] == "not_checked"
         assert len(calls) == 1
-        assert first["check_status"] == "queued"
-        assert second["check_id"] == first["check_id"]
+        assert queued["check_status"] == "queued"
+        assert duplicate["check_id"] == queued["check_id"]
 
 
 def test_menu_capabilities_can_be_refreshed(monkeypatch) -> None:
@@ -234,7 +238,7 @@ def test_menu_capabilities_can_be_refreshed(monkeypatch) -> None:
         db.add(site)
         db.commit()
 
-        result = get_site_menu_capabilities(site.id, None, db, refresh=True)  # type: ignore[arg-type]
+        result = enqueue_site_menu_capabilities_check(site.id, None, db)  # type: ignore[arg-type]
 
         assert calls == ["menu_checks"]
         assert result["check_status"] == "queued"
@@ -267,7 +271,7 @@ def test_failed_menu_capability_check_requires_manual_retry(monkeypatch) -> None
         db.commit()
 
         unchanged = get_site_menu_capabilities(site.id, None, db)  # type: ignore[arg-type]
-        retried = get_site_menu_capabilities(site.id, None, db, refresh=True)  # type: ignore[arg-type]
+        retried = enqueue_site_menu_capabilities_check(site.id, None, db)  # type: ignore[arg-type]
 
         assert unchanged["check_status"] == "failed"
         assert unchanged["check_error_code"] == "LIVE_BROWSER_TIMEOUT"
