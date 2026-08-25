@@ -6337,6 +6337,25 @@ td {
   white-space: normal;
 }
 
+.publicationConfirmationPending {
+  align-items: center;
+  background: var(--blue-soft);
+  border: 1px solid color-mix(in srgb, var(--blue) 35%, var(--border));
+  border-radius: 7px;
+  color: var(--blue);
+  display: inline-flex;
+  font-size: 11px;
+  gap: 4px;
+  min-height: 28px;
+  padding: 6px 8px;
+}
+
+.publicationConfirmationPending.compact {
+  min-height: 25px;
+  padding: 4px 7px;
+  white-space: nowrap;
+}
+
 .projectPublicationQueueTable th:first-child,
 .projectPublicationQueueTable td:first-child {
   text-align: center;
@@ -6534,6 +6553,7 @@ td {
 .status-generation-queued,
 .status-scheduled,
 .status-publishing,
+.status-publication-pending-confirmation,
 .status-retry-scheduled,
 .status-paused,
 .status-publication-paused,

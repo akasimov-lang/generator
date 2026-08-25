@@ -144,6 +144,68 @@ def test_fresh_cache_confirms_requested_page_deletion_only_when_slug_is_absent()
         assert present.deletion_confirmed_at is None
 
 
+def test_fresh_cache_confirms_publication_only_when_slug_is_present() -> None:
+    with make_session() as db:
+        site = models.Site(
+            name="publication-confirmation.example",
+            base_url="https://publication-confirmation.example",
+            publication_endpoint="https://publication-confirmation.example/api/content",
+            external_project_id="publication-confirmation",
+        )
+        db.add(site)
+        db.flush()
+        task = models.GenerationTask(title="Publish", site_id=site.id, geo="LV", language="lv", topics_count=2)
+        db.add(task)
+        db.flush()
+        absent = models.ContentItem(
+            task=task,
+            site_id=site.id,
+            topic="Absent page",
+            slug="/guides/absent/",
+            generated_json={"pages": []},
+            status="publication_pending_confirmation",
+            idempotency_key="publish-absent",
+            last_publication_status_code=201,
+        )
+        present = models.ContentItem(
+            task=task,
+            site_id=site.id,
+            topic="Present page",
+            slug="/guides/present/",
+            generated_json={"pages": []},
+            status="publication_pending_confirmation",
+            idempotency_key="publish-present",
+            last_publication_status_code=201,
+        )
+        db.add_all([absent, present])
+        db.commit()
+
+        result = sync_project_cache(db, [{
+            "id": "publication-confirmation",
+            "name": site.name,
+            "serverId": "camel",
+            "settings": {"canon": site.name},
+            "data": {"menu": {"header": [], "footer": []}, "pages": [{"slug": "/guides/present/"}]},
+        }])
+
+        db.refresh(absent)
+        db.refresh(present)
+        assert result["confirmed_publications_count"] == 1
+        assert absent.status == "publication_pending_confirmation"
+        assert absent.published_at is None
+        assert present.status == "published"
+        assert present.published_at is not None
+        assert present.published_url == "https://publication-confirmation.example/guides/present/"
+        confirmation_log = db.scalar(
+            select(models.PublicationLog).where(
+                models.PublicationLog.content_item_id == present.id,
+                models.PublicationLog.response_status == 200,
+            )
+        )
+        assert confirmation_log is not None
+        assert confirmation_log.request_payload["action"] == "content_publication_confirmed"
+
+
 def test_menu_capabilities_are_detected_per_template() -> None:
     capabilities = analyze_menu_templates([
         {"name": "header.hbs", "data": "{{#each headerMenu}}<a>{{title}}</a>{{#if this.children}}{{/if}}{{/each}}"},

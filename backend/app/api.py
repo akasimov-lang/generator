@@ -1067,7 +1067,7 @@ def update_section(site_id: str, section_id: str, payload: SectionUpdate, user: 
     assigned_content = db.scalars(
         select(models.ContentItem).where(
             models.ContentItem.section_id == section.id,
-            models.ContentItem.status.notin_({"publishing", "published"}),
+            models.ContentItem.status.notin_({"publishing", "publication_pending_confirmation", "published"}),
         )
     ).all()
     for item in assigned_content:
@@ -1554,7 +1554,7 @@ def update_task_section(task_id: str, payload: GenerationTaskSectionUpdate, _: A
         section = _get_section_for_site(db, task.site_id, payload.section_id)
     task.section_id = payload.section_id
     for item in task.items:
-        if item.status not in {"scheduled", "retry_scheduled", "publishing", "published"}:
+        if item.status not in {"scheduled", "retry_scheduled", "publishing", "publication_pending_confirmation", "published"}:
             item.section_id = payload.section_id
             apply_content_section_slug(item, section)
     db.commit()
@@ -1585,7 +1585,7 @@ def generate_task(task_id: str, _: AuthUser, db: Session = Depends(get_db)) -> A
         raise HTTPException(status_code=404, detail="Task not found")
     if task.archived_at is not None:
         raise HTTPException(status_code=400, detail="Archived task must be restored before generation")
-    mutable_items = [item for item in task.items if item.status not in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "published"}]
+    mutable_items = [item for item in task.items if item.status not in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published"}]
     if not mutable_items:
         raise HTTPException(status_code=400, detail="Task has no content that can be generated")
     if any(item.status in {"generation_queued", "generating"} for item in mutable_items):
@@ -1622,7 +1622,7 @@ def regenerate_all_task_content(
     if task.archived_at is not None:
         raise HTTPException(status_code=400, detail="Archived task must be restored before generation")
 
-    locked_statuses = {"scheduled", "retry_scheduled", "publication_paused", "publishing", "published"}
+    locked_statuses = {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published"}
     mutable_items = [item for item in task.items if item.status not in locked_statuses]
     if not mutable_items:
         raise HTTPException(status_code=400, detail="Task has no content that can be regenerated")
@@ -1674,7 +1674,7 @@ def start_task_pipeline(task_id: str, _: AuthUser, db: Session = Depends(get_db)
         raise HTTPException(status_code=404, detail="Task not found")
     if task.archived_at is not None:
         raise HTTPException(status_code=400, detail="Archived task must be restored before generation")
-    mutable_items = [item for item in task.items if item.status not in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "published"}]
+    mutable_items = [item for item in task.items if item.status not in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published"}]
     if not mutable_items:
         raise HTTPException(status_code=400, detail="Task has no content that can be generated")
     if any(item.status in {"generation_queued", "generating"} for item in mutable_items):
@@ -1854,7 +1854,7 @@ def generate_content(content_id: str, _: AuthUser, db: Session = Depends(get_db)
     item = db.get(models.ContentItem, content_id)
     if not item:
         raise HTTPException(status_code=404, detail="Content item not found")
-    if item.status in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "published"}:
+    if item.status in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published"}:
         raise HTTPException(status_code=400, detail=f"Content in status '{item.status}' cannot be regenerated")
     if item.status in {"generation_queued", "generating"}:
         return item
@@ -1878,7 +1878,7 @@ def update_content(content_id: str, payload: ContentUpdate, _: AuthUser, db: Ses
     item = db.get(models.ContentItem, content_id)
     if not item:
         raise HTTPException(status_code=404, detail="Content item not found")
-    if item.status in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "published"}:
+    if item.status in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published"}:
         raise HTTPException(status_code=400, detail=f"Content in status '{item.status}' cannot be edited")
 
     selected_section = db.get(models.Section, item.section_id) if item.section_id else None
@@ -1926,7 +1926,7 @@ def delete_content(content_id: str, _: AuthUser, db: Session = Depends(get_db)) 
     item = db.get(models.ContentItem, content_id)
     if not item:
         raise HTTPException(status_code=404, detail="Content item not found")
-    if item.status in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "published"}:
+    if item.status in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published"}:
         raise HTTPException(status_code=400, detail="Scheduled or published content cannot be deleted")
 
     task = db.get(models.GenerationTask, item.task_id)
@@ -2156,7 +2156,7 @@ def publish_all_campaign_items(campaign_id: str, user: AuthUser, db: Session = D
     items = db.scalars(
         select(models.ContentItem)
         .where(models.ContentItem.publication_campaign_id == campaign.id)
-        .where(models.ContentItem.status != "published")
+        .where(models.ContentItem.status.notin_({"publication_pending_confirmation", "published"}))
         .order_by(models.ContentItem.scheduled_at.asc().nullslast(), models.ContentItem.created_at.asc())
     ).all()
     if not items:
@@ -2250,7 +2250,7 @@ def list_admin_request_logs(_: AdminUser, db: Session = Depends(get_db)) -> list
                 "destination": destination,
                 "result": "Успешно" if successful else "Ошибка" if log.error_message or (log.response_status or 0) >= 400 else "Ожидает ответа",
                 "status_code": log.response_status,
-                "can_retry": menu_action or bool(log.content_item_id and content_status != "published"),
+                "can_retry": menu_action or bool(log.content_item_id and content_status not in {"publication_pending_confirmation", "published"}),
             }
         )
     return result
@@ -2282,7 +2282,7 @@ async def retry_admin_request_log(log_id: str, user: AdminUser, db: Session = De
         item = db.get(models.ContentItem, log.content_item_id)
         if not item:
             raise HTTPException(status_code=404, detail="Content for this request was not found")
-        if item.status == "published":
+        if item.status in {"publication_pending_confirmation", "published"}:
             raise HTTPException(status_code=409, detail="Content is already published; repeat request is disabled")
         if not item.site_id:
             raise HTTPException(status_code=400, detail="Content does not have a project")

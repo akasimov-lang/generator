@@ -2506,7 +2506,7 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
 
 
 def generate_task_items(db: Session, task: models.GenerationTask) -> models.GenerationTask:
-    mutable_items = [item for item in task.items if item.status not in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "published"}]
+    mutable_items = [item for item in task.items if item.status not in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published"}]
     if not mutable_items:
         raise ValueError("Task has no content that can be generated")
     task.status = "generating"
@@ -2567,7 +2567,7 @@ def run_task_pipeline(
     task: models.GenerationTask,
     competitor_attempts: int = COMPETITOR_RESEARCH_MAX_ATTEMPTS,
 ) -> models.GenerationTask:
-    locked_statuses = {"scheduled", "retry_scheduled", "publication_paused", "publishing", "published"}
+    locked_statuses = {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published"}
     item_ids = [item.id for item in task.items if item.status not in locked_statuses]
     if not item_ids:
         raise ValueError("Task has no content that can be generated")
@@ -2629,7 +2629,7 @@ def run_task_pipeline(
 
 
 def generate_content_item(db: Session, item: models.ContentItem) -> models.ContentItem:
-    if item.status in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "published"}:
+    if item.status in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published"}:
         raise ValueError(f"Content in status '{item.status}' cannot be regenerated")
     task = db.get(models.GenerationTask, item.task_id)
     if not task:
@@ -2899,7 +2899,7 @@ def refresh_campaign_status(db: Session, campaign_id: str | None) -> None:
     pending = db.scalar(
         select(func.count(models.ContentItem.id))
         .where(models.ContentItem.publication_campaign_id == campaign_id)
-        .where(models.ContentItem.status.in_(["scheduled", "retry_scheduled", "publication_paused", "publishing"]))
+        .where(models.ContentItem.status.in_(["scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation"]))
     ) or 0
     if pending == 0:
         failed = db.scalar(
@@ -3318,9 +3318,10 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
         )
         db.add(log)
         if 200 <= response.status_code < 300:
-            item.status = "published"
-            item.published_at = datetime.now(timezone.utc)
+            item.status = "publication_pending_confirmation"
+            item.published_at = None
             item.published_url = response_body.get("url")
+            item.scheduled_at = None
         elif response.status_code in (429, 500, 502, 503):
             item.status = "publication_failed"
             item.scheduled_at = None
@@ -3592,16 +3593,14 @@ async def publish_campaign_bundle(db: Session, campaign_id: str, log_id: str) ->
             item_status = str(item_result.get("status") or "").lower()
             item_succeeded = request_succeeded and item_result.get("success") is not False and item_status not in {"failed", "error", "publication_failed"}
             if item_succeeded:
-                published_at = datetime.now(timezone.utc)
-                item.status = "published"
-                item.published_at = published_at
+                item.status = "publication_pending_confirmation"
+                item.published_at = None
                 item.published_url = item_result.get("url") or item_result.get("published_url") or item.published_url
                 item.scheduled_at = None
                 results.append({
                     "content_item_id": item.id,
                     "topic": item.topic,
-                    "status": "published",
-                    "published_at": published_at.isoformat(),
+                    "status": "publication_pending_confirmation",
                     "published_url": item.published_url,
                 })
             else:
@@ -3615,8 +3614,9 @@ async def publish_campaign_bundle(db: Session, campaign_id: str, log_id: str) ->
                     "error": item_result.get("error") or item_result.get("message") or f"HTTP {response.status_code}",
                 })
 
-        campaign.status = "completed_with_errors" if has_failures else "completed"
-        campaign.completed_at = completed_at
+        has_pending_confirmation = any(item.status == "publication_pending_confirmation" for item in items)
+        campaign.status = "active" if has_pending_confirmation else "completed_with_errors" if has_failures else "completed"
+        campaign.completed_at = None if has_pending_confirmation else completed_at
         log.response_status = response.status_code
         log.response_body = {
             "endpoint_response": endpoint_body,

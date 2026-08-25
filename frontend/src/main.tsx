@@ -3781,8 +3781,9 @@ function PublicationWorkflowNav({ content, campaigns, activeSection, onSectionCh
   const completedCampaignCount = campaigns.filter((campaign) => ["completed", "completed_with_errors"].includes(campaign.status)).length;
   const processReadyCount = content.filter((item) => Boolean(item.site_id && item.section_id) && ["generated", "rejected", "approved"].includes(item.status)).length;
   const processPublishedCount = content.filter((item) => item.status === "published").length;
-  const processCount = processReadyCount + processPublishedCount;
-  const queueCount = content.filter((item) => ["scheduled", "retry_scheduled", "publication_paused", "publishing"].includes(item.status)).length;
+  const processConfirmationCount = content.filter((item) => item.status === "publication_pending_confirmation").length;
+  const processCount = processReadyCount + processConfirmationCount + processPublishedCount;
+  const queueCount = content.filter((item) => ["scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation"].includes(item.status)).length;
   const errorCount = content.filter((item) => item.status === "publication_failed").length;
   return (
     <nav className="publicationWorkflowNav publicationWorkflowNavTop" aria-label="Разделы публикации">
@@ -3824,7 +3825,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
     && ["generated", "rejected", "approved"].includes(item.status)
     && (!selectedPublicationSectionIds.length || (item.section_id && selectedPublicationSectionIds.includes(item.section_id))));
   const publishedContent = content
-    .filter((item) => ["published", "deletion_pending", "deleted"].includes(item.status))
+    .filter((item) => ["publication_pending_confirmation", "published", "deletion_pending", "deleted"].includes(item.status))
     .sort((left, right) => new Date(left.published_at || left.deletion_requested_at || 0).getTime() - new Date(right.published_at || right.deletion_requested_at || 0).getTime());
   const publicationProcessItems = [...publicationReady, ...publishedContent];
   const processSelectableIds = publicationProcessItems
@@ -3838,7 +3839,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
     .map((section) => ({ section, count: content.filter((item) => ["generated", "rejected", "approved"].includes(item.status) && item.section_id === section.id).length }))
     .filter(({ count }) => count > 0);
   const publicationQueue = content
-    .filter((item) => ["scheduled", "retry_scheduled", "publication_paused", "publishing"].includes(item.status))
+    .filter((item) => ["scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation"].includes(item.status))
     .sort((left, right) => new Date(left.scheduled_at || 0).getTime() - new Date(right.scheduled_at || 0).getTime());
   const publicationBacklog = content
     .filter((item) => item.status === "publication_failed")
@@ -3971,7 +3972,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
   }, [content, selectedPublicationSectionIds, site.id]);
 
   async function publishAll(campaign: PublicationCampaign) {
-    const count = content.filter((item) => item.publication_campaign_id === campaign.id && item.status !== "published").length;
+    const count = content.filter((item) => item.publication_campaign_id === campaign.id && !["publication_pending_confirmation", "published"].includes(item.status)).length;
     if (!count || !window.confirm(`Опубликовать все тексты кампании «${campaign.name}» (${count}) одним пакетным запросом?`)) return;
     setPublishingAllCampaignId(campaign.id);
     setFormError("");
@@ -4140,6 +4141,8 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
                   {deletingProcessItemId === item.id ? <LoaderCircle className="spin" size={14} /> : <Trash2 size={14} />}
                 </button>
               </span>
+            ) : item.status === "publication_pending_confirmation" ? (
+              <span className="publicationConfirmationPending"><RefreshCcw size={14} /><strong>Отправлено, ожидает обновления проекта</strong></span>
             ) : item.status === "deletion_pending" ? (
               <span className="deletedProcessState pending"><RefreshCcw size={14} /><strong>Удалено, требуется обновить проект</strong></span>
             ) : item.status === "deleted" ? (
@@ -4164,9 +4167,13 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
             sectionLabel(item.section_id, sections),
             item.scheduled_at ? formatDate(item.scheduled_at) : "—",
             <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} />,
-            <button className="button compact primary publishImmediatelyButton" type="button" onClick={() => void publishImmediately(item)} disabled={publishingNowId === item.id || item.status === "publishing"}>
-              <Send size={14} /> {publishingNowId === item.id ? "Отправляем…" : "Отправить"}
-            </button>
+            item.status === "publication_pending_confirmation" ? (
+              <span className="publicationConfirmationPending compact"><RefreshCcw size={13} /> Ожидает проверки</span>
+            ) : (
+              <button className="button compact primary publishImmediatelyButton" type="button" onClick={() => void publishImmediately(item)} disabled={publishingNowId === item.id || item.status === "publishing"}>
+                <Send size={14} /> {publishingNowId === item.id ? "Отправляем…" : "Отправить"}
+              </button>
+            )
           ])}
           wrapperClassName="projectPublicationQueueTable"
         />
@@ -4231,14 +4238,14 @@ function ProjectCampaignTreeItem({
     const rightDate = new Date(right.scheduled_at || right.published_at || right.created_at).getTime();
     return leftDate - rightDate;
   }), [items]);
-  const queuedCount = items.filter((item) => ["scheduled", "retry_scheduled", "publication_paused", "publishing"].includes(item.status)).length;
+  const queuedCount = items.filter((item) => ["scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation"].includes(item.status)).length;
   const publishedCount = items.filter((item) => item.status === "published").length;
   const failedCount = items.filter((item) => item.status === "publication_failed").length;
   const campaignTone = campaign.status === "completed_with_errors" ? "error" : campaign.status === "completed" ? "success" : "working";
   const isPublishingAll = campaign.status === "publishing_all" || publishingAllCampaignId === campaign.id;
   const isRescheduling = reschedulingCampaignId === campaign.id;
   const publicationModeChanged = itemsPerDayDraft !== currentItemsPerDay;
-  const unpublishedCount = items.length - publishedCount;
+  const unpublishedCount = items.filter((item) => !["publication_pending_confirmation", "published"].includes(item.status)).length;
 
   return (
     <article className={`projectCampaignItem campaign-${campaignTone} ${expanded ? "expanded" : ""}`}>
@@ -4300,7 +4307,9 @@ function ProjectCampaignTreeItem({
               item.published_at ? formatDate(item.published_at) : item.scheduled_at ? formatDate(item.scheduled_at) : "—",
               <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} />,
               <span className="projectCampaignRowActions">
-                {item.status !== "published" ? (
+                {item.status === "publication_pending_confirmation" ? (
+                  <span className="publicationConfirmationPending compact"><RefreshCcw size={13} /> Ожидает проверки</span>
+                ) : item.status !== "published" ? (
                   <button className="button compact primary publishImmediatelyButton" type="button" onClick={() => void onPublishImmediately(item)} disabled={publishingNowId === item.id || item.status === "publishing"}>
                     <Send size={14} /> {publishingNowId === item.id ? "Отправляем…" : "Отправить"}
                   </button>
@@ -6375,7 +6384,7 @@ function competitorStatusLabel(item: ContentItem, research?: CompetitorResearch)
 }
 
 function GenerationProgressCell({ item }: { item: ContentItem }) {
-  const complete = ["generated", "approved", "scheduled", "retry_scheduled", "publication_paused", "publishing", "published"].includes(item.status);
+  const complete = ["generated", "approved", "scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published"].includes(item.status);
   const progress = Math.max(0, Math.min(100, complete ? 100 : item.generation_progress || 0));
   const stage = item.status === "generation_queued"
     ? "В очереди"
@@ -6477,7 +6486,7 @@ function contentRowClassName(item: ContentItem) {
 }
 
 function isPublicationLocked(item: ContentItem) {
-  return ["scheduled", "retry_scheduled", "publication_paused", "publishing", "published"].includes(item.status);
+  return ["scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published"].includes(item.status);
 }
 
 function canApproveContent(item: ContentItem) {
@@ -6943,7 +6952,7 @@ function PublicationsView({ api, sites, content, onOpenProject, onChanged }: Vie
           {publicationProjectGroups.map(({ site, items }) => {
             const expanded = expandedProjectIds.includes(site.id);
             const generatedCount = items.filter((item) => Boolean(item.generated_at)).length;
-            const queuedCount = items.filter((item) => ["scheduled", "retry_scheduled", "publication_paused", "publishing"].includes(item.status)).length;
+            const queuedCount = items.filter((item) => ["scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation"].includes(item.status)).length;
             const publishedCount = items.filter((item) => item.status === "published").length;
             const errorCount = items.filter((item) => item.status === "publication_failed").length;
             const canon = site.cache_canon || site.base_url.replace(/^https?:\/\//, "").replace(/\/$/, "");
@@ -9165,6 +9174,7 @@ function StatusBadge({ status }: { status: string }) {
     paused: "Приостановлено",
     pending: "Ожидает",
     publication_failed: "Ошибка публикации",
+    publication_pending_confirmation: "Ожидает проверки",
     publication_paused: "Публикация приостановлена",
     published: "Опубликовано",
     publishing: "Публикуется",

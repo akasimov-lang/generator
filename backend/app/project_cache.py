@@ -431,6 +431,83 @@ def _confirm_deleted_content(db: Session, site: models.Site, project: dict[str, 
     return confirmed
 
 
+def _confirm_published_content(db: Session, site: models.Site, project: dict[str, Any], now: datetime) -> int:
+    """Confirm publication only after fresh project data contains the page slug."""
+    data = project.get("data") if isinstance(project.get("data"), dict) else None
+    if not isinstance(data, dict) or not isinstance(data.get("pages"), list):
+        return 0
+    pages_by_slug = {
+        _normalized_page_slug(page.get("slug")): page
+        for page in data["pages"]
+        if isinstance(page, dict)
+    }
+    pending_items = db.scalars(
+        select(models.ContentItem).where(
+            models.ContentItem.site_id == site.id,
+            models.ContentItem.status == "publication_pending_confirmation",
+        )
+    ).all()
+    confirmed = 0
+    campaign_ids: set[str] = set()
+    for item in pending_items:
+        normalized_slug = _normalized_page_slug(item.slug)
+        page = pages_by_slug.get(normalized_slug)
+        if not page:
+            continue
+        item.status = "published"
+        item.published_at = now
+        item.scheduled_at = None
+        page_url = str(page.get("url") or page.get("href") or "").strip()
+        if page_url.startswith(("http://", "https://")):
+            item.published_url = page_url
+        elif not item.published_url:
+            item.published_url = f"{site.base_url.rstrip('/')}{normalized_slug}"
+        db.add(
+            models.PublicationLog(
+                content_item_id=item.id,
+                endpoint_url=site.base_url,
+                request_payload={
+                    "action": "content_publication_confirmed",
+                    "project_name": site.name,
+                    "slug": normalized_slug,
+                },
+                response_status=200,
+                response_body={"confirmed": True, "slug": normalized_slug},
+            )
+        )
+        if item.publication_campaign_id:
+            campaign_ids.add(item.publication_campaign_id)
+        confirmed += 1
+
+    for campaign_id in campaign_ids:
+        campaign = db.get(models.PublicationCampaign, campaign_id)
+        if not campaign:
+            continue
+        pending = db.scalar(
+            select(func.count(models.ContentItem.id)).where(
+                models.ContentItem.publication_campaign_id == campaign_id,
+                models.ContentItem.status.in_([
+                    "scheduled",
+                    "retry_scheduled",
+                    "publication_paused",
+                    "publishing",
+                    "publication_pending_confirmation",
+                ]),
+            )
+        ) or 0
+        if pending:
+            continue
+        failed = db.scalar(
+            select(func.count(models.ContentItem.id)).where(
+                models.ContentItem.publication_campaign_id == campaign_id,
+                models.ContentItem.status == "publication_failed",
+            )
+        ) or 0
+        campaign.status = "completed_with_errors" if failed else "completed"
+        campaign.completed_at = now
+    return confirmed
+
+
 def _project_domains(project: dict[str, Any]) -> list[str]:
     settings = project.get("settings") if isinstance(project.get("settings"), dict) else {}
     domains = settings.get("domains") if isinstance(settings.get("domains"), list) else []
@@ -612,6 +689,7 @@ def sync_project_data_update(
         site.footer_menu_nested = None
         if server_id:
             site.cache_server_ip = server_id
+        _confirm_published_content(db, site, project, synced_at)
         _confirm_synchronized_sections(db, site, menu)
     db.commit()
     return len(sites)
@@ -632,6 +710,7 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
     created_count = 0
     updated_count = 0
     confirmed_sections_count = 0
+    confirmed_publications_count = 0
     matched_external_ids: set[str] = set()
     processed_external_ids: set[str] = set()
     name_occurrences: dict[str, int] = {}
@@ -724,6 +803,7 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
             site.project_status = "working" if is_working_project else "not_in_focus"
         site.default_menu = menu
         _confirm_deleted_content(db, site, project, now)
+        confirmed_publications_count += _confirm_published_content(db, site, project, now)
         confirmed_sections_count += _confirm_synchronized_sections(db, site, menu)
         site.has_menu = has_menu
         site.cache_synced_at = now
@@ -739,6 +819,7 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
         "created_count": created_count,
         "updated_count": updated_count,
         "confirmed_sections_count": confirmed_sections_count,
+        "confirmed_publications_count": confirmed_publications_count,
         "skipped_duplicate_count": skipped_duplicate_count,
         "deleted_duplicate_count": deleted_duplicate_count,
         "projects": cache_projects,
