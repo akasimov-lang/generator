@@ -5124,15 +5124,15 @@ function TasksView({
   const [targetWords, setTargetWords] = React.useState(DEFAULT_TARGET_WORDS);
   const taskCheckboxPreferences = React.useMemo(() => {
     try {
-      return JSON.parse(localStorage.getItem("task_create_checkbox_preferences") || "{}") as Partial<Record<"includeToc" | "includeFaq" | "generateTitle" | "collectCompetitors" | "includeCasinoRating", boolean>>;
+      return JSON.parse(localStorage.getItem("task_create_checkbox_preferences") || "{}") as Partial<Record<"includeToc" | "includeFaq" | "includeCasinoRating", boolean>>;
     } catch {
       return {};
     }
   }, []);
   const [includeToc, setIncludeToc] = React.useState(taskCheckboxPreferences.includeToc ?? true);
   const [includeFaq, setIncludeFaq] = React.useState(taskCheckboxPreferences.includeFaq ?? true);
-  const [generateTitle, setGenerateTitle] = React.useState(taskCheckboxPreferences.generateTitle ?? false);
-  const [collectCompetitors, setCollectCompetitors] = React.useState(taskCheckboxPreferences.collectCompetitors ?? false);
+  const [generateTitle, setGenerateTitle] = React.useState(true);
+  const [collectCompetitors, setCollectCompetitors] = React.useState(true);
   const [includeCasinoRating, setIncludeCasinoRating] = React.useState(taskCheckboxPreferences.includeCasinoRating ?? false);
   const [createFormExpanded, setCreateFormExpanded] = React.useState(false);
   const [creatingTaskAction, setCreatingTaskAction] = React.useState<"draft" | "start" | "">("");
@@ -5243,8 +5243,8 @@ function TasksView({
   }, [fixedSite?.id, tasks]);
 
   React.useEffect(() => {
-    localStorage.setItem("task_create_checkbox_preferences", JSON.stringify({ includeToc, includeFaq, generateTitle, collectCompetitors, includeCasinoRating }));
-  }, [includeToc, includeFaq, generateTitle, collectCompetitors, includeCasinoRating]);
+    localStorage.setItem("task_create_checkbox_preferences", JSON.stringify({ includeToc, includeFaq, includeCasinoRating }));
+  }, [includeToc, includeFaq, includeCasinoRating]);
 
   React.useEffect(() => {
     if (!expandedTaskId || (!hasResearchInProgress && !hasGenerationInProgress)) return;
@@ -5692,6 +5692,10 @@ function TasksView({
   }
 
   function toggleCreateForm() {
+    if (!createFormExpanded) {
+      setGenerateTitle(true);
+      setCollectCompetitors(true);
+    }
     setCreateFormExpanded((current) => !current);
   }
 

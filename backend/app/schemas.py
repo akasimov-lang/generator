@@ -363,8 +363,8 @@ class GenerationTaskCreate(BaseModel):
     shortcode: str | None = None
     include_toc: bool = True
     include_faq: bool = True
-    generate_title: bool = False
-    collect_competitors: bool = False
+    generate_title: bool = True
+    collect_competitors: bool = True
     include_casino_rating: bool = False
     save_as_draft: bool = False
 
