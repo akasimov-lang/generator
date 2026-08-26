@@ -576,6 +576,11 @@ class ContentUpdate(BaseModel):
     section_content_mode: Literal["nested", "menu_page"] | None = None
 
 
+class ContentRevisionRequest(BaseModel):
+    remarks: str = Field(min_length=3, max_length=5000)
+    generate_title: bool = True
+
+
 class PublicationCampaignCreate(BaseModel):
     name: str = Field(min_length=2, max_length=180)
     site_id: str

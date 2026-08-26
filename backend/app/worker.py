@@ -8,7 +8,7 @@ from app import models
 from app.core.config import get_settings
 from app.db import SessionLocal
 from app.project_cache import ProjectCacheError, fetch_project_cache, fetch_project_menu_capabilities, refresh_project_server_id, sync_project_data_update
-from app.services import COMPETITOR_RESEARCH_MAX_ATTEMPTS, collect_competitor_research_for_item, generate_content_item, generate_task_items, publish_campaign_bundle, publish_item, refresh_campaign_status, run_task_pipeline
+from app.services import COMPETITOR_RESEARCH_MAX_ATTEMPTS, collect_competitor_research_for_item, generate_content_item, generate_task_items, publish_campaign_bundle, publish_item, refresh_campaign_status, revise_content_item, run_task_pipeline
 
 settings = get_settings()
 
@@ -145,6 +145,19 @@ def generate_content_item_job(content_item_id: str) -> dict:
         if not item:
             return {"status": "missing", "content_item_id": content_item_id}
         generate_content_item(db, item)
+        return {"status": "complete", "content_item_id": content_item_id}
+    finally:
+        db.close()
+
+
+@celery_app.task(name="app.worker.revise_content_item", acks_late=True, reject_on_worker_lost=True)
+def revise_content_item_job(content_item_id: str, remarks: str, generate_title: bool = True) -> dict:
+    db = SessionLocal()
+    try:
+        item = db.get(models.ContentItem, content_item_id)
+        if not item:
+            return {"status": "missing", "content_item_id": content_item_id}
+        revise_content_item(db, item, remarks, generate_title=generate_title)
         return {"status": "complete", "content_item_id": content_item_id}
     finally:
         db.close()

@@ -1675,6 +1675,7 @@ function DashboardView({ api, dashboard, tasks, content, sites, onOpenTask, onCh
       </DataPanel>
       {selectedPreview ? (
         <ContentPreviewModal
+          api={api}
           item={selectedPreview}
           promptName={selectedPreview.generation_prompt_name}
           onClose={() => setSelectedPreview(null)}
@@ -2805,6 +2806,7 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
       ) : null}
       {selectedPreview ? (
         <ContentPreviewModal
+          api={api}
           item={selectedPreview}
           promptName={taskDetails?.task.prompt_template_name}
           onClose={() => setSelectedPreview(null)}
@@ -3314,7 +3316,7 @@ function ProjectPromptsPanel({ api, site, promptTemplates, basePrompt, isAdmin, 
           ) : null}
         </Modal>
       ) : null}
-      {previewItem ? <ContentPreviewModal item={previewItem} promptName={generatedTextsPrompt?.name} onClose={() => setPreviewItem(null)} /> : null}
+      {previewItem ? <ContentPreviewModal api={api} item={previewItem} promptName={generatedTextsPrompt?.name} onChanged={onChanged} onClose={() => setPreviewItem(null)} /> : null}
     </section>
   );
 }
@@ -3819,7 +3821,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
         </Modal>
       ) : null}
       {previewItem ? (
-        <ContentPreviewModal item={previewItem} onClose={() => setPreviewItem(null)} />
+        <ContentPreviewModal api={api} item={previewItem} onChanged={onChanged} onClose={() => setPreviewItem(null)} />
       ) : null}
     </section>
   );
@@ -4250,7 +4252,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
           wrapperClassName="publicationBacklogTable"
         />
       </DataPanel> : null}
-      {previewItem ? <ContentPreviewModal item={previewItem} onClose={() => setPreviewItem(null)} /> : null}
+      {previewItem ? <ContentPreviewModal api={api} item={previewItem} onChanged={onChanged} onClose={() => setPreviewItem(null)} /> : null}
     </section>
   );
 }
@@ -5977,13 +5979,15 @@ function TasksView({
       ) : null}
       {previewItem ? (
         <ContentPreviewModal
+          api={api}
           item={previewItem}
           promptName={previewItem.generation_prompt_name || expandedDetails?.task.prompt_template_name}
           onClose={() => setPreviewItem(null)}
-          actions={(
+          onChanged={onChanged}
+          actions={(currentPreviewItem, refreshItem) => (
             <>
-              {canApproveContent(previewItem) ? <button className="button compact approve" type="button" onClick={() => void approveTaskContent(previewItem)} disabled={taskActionId.startsWith(previewItem.id)}><CheckCircle2 size={15} /> Принять</button> : null}
-              <button className="button compact primary" type="button" onClick={() => void publishTaskContent(previewItem)} disabled={!canPublishContentImmediately(previewItem) || taskActionId.startsWith(previewItem.id)}><Send size={15} /> {taskActionId === `${previewItem.id}:publish` ? "Публикуем…" : "Опубликовать"}</button>
+              {canApproveContent(currentPreviewItem) ? <button className="button compact approve" type="button" onClick={async () => { await approveTaskContent(currentPreviewItem); await refreshItem(); }} disabled={taskActionId.startsWith(currentPreviewItem.id)}><CheckCircle2 size={15} /> Принять</button> : null}
+              {canPublishContentImmediately(currentPreviewItem) ? <button className="button compact primary" type="button" onClick={async () => { await publishTaskContent(currentPreviewItem); await refreshItem(); }} disabled={taskActionId.startsWith(currentPreviewItem.id)}><Send size={15} /> {taskActionId === `${currentPreviewItem.id}:publish` ? "Публикуем…" : "Опубликовать"}</button> : null}
             </>
           )}
         />
@@ -6926,6 +6930,7 @@ function ContentView({ api, sites, content, onChanged }: ViewProps & { sites: Si
 
       {selectedPreview ? (
         <ContentPreviewModal
+          api={api}
           item={selectedPreview}
           onClose={() => setSelectedPreview(null)}
           actions={
@@ -7190,7 +7195,7 @@ function PublicationsView({ api, sites, content, onOpenProject, onChanged }: Vie
           {!publicationProjectGroups.length ? <EmptyState text="Проектов с добавленными темами пока нет." /> : null}
         </div>
       </DataPanel>
-      {selectedPreview ? <ContentPreviewModal item={selectedPreview} onClose={() => setSelectedPreview(null)} /> : null}
+      {selectedPreview ? <ContentPreviewModal api={api} item={selectedPreview} onChanged={onChanged} onClose={() => setSelectedPreview(null)} /> : null}
     </section>
   );
 }
@@ -9271,15 +9276,15 @@ function ResponsiveTable({ columns, columnKeys = [], rows, rowClassNames, wrappe
   );
 }
 
-function Modal({ title, subtitle, children, onClose, wide, className = "", headerActions }: { title: string; subtitle?: string; children: React.ReactNode; onClose: () => void; wide?: boolean; className?: string; headerActions?: React.ReactNode }) {
+function Modal({ title, subtitle, children, onClose, wide, className = "", headerActions }: { title?: string; subtitle?: string; children: React.ReactNode; onClose: () => void; wide?: boolean; className?: string; headerActions?: React.ReactNode }) {
   return (
-    <div className="modalOverlay" role="dialog" aria-modal="true" aria-labelledby="modal-title" onMouseDown={onClose}>
+    <div className="modalOverlay" role="dialog" aria-modal="true" aria-labelledby={title ? "modal-title" : undefined} aria-label={title ? undefined : "Просмотр текста"} onMouseDown={onClose}>
       <div className={`modalDialog ${wide ? "wide" : ""} ${className}`.trim()} onMouseDown={(event) => event.stopPropagation()}>
         <div className="modalHeader">
-          <div className="modalTitleGroup">
-            <h2 id="modal-title">{title}</h2>
+          {title || subtitle ? <div className="modalTitleGroup">
+            {title ? <h2 id="modal-title">{title}</h2> : null}
             {subtitle ? <small>{subtitle}</small> : null}
-          </div>
+          </div> : <span />}
           <div className="modalHeaderControls">
             {headerActions}
             <button className="iconButton" type="button" onClick={onClose} aria-label="Закрыть окно"><X size={18} /></button>
@@ -9291,17 +9296,86 @@ function Modal({ title, subtitle, children, onClose, wide, className = "", heade
   );
 }
 
-function ContentPreviewModal({ item, promptName, actions, onClose }: { item: ContentItem; promptName?: string | null; actions?: React.ReactNode; onClose: () => void }) {
-  const previewDescription = contentItemDescription(item);
+function ContentPreviewModal({ item, promptName, actions, api, onChanged, onClose }: {
+  item: ContentItem;
+  promptName?: string | null;
+  actions?: React.ReactNode | ((currentItem: ContentItem, refreshItem: () => Promise<void>) => React.ReactNode);
+  api?: <T>(path: string, options?: RequestInit) => Promise<T>;
+  onChanged?: () => void | Promise<void>;
+  onClose: () => void;
+}) {
+  const [currentItem, setCurrentItem] = React.useState(item);
+  const [revisionOpen, setRevisionOpen] = React.useState(false);
+  const [remarks, setRemarks] = React.useState("");
+  const [generateTitle, setGenerateTitle] = React.useState(true);
+  const [revisionError, setRevisionError] = React.useState("");
+  const [revisionSubmitted, setRevisionSubmitted] = React.useState(false);
+  const revisionActive = ACTIVE_GENERATION_STATUSES.includes(currentItem.status);
+  const previewDescription = contentItemDescription(currentItem);
+
+  React.useEffect(() => {
+    setCurrentItem(item);
+  }, [item]);
+
+  React.useEffect(() => {
+    if (!revisionActive || !api) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const refreshed = await api<ContentItem>(`/content/${currentItem.id}`);
+        if (cancelled) return;
+        setCurrentItem(refreshed);
+        if (!ACTIVE_GENERATION_STATUSES.includes(refreshed.status)) {
+          setRevisionSubmitted(false);
+          await onChanged?.();
+        }
+      } catch (error) {
+        if (!cancelled) setRevisionError(error instanceof Error ? error.message : "Не удалось обновить статус генерации.");
+      }
+    };
+    void poll();
+    const intervalId = window.setInterval(() => void poll(), 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [api, currentItem.id, onChanged, revisionActive]);
+
+  async function requestRevision(event: React.FormEvent) {
+    event.preventDefault();
+    if (!api || remarks.trim().length < 3) return;
+    setRevisionError("");
+    setRevisionSubmitted(true);
+    try {
+      const queued = await api<ContentItem>(`/content/${currentItem.id}/revise`, {
+        method: "POST",
+        body: JSON.stringify({ remarks: remarks.trim(), generate_title: generateTitle })
+      });
+      setCurrentItem(queued);
+      setRevisionOpen(true);
+    } catch (error) {
+      setRevisionSubmitted(false);
+      setRevisionError(error instanceof Error ? error.message : "Не удалось отправить текст на доработку.");
+    }
+  }
+
+  async function refreshCurrentItem() {
+    if (!api) return;
+    const refreshed = await api<ContentItem>(`/content/${currentItem.id}`);
+    setCurrentItem(refreshed);
+    await onChanged?.();
+  }
+
+  const renderedActions = typeof actions === "function" ? actions(currentItem, refreshCurrentItem) : actions;
   return (
-    <Modal title={`Просмотр текста: ${item.topic}`} subtitle="Название темы используется как Title страницы" onClose={onClose} wide className="contentPreviewModal">
+    <Modal onClose={onClose} wide className="contentPreviewModal">
       <div className="contentPreviewHeader">
         <div className="contentPreviewInfo">
           <div className="contentPreviewMetaLine">
-            <span>URL: <code>{item.slug}</code></span>
-            <PromptBadge name={item.generation_prompt_name || promptName} />
-            {item.competitor_brief ? <span className="researchBadge">На основе анализа конкурентов</span> : null}
-            <span>Сгенерировано: {item.generated_at ? formatDate(item.generated_at) : "-"}</span>
+            <span>URL: <code>{currentItem.slug}</code></span>
+            <PromptBadge name={currentItem.generation_prompt_name || promptName} />
+            {currentItem.competitor_brief ? <span className="researchBadge">На основе анализа конкурентов</span> : null}
+            <span>Сгенерировано: {currentItem.generated_at ? formatDate(currentItem.generated_at) : "-"}</span>
           </div>
           <div className="previewDescriptionCompact">
             <strong>Meta Description</strong>
@@ -9309,18 +9383,53 @@ function ContentPreviewModal({ item, promptName, actions, onClose }: { item: Con
           </div>
         </div>
         <div className="userActions contentPreviewActions">
-          <StatusBadge status={item.status} />
-          {actions}
+          <StatusBadge status={currentItem.status} />
+          {currentItem.status === "published" && api ? (
+            <button className="button compact primary" type="button" onClick={() => setRevisionOpen((open) => !open)}><Sparkles size={15} /> Сгенерировать</button>
+          ) : renderedActions}
         </div>
       </div>
       <div className="contentPreviewGeneration">
         <span className="previewGenerationLabel">Генерация</span>
-        <GenerationProgressCell item={item} />
+        <GenerationProgressCell item={currentItem} />
       </div>
+      {api ? (
+        <section className={`revisionAccordion ${revisionOpen || revisionActive ? "open" : ""}`}>
+          {currentItem.status !== "published" ? (
+            <button className="revisionAccordionToggle" type="button" onClick={() => setRevisionOpen((open) => !open)} aria-expanded={revisionOpen || revisionActive}>
+              <span><Sparkles size={15} /> Доработать текст</span>
+              {revisionOpen || revisionActive ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
+            </button>
+          ) : null}
+          {revisionOpen || revisionActive ? (
+            <div className="revisionAccordionBody">
+              {revisionActive ? (
+                <div className="revisionGenerationState">
+                  <CircularOperationProgress value={Math.max(1, currentItem.generation_progress || 0)} />
+                  <span><b>{currentItem.status === "generation_queued" ? "В очереди на доработку" : "Генерирую новую версию"}</b><small>Текущая опубликованная версия остаётся на сайте.</small></span>
+                </div>
+              ) : (
+                <form onSubmit={requestRevision}>
+                  <label>
+                    Замечания по тексту
+                    <textarea value={remarks} onChange={(event) => setRemarks(event.target.value)} rows={4} minLength={3} maxLength={5000} placeholder="Опишите, что изменить, добавить или убрать в текущем тексте" required />
+                  </label>
+                  <div className="revisionFormFooter">
+                    <label className="checkboxRow"><input type="checkbox" checked={generateTitle} onChange={(event) => setGenerateTitle(event.target.checked)} /> Новый Title</label>
+                    <button className="button compact primary" type="submit" disabled={revisionSubmitted || remarks.trim().length < 3}><Sparkles size={15} /> {revisionSubmitted ? "Отправляю…" : "Отправить на доработку"}</button>
+                  </div>
+                </form>
+              )}
+              {currentItem.status === "generation_failed" && currentItem.generation_error ? <span className="formError">{currentItem.generation_error}</span> : null}
+              {revisionError ? <span className="formError">{revisionError}</span> : null}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
       <div className="previewStructureLegend">
         Метки H1–H4 показаны только для проверки структуры и не добавляются в опубликованный текст.
       </div>
-      <ContentPreviewBody item={item} />
+      <ContentPreviewBody item={currentItem} />
     </Modal>
   );
 }

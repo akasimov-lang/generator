@@ -2751,6 +2751,91 @@ def generate_content_item(db: Session, item: models.ContentItem) -> models.Conte
         raise
 
 
+def revise_content_item(db: Session, item: models.ContentItem, remarks: str, generate_title: bool = True) -> models.ContentItem:
+    """Create a complete replacement draft from the current text and editor remarks."""
+    task = db.get(models.GenerationTask, item.task_id)
+    if not task:
+        raise ValueError("Generation task not found")
+    provider = db.get(models.AiProvider, task.ai_provider_id) if task.ai_provider_id else None
+    if not provider or not provider.is_active:
+        raise ValueError("An active AI provider is required to revise content")
+    site = db.get(models.Site, task.site_id) if task.site_id else None
+    current_payload = copy.deepcopy(item.generated_json)
+    current_pages = current_payload.get("pages") if isinstance(current_payload, dict) else None
+    current_title = (
+        current_pages[0].get("title")
+        if isinstance(current_pages, list) and current_pages and isinstance(current_pages[0], dict)
+        else None
+    )
+    current_text = json.dumps(current_payload, ensure_ascii=False, indent=2)
+    revision_prompt = f"""{task.prompt_template or DEFAULT_CONTENT_PROMPT_TEMPLATE}
+
+=== EDITOR REVISION REQUEST ===
+Revise the existing generated page according to the editor's remarks below.
+Return a complete replacement article, not a list of edits and not commentary about the request.
+Keep the same topic, target language, geo, page purpose and URL intent. Preserve correct facts and useful
+sections that the remarks do not ask to change. Apply every editor remark precisely.
+
+EDITOR REMARKS:
+{remarks.strip()}
+
+CURRENT GENERATED PAGE (source JSON; rewrite its article content):
+{current_text}
+=== END EDITOR REVISION REQUEST ==="""
+
+    item.status = "generating"
+    item.generation_progress = 15
+    item.generation_error = None
+    task.status = "generating"
+    db.commit()
+    try:
+        item.generated_json = asyncio.run(
+            build_ai_content(
+                provider=provider,
+                topic=item.topic,
+                geo=task.geo,
+                language=task.language,
+                target_words=task.target_words,
+                site=site,
+                payload_mode=task.payload_mode,
+                prompt_template=revision_prompt,
+                shortcode=None,
+                include_toc=task.include_toc,
+                include_faq=task.include_faq,
+                competitor_brief=item.competitor_brief,
+                variation_context=build_task_variation_context(db, item),
+                generate_title=generate_title,
+            )
+        )
+        if not generate_title and current_title is not None:
+            revised_pages = item.generated_json.get("pages") if isinstance(item.generated_json, dict) else None
+            if isinstance(revised_pages, list) and revised_pages and isinstance(revised_pages[0], dict):
+                revised_pages[0]["title"] = current_title
+        item.word_count = count_words(item.generated_json)
+        section = db.get(models.Section, item.section_id) if item.section_id else None
+        ensure_content_slug_available(db, item, section=section)
+        item.generation_progress = 100
+        item.generation_prompt_name = task.prompt_template_name
+        item.generated_at = datetime.now(timezone.utc)
+        item.status = "generated"
+        task.status = "generated"
+        db.commit()
+        db.refresh(item)
+        return item
+    except Exception as exc:
+        db.rollback()
+        failed_item = db.get(models.ContentItem, item.id)
+        failed_task = db.get(models.GenerationTask, item.task_id)
+        if failed_item:
+            failed_item.generated_json = current_payload
+            failed_item.status = "generation_failed"
+            failed_item.generation_error = f"{type(exc).__name__}: {exc}"[:500]
+        if failed_task:
+            failed_task.status = "generation_failed"
+        db.commit()
+        raise
+
+
 def schedule_campaign(db: Session, payload: PublicationCampaignCreate) -> models.PublicationCampaign:
     site = db.get(models.Site, payload.site_id)
     if not site or not site.is_active:

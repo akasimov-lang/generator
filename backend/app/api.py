@@ -19,6 +19,7 @@ from app.schemas import (
     CompetitorQueriesUpdate,
     CompetitorResearchResponse,
     ContentItemResponse,
+    ContentRevisionRequest,
     ContentUpdate,
     DuplicateSitesDeleteResponse,
     FavoriteSitesResponse,
@@ -102,7 +103,7 @@ from app.services import (
     validate_content_for_publication,
     validate_ai_provider_key,
 )
-from app.worker import check_site_menu_visibility_job, collect_competitor_research_job, generate_content_item_job, generate_task_content_job, publish_campaign_bundle_job, run_task_pipeline_job
+from app.worker import check_site_menu_visibility_job, collect_competitor_research_job, generate_content_item_job, generate_task_content_job, publish_campaign_bundle_job, revise_content_item_job, run_task_pipeline_job
 
 router = APIRouter()
 
@@ -1978,6 +1979,33 @@ def generate_content(content_id: str, _: AuthUser, db: Session = Depends(get_db)
         item.generation_error = f"{type(exc).__name__}: {exc}"[:500]
         db.commit()
         raise HTTPException(status_code=502, detail="Failed to queue content generation") from exc
+    db.refresh(item)
+    return item
+
+
+@router.post("/content/{content_id}/revise", response_model=ContentItemResponse)
+def revise_content(content_id: str, payload: ContentRevisionRequest, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    item = db.get(models.ContentItem, content_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Content item not found")
+    if item.status in {"generation_queued", "generating"}:
+        return item
+    if item.status in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "deletion_pending", "deleted"}:
+        raise HTTPException(status_code=400, detail=f"Content in status '{item.status}' cannot be revised")
+    if not item.generated_json:
+        raise HTTPException(status_code=400, detail="Generate the text before requesting a revision")
+    previous_status = item.status
+    item.status = "generation_queued"
+    item.generation_progress = 1
+    item.generation_error = None
+    db.commit()
+    try:
+        revise_content_item_job.delay(item.id, payload.remarks.strip(), payload.generate_title)
+    except Exception as exc:
+        item.status = previous_status
+        item.generation_error = f"{type(exc).__name__}: {exc}"[:500]
+        db.commit()
+        raise HTTPException(status_code=502, detail="Failed to queue content revision") from exc
     db.refresh(item)
     return item
 

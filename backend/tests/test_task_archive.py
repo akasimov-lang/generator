@@ -5,16 +5,16 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app import models
-from app.api import archive_task, collect_content_competitors, generate_content, get_task, list_archived_tasks, list_tasks, regenerate_all_task_content, restore_task, start_task_pipeline, update_content, update_task_section
+from app.api import archive_task, collect_content_competitors, generate_content, get_task, list_archived_tasks, list_tasks, regenerate_all_task_content, restore_task, revise_content, start_task_pipeline, update_content, update_task_section
 from app.db import Base
-from app.schemas import ContentUpdate, GenerationTaskCreate, GenerationTaskRegenerateAll, GenerationTaskSectionUpdate
+from app.schemas import ContentRevisionRequest, ContentUpdate, GenerationTaskCreate, GenerationTaskRegenerateAll, GenerationTaskSectionUpdate
 from app.services import create_generation_task, run_task_pipeline
-from app.worker import celery_app, generate_content_item_job, generate_task_content_job, run_task_pipeline_job
+from app.worker import celery_app, generate_content_item_job, generate_task_content_job, revise_content_item_job, run_task_pipeline_job
 
 
 def test_generation_jobs_return_to_queue_when_worker_is_lost() -> None:
     assert celery_app.conf.worker_prefetch_multiplier == 1
-    for job in (generate_content_item_job, generate_task_content_job, run_task_pipeline_job):
+    for job in (generate_content_item_job, generate_task_content_job, revise_content_item_job, run_task_pipeline_job):
         assert job.acks_late is True
         assert job.reject_on_worker_lost is True
 
@@ -105,6 +105,38 @@ def test_content_generation_is_queued_with_initial_progress(monkeypatch: pytest.
         )
 
         assert queued_ids == [item.id]
+        assert response.status == "generation_queued"
+        assert response.generation_progress == 1
+
+
+def test_published_content_revision_is_queued_with_editor_options(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+    queued: list[tuple[str, str, bool]] = []
+    monkeypatch.setattr("app.api.revise_content_item_job.delay", lambda *args: queued.append(args))
+
+    with TestingSession() as db:
+        task = models.GenerationTask(title="Revise", geo="LV", language="lv", topics_count=1)
+        item = models.ContentItem(
+            task=task,
+            topic="Casino review",
+            slug="/casino-review/",
+            generated_json={"pages": [{"title": "Existing title", "content": {"blocks": []}}]},
+            status="published",
+            idempotency_key="published-revision-item",
+        )
+        db.add(item)
+        db.commit()
+
+        response = revise_content(
+            item.id,
+            ContentRevisionRequest(remarks="Rewrite the payment section", generate_title=False),
+            {"id": "editor-id", "username": "editor", "is_admin": False},
+            db,
+        )
+
+        assert queued == [(item.id, "Rewrite the payment section", False)]
         assert response.status == "generation_queued"
         assert response.generation_progress == 1
 

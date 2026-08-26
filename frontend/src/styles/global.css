@@ -920,6 +920,90 @@ h2 {
   padding: 0 2px;
 }
 
+.revisionAccordion {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.revisionAccordion.open {
+  border-color: color-mix(in srgb, var(--primary) 38%, var(--border));
+}
+
+.revisionAccordionToggle {
+  align-items: center;
+  background: var(--surface-3);
+  border: 0;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  justify-content: space-between;
+  padding: 9px 11px;
+  width: 100%;
+}
+
+.revisionAccordionToggle > span {
+  align-items: center;
+  display: inline-flex;
+  gap: 7px;
+}
+
+.revisionAccordionBody {
+  background: color-mix(in srgb, var(--primary-soft) 42%, var(--surface));
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 8px;
+  padding: 11px;
+}
+
+.revisionAccordionBody form,
+.revisionAccordionBody label:not(.checkboxRow) {
+  display: grid;
+  gap: 7px;
+}
+
+.revisionAccordionBody label {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.revisionAccordionBody textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+.revisionFormFooter {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.revisionGenerationState {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.revisionGenerationState > span {
+  display: grid;
+  gap: 2px;
+}
+
+.revisionGenerationState b {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.revisionGenerationState small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
 .previewParagraph,
 .previewFaq p {
   margin: 0;
