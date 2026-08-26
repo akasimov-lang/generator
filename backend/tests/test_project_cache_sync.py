@@ -613,3 +613,57 @@ def test_sync_keeps_pending_menu_item_missing_from_external_menu() -> None:
         assert section is not None
         assert section.sync_status == "pending"
         assert section.synced_at is None
+
+
+def test_sync_confirms_nested_menu_item_only_under_its_parent() -> None:
+    with make_session() as db:
+        project = {
+            "id": "nested-menu-project",
+            "name": "nested-menu.example",
+            "settings": {"canon": "nested-menu.example"},
+            "data": {"menu": {"header": [], "footer": []}, "pages": []},
+        }
+        sync_project_cache(db, [project])
+        site = db.scalar(select(models.Site).where(models.Site.external_project_id == "nested-menu-project"))
+        parent = models.Section(
+            site_id=site.id,
+            external_id="reviews",
+            name="Reviews",
+            path="/reviews/",
+            menu_type="header",
+            sync_status="synced",
+        )
+        db.add(parent)
+        db.flush()
+        child = models.Section(
+            site_id=site.id,
+            external_id="vox",
+            name="Vox Casino",
+            path="/vox-casino/",
+            menu_type="header",
+            parent_id=parent.id,
+            sync_status="synced",
+        )
+        db.add(child)
+        db.commit()
+
+        project["data"]["menu"]["header"] = [
+            {"title": "Reviews", "slug": "/reviews/"},
+            {"title": "Vox Casino", "slug": "/vox-casino/"},
+        ]
+        flat_result = sync_project_cache(db, [project])
+        db.refresh(child)
+
+        assert flat_result["confirmed_sections_count"] == 0
+        assert child.sync_status == "pending"
+
+        project["data"]["menu"]["header"] = [{
+            "title": "Reviews",
+            "slug": "/reviews/",
+            "children": [{"title": "Vox Casino", "slug": "/vox-casino/"}],
+        }]
+        nested_result = sync_project_cache(db, [project])
+        db.refresh(child)
+
+        assert nested_result["confirmed_sections_count"] == 1
+        assert child.sync_status == "synced"

@@ -620,18 +620,54 @@ def _flatten_menu_items(items: list[Any]) -> list[Any]:
     return flattened
 
 
+def _menu_item_children(item: Any) -> list[Any]:
+    if not isinstance(item, dict):
+        return []
+    children = item.get("children") or item.get("items")
+    return children if isinstance(children, list) else []
+
+
+def _menu_item_in_expected_position(
+    section: models.Section,
+    sections_by_id: dict[str, models.Section],
+    root_items: list[Any],
+    seen: set[str] | None = None,
+) -> Any | None:
+    visited = set(seen or ())
+    if section.id in visited:
+        return None
+    visited.add(section.id)
+    candidates = root_items
+    if section.parent_id:
+        parent = sections_by_id.get(section.parent_id)
+        if parent is None or parent.menu_type != section.menu_type:
+            return None
+        parent_item = _menu_item_in_expected_position(parent, sections_by_id, root_items, visited)
+        if parent_item is None:
+            return None
+        candidates = _menu_item_children(parent_item)
+    return next((item for item in candidates if _menu_item_matches_section(item, section)), None)
+
+
 def _confirm_synchronized_sections(db: Session, site: models.Site, menu: dict[str, list[Any]]) -> int:
     sections = db.scalars(
         select(models.Section).where(models.Section.site_id == site.id)
     ).all()
+    sections_by_id = {section.id: section for section in sections}
     confirmed_count = 0
     for section in sections:
-        menu_items = _flatten_menu_items(menu.get(section.menu_type, []))
-        exists_in_project = any(_menu_item_matches_section(item, section) for item in menu_items)
-        if not exists_in_project:
+        root_items = menu.get(section.menu_type, [])
+        menu_items = _flatten_menu_items(root_items)
+        exists_anywhere = any(_menu_item_matches_section(item, section) for item in menu_items)
+        exists_in_expected_position = _menu_item_in_expected_position(
+            section,
+            sections_by_id,
+            root_items,
+        ) is not None
+        if not exists_in_expected_position:
             if section.sync_status == "synced":
-                section.sync_status = "external_deleted"
-                section.synced_at = datetime.now(timezone.utc)
+                section.sync_status = "pending" if exists_anywhere else "external_deleted"
+                section.synced_at = None if exists_anywhere else datetime.now(timezone.utc)
             continue
         if section.sync_status not in {"pending", "external_deleted"}:
             continue
