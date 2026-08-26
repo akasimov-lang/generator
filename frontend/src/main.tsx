@@ -8314,7 +8314,7 @@ function SiteMenuPreviewSection({ title, items, sections = [], content = [], ico
         const pagesCollapsed = collapsedPageKeys.has(node.key);
         const nestedPages = node.section
           ? content
-              .filter((item) => item.section_id === node.section?.id && (Boolean(item.generated_at) || item.status === "published"))
+              .filter((item) => item.status !== "deleted" && item.section_id === node.section?.id && (Boolean(item.generated_at) || item.status === "published"))
               .sort((left, right) => {
                 if (left.status === "published" && right.status !== "published") return 1;
                 if (left.status !== "published" && right.status === "published") return -1;
