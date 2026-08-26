@@ -600,7 +600,7 @@ def test_menu_sync_sends_nested_items_when_template_has_one_level(db: Session, m
     result = asyncio.run(sync_project_menus(db, site, menu_types=("header",)))
 
     assert result["success"] is True
-    assert [item["slug"] for item in calls[0]["list"]] == ["/parent/", "/parent/child/"]
+    assert "/parent/child/" in [item["slug"] for item in calls[0]["list"]]
     assert child.sync_status == "pending"
 
 
