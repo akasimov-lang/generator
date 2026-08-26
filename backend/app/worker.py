@@ -7,7 +7,7 @@ from sqlalchemy import select
 from app import models
 from app.core.config import get_settings
 from app.db import SessionLocal
-from app.project_cache import ProjectCacheError, fetch_project_menu_capabilities, refresh_project_server_id
+from app.project_cache import ProjectCacheError, fetch_project_cache, fetch_project_menu_capabilities, refresh_project_server_id, sync_project_data_update
 from app.services import COMPETITOR_RESEARCH_MAX_ATTEMPTS, collect_competitor_research_for_item, generate_content_item, generate_task_items, publish_campaign_bundle, publish_item, refresh_campaign_status, run_task_pipeline
 
 settings = get_settings()
@@ -42,6 +42,11 @@ def check_site_menu_visibility_job(check_id: str) -> dict:
             raise ProjectCacheError("Project was not found", "PROJECT_NOT_FOUND")
         refresh_project_server_id(db, site)
         capabilities = fetch_project_menu_capabilities(site, force=True)
+        projects = fetch_project_cache([site.name])
+        project = next((item for item in projects if str(item.get("name") or "").strip() == site.name), None)
+        if project is None:
+            raise ProjectCacheError(f"Project '{site.name}' was not found in cache")
+        sync_project_data_update(db, site.name, project)
         site.header_menu_template_rendered = capabilities["header_menu_template_rendered"]
         site.header_menu_rendered = capabilities["header_menu_rendered"]
         site.header_menu_nested = capabilities["header_menu_nested"]

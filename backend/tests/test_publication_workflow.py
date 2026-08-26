@@ -395,6 +395,7 @@ def test_project_page_payload_matches_receiver_dto(db: Session) -> None:
 def test_nested_page_slug_uses_full_parent_path_without_duplication() -> None:
     assert build_nested_page_slug("/best-casinos/", "/online-casino-bonus-terms-in/") == "/best-casinos/online-casino-bonus-terms-in/"
     assert build_nested_page_slug("/best-casinos/", "/best-casinos/online-casino-bonus-terms-in/") == "/best-casinos/online-casino-bonus-terms-in/"
+    assert build_nested_page_slug("/casino-reviews/", "/casino-reviews/") == "/casino-reviews/"
     assert build_nested_page_slug("/casino/guides/", "/article/") == "/casino/guides/article/"
 
 
@@ -515,7 +516,7 @@ def test_project_server_requests_refresh_token_and_store_status_codes(db: Sessio
     assert page_calls[0]["json"]["token"] == "fresh-token"
     assert menu_result["status_codes"] == [201, 201]
     assert menu_result["last_status_code"] == 201
-    assert section.sync_status == "synced"
+    assert section.sync_status == "pending"
     assert item.status == "publication_pending_confirmation"
     assert item.published_at is None
     assert item.last_publication_status_code == 201
@@ -531,7 +532,7 @@ def test_project_server_requests_refresh_token_and_store_status_codes(db: Sessio
     assert page_log.request_payload["token"] == "[redacted]"
 
 
-def test_menu_sync_blocks_nested_items_when_template_has_one_level(db: Session, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_menu_sync_sends_nested_items_when_template_has_one_level(db: Session, monkeypatch: pytest.MonkeyPatch) -> None:
     site, _ = make_content(db)
     site.cache_server_ip = "bear"
     parent = models.Section(
@@ -567,8 +568,40 @@ def test_menu_sync_blocks_nested_items_when_template_has_one_level(db: Session, 
         },
     )
 
-    with pytest.raises(project_cache_module.ProjectCacheError, match="веб-разработчику"):
-        asyncio.run(sync_project_menus(db, site))
+    calls: list[dict] = []
+
+    class FakeResponse:
+        status_code = 201
+        headers = {"content-type": "application/json"}
+        text = ""
+
+        def json(self) -> dict:
+            return {"ok": True}
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url: str, json: dict, headers: dict | None = None):
+            if url.endswith("/auth/login"):
+                return type("LoginResponse", (), {"status_code": 200, "json": lambda self: {"token": "fresh-token"}})()
+            calls.append(json)
+            return FakeResponse()
+
+    monkeypatch.setattr(service_module, "refresh_project_server_token", lambda client: asyncio.sleep(0, result="fresh-token"))
+    monkeypatch.setattr(service_module.httpx, "AsyncClient", FakeAsyncClient)
+
+    result = asyncio.run(sync_project_menus(db, site, menu_types=("header",)))
+
+    assert result["success"] is True
+    assert [item["slug"] for item in calls[0]["list"]] == ["/parent/", "/parent/child/"]
+    assert child.sync_status == "pending"
 
 
 def test_campaign_bundle_contains_project_actor_and_ordered_changes(db: Session) -> None:

@@ -1851,7 +1851,10 @@ function ProjectWorkspaceView({
         const result = await api<MenuCapabilities>(`/sites/${selectedSite.id}/menu-capabilities`);
         if (cancelled) return;
         setMenuCapabilities(result);
-        if (result.check_status === "completed" || result.check_status === "failed") await onChanged();
+        if (result.check_status === "completed" || result.check_status === "failed") {
+          await onChanged();
+          await loadProject();
+        }
       } catch (error) {
         if (!cancelled) setMenuCapabilitiesError(error instanceof Error ? error.message : "Не удалось обновить очередь проверки меню");
       }
@@ -1861,7 +1864,7 @@ function ProjectWorkspaceView({
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [api, menuCheckPending, onChanged, selectedSite]);
+  }, [api, loadProject, menuCheckPending, onChanged, selectedSite]);
 
   React.useEffect(() => {
     if (!selectedSite || !menuCapabilities || menuCapabilities.checked_at) return;
@@ -1930,6 +1933,7 @@ function ProjectWorkspaceView({
   const openContentForMenuSection = React.useCallback((section: Section) => {
     if (!selectedSite) return;
     window.sessionStorage.setItem(`workspace_add_content_section:${selectedSite.id}`, section.id);
+    window.sessionStorage.setItem(`workspace_add_content_mode:${selectedSite.id}`, "menu_page");
     onTabChange("topics", selectedSite.name);
   }, [onTabChange, selectedSite]);
 
@@ -2067,6 +2071,7 @@ function ProjectWorkspaceView({
               aria-label={`Запустить точную desktop-проверку меню проекта ${selectedSite.name}`}
             >
               <RefreshCcw className={menuCapabilitiesLoading || menuCheckPending ? "spin" : ""} size={15} />
+              <span>{menuCapabilitiesLoading || menuCheckPending ? "Проверка…" : "Проверить"}</span>
             </button>
           ) : null}
         </span>
@@ -3699,7 +3704,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
           </form>
         ) : null}
         <ResponsiveTable
-          columns={["Выбор", "Тема", "Меню", "Слова", "Статус", "Опубликовано", "Действия"]}
+          columns={["Выбор", "Тема", "Меню", "Слова", "Состояние", "Опубликовано", "Действия"]}
           columnKeys={["select", "topic", "menu", "words", "status", "published", "actions"]}
           wrapperClassName="projectContentTable"
           sortableColumnIndexes={[1, 2, 3, 4, 5]}
@@ -4417,6 +4422,12 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onAd
   );
   const persistedSections = React.useMemo(() => sections.filter((section) => !section.is_temporary_parent), [sections]);
   const pendingSections = React.useMemo(() => sections.filter((section) => section.sync_status === "pending"), [sections]);
+  const unconfirmedNestedSections = sections.filter((section) => section.parent_id && section.sync_status !== "synced");
+  const singleLevelMenuLabels = Array.from(new Set(
+    unconfirmedNestedSections
+      .filter((section) => section.menu_type === "header" ? menuCapabilities?.header_menu_nested === false : menuCapabilities?.footer_menu_nested === false)
+      .map((section) => section.menu_type === "header" ? "Header" : "Footer")
+  ));
   const menuLibraryListId = React.useId();
 
   React.useEffect(() => {
@@ -4876,6 +4887,7 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onAd
   return (
     <section className="viewStack">
       <DataPanel title="Структура меню проекта" allowCollapse={false}>
+        {singleLevelMenuLabels.length ? <div className="notice menuNestingNotice menuSingleLevelNotice" role="note"><CircleAlert size={18} /><span><strong>{singleLevelMenuLabels.join(" и ")} поддерживает только один уровень меню.</strong> Вложенные пункты будут отправлены на сервер, но необходимо обратиться к веб-разработчику, чтобы он реализовал их отображение в шаблоне проекта. После изменений нажмите «Проверить»: сообщение исчезнет, когда проверка подтвердит наличие всех вложенных пунктов на сайте.</span></div> : null}
         {menuNestingNotice ? <div className="notice menuNestingNotice" role="note"><AlertTriangle size={17} /><span>{menuNestingNotice}</span></div> : null}
         <section className={`menuAddPanel embeddedMenuAddPanel ${addExpanded ? "expanded" : ""}`}>
           <button className="menuAddToggle" type="button" onClick={() => { setInlineMenuType(null); setAddExpanded((current) => !current); }} aria-expanded={addExpanded}>
@@ -5067,6 +5079,7 @@ function TasksView({
   const [siteId, setSiteId] = React.useState(fixedSite?.id || "");
   const [providerId, setProviderId] = React.useState("");
   const [sectionId, setSectionId] = React.useState("");
+  const [sectionContentMode, setSectionContentMode] = React.useState<"nested" | "menu_page">("nested");
   const [promptTemplateId, setPromptTemplateId] = React.useState("");
   const [targetWords, setTargetWords] = React.useState(DEFAULT_TARGET_WORDS);
   const taskCheckboxPreferences = React.useMemo(() => {
@@ -5111,10 +5124,14 @@ function TasksView({
   React.useEffect(() => {
     if (!selectedSite) return;
     const storageKey = `workspace_add_content_section:${selectedSite.id}`;
+    const modeStorageKey = `workspace_add_content_mode:${selectedSite.id}`;
     const requestedSectionId = window.sessionStorage.getItem(storageKey);
     if (!requestedSectionId || !sections.some((section) => section.id === requestedSectionId)) return;
     window.sessionStorage.removeItem(storageKey);
+    const requestedMode = window.sessionStorage.getItem(modeStorageKey);
+    window.sessionStorage.removeItem(modeStorageKey);
     setSectionId(requestedSectionId);
+    setSectionContentMode(requestedMode === "menu_page" ? "menu_page" : "nested");
     setCreateFormExpanded(true);
   }, [sections, selectedSite]);
 
@@ -5231,6 +5248,7 @@ function TasksView({
       language,
       site_id: siteId || null,
       section_id: sectionId || null,
+      section_content_mode: sectionContentMode,
       ai_provider_id: providerId || null,
       payload_mode: "site_default",
       target_words: targetWords || null,
@@ -8135,6 +8153,7 @@ function nestedContentSlug(sectionPath: string, contentSlug: string): string {
   const parts = contentPath.split("/").filter(Boolean);
   const leaf = parts.at(-1) || "";
   if (!leaf) return parent;
+  if (contentPath === parent) return parent;
   return parent === "/" ? `/${leaf}/` : `${parent}${leaf}/`;
 }
 

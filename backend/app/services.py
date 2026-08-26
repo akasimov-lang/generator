@@ -2500,6 +2500,7 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
             status="draft",
             word_count=count_words(generated_json),
             section_id=payload.section_id,
+            section_content_mode=payload.section_content_mode,
             generation_prompt_name=payload.prompt_template_name,
             include_casino_rating=payload.include_casino_rating,
             competitor_research_status="queries_ready" if payload.collect_competitors else "not_requested",
@@ -3012,6 +3013,8 @@ def build_nested_page_slug(section_path: object | None, page_slug: object) -> st
     normalized_parent = _normalized_project_slug(section_path) if section_path else "/"
     if not page_leaf:
         return normalized_parent
+    if normalized_page == normalized_parent:
+        return normalized_parent
     if normalized_parent == "/":
         return f"/{page_leaf}/"
     return f"{normalized_parent.rstrip('/')}/{page_leaf}/"
@@ -3025,6 +3028,8 @@ def apply_content_section_slug(item: models.ContentItem, section: models.Section
     source_slug = item.section_source_slug or (page.get("slug") if page else item.slug) or item.slug
     if not item.section_source_slug:
         item.section_source_slug = _normalized_project_slug(source_slug)
+    if section and _normalized_project_slug(source_slug) == _normalized_project_slug(section.path):
+        item.section_content_mode = "menu_page"
     if section and item.section_content_mode == "menu_page":
         full_slug = _normalized_project_slug(section.path)
     else:
@@ -3133,25 +3138,6 @@ async def sync_project_menus(
     site.footer_menu_template_rendered = capabilities["footer_menu_rendered"]
     site.footer_menu_nested = capabilities["footer_menu_nested"]
     db.commit()
-    pending_nested_sections = db.scalars(
-        select(models.Section).where(
-            models.Section.site_id == site.id,
-            models.Section.menu_type.in_(menu_types),
-            models.Section.sync_status == "pending",
-            models.Section.parent_id.is_not(None),
-        )
-    ).all()
-    unsupported_menu_types = {
-        section.menu_type
-        for section in pending_nested_sections
-        if not capabilities[f"{section.menu_type}_menu_nested"]
-    }
-    if unsupported_menu_types:
-        labels = ", ".join(sorted(menu_type.capitalize() for menu_type in unsupported_menu_types))
-        raise ProjectCacheError(
-            f"{labels}: шаблон проекта поддерживает только один уровень меню. "
-            "Обратитесь к веб-разработчику, чтобы добавить выпадающее меню, затем повторите синхронизацию."
-        )
     endpoint = project_server_url(site, "/projects/menu")
     results: list[dict] = []
     async with httpx.AsyncClient(timeout=45.0) as client:
@@ -3181,30 +3167,6 @@ async def sync_project_menus(
                     current_menu = dict(site.default_menu) if isinstance(site.default_menu, dict) else {}
                     current_menu[menu_type] = payload["list"]
                     site.default_menu = current_menu
-                    sections = db.scalars(
-                        select(models.Section).where(
-                            models.Section.site_id == site.id,
-                            models.Section.menu_type == menu_type,
-                            models.Section.sync_status == "pending",
-                        )
-                    ).all()
-                    synced_at = datetime.now(timezone.utc)
-                    for section in sections:
-                        section.sync_status = "synced"
-                        section.synced_at = synced_at
-                    for pending_log in db.scalars(
-                        select(models.PublicationLog)
-                        .where(models.PublicationLog.response_status.is_(None))
-                        .order_by(models.PublicationLog.created_at.asc())
-                    ).all():
-                        pending_payload = pending_log.request_payload if isinstance(pending_log.request_payload, dict) else {}
-                        if (
-                            pending_payload.get("project_name") == site.name
-                            and pending_payload.get("menu_type") == menu_type
-                            and pending_payload.get("action") in {"menu_item_create", "menu_item_update", "menu_item_delete"}
-                        ):
-                            pending_log.response_status = response.status_code
-                            pending_log.response_body = {"synchronized": True, "endpoint": endpoint}
                 results.append({"type": menu_type, "status_code": response.status_code, "success": successful})
                 db.commit()
             except Exception as exc:

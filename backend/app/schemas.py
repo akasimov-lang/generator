@@ -354,6 +354,7 @@ class GenerationTaskCreate(BaseModel):
     topics: list[str] = Field(min_length=1, max_length=30)
     site_id: str | None = None
     section_id: str | None = None
+    section_content_mode: Literal["nested", "menu_page"] = "nested"
     ai_provider_id: str | None = None
     payload_mode: Literal["site_default", "simple_page", "full_site"] = "site_default"
     target_words: int | None = Field(default=2000, ge=300, le=8000)

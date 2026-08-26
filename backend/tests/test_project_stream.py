@@ -97,6 +97,85 @@ def test_stream_event_creates_a_project_that_is_not_in_database(monkeypatch) -> 
     assert requests[1]["fields"] == {"settings": True, "head": True, "data": True, "serverId": True}
 
 
+def test_stream_event_confirms_publication_and_preserves_response_code(monkeypatch) -> None:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    with session_factory() as db:
+        site = models.Site(
+            name="stream-publication.example",
+            base_url="https://stream-publication.example",
+            publication_endpoint="https://stream-publication.example/api/content",
+            external_project_id="stream-publication",
+        )
+        db.add(site)
+        db.flush()
+        task = models.GenerationTask(title="Publish", site_id=site.id, geo="LV", language="lv", topics_count=1)
+        db.add(task)
+        db.flush()
+        item = models.ContentItem(
+            task=task,
+            site_id=site.id,
+            topic="Stream confirmed page",
+            slug="/guides/stream-confirmed/",
+            generated_json={"pages": []},
+            status="publication_pending_confirmation",
+            idempotency_key="stream-confirmed-publication",
+            last_publication_status_code=201,
+        )
+        db.add(item)
+        db.commit()
+        item_id = item.id
+
+    project = {
+        "id": "stream-publication",
+        "name": "stream-publication.example",
+        "serverId": "camel",
+        "settings": {"canon": "stream-publication.example"},
+        "data": {
+            "menu": {"header": [], "footer": []},
+            "pages": [{"slug": "/guides/stream-confirmed/"}],
+        },
+    }
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> list[dict]:
+            return [project]
+
+    class FakeClient:
+        def post(self, url: str, headers: dict, json: dict) -> FakeResponse:
+            return FakeResponse()
+
+    monkeypatch.setattr(project_stream_module, "SessionLocal", session_factory)
+
+    project_stream_module._handle_event(
+        FakeClient(),
+        "token",
+        ServerSentEvent(
+            event_id="17",
+            event="message",
+            data='{"projectName":"stream-publication.example","server":"camel.slf-hostesting.com"}',
+        ),
+    )
+
+    with session_factory() as db:
+        item = db.get(models.ContentItem, item_id)
+        assert item is not None
+        assert item.status == "published"
+        assert item.last_publication_status_code == 201
+        confirmation_log = db.scalar(
+            select(models.PublicationLog).where(
+                models.PublicationLog.content_item_id == item_id,
+                models.PublicationLog.response_status == 200,
+            )
+        )
+        assert confirmation_log is not None
+        assert confirmation_log.request_payload["action"] == "content_publication_confirmed"
+
+
 def test_stream_update_tracks_external_menu_deletions() -> None:
     with make_session() as db:
         site = models.Site(

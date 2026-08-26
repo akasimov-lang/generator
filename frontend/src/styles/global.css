@@ -541,6 +541,17 @@ h2 {
   margin-top: 1px;
 }
 
+.menuSingleLevelNotice {
+  background: color-mix(in srgb, var(--primary-soft) 55%, var(--surface));
+  border-color: color-mix(in srgb, var(--primary) 38%, var(--border));
+  color: var(--text);
+}
+
+.menuSingleLevelNotice svg,
+.menuSingleLevelNotice strong {
+  color: var(--primary);
+}
+
 .permissionOverlay {
   position: fixed;
   inset: 0;
@@ -1623,11 +1634,12 @@ h2 {
   cursor: pointer;
   display: inline-flex;
   flex: 0 0 auto;
+  gap: 6px;
   height: 30px;
   justify-content: center;
   margin-left: 2px;
-  padding: 0;
-  width: 30px;
+  padding: 0 9px;
+  width: auto;
 }
 
 .workspaceMenuCheckButton:hover:not(:disabled),
@@ -6537,10 +6549,10 @@ td {
 }
 
 .publicationStatusCell {
-  align-items: flex-start;
+  align-items: center;
   display: inline-flex;
-  flex-direction: column;
-  height: 32px;
+  flex-direction: row;
+  gap: 5px;
   justify-content: center;
   min-width: 0;
 }
@@ -6552,11 +6564,14 @@ td {
 }
 
 .publicationResponseCode {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
   color: var(--muted);
   font-size: 9px;
   font-weight: 700;
   line-height: 11px;
-  padding-left: 8px;
+  padding: 2px 6px;
   white-space: nowrap;
 }
 
