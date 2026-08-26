@@ -9355,7 +9355,7 @@ function StatusBadge({ status }: { status: string }) {
     generated: "Сгенерировано",
     generating: "Генерация",
     generation_failed: "Ошибка генерации",
-    generation_queued: "В очереди на генерацию",
+    generation_queued: "Генерирую...",
     invalid: "Ошибка",
     not_requested: "Не запрошено",
     pages_fetched: "Страницы загружены",
