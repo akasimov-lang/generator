@@ -2351,7 +2351,7 @@ function MenuCapabilityCard({ label, templateRendered, rendered, nested, icon, l
         </button>
       </span>
       <span className="projectMenuCapabilityValue">
-        {effectiveRendered === true ? <MenuReadyMedal /> : effectiveRendered === false ? <MenuReadyMedal tone="red" /> : icon === "header" ? <HeaderMenuIcon /> : <FooterMenuIcon />}
+        {effectiveRendered === true ? <MenuReadyMedal tone={nested ? "gold" : "green"} /> : effectiveRendered === false ? <MenuReadyMedal tone="red" /> : icon === "header" ? <HeaderMenuIcon /> : <FooterMenuIcon />}
         <b>{statusText}</b>
       </span>
       {error ? <em className="projectMenuCapabilityError">{error}</em> : effectiveRendered ? <em>{nested ? "Есть вложенность" : "Один уровень"}</em> : effectiveRendered === false ? <em>{rendered == null ? "Не найдено в шаблоне" : "Не отображается на сайте"}</em> : null}
