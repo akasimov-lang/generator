@@ -716,13 +716,6 @@ def sync_project_data_update(
         site.default_menu = menu
         site.has_menu = bool(menu["header"] or menu["footer"])
         site.cache_synced_at = synced_at
-        site.menu_capabilities_checked_at = None
-        site.header_menu_template_rendered = None
-        site.header_menu_rendered = None
-        site.header_menu_nested = None
-        site.footer_menu_template_rendered = None
-        site.footer_menu_rendered = None
-        site.footer_menu_nested = None
         if server_id:
             site.cache_server_ip = server_id
         _confirm_published_content(db, site, project, synced_at)

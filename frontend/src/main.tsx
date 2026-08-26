@@ -4971,7 +4971,7 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
               <code className="menuTableClamp" title={item.slug}>{item.slug}</code>,
               formatDate(item.published_at || item.updated_at),
               <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} />,
-              <div className="menuSectionEditActions"><a className="button compact secondary" href={contentSiteUrl(item)} target="_blank" rel="noreferrer" title="Открыть опубликованную страницу"><ExternalLink size={14} /> URL</a><button className="button compact danger" type="button" onClick={() => void deleteNestedPage(item)} disabled={deletingNestedPageId === item.id} title={`Удалить опубликованную страницу${section ? ` из «${section.name}»` : ""}`}><Trash2 size={14} /> {deletingNestedPageId === item.id ? "Удаляем" : "Удалить"}</button></div>
+              <div className="menuSectionEditActions"><a className="button compact secondary" href={projectContentSiteUrl(site, item)} target="_blank" rel="noreferrer" title="Открыть опубликованную страницу"><ExternalLink size={14} /> URL</a><button className="button compact danger" type="button" onClick={() => void deleteNestedPage(item)} disabled={deletingNestedPageId === item.id} title={`Удалить опубликованную страницу${section ? ` из «${section.name}»` : ""}`}><Trash2 size={14} /> {deletingNestedPageId === item.id ? "Удаляем" : "Удалить"}</button></div>
             ];
           })]}
         /> : null}
@@ -8205,6 +8205,16 @@ function nestedContentSlug(sectionPath: string, contentSlug: string): string {
   if (!leaf) return parent;
   if (contentPath === parent) return parent;
   return parent === "/" ? `/${leaf}/` : `${parent}${leaf}/`;
+}
+
+function projectContentSiteUrl(site: Site, item: ContentItem): string {
+  if (item.published_url) return item.published_url;
+  const projectBaseUrl = site.base_url || `https://${site.cache_canon || site.name}`;
+  try {
+    return new URL(item.slug.replace(/^\/+/, ""), `${projectBaseUrl.replace(/\/+$/, "")}/`).toString();
+  } catch {
+    return `${projectBaseUrl.replace(/\/+$/, "")}/${item.slug.replace(/^\/+/, "")}`;
+  }
 }
 
 function SiteMenuPreviewSection({ title, items, sections = [], content = [], icon, action, children, adoptingParentKey, activeParentTreeKey, pagePreviewLoadingKey, deletingNestedPageId, onPreviewPage, onDeletePage, onAddContent, onAddChild }: { title: string; items: unknown[]; sections?: Section[]; content?: ContentItem[]; icon?: React.ReactNode; action?: React.ReactNode; children?: React.ReactNode; adoptingParentKey?: string | null; activeParentTreeKey?: string; pagePreviewLoadingKey?: string | null; deletingNestedPageId?: string | null; onPreviewPage?: (item: MenuPreviewItem, treeKey: string) => void; onDeletePage?: (item: ContentItem) => void; onAddContent?: (item: MenuPreviewItem, section: Section | undefined) => void; onAddChild?: (item: MenuPreviewItem, section: Section | undefined, treeKey: string) => void }) {

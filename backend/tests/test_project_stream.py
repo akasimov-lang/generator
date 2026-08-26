@@ -184,6 +184,13 @@ def test_stream_update_tracks_external_menu_deletions() -> None:
             publication_endpoint="https://changed.example/api/content",
             cache_server_ip="old-server",
             default_menu={"header": [{"title": "Removed", "slug": "/removed/"}], "footer": []},
+            menu_capabilities_checked_at=datetime.now(timezone.utc),
+            header_menu_template_rendered=True,
+            header_menu_rendered=True,
+            header_menu_nested=True,
+            footer_menu_template_rendered=True,
+            footer_menu_rendered=True,
+            footer_menu_nested=False,
         )
         removed = models.Section(
             site=site,
@@ -215,6 +222,13 @@ def test_stream_update_tracks_external_menu_deletions() -> None:
         assert site.default_menu == {"header": [], "footer": []}
         assert site.cache_server_ip == "bear"
         assert site.has_menu is False
+        assert site.menu_capabilities_checked_at is not None
+        assert site.header_menu_template_rendered is True
+        assert site.header_menu_rendered is True
+        assert site.header_menu_nested is True
+        assert site.footer_menu_template_rendered is True
+        assert site.footer_menu_rendered is True
+        assert site.footer_menu_nested is False
         assert removed.sync_status == "external_deleted"
         assert pending.sync_status == "pending"
 
