@@ -13,7 +13,10 @@ from app.services import COMPETITOR_RESEARCH_MAX_ATTEMPTS, collect_competitor_re
 settings = get_settings()
 
 celery_app = Celery("generator", broker=settings.celery_broker_url, backend=settings.celery_result_backend)
-celery_app.conf.timezone = "UTC"
+celery_app.conf.update(
+    timezone="UTC",
+    worker_prefetch_multiplier=1,
+)
 celery_app.conf.beat_schedule = {
     "publish-due-items-every-minute": {
         "task": "app.worker.publish_due_items",
@@ -108,7 +111,7 @@ def collect_competitor_research_job(self, content_item_id: str) -> dict:
         db.close()
 
 
-@celery_app.task(name="app.worker.generate_task_content")
+@celery_app.task(name="app.worker.generate_task_content", acks_late=True, reject_on_worker_lost=True)
 def generate_task_content_job(task_id: str) -> dict:
     db = SessionLocal()
     try:
@@ -121,7 +124,7 @@ def generate_task_content_job(task_id: str) -> dict:
         db.close()
 
 
-@celery_app.task(name="app.worker.run_task_pipeline")
+@celery_app.task(name="app.worker.run_task_pipeline", acks_late=True, reject_on_worker_lost=True)
 def run_task_pipeline_job(task_id: str) -> dict:
     db = SessionLocal()
     try:
@@ -134,7 +137,7 @@ def run_task_pipeline_job(task_id: str) -> dict:
         db.close()
 
 
-@celery_app.task(name="app.worker.generate_content_item")
+@celery_app.task(name="app.worker.generate_content_item", acks_late=True, reject_on_worker_lost=True)
 def generate_content_item_job(content_item_id: str) -> dict:
     db = SessionLocal()
     try:
