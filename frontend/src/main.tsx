@@ -5809,10 +5809,29 @@ function TasksView({
               Пункт меню
               <SearchableSelect
                 value={sectionId}
-                onChange={setSectionId}
+                onChange={(value) => {
+                  setSectionId(value);
+                  setSectionContentMode("nested");
+                }}
                 options={[{ value: "", label: "Выбрать позже" }, ...sections.map((section) => ({ value: section.id, label: `${section.name} · ${section.path}` }))]}
                 searchPlaceholder="Найти пункт меню"
+                renderOptionAction={(option, closeDropdown) => option.value ? (
+                  <button
+                    className={`menuMainChoiceButton ${sectionId === option.value && sectionContentMode === "menu_page" ? "active" : ""}`}
+                    type="button"
+                    onClick={() => {
+                      setSectionId(option.value);
+                      setSectionContentMode("menu_page");
+                      closeDropdown();
+                    }}
+                    title="Сгенерировать текст как контент самого пункта меню"
+                    aria-label={`MAIN — создать контент пункта меню ${option.label}`}
+                  >
+                    <FileText size={11} /> MAIN
+                  </button>
+                ) : null}
               />
+              {sectionId ? <small>{sectionContentMode === "menu_page" ? "Контент пункта меню (MAIN)" : "Вложенная страница"}</small> : null}
             </label>
           ) : null}
           <fieldset className="generationOptionsGroup wide">
