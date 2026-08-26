@@ -444,6 +444,7 @@ type PublicationLog = {
   id: string;
   content_item_id: string | null;
   endpoint_url: string;
+  request_payload: Record<string, unknown> | null;
   response_status: number | null;
   error_message: string | null;
   created_at: string;
@@ -2281,7 +2282,7 @@ function ProjectWorkspaceView({
             ) : null}
           </WorkspaceTabPane>
           <WorkspaceTabPane active={activeTab === "menu"} storagePrefix={`${currentUsername}:${selectedSite.id}:menu`}>
-            <FastProjectMenuPanel api={api} site={selectedSite} sections={sections} content={siteContent} menuCapabilities={menuCapabilities} onAddContent={openContentForMenuSection} onChanged={refreshProject} />
+            <FastProjectMenuPanel api={api} site={selectedSite} sections={sections} content={siteContent} logs={logs} menuCapabilities={menuCapabilities} onAddContent={openContentForMenuSection} onChanged={refreshProject} />
           </WorkspaceTabPane>
         </>
       ) : null}
@@ -4364,7 +4365,7 @@ function ProjectCampaignTreeItem({
   );
 }
 
-function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onAddContent, onChanged }: ViewProps & { site: Site; sections: Section[]; content: ContentItem[]; menuCapabilities: MenuCapabilities | null; onAddContent: (section: Section) => void }) {
+function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities, onAddContent, onChanged }: ViewProps & { site: Site; sections: Section[]; content: ContentItem[]; logs: PublicationLog[]; menuCapabilities: MenuCapabilities | null; onAddContent: (section: Section) => void }) {
   const [name, setName] = React.useState("");
   const [path, setPath] = React.useState("");
   const [menuType, setMenuType] = React.useState<"header" | "footer">("header");
@@ -4427,6 +4428,7 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onAd
   );
   const persistedSections = React.useMemo(() => sections.filter((section) => !section.is_temporary_parent), [sections]);
   const pendingSections = React.useMemo(() => sections.filter((section) => section.sync_status === "pending"), [sections]);
+  const publishedPages = React.useMemo(() => content.filter((item) => item.status === "published"), [content]);
   const unconfirmedNestedSections = sections.filter((section) => section.parent_id && section.sync_status !== "synced");
   const singleLevelMenuLabels = Array.from(new Set(
     unconfirmedNestedSections
@@ -4434,6 +4436,24 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onAd
       .map((section) => section.menu_type === "header" ? "Header" : "Footer")
   ));
   const menuLibraryListId = React.useId();
+
+  const sectionResponseCode = React.useCallback((section: Section) => {
+    const normalizedPath = normalizedTreePath(section.path);
+    const matchingLogs = logs
+      .filter((log) => log.response_status != null)
+      .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at));
+    const syncLog = matchingLogs.find((log) => {
+      const payload = log.request_payload;
+      if (!payload || payload.action !== "menu_sync" || payload.menu_type !== section.menu_type) return false;
+      const items = Array.isArray(payload.list) ? payload.list : [];
+      return items.some((item) => item && typeof item === "object" && normalizedTreePath(String((item as Record<string, unknown>).slug || "")) === normalizedPath);
+    });
+    if (syncLog) return syncLog.response_status;
+    return matchingLogs.find((log) => {
+      const payload = log.request_payload;
+      return payload && normalizedTreePath(String(payload.path || "")) === normalizedPath;
+    })?.response_status ?? null;
+  }, [logs]);
 
   React.useEffect(() => {
     setName("");
@@ -4921,24 +4941,39 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onAd
             {inlineMenuType === "footer" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "footer")}>{menuFields("footer")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
           </SiteMenuPreviewSection>
         </div>
-        {persistedSections.length ? <ResponsiveTable
+        {persistedSections.length || publishedPages.length ? <ResponsiveTable
           wrapperClassName="pendingMenuChangesTable"
-          columns={["Название", "Тип меню", "URL", "Изменено", "Состояние", "Действия"]}
-          rows={persistedSections.map((section) => {
+          columns={["Название", "Тип", "URL", "Изменено", "Состояние", "Действия"]}
+          columnKeys={["name", "type", "url", "changed", "state", "actions"]}
+          rows={[...persistedSections.map((section) => {
             const editing = editingSectionId === section.id;
+            const responseCode = sectionResponseCode(section);
             return [
-              editing ? <input className="menuSectionEditInput" value={editingSectionName} onChange={(event) => setEditingSectionName(event.target.value)} aria-label="Название пункта меню" /> : section.name,
+              editing ? <input className="menuSectionEditInput" value={editingSectionName} onChange={(event) => setEditingSectionName(event.target.value)} aria-label="Название пункта меню" /> : <span className="menuTableClamp" title={section.name}>{section.name}</span>,
               section.menu_type === "footer" ? "Footer" : "Header",
-              editing ? <input className="menuSectionEditInput" value={editingSectionPath} onChange={(event) => setEditingSectionPath(event.target.value)} aria-label="URL пункта меню" /> : section.path,
+              editing ? <input className="menuSectionEditInput" value={editingSectionPath} onChange={(event) => setEditingSectionPath(event.target.value)} aria-label="URL пункта меню" /> : <code className="menuTableClamp" title={section.path}>{section.path}</code>,
               formatDate(section.synced_at || section.updated_at),
-              section.sync_status === "synced"
+              <span className="menuTableState">{section.sync_status === "synced"
                 ? <span className="syncedBadge">Синхронизировано</span>
                 : section.sync_status === "external_deleted"
                   ? <span className="pendingSyncBadge">Удалено на проекте</span>
-                  : <span className="pendingSyncBadge">Не синхронизировано</span>,
+                  : <span className="pendingSyncBadge">Не синхронизировано</span>}{responseCode ? <span className="publicationResponseCode">HTTP {responseCode}</span> : null}</span>,
               editing ? <div className="menuSectionEditActions"><button className="button compact secondary" type="button" onClick={cancelSectionEdit} disabled={savingSectionEdit}>Отменить</button><button className="button compact primary" type="button" onClick={() => saveSectionEdit(section)} disabled={savingSectionEdit}>Сохранить</button></div> : <div className="menuSectionEditActions">{section.sync_status === "external_deleted" ? <button className="button compact primary" type="button" onClick={() => restoreSection(section)} disabled={restoringSectionId === section.id || sendingSectionId === section.id}><RefreshCcw size={14} /> {restoringSectionId === section.id ? "Восстанавливаем" : "Восстановить"}</button> : <><button className="button compact primary" type="button" onClick={() => sendSection(section)} disabled={sendingSectionId === section.id || deletingSectionId === section.id}><Send size={14} /> {sendingSectionId === section.id ? "Отправляем" : "Отправить"}</button><button className="button compact secondary" type="button" onClick={() => startSectionEdit(section)} disabled={deletingSectionId === section.id || sendingSectionId === section.id}><Edit3 size={14} /> Изменить</button></>}<button className="button compact danger" type="button" onClick={() => deleteSection(section)} disabled={deletingSectionId === section.id || restoringSectionId === section.id || sendingSectionId === section.id}><Trash2 size={14} /> {deletingSectionId === section.id ? "Удаляем" : "Удалить"}</button></div>
             ];
-          })}
+          }), ...publishedPages.map((item) => {
+            const section = sections.find((candidate) => candidate.id === item.section_id);
+            const pageType = item.section_id
+              ? item.section_content_mode === "menu_page" ? "Страница пункта меню" : "Вложенная страница"
+              : "Страница";
+            return [
+              <span className="menuTableClamp" title={item.topic}>{item.topic}</span>,
+              <span className="menuTableClamp" title={pageType}>{pageType}</span>,
+              <code className="menuTableClamp" title={item.slug}>{item.slug}</code>,
+              formatDate(item.published_at || item.updated_at),
+              <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} />,
+              <div className="menuSectionEditActions"><a className="button compact secondary" href={contentSiteUrl(item)} target="_blank" rel="noreferrer" title="Открыть опубликованную страницу"><ExternalLink size={14} /> URL</a><button className="button compact danger" type="button" onClick={() => void deleteNestedPage(item)} disabled={deletingNestedPageId === item.id} title={`Удалить опубликованную страницу${section ? ` из «${section.name}»` : ""}`}><Trash2 size={14} /> {deletingNestedPageId === item.id ? "Удаляем" : "Удалить"}</button></div>
+            ];
+          })]}
         /> : null}
         {pagePreview ? <ProjectPagePreviewModal preview={pagePreview} onClose={() => setPagePreview(null)} /> : null}
         {pagePreviewError ? <Modal title={`Просмотр страницы: ${pagePreviewError.title}`} subtitle={pagePreviewError.slug || "URL не указан"} onClose={() => setPagePreviewError(null)}><div className="emptyState">{pagePreviewError.message}</div></Modal> : null}

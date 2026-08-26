@@ -4264,6 +4264,47 @@ button:hover:not(:disabled) .buttonRefreshIcon {
 
 .pendingMenuChangesTable tbody tr {
   background: #fffaf0;
+  height: 58px;
+}
+
+.pendingMenuChangesTable table {
+  min-width: 1080px;
+  table-layout: fixed;
+}
+
+.pendingMenuChangesTable tbody td {
+  height: 58px;
+  max-height: 58px;
+  overflow: hidden;
+  padding-bottom: 6px;
+  padding-top: 6px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.pendingMenuChangesTable .column-name { width: 17%; }
+.pendingMenuChangesTable .column-type { width: 13%; }
+.pendingMenuChangesTable .column-url { width: 17%; }
+.pendingMenuChangesTable .column-changed { width: 14%; }
+.pendingMenuChangesTable .column-state { width: 13%; }
+.pendingMenuChangesTable .column-actions { width: 26%; }
+
+.menuTableClamp {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menuTableState {
+  align-items: flex-start;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  justify-content: center;
+  max-height: 42px;
+  overflow: hidden;
 }
 
 .pendingSyncBadge {
@@ -4300,6 +4341,7 @@ button:hover:not(:disabled) .buttonRefreshIcon {
 
 .menuSectionEditActions {
   display: flex;
+  flex-wrap: nowrap;
   gap: 6px;
   white-space: nowrap;
 }
