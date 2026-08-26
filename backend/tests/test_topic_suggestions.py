@@ -106,6 +106,10 @@ def test_hidden_prompt_supports_one_topic_for_selected_menu_section() -> None:
     assert "Generate exactly 1 new SEO topic" in prompt
     assert "SINGLE TOPIC MODE" in prompt
     assert "strongest missing standalone page for the chosen menu section" in prompt
+    assert "CASINO REVIEW TOPIC EXAMPLE" in prompt
+    assert "Обзор онлайн-казино {Brand} в {Year}" in prompt
+    assert "A brand is optional" in prompt
+    assert "not as a mandatory template" in prompt
 
 
 def test_gemini_retries_until_ten_unique_topics(monkeypatch) -> None:
