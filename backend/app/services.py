@@ -2769,7 +2769,7 @@ def schedule_campaign(db: Session, payload: PublicationCampaignCreate) -> models
         if item.status not in {"generated", "rejected", "approved"}:
             raise ValueError("Campaign can include only publication-ready content")
         section = db.get(models.Section, item.section_id) if item.section_id else None
-        ensure_content_slug_available(db, item, section=section)
+        ensure_content_slug_available(db, item, section=section, apply_section_slug=False)
         validate_content_for_publication(item)
 
     task_ids = {item.task_id for item in items}
@@ -3125,9 +3125,14 @@ def ensure_content_slug_available(
     item: models.ContentItem,
     *,
     section: models.Section | None = None,
+    apply_section_slug: bool = True,
 ) -> str:
     """Validate the final URL after applying the selected menu placement."""
-    final_slug = apply_content_section_slug(item, section)
+    final_slug = (
+        apply_content_section_slug(item, section)
+        if apply_section_slug
+        else _normalized_project_slug(item.slug)
+    )
     conflict = find_content_slug_conflict(
         db,
         item.site_id,

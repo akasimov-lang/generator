@@ -196,7 +196,11 @@ def test_generation_task_rejects_second_main_page_for_same_menu_url() -> None:
 
     with TestingSession() as db:
         site = models.Site(name="unique.example", base_url="https://unique.example", publication_endpoint="https://unique.example/api/content")
+        db.add(site)
+        db.flush()
         section = models.Section(site=site, external_id="reviews", name="Reviews", path="/reviews/", menu_type="header")
+        db.add(section)
+        db.flush()
         existing_task = models.GenerationTask(title="Existing", site_id=site.id, geo="LV", language="lv", topics_count=1)
         existing = models.ContentItem(
             task=existing_task,
@@ -209,7 +213,7 @@ def test_generation_task_rejects_second_main_page_for_same_menu_url() -> None:
             status="published",
             idempotency_key="existing-main-page",
         )
-        db.add_all([site, section, existing_task, existing])
+        db.add_all([existing_task, existing])
         db.commit()
 
         with pytest.raises(ValueError, match=r"URL /reviews/ уже используется"):
@@ -234,11 +238,15 @@ def test_content_assignment_rejects_duplicate_final_url() -> None:
 
     with TestingSession() as db:
         site = models.Site(name="unique.example", base_url="https://unique.example", publication_endpoint="https://unique.example/api/content")
+        db.add(site)
+        db.flush()
         section = models.Section(site=site, external_id="reviews", name="Reviews", path="/reviews/", menu_type="header")
+        db.add(section)
+        db.flush()
         task = models.GenerationTask(title="Items", site_id=site.id, geo="LV", language="lv", topics_count=2)
         existing = models.ContentItem(task=task, site_id=site.id, section_id=section.id, section_content_mode="menu_page", topic="Existing", slug="/reviews/", generated_json={}, status="published", idempotency_key="existing-assignment")
         candidate = models.ContentItem(task=task, site_id=site.id, topic="Candidate", slug="/candidate/", generated_json={}, status="generated", idempotency_key="candidate-assignment")
-        db.add_all([site, section, task, existing, candidate])
+        db.add_all([task, existing, candidate])
         db.commit()
 
         with pytest.raises(HTTPException) as error:
