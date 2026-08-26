@@ -1004,6 +1004,20 @@ h2 {
   font-size: 10px;
 }
 
+.siteMenuNestedPageLink {
+  color: inherit;
+  display: block;
+  overflow: hidden;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.siteMenuNestedPageLink:hover {
+  color: var(--primary-strong);
+  text-decoration: underline;
+}
+
 .previewParagraph,
 .previewFaq p {
   margin: 0;
@@ -3319,6 +3333,20 @@ h2 {
   position: absolute;
   top: 17px;
   width: 10px;
+}
+
+.siteMenuNestedPages li.siteMenuPublishedPageRow {
+  border-radius: 8px;
+  margin-left: -6px;
+  padding-left: 6px;
+  padding-right: 6px;
+  transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.siteMenuNestedPages li.siteMenuPublishedPageRow:hover,
+.siteMenuNestedPages li.siteMenuPublishedPageRow:focus-within {
+  background: color-mix(in srgb, var(--primary-soft) 76%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 20%, transparent);
 }
 
 .siteMenuNestedPageIcon {
