@@ -359,7 +359,7 @@ button {
 
 .nav {
   display: grid;
-  gap: 4px;
+  gap: 3px;
 }
 
 .navButton {

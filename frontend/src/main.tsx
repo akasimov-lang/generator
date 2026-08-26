@@ -9382,7 +9382,7 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <span className={`status status-${status.replaceAll("_", "-")}`}>
       {labels[status] || status}
-      {status === "generation_queued" ? <LoaderCircle className="spin" size={12} aria-hidden="true" /> : null}
+      {status === "generation_queued" ? <LoaderCircle className="spin" size={10} strokeWidth={2.4} aria-hidden="true" /> : null}
     </span>
   );
 }
