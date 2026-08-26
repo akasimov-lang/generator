@@ -3760,7 +3760,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
             item.published_url ? <a href={item.published_url} target="_blank" rel="noreferrer"><ExternalLink size={15} /> URL</a> : item.published_at ? formatDate(item.published_at) : "-",
             <div className="userActions projectContentActions">
               <button className="button compact" type="button" onClick={() => openEditor(item)} disabled={isPublicationLocked(item)} title="Открыть и редактировать JSON payload"><Database size={15} /> JSON</button>
-              <button className="button compact approve" type="button" onClick={() => approve(item)} disabled={!canApproveContent(item)} title="Принять текст"><CheckCircle2 size={15} /> Принять</button>
+              {canApproveContent(item) ? <button className="button compact approve" type="button" onClick={() => approve(item)} title="Принять текст"><CheckCircle2 size={15} /> Принять</button> : null}
               <button className="button compact primary" type="button" onClick={() => void publishImmediately(item)} disabled={!canPublishContentImmediately(item) || publishingItemId === item.id} title="Сразу отправить JSON текста на сервер проекта"><Send size={15} /> {publishingItemId === item.id ? "Публикуем…" : "Опубликовать"}</button>
               <button className="button compact danger" type="button" onClick={() => void deleteItem(item)} disabled={(isPublicationLocked(item) && item.status !== "published") || deletingItemId === item.id || publishingItemId === item.id} title={isPublicationLocked(item) && item.status !== "published" ? "Дождитесь завершения публикации или обновления проекта" : item.status === "published" ? "Удалить опубликованный текст с проекта" : "Удалить текст"}><Trash2 size={15} /> {deletingItemId === item.id ? "Удаляем…" : "Удалить"}</button>
               {item.status === "published" ? <a className="viewOnSiteIconButton" href={contentSiteUrl(item)} target="_blank" rel="noreferrer" title="Посмотреть на сайте" aria-label={`Посмотреть на сайте: ${item.topic}`}><ExternalLink size={16} /></a> : null}
@@ -5899,7 +5899,7 @@ function TasksView({
           onClose={() => setPreviewItem(null)}
           actions={(
             <>
-              <button className="button compact approve" type="button" onClick={() => void approveTaskContent(previewItem)} disabled={!canApproveContent(previewItem) || taskActionId.startsWith(previewItem.id)}><CheckCircle2 size={15} /> Принять</button>
+              {canApproveContent(previewItem) ? <button className="button compact approve" type="button" onClick={() => void approveTaskContent(previewItem)} disabled={taskActionId.startsWith(previewItem.id)}><CheckCircle2 size={15} /> Принять</button> : null}
               <button className="button compact primary" type="button" onClick={() => void publishTaskContent(previewItem)} disabled={!canPublishContentImmediately(previewItem) || taskActionId.startsWith(previewItem.id)}><Send size={15} /> {taskActionId === `${previewItem.id}:publish` ? "Публикуем…" : "Опубликовать"}</button>
             </>
           )}
@@ -6390,9 +6390,9 @@ function AdminTasksAccordion({
                                   <button className="button compact" type="button" onClick={() => onRegenerate(item)} disabled={busy || isPublicationLocked(item)}>
                                     <Play size={15} /> {actionId === `${item.id}:generate` ? "Генерация" : "Сгенерировать заново"}
                                   </button>
-                                  <button className="button compact approve" type="button" onClick={() => void onApprove(item)} disabled={busy || !canApproveContent(item)} title="Принять текст">
+                                  {canApproveContent(item) ? <button className="button compact approve" type="button" onClick={() => void onApprove(item)} disabled={busy} title="Принять текст">
                                     <CheckCircle2 size={15} /> {actionId === `${item.id}:approve` ? "Принимаю" : "Принять"}
-                                  </button>
+                                  </button> : null}
                                   <button className="button compact primary" type="button" onClick={() => void onPublish(item)} disabled={busy || !canPublishContentImmediately(item)} title="Сразу отправить JSON текста на сервер проекта">
                                     <Send size={15} /> {actionId === `${item.id}:publish` ? "Публикуем…" : "Опубликовать"}
                                   </button>
