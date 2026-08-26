@@ -374,6 +374,7 @@ class TopicSuggestionsRequest(BaseModel):
     language: str = Field(min_length=2, max_length=20)
     ai_provider_id: str | None = None
     section_id: str | None = None
+    count: int = Field(default=10, ge=1, le=10)
     current_topics: list[str] = Field(default_factory=list, max_length=30)
 
 

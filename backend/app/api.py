@@ -1449,6 +1449,7 @@ def suggest_site_topics(site_id: str, payload: TopicSuggestionsRequest, _: AuthU
                 language=payload.language,
                 existing_topics=existing_topics,
                 section_context=section_context,
+                count=payload.count,
             )
         )
     except Exception as exc:

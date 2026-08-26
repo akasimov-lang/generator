@@ -1166,6 +1166,12 @@ h2 {
   font-size: 12px;
 }
 
+.topicGenerationActions {
+  align-items: center;
+  display: inline-flex;
+  gap: 7px;
+}
+
 .circularOperationProgress {
   align-items: center;
   background: conic-gradient(var(--primary) var(--operation-progress), color-mix(in srgb, var(--border) 78%, transparent) 0deg);

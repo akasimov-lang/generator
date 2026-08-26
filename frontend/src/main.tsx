@@ -5137,6 +5137,7 @@ function TasksView({
   const [createFormExpanded, setCreateFormExpanded] = React.useState(false);
   const [creatingTaskAction, setCreatingTaskAction] = React.useState<"draft" | "start" | "">("");
   const [generatingTopics, setGeneratingTopics] = React.useState(false);
+  const [generatingTopicCount, setGeneratingTopicCount] = React.useState<1 | 10>(10);
   const [topicGenerationProgress, setTopicGenerationProgress] = useSimulatedOperationProgress(generatingTopics);
   const [expandedTaskId, setExpandedTaskId] = React.useState("");
   const [expandedDetails, setExpandedDetails] = React.useState<TaskDetails | null>(null);
@@ -5195,14 +5196,18 @@ function TasksView({
     }
   }, [promptTemplateId, promptTemplates]);
 
-  async function generateTopicsWithGemini() {
+  async function generateTopicsWithGemini(count: 1 | 10 = 10) {
     setTaskError("");
     if (!selectedSite) {
       setTaskError("Выберите проект для генерации тем.");
       return;
     }
-    if (cleanTopics.length > 20) {
-      setTaskError("Чтобы добавить ещё 10 тем, оставьте в форме не более 20 тем.");
+    if (cleanTopics.length > 30 - count) {
+      setTaskError(`Чтобы добавить ещё ${count} ${count === 1 ? "тему" : "тем"}, оставьте в форме не более ${30 - count} тем.`);
+      return;
+    }
+    if (count === 1 && !sectionId) {
+      setTaskError("Выберите конкретный пункт меню для генерации одной темы.");
       return;
     }
     const provider = providers.find((item) => item.id === providerId);
@@ -5211,6 +5216,7 @@ function TasksView({
       return;
     }
     setTopicGenerationProgress(3);
+    setGeneratingTopicCount(count);
     setGeneratingTopics(true);
     try {
       const response = await api<TopicSuggestionsResponse>(`/sites/${selectedSite.id}/topic-suggestions`, {
@@ -5220,6 +5226,7 @@ function TasksView({
           language,
           ai_provider_id: provider.id,
           section_id: sectionId || null,
+          count,
           current_topics: cleanTopics
         })
       });
@@ -5866,16 +5873,28 @@ function TasksView({
           <label className="wide">
             <span className="topicFieldHeader">
               <span>Темы, каждая с новой строки</span>
-              <button
-                className="button compact topicGenerateButton"
-                type="button"
-                onClick={generateTopicsWithGemini}
-                disabled={generatingTopics || !selectedSite || cleanTopics.length > 20}
-                title={cleanTopics.length > 20 ? "Для добавления 10 тем в форме должно быть не более 20 тем" : "Добавить 10 уникальных тем через Gemini"}
-              >
-                {generatingTopics ? <CircularOperationProgress value={topicGenerationProgress} /> : <Sparkles size={15} />}
-                {generatingTopics ? "Генерация тем" : "Сгенерировать 10 тем"}
-              </button>
+              <span className="topicGenerationActions">
+                <button
+                  className="button compact topicGenerateButton"
+                  type="button"
+                  onClick={() => void generateTopicsWithGemini(1)}
+                  disabled={generatingTopics || !selectedSite || !sectionId || cleanTopics.length > 29}
+                  title={!sectionId ? "Сначала выберите конкретный пункт меню" : "Добавить одну уникальную тему для выбранного пункта меню"}
+                >
+                  {generatingTopics && generatingTopicCount === 1 ? <CircularOperationProgress value={topicGenerationProgress} /> : <Sparkles size={15} />}
+                  {generatingTopics && generatingTopicCount === 1 ? "Генерация темы" : "Сгенерировать 1 тему"}
+                </button>
+                <button
+                  className="button compact topicGenerateButton"
+                  type="button"
+                  onClick={() => void generateTopicsWithGemini(10)}
+                  disabled={generatingTopics || !selectedSite || cleanTopics.length > 20}
+                  title={cleanTopics.length > 20 ? "Для добавления 10 тем в форме должно быть не более 20 тем" : "Добавить 10 уникальных тем через Gemini"}
+                >
+                  {generatingTopics && generatingTopicCount === 10 ? <CircularOperationProgress value={topicGenerationProgress} /> : <Sparkles size={15} />}
+                  {generatingTopics && generatingTopicCount === 10 ? "Генерация тем" : "Сгенерировать 10 тем"}
+                </button>
+              </span>
             </span>
             <textarea value={topics} onChange={(event) => setTopics(event.target.value)} required rows={10} placeholder="best online casinos in Germany" />
             <span className="fieldHint">Тем в задаче: {cleanTopics.length}</span>

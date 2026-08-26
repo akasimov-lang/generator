@@ -87,6 +87,27 @@ def test_hidden_prompt_without_section_keeps_project_wide_scope() -> None:
     assert "MANDATORY SELECTED MENU SECTION SCOPE" not in prompt
 
 
+def test_hidden_prompt_supports_one_topic_for_selected_menu_section() -> None:
+    site = models.Site(
+        name="best-casino-australia.com",
+        base_url="https://best-casino-australia.com",
+        publication_endpoint="https://example.com/content",
+    )
+
+    prompt = build_hidden_topic_generation_prompt(
+        site=site,
+        geo="AU",
+        language="en",
+        existing_topics=["Existing guide"],
+        count=1,
+        section_context='{"name":"Bonuses","slug":"/bonuses/","breadcrumb":["Bonuses"]}',
+    )
+
+    assert "Generate exactly 1 new SEO topic" in prompt
+    assert "SINGLE TOPIC MODE" in prompt
+    assert "strongest missing standalone page for the chosen menu section" in prompt
+
+
 def test_gemini_retries_until_ten_unique_topics(monkeypatch) -> None:
     responses = [
         [
