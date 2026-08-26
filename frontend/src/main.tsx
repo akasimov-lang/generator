@@ -1743,7 +1743,13 @@ function ProjectWorkspaceView({
   const pendingSectionsCount = sections.filter((section) => section.sync_status === "pending").length;
   const unpublishedGeneratedContentCount = siteContent.filter((item) => Boolean(item.generated_at) && item.status !== "published").length;
   const selectedProjectMedalStatus = menuCapabilities?.checked_at
-    ? menuMedalStatus(menuCapabilities.checked_at, menuCapabilities.header_menu_rendered, menuCapabilities.footer_menu_rendered)
+    ? menuMedalStatus(
+        menuCapabilities.checked_at,
+        menuCapabilities.header_menu_rendered,
+        menuCapabilities.footer_menu_rendered,
+        menuCapabilities.header_menu_nested,
+        menuCapabilities.footer_menu_nested
+      )
     : selectedSite ? projectMenuMedalStatus(selectedSite) : "unchecked";
   const menuCheckPending = menuCapabilities?.check_status === "queued" || menuCapabilities?.check_status === "running";
   const menuCheckError = menuCapabilities?.check_status === "failed"
@@ -7284,20 +7290,32 @@ function localeFlag(countryCode: string | null): string {
 
 type ProjectMedalStatus = "gold" | "verified" | "missing" | "unchecked";
 
-function menuMedalStatus(checkedAt: string | null, headerRendered: boolean | null, footerRendered: boolean | null): ProjectMedalStatus {
+function menuMedalStatus(
+  checkedAt: string | null,
+  headerRendered: boolean | null,
+  footerRendered: boolean | null,
+  headerNested: boolean | null,
+  footerNested: boolean | null
+): ProjectMedalStatus {
   if (!checkedAt || headerRendered == null) return "unchecked";
   if (!headerRendered) return "missing";
-  return footerRendered === true ? "gold" : "verified";
+  return footerRendered === true && headerNested === true && footerNested === true ? "gold" : "verified";
 }
 
 function projectMenuMedalStatus(site: Site): ProjectMedalStatus {
-  return menuMedalStatus(site.menu_capabilities_checked_at, site.header_menu_rendered, site.footer_menu_rendered);
+  return menuMedalStatus(
+    site.menu_capabilities_checked_at,
+    site.header_menu_rendered,
+    site.footer_menu_rendered,
+    site.header_menu_nested,
+    site.footer_menu_nested
+  );
 }
 
 function ProjectVerificationMedal({ status }: { status: ProjectMedalStatus }) {
   const statusText = status === "gold"
-    ? "Проверка пройдена: рендеринг Header и Footer реализован"
-    : status === "verified" ? "Проверка Header пройдена"
+    ? "Проверка пройдена: Header и Footer отображаются и поддерживают вложенное меню"
+    : status === "verified" ? "Проверка пройдена с ограничениями: Header или Footer не поддерживает вложенное меню"
     : status === "missing" ? "Проверено: рендеринг Header-меню не реализован" : "Проверка Header ещё не выполнена";
   return (
     <span className={`projectVerificationMedal is${status[0].toUpperCase()}${status.slice(1)}`} title={statusText} aria-label={statusText}>
