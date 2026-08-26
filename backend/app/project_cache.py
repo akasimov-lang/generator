@@ -449,6 +449,7 @@ def _confirm_published_content(db: Session, site: models.Site, project: dict[str
     ).all()
     confirmed = 0
     campaign_ids: set[str] = set()
+    task_ids: set[str] = set()
     for item in pending_items:
         normalized_slug = _normalized_page_slug(item.slug)
         page = pages_by_slug.get(normalized_slug)
@@ -477,7 +478,27 @@ def _confirm_published_content(db: Session, site: models.Site, project: dict[str
         )
         if item.publication_campaign_id:
             campaign_ids.add(item.publication_campaign_id)
+        task_ids.add(item.task_id)
         confirmed += 1
+
+    for task_id in task_ids:
+        task = db.get(models.GenerationTask, task_id)
+        if not task:
+            continue
+        remaining = db.scalar(
+            select(func.count(models.ContentItem.id)).where(
+                models.ContentItem.task_id == task_id,
+                models.ContentItem.status.notin_(["published", "deleted"]),
+            )
+        ) or 0
+        published = db.scalar(
+            select(func.count(models.ContentItem.id)).where(
+                models.ContentItem.task_id == task_id,
+                models.ContentItem.status == "published",
+            )
+        ) or 0
+        if published and not remaining:
+            task.status = "published"
 
     for campaign_id in campaign_ids:
         campaign = db.get(models.PublicationCampaign, campaign_id)

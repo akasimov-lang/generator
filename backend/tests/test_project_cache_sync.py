@@ -190,12 +190,14 @@ def test_fresh_cache_confirms_publication_only_when_slug_is_present() -> None:
 
         db.refresh(absent)
         db.refresh(present)
+        db.refresh(task)
         assert result["confirmed_publications_count"] == 1
         assert absent.status == "publication_pending_confirmation"
         assert absent.published_at is None
         assert present.status == "published"
         assert present.published_at is not None
         assert present.published_url == "https://publication-confirmation.example/guides/present/"
+        assert task.status != "published"
         confirmation_log = db.scalar(
             select(models.PublicationLog).where(
                 models.PublicationLog.content_item_id == present.id,
@@ -204,6 +206,21 @@ def test_fresh_cache_confirms_publication_only_when_slug_is_present() -> None:
         )
         assert confirmation_log is not None
         assert confirmation_log.request_payload["action"] == "content_publication_confirmed"
+
+        final_result = sync_project_cache(db, [{
+            "id": "publication-confirmation",
+            "name": site.name,
+            "serverId": "camel",
+            "settings": {"canon": site.name},
+            "data": {
+                "menu": {"header": [], "footer": []},
+                "pages": [{"slug": "/guides/absent/"}, {"slug": "/guides/present/"}],
+            },
+        }])
+
+        db.refresh(task)
+        assert final_result["confirmed_publications_count"] == 1
+        assert task.status == "published"
 
 
 def test_menu_capabilities_are_detected_per_template() -> None:
