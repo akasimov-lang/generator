@@ -1743,7 +1743,15 @@ function ProjectWorkspaceView({
   const routeProjectName = workspaceProjectNameFromPath(window.location.pathname);
   const pendingSectionsCount = sections.filter((section) => section.sync_status === "pending").length;
   const unpublishedGeneratedContentCount = siteContent.filter((item) => Boolean(item.generated_at) && item.status !== "published").length;
-  const selectedProjectMedalStatus = menuCapabilities?.checked_at
+  const headerNestingRequired = projectRequiresHeaderNesting(sections, siteContent);
+  const headerNestingRenderingMissing = Boolean(
+    headerNestingRequired
+    && menuCapabilities?.checked_at
+    && menuCapabilities.header_menu_nested === false
+  );
+  const selectedProjectMedalStatus = headerNestingRenderingMissing
+    ? "missing"
+    : menuCapabilities?.checked_at
     ? menuMedalStatus(
         menuCapabilities.checked_at,
         menuCapabilities.header_menu_rendered,
@@ -2164,7 +2172,7 @@ function ProjectWorkspaceView({
                   <span className="projectTitleCard"><small>Title</small><b title={selectedSite.homepage_title || "Title не указан"}>{selectedSite.homepage_title || "—"}</b></span>
                   <span className="projectMetricCard"><small>Доменов в сетке</small><b>{formatNumber(selectedSite.domains_count)}</b></span>
                   <span className="projectMetricCard"><small>Страниц</small><b>{formatNumber(selectedSite.internal_pages_count)}</b></span>
-                  <MenuCapabilityCard label="Header" templateRendered={menuCapabilities?.header_menu_template_rendered} rendered={menuCapabilities?.header_menu_rendered} nested={menuCapabilities?.header_menu_nested} icon="header" loading={menuCapabilitiesLoading || templateCapabilitiesLoading || menuCheckPending} error={menuCapabilitiesError} onRetry={refreshTemplateMenuCapabilities} />
+                  <MenuCapabilityCard label="Header" templateRendered={menuCapabilities?.header_menu_template_rendered} rendered={menuCapabilities?.header_menu_rendered} nested={menuCapabilities?.header_menu_nested} nestedRequired={headerNestingRequired} icon="header" loading={menuCapabilitiesLoading || templateCapabilitiesLoading || menuCheckPending} error={menuCapabilitiesError} onRetry={refreshTemplateMenuCapabilities} />
                   <MenuCapabilityCard label="Footer" templateRendered={menuCapabilities?.footer_menu_template_rendered} rendered={menuCapabilities?.footer_menu_rendered} nested={menuCapabilities?.footer_menu_nested} icon="footer" loading={menuCapabilitiesLoading || templateCapabilitiesLoading || menuCheckPending} error={menuCapabilitiesError} onRetry={refreshTemplateMenuCapabilities} />
                 </div>
               </>
@@ -2180,6 +2188,17 @@ function ProjectWorkspaceView({
             {selectedSite ? <span className="projectRefreshMeta"><small title={selectedSite.cache_server_host || "Сервер не указан"}>{selectedSite.cache_server_host || "—"}</small>{projectRefreshStatus === "success" || projectRefreshStatus === "error" ? <em className={projectRefreshStatus === "success" ? "success" : ""}>Status Code: {projectRefreshResponseCode || "UNKNOWN"}</em> : null}</span> : null}
           </button>
         </div>
+        {selectedSite && selectedProjectMedalStatus === "missing" ? (
+          <div className="projectMenuImplementationWarning" role="status">
+            <AlertTriangle size={20} />
+            <div>
+              <strong>{headerNestingRenderingMissing ? "Вложенное меню Header не отображается на сайте" : "Рендеринг меню не реализован на сайте"}</strong>
+              <span>{headerNestingRenderingMissing
+                ? "В проекте есть вложенные пункты или страницы. Необходимо обратиться к веб-разработчику, чтобы реализовать рендеринг вложенного меню Header, затем повторить проверку."
+                : "Необходимо обратиться к веб-разработчику для добавления рендеринга меню на сайт."}</span>
+            </div>
+          </div>
+        ) : null}
         {selectedSite ? (
           <div className="projectUpdatedAt">
             <CalendarClock size={20} />
@@ -2188,15 +2207,6 @@ function ProjectWorkspaceView({
             <b className={pendingSectionsCount ? "pending" : "synced"}>
               {pendingSectionsCount ? `Не синхронизировано: ${pendingSectionsCount}` : "Синхронизировано"}
             </b>
-          </div>
-        ) : null}
-        {selectedSite && selectedProjectMedalStatus === "missing" ? (
-          <div className="projectMenuImplementationWarning" role="status">
-            <AlertTriangle size={20} />
-            <div>
-              <strong>Рендеринг меню не реализован на сайте</strong>
-              <span>Необходимо обратиться к веб-разработчику для добавления рендеринга меню на сайт.</span>
-            </div>
           </div>
         ) : null}
         <div className="workspaceTabs">
@@ -2324,12 +2334,15 @@ function AutoFitDomain({ value }: { value: string }) {
   return <b ref={domainRef} className="projectCanonDomain" title={value}>{value}</b>;
 }
 
-function MenuCapabilityCard({ label, templateRendered, rendered, nested, icon, loading, error, onRetry }: { label: string; templateRendered: boolean | null | undefined; rendered: boolean | null | undefined; nested: boolean | null | undefined; icon: "header" | "footer"; loading: boolean; error: string; onRetry: () => void }) {
+function MenuCapabilityCard({ label, templateRendered, rendered, nested, nestedRequired = false, icon, loading, error, onRetry }: { label: string; templateRendered: boolean | null | undefined; rendered: boolean | null | undefined; nested: boolean | null | undefined; nestedRequired?: boolean; icon: "header" | "footer"; loading: boolean; error: string; onRetry: () => void }) {
   const effectiveRendered = rendered ?? templateRendered;
+  const nestedRenderingMissing = effectiveRendered === true && nestedRequired && nested === false;
   const statusText = loading
     ? "Проверяем"
     : error
       ? "Ошибка сервера"
+      : nestedRenderingMissing
+        ? "Вложенность не реализована"
       : effectiveRendered == null
         ? "Не проверено"
         : rendered != null
@@ -2343,7 +2356,7 @@ function MenuCapabilityCard({ label, templateRendered, rendered, nested, icon, l
         : nested ? "Вложенность поддерживается" : "Только один уровень"
       : templateRendered ? nested ? "Шаблон поддерживает вложенность" : "Шаблон поддерживает один уровень" : "Шаблон не содержит меню";
   return (
-    <span className={`projectMenuCapability ${error ? "isError" : effectiveRendered === true ? "isReady" : effectiveRendered === false ? "isMissing" : "isChecking"}`} title={error || `${label}: ${statusText}${renderingDetails ? `. ${renderingDetails}` : ""}`}>
+    <span className={`projectMenuCapability ${error ? "isError" : nestedRenderingMissing || effectiveRendered === false ? "isMissing" : effectiveRendered === true ? "isReady" : "isChecking"}`} title={error || `${label}: ${statusText}${renderingDetails ? `. ${renderingDetails}` : ""}`}>
       <span className="projectMenuCapabilityHeader">
         <small>{label}</small>
         <button className="projectMenuCapabilityRetry" type="button" onClick={onRetry} disabled={loading} title={`Обновить проверку шаблона ${label}`} aria-label={`Обновить проверку шаблона ${label}`}>
@@ -2351,10 +2364,10 @@ function MenuCapabilityCard({ label, templateRendered, rendered, nested, icon, l
         </button>
       </span>
       <span className="projectMenuCapabilityValue">
-        {effectiveRendered === true ? <MenuReadyMedal tone={nested ? "gold" : "green"} /> : effectiveRendered === false ? <MenuReadyMedal tone="red" /> : icon === "header" ? <HeaderMenuIcon /> : <FooterMenuIcon />}
+        {nestedRenderingMissing || effectiveRendered === false ? <MenuReadyMedal tone="red" /> : effectiveRendered === true ? <MenuReadyMedal tone={nested ? "gold" : "green"} /> : icon === "header" ? <HeaderMenuIcon /> : <FooterMenuIcon />}
         <b>{statusText}</b>
       </span>
-      {error ? <em className="projectMenuCapabilityError">{error}</em> : effectiveRendered ? <em>{nested ? "Есть вложенность" : "Один уровень"}</em> : effectiveRendered === false ? <em>{rendered == null ? "Не найдено в шаблоне" : "Не отображается на сайте"}</em> : null}
+      {error ? <em className="projectMenuCapabilityError">{error}</em> : nestedRenderingMissing ? <em>Вложенные пункты не отображаются</em> : effectiveRendered ? <em>{nested ? "Есть вложенность" : "Один уровень"}</em> : effectiveRendered === false ? <em>{rendered == null ? "Не найдено в шаблоне" : "Не отображается на сайте"}</em> : null}
     </span>
   );
 }
@@ -4429,12 +4442,6 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
   const persistedSections = React.useMemo(() => sections.filter((section) => !section.is_temporary_parent), [sections]);
   const pendingSections = React.useMemo(() => sections.filter((section) => section.sync_status === "pending"), [sections]);
   const publishedPages = React.useMemo(() => content.filter((item) => item.status === "published"), [content]);
-  const unconfirmedNestedSections = sections.filter((section) => section.parent_id && section.sync_status !== "synced");
-  const singleLevelMenuLabels = Array.from(new Set(
-    unconfirmedNestedSections
-      .filter((section) => section.menu_type === "header" ? menuCapabilities?.header_menu_nested === false : menuCapabilities?.footer_menu_nested === false)
-      .map((section) => section.menu_type === "header" ? "Header" : "Footer")
-  ));
   const menuLibraryListId = React.useId();
 
   const sectionResponseCode = React.useCallback((section: Section) => {
@@ -4912,7 +4919,6 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
   return (
     <section className="viewStack">
       <DataPanel title="Структура меню проекта" allowCollapse={false}>
-        {singleLevelMenuLabels.length ? <div className="notice menuNestingNotice menuSingleLevelNotice" role="note"><CircleAlert size={18} /><span><strong>{singleLevelMenuLabels.join(" и ")} поддерживает только один уровень меню.</strong> Вложенные пункты будут отправлены на сервер, но необходимо обратиться к веб-разработчику, чтобы он реализовал их отображение в шаблоне проекта. После изменений нажмите «Проверить»: сообщение исчезнет, когда проверка подтвердит наличие всех вложенных пунктов на сайте.</span></div> : null}
         {menuNestingNotice ? <div className="notice menuNestingNotice" role="note"><AlertTriangle size={17} /><span>{menuNestingNotice}</span></div> : null}
         <section className={`menuAddPanel embeddedMenuAddPanel ${addExpanded ? "expanded" : ""}`}>
           <button className="menuAddToggle" type="button" onClick={() => { setInlineMenuType(null); setAddExpanded((current) => !current); }} aria-expanded={addExpanded}>
@@ -7365,6 +7371,27 @@ function localeFlag(countryCode: string | null): string {
 }
 
 type ProjectMedalStatus = "gold" | "verified" | "missing" | "unchecked";
+
+function projectRequiresHeaderNesting(sections: Section[], content: ContentItem[]): boolean {
+  const activeHeaderSections = sections.filter(
+    (section) => section.menu_type === "header"
+      && section.sync_status !== "external_deleted"
+      && !section.is_temporary_parent
+  );
+  if (activeHeaderSections.some((section) => Boolean(section.parent_id))) return true;
+  const headerSectionIds = new Set(activeHeaderSections.map((section) => section.id));
+  const remotelyPresentStatuses = new Set([
+    "publishing",
+    "publication_pending_confirmation",
+    "published",
+    "deletion_pending"
+  ]);
+  return content.some(
+    (item) => item.section_content_mode === "nested"
+      && Boolean(item.section_id && headerSectionIds.has(item.section_id))
+      && remotelyPresentStatuses.has(item.status)
+  );
+}
 
 function menuMedalStatus(
   checkedAt: string | null,
