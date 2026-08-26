@@ -6551,8 +6551,8 @@ td {
 .publicationStatusCell {
   align-items: center;
   display: inline-flex;
-  flex-direction: row;
-  gap: 5px;
+  flex-direction: column;
+  gap: 3px;
   justify-content: center;
   min-width: 0;
 }
