@@ -4565,20 +4565,12 @@ function ProjectMenuPanel({ api, site, sections, content, menuCapabilities, onAd
   }
 
   async function deleteNestedPage(item: ContentItem) {
-    const isPublished = item.status === "published";
-    const confirmation = isPublished
-      ? `Удалить опубликованную вложенную страницу «${item.topic}» с проекта? После запроса потребуется обновить проект.`
-      : `Удалить вложенную страницу «${item.topic}»?`;
-    if (!window.confirm(confirmation)) return;
+    if (!window.confirm(`Удалить опубликованную вложенную страницу «${item.topic}» с проекта? После запроса потребуется обновить проект.`)) return;
     setDeletingNestedPageId(item.id);
     setFormError("");
     setMenuNestingNotice("");
     try {
-      if (isPublished) {
-        await api<ContentItem>(`/content/${item.id}/delete-published`, { method: "POST" });
-      } else {
-        await api(`/content/${item.id}`, { method: "DELETE" });
-      }
+      await api<ContentItem>(`/content/${item.id}/delete-published`, { method: "POST" });
       setUpdatedAt(new Date().toISOString());
       await onChanged();
     } catch (error) {
@@ -8209,9 +8201,8 @@ function SiteMenuPreviewSection({ title, items, sections = [], content = [], ico
                       <code>{nestedContentSlug(node.item.path || node.section?.path || "/", page.slug)}</code>
                     </span>
                     <StatusBadge status={page.status} />
-                    {onDeletePage ? <button className="siteMenuNestedPageDelete" type="button" onClick={() => onDeletePage(page)} disabled={(isPublicationLocked(page) && page.status !== "published") || ["deletion_pending", "deleted"].includes(page.status) || deletingNestedPageId === page.id} title={page.status === "deletion_pending" ? "Удаление уже отправлено, требуется обновить проект" : page.status === "deleted" ? "Страница удалена с проекта" : isPublicationLocked(page) && page.status !== "published" ? "Нельзя удалить страницу во время публикации" : page.status === "published" ? `Удалить опубликованную страницу «${page.topic}» с проекта` : `Удалить страницу «${page.topic}»`} aria-label={`Удалить страницу: ${page.topic}`}>
+                    {onDeletePage && page.status === "published" ? <button className="siteMenuNestedPageDelete" type="button" onClick={() => onDeletePage(page)} disabled={deletingNestedPageId === page.id} title="Удалить" aria-label={`Удалить страницу: ${page.topic}`}>
                       {deletingNestedPageId === page.id ? <LoaderCircle size={13} /> : <Trash2 size={13} />}
-                      <span>{deletingNestedPageId === page.id ? "Удаляем…" : "Удалить"}</span>
                     </button> : null}
                   </li>
                 ))}
