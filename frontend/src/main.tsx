@@ -1747,8 +1747,7 @@ function ProjectWorkspaceView({
         menuCapabilities.checked_at,
         menuCapabilities.header_menu_rendered,
         menuCapabilities.footer_menu_rendered,
-        menuCapabilities.header_menu_nested,
-        menuCapabilities.footer_menu_nested
+        menuCapabilities.header_menu_nested
       )
     : selectedSite ? projectMenuMedalStatus(selectedSite) : "unchecked";
   const menuCheckPending = menuCapabilities?.check_status === "queued" || menuCapabilities?.check_status === "running";
@@ -7294,12 +7293,11 @@ function menuMedalStatus(
   checkedAt: string | null,
   headerRendered: boolean | null,
   footerRendered: boolean | null,
-  headerNested: boolean | null,
-  footerNested: boolean | null
+  headerNested: boolean | null
 ): ProjectMedalStatus {
   if (!checkedAt || headerRendered == null) return "unchecked";
   if (!headerRendered) return "missing";
-  return footerRendered === true && headerNested === true && footerNested === true ? "gold" : "verified";
+  return footerRendered === true && headerNested === true ? "gold" : "verified";
 }
 
 function projectMenuMedalStatus(site: Site): ProjectMedalStatus {
@@ -7307,15 +7305,14 @@ function projectMenuMedalStatus(site: Site): ProjectMedalStatus {
     site.menu_capabilities_checked_at,
     site.header_menu_rendered,
     site.footer_menu_rendered,
-    site.header_menu_nested,
-    site.footer_menu_nested
+    site.header_menu_nested
   );
 }
 
 function ProjectVerificationMedal({ status }: { status: ProjectMedalStatus }) {
   const statusText = status === "gold"
-    ? "Проверка пройдена: Header и Footer отображаются и поддерживают вложенное меню"
-    : status === "verified" ? "Проверка пройдена с ограничениями: Header или Footer не поддерживает вложенное меню"
+    ? "Проверка пройдена: Header и Footer отображаются, Header поддерживает вложенное меню"
+    : status === "verified" ? "Проверка пройдена с ограничениями: Footer не отображается или Header не поддерживает вложенное меню"
     : status === "missing" ? "Проверено: рендеринг Header-меню не реализован" : "Проверка Header ещё не выполнена";
   return (
     <span className={`projectVerificationMedal is${status[0].toUpperCase()}${status.slice(1)}`} title={statusText} aria-label={statusText}>
