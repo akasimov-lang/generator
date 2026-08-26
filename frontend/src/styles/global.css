@@ -6581,6 +6581,7 @@ td {
 .status {
   display: inline-flex;
   align-items: center;
+  gap: 4px;
   border-radius: 999px;
   padding: 4px 9px;
   font-size: 12px;

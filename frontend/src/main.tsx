@@ -9355,7 +9355,7 @@ function StatusBadge({ status }: { status: string }) {
     generated: "Сгенерировано",
     generating: "Генерация",
     generation_failed: "Ошибка генерации",
-    generation_queued: "Генерирую...",
+    generation_queued: "Генерирую",
     invalid: "Ошибка",
     not_requested: "Не запрошено",
     pages_fetched: "Страницы загружены",
@@ -9379,7 +9379,12 @@ function StatusBadge({ status }: { status: string }) {
     unchecked: "Не проверено",
     valid: "Готово"
   };
-  return <span className={`status status-${status.replaceAll("_", "-")}`}>{labels[status] || status}</span>;
+  return (
+    <span className={`status status-${status.replaceAll("_", "-")}`}>
+      {labels[status] || status}
+      {status === "generation_queued" ? <LoaderCircle className="spin" size={12} aria-hidden="true" /> : null}
+    </span>
+  );
 }
 
 function PublicationStatus({ status, statusCode }: { status: string; statusCode?: number | null }) {
