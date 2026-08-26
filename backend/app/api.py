@@ -85,6 +85,7 @@ from app.services import (
     compose_prompt_with_base,
     create_generation_task,
     ensure_base_prompt_template,
+    ensure_content_slug_available,
     ensure_default_prompt_template,
     ensure_competitor_queries,
     fetch_competitor_pages_for_item,
@@ -149,6 +150,39 @@ def _normalized_language(value: str | None) -> str:
 def _normalized_menu_path(value: str) -> str:
     path = value.strip().strip("/")
     return f"/{path}/" if path else "/"
+
+
+def _ensure_section_unique(
+    db: Session,
+    site_id: str,
+    menu_type: str,
+    path: str,
+    external_id: str,
+    *,
+    exclude_section_id: str | None = None,
+) -> None:
+    normalized_path = _normalized_menu_path(path)
+    sections = db.scalars(select(models.Section).where(models.Section.site_id == site_id)).all()
+    conflict = next(
+        (
+            section
+            for section in sections
+            if section.id != exclude_section_id
+            and (
+                section.external_id.casefold() == external_id.strip().casefold()
+                or (
+                    section.menu_type == menu_type
+                    and _normalized_menu_path(section.path) == normalized_path
+                )
+            )
+        ),
+        None,
+    )
+    if conflict:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Пункт меню с URL {normalized_path} уже существует: «{conflict.name}»",
+        )
 
 
 def _normalized_project_page_path(value: Any) -> str:
@@ -943,6 +977,8 @@ async def sync_site_section(
 @router.post("/sites/{site_id}/sections", response_model=SectionResponse)
 def create_section(site_id: str, payload: SectionCreate, user: AuthUser, db: Session = Depends(get_db)) -> Any:
     site = _get_site_or_404(db, site_id)
+    normalized_path = _normalized_menu_path(payload.path)
+    _ensure_section_unique(db, site_id, payload.menu_type, normalized_path, payload.external_id)
     parent = None
     if payload.parent_id:
         parent = _get_section_for_site(db, site_id, payload.parent_id)
@@ -953,17 +989,19 @@ def create_section(site_id: str, payload: SectionCreate, user: AuthUser, db: Ses
         site,
         MenuLibraryItemCreate(
             name=payload.name,
-            path=payload.path,
+            path=normalized_path,
             external_id=payload.external_id,
         ),
     )
-    section = models.Section(site_id=site_id, **payload.model_dump())
+    section_data = payload.model_dump()
+    section_data["path"] = normalized_path
+    section = models.Section(site_id=site_id, **section_data)
     db.add(section)
     db.flush()
     db.add(
         models.PublicationLog(
             endpoint_url=_menu_request_endpoint(site),
-            request_payload={"action": "menu_item_create", "project_name": site.name, "username": _request_username(user), **payload.model_dump()},
+            request_payload={"action": "menu_item_create", "project_name": site.name, "username": _request_username(user), **section_data},
             response_status=None,
             response_body={"section_id": section.id, "synchronized": False},
         )
@@ -1082,9 +1120,18 @@ def update_section(site_id: str, section_id: str, payload: SectionUpdate, user: 
     section = _get_section_for_site(db, site_id, section_id)
     old_name = section.name
     old_path = section.path
-    section.name = payload.name.strip()
     path = payload.path.strip().strip("/")
-    section.path = f"/{path}/" if path else "/"
+    normalized_path = f"/{path}/" if path else "/"
+    _ensure_section_unique(
+        db,
+        site_id,
+        section.menu_type,
+        normalized_path,
+        section.external_id,
+        exclude_section_id=section.id,
+    )
+    section.name = payload.name.strip()
+    section.path = normalized_path
     section.sync_status = "pending"
     section.synced_at = None
     assigned_content = db.scalars(
@@ -1239,16 +1286,25 @@ def create_sections_bulk(site_id: str, payload: SectionsBulkCreate, _: AuthUser,
     existing_ids = set(
         db.scalars(select(models.Section.external_id).where(models.Section.site_id == site_id)).all()
     )
+    existing_keys = {
+        (section.menu_type, _normalized_menu_path(section.path))
+        for section in db.scalars(select(models.Section).where(models.Section.site_id == site_id)).all()
+    }
     created: list[models.Section] = []
     skipped_count = 0
     for item in payload.items:
-        if item.external_id in existing_ids:
+        normalized_path = _normalized_menu_path(item.path)
+        key = (item.menu_type, normalized_path)
+        if item.external_id in existing_ids or key in existing_keys:
             skipped_count += 1
             continue
-        section = models.Section(site_id=site_id, **item.model_dump())
+        section_data = item.model_dump()
+        section_data["path"] = normalized_path
+        section = models.Section(site_id=site_id, **section_data)
         db.add(section)
         created.append(section)
         existing_ids.add(item.external_id)
+        existing_keys.add(key)
     db.commit()
     for section in created:
         db.refresh(section)
@@ -1467,7 +1523,11 @@ def create_site_task(site_id: str, payload: GenerationTaskCreate, user: AuthUser
         _get_section_for_site(db, site_id, payload.section_id)
     data = payload.model_dump()
     data["site_id"] = site_id
-    return create_generation_task(db, GenerationTaskCreate(**data), created_by_user_id=user["id"])
+    try:
+        return create_generation_task(db, GenerationTaskCreate(**data), created_by_user_id=user["id"])
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.get("/sites/{site_id}/content", response_model=list[ContentItemResponse])
@@ -1559,7 +1619,11 @@ def list_archived_tasks(_: AuthUser, db: Session = Depends(get_db)) -> Any:
 @router.post("/tasks", response_model=GenerationTaskResponse)
 def create_task(payload: GenerationTaskCreate, user: AuthUser, db: Session = Depends(get_db)) -> Any:
     _validate_task_topics(payload)
-    return create_generation_task(db, payload, created_by_user_id=user["id"])
+    try:
+        return create_generation_task(db, payload, created_by_user_id=user["id"])
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.delete("/tasks/{task_id}")
@@ -1957,7 +2021,11 @@ def update_content(content_id: str, payload: ContentUpdate, _: AuthUser, db: Ses
         or "section_content_mode" in payload.model_fields_set
         or "generated_json" in payload.model_fields_set
     ):
-        apply_content_section_slug(item, selected_section)
+        try:
+            ensure_content_slug_available(db, item, section=selected_section)
+        except ValueError as exc:
+            db.rollback()
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     if item.status in {"draft", "generated", "approved", "rejected", "scheduled", "publication_failed"}:
         item.status = "generated"

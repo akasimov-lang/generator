@@ -2479,6 +2479,26 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
     prompt_template = append_casino_rating_requirement(prompt_template, payload.include_casino_rating)
     site = db.get(models.Site, payload.site_id) if payload.site_id else None
     section = db.get(models.Section, payload.section_id) if payload.section_id else None
+    planned_slugs: set[str] = set()
+    for topic in clean_topics:
+        source_slug = normalize_slug(topic)
+        final_slug = (
+            _normalized_project_slug(section.path)
+            if section and payload.section_content_mode == "menu_page"
+            else build_nested_page_slug(section.path if section else None, source_slug)
+        )
+        if final_slug in planned_slugs:
+            raise ValueError(
+                f"URL {final_slug} повторяется внутри задачи. "
+                "Для MAIN-контента можно создать только одну страницу на пункт меню."
+            )
+        conflict = find_content_slug_conflict(db, payload.site_id, final_slug)
+        if conflict:
+            raise ValueError(
+                f"URL {final_slug} уже используется текстом «{conflict.topic}» "
+                f"(статус: {conflict.status}). Дубли страниц создавать нельзя."
+            )
+        planned_slugs.add(final_slug)
     automatic_title = (
         f"{site.name} · {len(clean_topics)} тем · {payload.language.upper()}-{payload.geo.upper()}"
         if site
@@ -2535,7 +2555,7 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
             competitor_research_status="queries_ready" if payload.collect_competitors else "not_requested",
             idempotency_key=f"{payload.geo.lower()}-{payload.language.lower()}-{slugify(topic)}-{index}-{uuid.uuid4().hex[:8]}",
         )
-        apply_content_section_slug(item, section)
+        ensure_content_slug_available(db, item, section=section)
         db.add(item)
         db.flush()
         if payload.collect_competitors:
@@ -2581,7 +2601,7 @@ def generate_task_items(db: Session, task: models.GenerationTask) -> models.Gene
                 )
                 item.word_count = count_words(item.generated_json)
             section = db.get(models.Section, item.section_id) if item.section_id else None
-            apply_content_section_slug(item, section)
+            ensure_content_slug_available(db, item, section=section)
             item.generation_progress = 90
             item.generation_prompt_name = task.prompt_template_name
             item.include_casino_rating = task.include_casino_rating
@@ -2705,7 +2725,7 @@ def generate_content_item(db: Session, item: models.ContentItem) -> models.Conte
             )
             item.word_count = count_words(item.generated_json)
         section = db.get(models.Section, item.section_id) if item.section_id else None
-        apply_content_section_slug(item, section)
+        ensure_content_slug_available(db, item, section=section)
         item.generation_progress = 90
         item.generation_prompt_name = task.prompt_template_name
         item.include_casino_rating = task.include_casino_rating
@@ -2748,6 +2768,8 @@ def schedule_campaign(db: Session, payload: PublicationCampaignCreate) -> models
             raise ValueError("Campaign can include only content from the selected site")
         if item.status not in {"generated", "rejected", "approved"}:
             raise ValueError("Campaign can include only publication-ready content")
+        section = db.get(models.Section, item.section_id) if item.section_id else None
+        ensure_content_slug_available(db, item, section=section)
         validate_content_for_publication(item)
 
     task_ids = {item.task_id for item in items}
@@ -3070,6 +3092,56 @@ def apply_content_section_slug(item: models.ContentItem, section: models.Section
     return full_slug
 
 
+def find_content_slug_conflict(
+    db: Session,
+    site_id: str | None,
+    slug: object,
+    *,
+    exclude_content_id: str | None = None,
+) -> models.ContentItem | None:
+    """Return another non-deleted page that owns the normalized project URL."""
+    if not site_id:
+        return None
+    normalized_slug = _normalized_project_slug(slug)
+    candidates = db.scalars(
+        select(models.ContentItem).where(
+            models.ContentItem.site_id == site_id,
+            models.ContentItem.status != "deleted",
+        )
+    ).all()
+    return next(
+        (
+            candidate
+            for candidate in candidates
+            if candidate.id != exclude_content_id
+            and _normalized_project_slug(candidate.slug) == normalized_slug
+        ),
+        None,
+    )
+
+
+def ensure_content_slug_available(
+    db: Session,
+    item: models.ContentItem,
+    *,
+    section: models.Section | None = None,
+) -> str:
+    """Validate the final URL after applying the selected menu placement."""
+    final_slug = apply_content_section_slug(item, section)
+    conflict = find_content_slug_conflict(
+        db,
+        item.site_id,
+        final_slug,
+        exclude_content_id=item.id,
+    )
+    if conflict:
+        raise ValueError(
+            f"URL {final_slug} уже используется текстом «{conflict.topic}» "
+            f"(статус: {conflict.status}). Выберите вложенную страницу или другой пункт меню."
+        )
+    return final_slug
+
+
 def _numeric_menu_id(value: object, fallback: int) -> int:
     try:
         numeric = int(value)
@@ -3277,6 +3349,8 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
         endpoint = site.publication_endpoint
     item.last_publication_status_code = None
     try:
+        section = db.get(models.Section, item.section_id) if item.section_id else None
+        ensure_content_slug_available(db, item, section=section)
         validate_content_for_publication(item)
     except ValueError as exc:
         db.add(
@@ -3300,7 +3374,7 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
         async with httpx.AsyncClient(timeout=45.0) as client:
             token = await refresh_project_server_token(client)
             section = db.get(models.Section, item.section_id) if item.section_id else None
-            apply_content_section_slug(item, section)
+            ensure_content_slug_available(db, item, section=section)
             request_payload = build_project_page_payload(item, site, token, section=section)
             response = await client.post(
                 endpoint,

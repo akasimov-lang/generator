@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -127,6 +128,25 @@ def test_project_menu_library_stores_custom_items_without_duplicates() -> None:
         db.refresh(site)
         assert first == second
         assert len(site.menu_library) == 1
+
+
+def test_menu_create_rejects_duplicate_normalized_url() -> None:
+    with make_session() as db:
+        site = models.Site(name="review.example", base_url="https://review.example", publication_endpoint="https://review.example/api/content")
+        existing = models.Section(site=site, external_id="reviews", name="Reviews", path="/reviews/", menu_type="header")
+        db.add_all([site, existing])
+        db.commit()
+
+        with pytest.raises(HTTPException) as error:
+            create_section(
+                site.id,
+                SectionCreate(external_id="reviews-copy", name="Reviews copy", path="reviews", menu_type="header"),
+                None,  # type: ignore[arg-type]
+                db,
+            )
+
+        assert error.value.status_code == 409
+        assert "уже существует" in str(error.value.detail)
 
 
 def test_cached_menu_item_can_be_adopted_and_used_as_parent() -> None:

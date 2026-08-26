@@ -189,6 +189,70 @@ def test_generation_task_can_be_saved_as_draft() -> None:
         assert task.items[0].competitor_research_status == "queries_ready"
 
 
+def test_generation_task_rejects_second_main_page_for_same_menu_url() -> None:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    with TestingSession() as db:
+        site = models.Site(name="unique.example", base_url="https://unique.example", publication_endpoint="https://unique.example/api/content")
+        section = models.Section(site=site, external_id="reviews", name="Reviews", path="/reviews/", menu_type="header")
+        existing_task = models.GenerationTask(title="Existing", site_id=site.id, geo="LV", language="lv", topics_count=1)
+        existing = models.ContentItem(
+            task=existing_task,
+            site_id=site.id,
+            section_id=section.id,
+            section_content_mode="menu_page",
+            topic="Existing review",
+            slug="/reviews/",
+            generated_json={},
+            status="published",
+            idempotency_key="existing-main-page",
+        )
+        db.add_all([site, section, existing_task, existing])
+        db.commit()
+
+        with pytest.raises(ValueError, match=r"URL /reviews/ уже используется"):
+            create_generation_task(
+                db,
+                GenerationTaskCreate(
+                    geo="LV",
+                    language="lv",
+                    topics=["Another review"],
+                    site_id=site.id,
+                    section_id=section.id,
+                    section_content_mode="menu_page",
+                    collect_competitors=False,
+                ),
+            )
+
+
+def test_content_assignment_rejects_duplicate_final_url() -> None:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    with TestingSession() as db:
+        site = models.Site(name="unique.example", base_url="https://unique.example", publication_endpoint="https://unique.example/api/content")
+        section = models.Section(site=site, external_id="reviews", name="Reviews", path="/reviews/", menu_type="header")
+        task = models.GenerationTask(title="Items", site_id=site.id, geo="LV", language="lv", topics_count=2)
+        existing = models.ContentItem(task=task, site_id=site.id, section_id=section.id, section_content_mode="menu_page", topic="Existing", slug="/reviews/", generated_json={}, status="published", idempotency_key="existing-assignment")
+        candidate = models.ContentItem(task=task, site_id=site.id, topic="Candidate", slug="/candidate/", generated_json={}, status="generated", idempotency_key="candidate-assignment")
+        db.add_all([site, section, task, existing, candidate])
+        db.commit()
+
+        with pytest.raises(HTTPException) as error:
+            update_content(
+                candidate.id,
+                ContentUpdate(section_id=section.id, section_content_mode="menu_page"),
+                None,  # type: ignore[arg-type]
+                db,
+            )
+
+        assert error.value.status_code == 409
+        assert "URL /reviews/ уже используется" in str(error.value.detail)
+
+
 def test_task_menu_section_updates_all_mutable_items() -> None:
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
