@@ -1370,21 +1370,29 @@ A menu item is selected. Treat it as the target topical cluster for every genera
     single_topic_rule = (
         """SINGLE TOPIC MODE:
 - Select the strongest missing standalone page for the chosen menu section.
+- Treat the selected menu item context as the complete assignment for this one topic.
+- Infer the future page type and dominant search intent from the menu item name, slug, and breadcrumb.
+- Build a meaningful topic structure: subject or user intent, relevant GEO/time context when useful, and the main aspects the page should cover.
 - Prefer a concrete user task with clear search demand over a broad category label.
 - The topic must be ready to use as the only manually reviewed topic in a generation task.
 """
         if count == 1
         else ""
     )
-    casino_review_rule = """CASINO REVIEW TOPIC EXAMPLE:
+    casino_review_rule = (
+        """STRUCTURE EXAMPLE FOR SINGLE-TOPIC CASINO REVIEW CONTEXT:
 - Determine from the selected menu section name, slug, and breadcrumb whether it is specifically a casino-review section.
-- If it is a casino-review section, use this as a stylistic and semantic example, not as a mandatory template:
+- If it is a casino-review section, use this example only to understand the intended semantic structure, not as a mandatory title template:
   «Обзор онлайн-казино {Brand} в {Year}: лицензия, бонусы, игры, способы оплаты и вывод средств»
+- The example structure is: page subject or intent, optional relevant time context, then the important evaluation aspects.
 - A brand is optional. The topic may be a review of a real GEO-relevant casino or another independent search intent that naturally belongs to the review section.
 - Do not force the year or every listed aspect when they do not fit the selected topic.
 - Write the result naturally in the content language; do not copy Russian example text or leave placeholders in the result.
 - If a brand is used, do not invent it and do not select a brand already represented in the existing topics.
 """
+        if count == 1
+        else ""
+    )
     topic_noun = "topic" if count == 1 else "topics"
     return f"""{HIDDEN_TOPIC_GENERATION_PROMPT_MARKER}
 

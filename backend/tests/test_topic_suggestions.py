@@ -64,6 +64,7 @@ def test_hidden_prompt_contains_project_context_and_existing_topics() -> None:
     assert "MANDATORY SELECTED MENU SECTION SCOPE" in prompt
     assert "natural child page of this exact menu section" in prompt
     assert "Guides · /guides/" in prompt
+    assert "STRUCTURE EXAMPLE FOR SINGLE-TOPIC CASINO REVIEW CONTEXT" not in prompt
 
 
 def test_hidden_prompt_without_section_keeps_project_wide_scope() -> None:
@@ -106,10 +107,11 @@ def test_hidden_prompt_supports_one_topic_for_selected_menu_section() -> None:
     assert "Generate exactly 1 new SEO topic" in prompt
     assert "SINGLE TOPIC MODE" in prompt
     assert "strongest missing standalone page for the chosen menu section" in prompt
-    assert "CASINO REVIEW TOPIC EXAMPLE" in prompt
+    assert "STRUCTURE EXAMPLE FOR SINGLE-TOPIC CASINO REVIEW CONTEXT" in prompt
     assert "Обзор онлайн-казино {Brand} в {Year}" in prompt
     assert "A brand is optional" in prompt
-    assert "not as a mandatory template" in prompt
+    assert "intended semantic structure" in prompt
+    assert "selected menu item context as the complete assignment" in prompt
 
 
 def test_gemini_retries_until_ten_unique_topics(monkeypatch) -> None:
