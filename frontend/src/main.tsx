@@ -907,6 +907,11 @@ function App() {
     navigateTo("workspace", "content");
   }, [navigateTo]);
 
+  const handleLogin = React.useCallback((nextToken: string) => {
+    setMessage("");
+    setToken(nextToken);
+  }, []);
+
   const api = React.useCallback(
     async <T,>(path: string, options: RequestInit = {}): Promise<T> => {
       const method = (options.method || "GET").toUpperCase();
@@ -1008,7 +1013,10 @@ function App() {
   }
 
   React.useEffect(() => {
-    loadAll().catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Не удалось загрузить данные"));
+    loadAll().catch((error: unknown) => {
+      if ((error as ApiRequestError)?.statusCode === 401) return;
+      setMessage(error instanceof Error ? error.message : "Не удалось загрузить данные");
+    });
   }, [loadAll]);
 
   React.useEffect(() => {
@@ -1067,7 +1075,7 @@ function App() {
   }, [activeView, currentUser, isAdmin, navigateTo, workspaceTab]);
 
   if (!token) {
-    return <LoginScreen onLogin={setToken} />;
+    return <LoginScreen onLogin={handleLogin} />;
   }
 
   if (!currentUser) {
