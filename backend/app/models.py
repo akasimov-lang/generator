@@ -152,6 +152,8 @@ class GenerationTask(Base, TimestampMixin):
     generate_title: Mapped[bool] = mapped_column(Boolean, default=True)
     collect_competitors: Mapped[bool] = mapped_column(Boolean, default=True)
     include_casino_rating: Mapped[bool] = mapped_column(Boolean, default=False)
+    generation_mode: Mapped[str] = mapped_column(String(40), nullable=False, default="standard", server_default="standard")
+    auto_publish: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     archived_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
@@ -180,6 +182,7 @@ class ContentItem(Base, TimestampMixin):
     section_source_slug: Mapped[str | None] = mapped_column(String(240), nullable=True)
     generation_prompt_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
     include_casino_rating: Mapped[bool] = mapped_column(Boolean, default=False)
+    generation_context: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     generation_progress: Mapped[int] = mapped_column(Integer, default=0)
     generation_error: Mapped[str | None] = mapped_column(Text, nullable=True)

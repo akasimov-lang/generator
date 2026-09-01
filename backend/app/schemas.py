@@ -366,6 +366,25 @@ class GenerationTaskCreate(BaseModel):
     generate_title: bool = True
     collect_competitors: bool = True
     include_casino_rating: bool = False
+    generation_mode: Literal["standard", "casino_reviews"] = "standard"
+    auto_publish: bool = False
+    save_as_draft: bool = False
+
+
+class MenuStructureGenerationCreate(BaseModel):
+    geo: str
+    language: str
+    ai_provider_id: str | None = None
+    target_words: int | None = Field(default=2000, ge=300, le=8000)
+    prompt_template_name: str | None = Field(default=None, max_length=160)
+    prompt_template: str | None = None
+    include_toc: bool = True
+    include_faq: bool = True
+    generate_title: bool = True
+    collect_competitors: bool = True
+    menu_types: list[Literal["header", "footer"]] = Field(default_factory=lambda: ["header"])
+    section_ids: list[str] = Field(default_factory=list, max_length=200)
+    auto_publish: bool = False
     save_as_draft: bool = False
 
 
@@ -419,6 +438,8 @@ class GenerationTaskResponse(BaseModel):
     generate_title: bool
     collect_competitors: bool
     include_casino_rating: bool
+    generation_mode: str = "standard"
+    auto_publish: bool = False
     archived_at: datetime | None = None
     archived_by_user_id: str | None = None
     created_at: datetime
@@ -440,6 +461,7 @@ class ContentItemResponse(BaseModel):
     status: str
     word_count: int
     include_casino_rating: bool
+    generation_context: dict[str, Any] | None = None
     generation_prompt_name: str | None
     generated_at: datetime | None
     generation_progress: int = 0

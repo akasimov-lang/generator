@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app import models
 from app.core.config import get_settings
 from app.project_cache import ProjectCacheError, fetch_project_cache, fetch_project_template_capabilities, project_server_url, refresh_project_server_id, refresh_project_server_token
-from app.schemas import GenerationTaskCreate, PublicationCampaignCreate
+from app.schemas import GenerationTaskCreate, MenuStructureGenerationCreate, PublicationCampaignCreate
 
 SIMPLE_PAGE = "simple_page"
 FULL_SITE = "full_site"
@@ -59,6 +59,73 @@ CASINO_RATING_PROMPT_INSTRUCTION = f"""{CASINO_RATING_PROMPT_MARKER}
 - после рейтинга добавь короткое объяснение методологии оценки;
 - весь рейтинг и пояснения должны быть на языке создаваемого текста.
 === END CASINO RATING REQUIREMENT ==="""
+
+CASINO_REVIEW_PROMPT_NAME = "обзоры казино"
+CASINO_REVIEW_PROMPT_TEMPLATE = """Роль:
+Ты — независимый senior-редактор и SEO-аналитик, специализирующийся на обзорах онлайн-казино.
+
+Задача:
+Подготовь оригинальный, полезный и нейтральный обзор казино {{BRAND_NAME}} для сайта {{SITE_NAME}}.
+
+Контекст:
+- Бренд: {{BRAND_NAME}}
+- GEO: {{GEO}}
+- Язык текста: {{LANGUAGE}}
+- Текущий год: {{CURRENT_YEAR}}
+- Желаемый объём: около {{TARGET_WORDS}} слов
+- URL страницы: {{SLUG}}
+- Поисковые запросы: {{SEARCH_QUERIES}}
+- Материалы конкурентов: {{COMPETITOR_SUMMARY}}
+- Подтверждённые темы: {{COMMON_HEADINGS}}
+- Content gaps: {{CONTENT_GAPS}}
+
+Правила:
+1. Пиши весь публичный текст только на языке {{LANGUAGE}}.
+2. Рассматривай только казино {{BRAND_NAME}} и не подменяй его другим брендом.
+3. Не выдумывай лицензии, бонусы, лимиты, сроки выплат, платёжные методы, владельцев, рейтинги и другие факты.
+4. Используй факты только из переданного исследовательского контекста. Неподтверждённое опускай или выноси в Editor Check.
+5. Не копируй конкурентов и не повторяй их структуру дословно.
+6. Избегай рекламных обещаний, давления на пользователя и обещаний гарантированного выигрыша.
+7. Учитывай законодательство, возрастные ограничения и ответственную игру для GEO {{GEO}}.
+8. Плюсы и минусы должны быть конкретными, сбалансированными и подтверждаться текстом.
+9. Не добавляй изображение: система позже привяжет hero-изображение к слоту hero_after_h1.
+
+Структура ответа:
+Title:
+Meta Description:
+H1:
+
+H2: Краткий обзор {{BRAND_NAME}}
+H2: Основные характеристики
+H2: Лицензия, безопасность и репутация
+H2: Регистрация и верификация
+H2: Бонусы и условия
+H2: Игры и провайдеры
+H2: Пополнение и вывод средств
+H2: Мобильная версия
+H2: Поддержка пользователей
+H2: Преимущества и недостатки
+H2: Итоговая оценка
+H2: FAQ
+H2: Ответственная игра
+
+Editor Check:
+- Неподтверждённые факты:
+- Что проверить перед публикацией:
+- Юридические риски:
+- Устаревающие данные:
+- Общая готовность текста:
+"""
+
+MENU_STRUCTURE_PROMPT_MARKER = "=== MENU PAGE GENERATION CONTEXT ==="
+MENU_STRUCTURE_PROMPT_INSTRUCTION = f"""{MENU_STRUCTURE_PROMPT_MARKER}
+Сгенерируй контент самого выбранного пункта меню, а не вложенную статью.
+- Текущий пункт меню: {{{{CURRENT_SECTION}}}}
+- Полная структура сайта: {{{{MENU_STRUCTURE}}}}
+- Определи интент страницы по названию, URL, breadcrumb, родительским и соседним пунктам.
+- Страница должна раскрывать назначение текущего пункта и не дублировать интенты соседних разделов.
+- Не описывай структуру меню и не упоминай, что она была передана в задании.
+=== END MENU PAGE GENERATION CONTEXT ==="""
 
 
 def append_casino_rating_requirement(prompt_template: str, enabled: bool) -> str:
@@ -1021,6 +1088,7 @@ async def build_ai_content(
     competitor_brief: dict | None = None,
     variation_context: dict | None = None,
     generate_title: bool = False,
+    generation_context: dict | None = None,
 ) -> dict:
     if provider.provider_type == "gemini":
         return await build_gemini_content(
@@ -1038,6 +1106,7 @@ async def build_ai_content(
             competitor_brief=competitor_brief,
             variation_context=variation_context,
             generate_title=generate_title,
+            generation_context=generation_context,
         )
     return build_stub_content(
         topic=topic,
@@ -1069,6 +1138,7 @@ async def build_gemini_content(
     competitor_brief: dict | None = None,
     variation_context: dict | None = None,
     generate_title: bool = False,
+    generation_context: dict | None = None,
 ) -> dict:
     if not provider.api_key:
         raise ValueError("Gemini API key is not configured")
@@ -1100,6 +1170,7 @@ async def build_gemini_content(
         competitor_brief=competitor_brief,
         variation_context=variation_context,
         generate_title=generate_title,
+        generation_context=generation_context,
     )
     try:
         response = await call_gemini(provider, prompt)
@@ -1120,7 +1191,8 @@ async def build_gemini_content(
 
     article_parts = extract_ai_article_parts(generated_text, topic)
     page_title = article_parts["title"].strip() if generate_title else topic.strip()
-    page_h1 = concise_h1_from_topic(topic)
+    special_mode = str((generation_context or {}).get("content_kind") or "") in {"casino_review", "menu_page"}
+    page_h1 = article_parts["h1"].strip() if special_mode and article_parts["h1"].strip() else concise_h1_from_topic(topic)
     page["title"] = page_title
     page["breadcrumb"] = topic.strip()
     page["description"] = article_parts["meta_description"] or clean_text(article_parts["body"])[:155] or page["description"]
@@ -1151,6 +1223,8 @@ async def build_gemini_content(
         }
     if article_parts["editor_check"]:
         base_payload["generation_meta"]["editor_check"] = article_parts["editor_check"]
+    if generation_context:
+        base_payload["generation_meta"]["generation_context"] = generation_context
     return base_payload
 
 
@@ -1167,6 +1241,7 @@ def build_gemini_prompt(
     competitor_brief: dict | None = None,
     variation_context: dict | None = None,
     generate_title: bool = False,
+    generation_context: dict | None = None,
 ) -> str:
     template = prompt_template.strip() if prompt_template and prompt_template.strip() else DEFAULT_CONTENT_PROMPT_TEMPLATE
     slug = normalize_slug(topic)
@@ -1184,6 +1259,9 @@ def build_gemini_prompt(
         "shortcode": shortcode or "none",
         "include_toc": "yes" if include_toc else "no",
         "include_faq": "yes" if include_faq else "no",
+        "brand_name": str((generation_context or {}).get("casino_brand") or topic),
+        "current_section": json.dumps((generation_context or {}).get("current_section") or {}, ensure_ascii=False),
+        "menu_structure": json.dumps((generation_context or {}).get("site_menu") or [], ensure_ascii=False),
         **competitor_values,
     }
     prompt = template
@@ -1548,6 +1626,26 @@ def ensure_default_prompt_template(db: Session, site: models.Site) -> models.Pro
     db.add(prompt)
     db.flush()
     site.default_prompt_template_id = prompt.id
+    return prompt
+
+
+def ensure_casino_review_prompt_template(db: Session) -> models.PromptTemplate:
+    existing = db.scalar(
+        select(models.PromptTemplate)
+        .where(models.PromptTemplate.name == CASINO_REVIEW_PROMPT_NAME)
+        .order_by(models.PromptTemplate.created_at.asc())
+        .limit(1)
+    )
+    if existing:
+        return existing
+    prompt = models.PromptTemplate(
+        site_id=None,
+        name=CASINO_REVIEW_PROMPT_NAME,
+        content=CASINO_REVIEW_PROMPT_TEMPLATE,
+        is_default=False,
+    )
+    db.add(prompt)
+    db.flush()
     return prompt
 
 
@@ -2475,10 +2573,36 @@ def breadcrumb_schema_block(slug: str, title: str) -> dict:
 
 def create_generation_task(db: Session, payload: GenerationTaskCreate, created_by_user_id: str | None = None) -> models.GenerationTask:
     clean_topics = [topic.strip() for topic in payload.topics if topic.strip()]
-    prompt_template = compose_prompt_with_base(db, payload.prompt_template)
+    if payload.generation_mode == "casino_reviews":
+        unique_topics: list[str] = []
+        seen_brands: set[str] = set()
+        for brand in clean_topics:
+            key = clean_text(brand).casefold()
+            if key and key not in seen_brands:
+                seen_brands.add(key)
+                unique_topics.append(clean_text(brand))
+        clean_topics = unique_topics
+        if not clean_topics:
+            raise ValueError("Добавьте хотя бы один бренд казино")
+        casino_prompt = ensure_casino_review_prompt_template(db)
+        prompt_template = compose_prompt_with_base(db, casino_prompt.content)
+        prompt_template_name = CASINO_REVIEW_PROMPT_NAME
+    else:
+        prompt_template = compose_prompt_with_base(db, payload.prompt_template)
+        prompt_template_name = payload.prompt_template_name
     prompt_template = append_casino_rating_requirement(prompt_template, payload.include_casino_rating)
     site = db.get(models.Site, payload.site_id) if payload.site_id else None
     section = db.get(models.Section, payload.section_id) if payload.section_id else None
+    if payload.generation_mode == "casino_reviews":
+        if not site or not section or section.site_id != site.id:
+            raise ValueError("Для обзоров казино выберите проект и пункт меню casinos")
+        casino_section_values = {
+            clean_text(section.external_id).casefold(),
+            clean_text(section.name).casefold(),
+            _normalized_project_slug(section.path).strip("/").casefold(),
+        }
+        if "casinos" not in casino_section_values and "casino" not in casino_section_values:
+            raise ValueError("Режим обзоров доступен только для пункта меню casinos")
     planned_slugs: set[str] = set()
     for topic in clean_topics:
         source_slug = normalize_slug(topic)
@@ -2500,6 +2624,9 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
             )
         planned_slugs.add(final_slug)
     automatic_title = (
+        f"Обзоры казино · {len(clean_topics)} брендов · {payload.language.upper()}-{payload.geo.upper()}"
+        if payload.generation_mode == "casino_reviews"
+        else
         f"{site.name} · {len(clean_topics)} тем · {payload.language.upper()}-{payload.geo.upper()}"
         if site
         else f"Без проекта · {len(clean_topics)} тем · {payload.language.upper()}-{payload.geo.upper()}"
@@ -2515,13 +2642,15 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
         payload_mode=payload.payload_mode,
         topics_count=len(clean_topics),
         target_words=payload.target_words,
-        prompt_template_name=payload.prompt_template_name,
+        prompt_template_name=prompt_template_name,
         prompt_template=prompt_template,
         include_toc=payload.include_toc,
         include_faq=payload.include_faq,
         generate_title=payload.generate_title,
         collect_competitors=payload.collect_competitors,
         include_casino_rating=payload.include_casino_rating,
+        generation_mode=payload.generation_mode,
+        auto_publish=payload.auto_publish,
         status="draft" if payload.save_as_draft else ("research_queries_ready" if payload.collect_competitors else "created"),
     )
     db.add(task)
@@ -2550,8 +2679,18 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
             word_count=count_words(generated_json),
             section_id=payload.section_id,
             section_content_mode=payload.section_content_mode,
-            generation_prompt_name=payload.prompt_template_name,
+            generation_prompt_name=prompt_template_name,
             include_casino_rating=payload.include_casino_rating,
+            generation_context=(
+                {
+                    "content_kind": "casino_review",
+                    "casino_brand": topic,
+                    "brand_key": slugify(topic),
+                    "hero_image_slot": "hero_after_h1",
+                }
+                if payload.generation_mode == "casino_reviews"
+                else None
+            ),
             competitor_research_status="queries_ready" if payload.collect_competitors else "not_requested",
             idempotency_key=f"{payload.geo.lower()}-{payload.language.lower()}-{slugify(topic)}-{index}-{uuid.uuid4().hex[:8]}",
         )
@@ -2561,6 +2700,144 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
         if payload.collect_competitors:
             ensure_competitor_queries(db, item, payload.geo, payload.language)
 
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+def create_menu_structure_task(
+    db: Session,
+    site: models.Site,
+    payload: MenuStructureGenerationCreate,
+    created_by_user_id: str | None = None,
+) -> models.GenerationTask:
+    menu_types = set(payload.menu_types or ["header"])
+    requested_ids = set(payload.section_ids)
+    all_sections = db.scalars(
+        select(models.Section)
+        .where(
+            models.Section.site_id == site.id,
+            models.Section.sync_status != "external_deleted",
+            models.Section.is_temporary_parent.is_(False),
+        )
+        .order_by(models.Section.menu_type.asc(), models.Section.created_at.asc())
+    ).all()
+    section_by_id = {section.id: section for section in all_sections}
+    if requested_ids - section_by_id.keys():
+        raise ValueError("Один или несколько выбранных пунктов меню не найдены")
+
+    eligible: list[models.Section] = []
+    seen_paths: set[str] = set()
+    for section in all_sections:
+        normalized_path = _normalized_project_slug(section.path)
+        if section.menu_type not in menu_types or normalized_path == "/":
+            continue
+        if requested_ids and section.id not in requested_ids:
+            continue
+        if normalized_path in seen_paths:
+            continue
+        seen_paths.add(normalized_path)
+        if find_content_slug_conflict(db, site.id, normalized_path):
+            continue
+        eligible.append(section)
+    if not eligible:
+        raise ValueError("Для выбранной структуры нет пунктов без существующего контента")
+
+    def breadcrumb(section: models.Section) -> list[str]:
+        names = [section.name]
+        parent_id = section.parent_id
+        visited = {section.id}
+        while parent_id and len(names) < 8:
+            parent = section_by_id.get(parent_id)
+            if not parent or parent.id in visited:
+                break
+            names.insert(0, parent.name)
+            visited.add(parent.id)
+            parent_id = parent.parent_id
+        return names
+
+    site_menu = [
+        {
+            "id": section.id,
+            "name": section.name,
+            "path": _normalized_project_slug(section.path),
+            "menu_type": section.menu_type,
+            "parent_id": section.parent_id,
+            "breadcrumb": breadcrumb(section),
+        }
+        for section in all_sections
+        if section.menu_type in menu_types
+    ]
+    prompt_template = compose_prompt_with_base(db, payload.prompt_template)
+    if MENU_STRUCTURE_PROMPT_MARKER not in prompt_template:
+        prompt_template = f"{prompt_template.rstrip()}\n\n{MENU_STRUCTURE_PROMPT_INSTRUCTION}\n"
+    task = models.GenerationTask(
+        title=f"Структура меню · {len(eligible)} текстов · {payload.language.upper()}-{payload.geo.upper()}",
+        created_by_user_id=created_by_user_id,
+        site_id=site.id,
+        section_id=None,
+        ai_provider_id=payload.ai_provider_id,
+        geo=payload.geo,
+        language=payload.language,
+        payload_mode="site_default",
+        topics_count=len(eligible),
+        target_words=payload.target_words,
+        prompt_template_name=payload.prompt_template_name,
+        prompt_template=prompt_template,
+        include_toc=payload.include_toc,
+        include_faq=payload.include_faq,
+        generate_title=payload.generate_title,
+        collect_competitors=payload.collect_competitors,
+        include_casino_rating=False,
+        generation_mode="menu_structure",
+        auto_publish=payload.auto_publish,
+        status="draft" if payload.save_as_draft else ("research_queries_ready" if payload.collect_competitors else "created"),
+    )
+    db.add(task)
+    db.flush()
+    for index, section in enumerate(eligible, start=1):
+        generated_json = build_stub_content(
+            section.name,
+            payload.geo,
+            payload.language,
+            payload.target_words,
+            site=site,
+            payload_mode="site_default",
+            include_toc=payload.include_toc,
+            include_faq=payload.include_faq,
+        )
+        current_section = {
+            "id": section.id,
+            "name": section.name,
+            "path": _normalized_project_slug(section.path),
+            "menu_type": section.menu_type,
+            "breadcrumb": breadcrumb(section),
+        }
+        item = models.ContentItem(
+            task_id=task.id,
+            site_id=site.id,
+            topic=section.name,
+            slug=current_section["path"],
+            generated_json=generated_json,
+            status="draft",
+            word_count=count_words(generated_json),
+            section_id=section.id,
+            section_content_mode="menu_page",
+            generation_prompt_name=payload.prompt_template_name,
+            include_casino_rating=False,
+            generation_context={
+                "content_kind": "menu_page",
+                "current_section": current_section,
+                "site_menu": site_menu,
+            },
+            competitor_research_status="queries_ready" if payload.collect_competitors else "not_requested",
+            idempotency_key=f"menu-page-{site.id}-{section.id}-{index}-{uuid.uuid4().hex[:8]}",
+        )
+        ensure_content_slug_available(db, item, section=section)
+        db.add(item)
+        db.flush()
+        if payload.collect_competitors:
+            ensure_competitor_queries(db, item, payload.geo, payload.language)
     db.commit()
     db.refresh(task)
     return task
@@ -2597,6 +2874,7 @@ def generate_task_items(db: Session, task: models.GenerationTask) -> models.Gene
                         competitor_brief=item.competitor_brief,
                         variation_context=build_task_variation_context(db, item),
                         generate_title=task.generate_title,
+                        generation_context=item.generation_context,
                     )
                 )
                 item.word_count = count_words(item.generated_json)
@@ -2621,6 +2899,9 @@ def generate_task_items(db: Session, task: models.GenerationTask) -> models.Gene
         raise
     db.commit()
     db.refresh(task)
+    if task.auto_publish and task.status == "generated":
+        auto_publish_generated_task(db, task)
+        db.refresh(task)
     return task
 
 
@@ -2687,6 +2968,49 @@ def run_task_pipeline(
     task.status = "generation_failed" if failed_items else "generated"
     db.commit()
     db.refresh(task)
+    if task.auto_publish:
+        auto_publish_generated_task(db, task)
+        db.refresh(task)
+    return task
+
+
+def auto_publish_generated_task(db: Session, task: models.GenerationTask) -> models.GenerationTask:
+    """Accept and immediately publish every valid generated item in an automated task."""
+    if not task.auto_publish:
+        return task
+    site = db.get(models.Site, task.site_id) if task.site_id else None
+    if not site:
+        raise ValueError("Automatic publication requires a project")
+    failed = False
+    pending_confirmation = False
+    for item in task.items:
+        if item.status != "generated":
+            if item.status != "published":
+                failed = True
+            continue
+        try:
+            validate_content_for_publication(item)
+            item.status = "approved"
+            db.commit()
+            asyncio.run(publish_item(db, item, site, initiator_username="automatic-menu-generation"))
+            if item.status == "publication_pending_confirmation":
+                pending_confirmation = True
+            elif item.status != "published":
+                failed = True
+        except Exception as exc:
+            db.rollback()
+            failed_item = db.get(models.ContentItem, item.id)
+            if failed_item:
+                failed_item.status = "publication_failed"
+                failed_item.generation_error = f"Автопубликация: {type(exc).__name__}: {exc}"[:500]
+                db.commit()
+            failed = True
+    task = db.get(models.GenerationTask, task.id)
+    if not task:
+        raise ValueError("Generation task not found")
+    task.status = "publication_failed" if failed else "publishing" if pending_confirmation else "published"
+    db.commit()
+    db.refresh(task)
     return task
 
 
@@ -2721,6 +3045,7 @@ def generate_content_item(db: Session, item: models.ContentItem) -> models.Conte
                     competitor_brief=item.competitor_brief,
                     variation_context=build_task_variation_context(db, item),
                     generate_title=task.generate_title,
+                    generation_context=item.generation_context,
                 )
             )
             item.word_count = count_words(item.generated_json)
@@ -2807,6 +3132,7 @@ CURRENT GENERATED PAGE (source JSON; rewrite its article content):
                 competitor_brief=item.competitor_brief,
                 variation_context=build_task_variation_context(db, item),
                 generate_title=revision.generate_title,
+                generation_context=item.generation_context,
             )
         )
         if not revision.generate_title and current_title is not None:

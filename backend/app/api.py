@@ -34,6 +34,7 @@ from app.schemas import (
     MenuLibraryItemCreate,
     MenuLibraryItemResponse,
     MenuLibraryItemUpdate,
+    MenuStructureGenerationCreate,
     MenuVisibilityCheckResponse,
     PasswordChange,
     PublishedContentBulkDeleteRequest,
@@ -86,9 +87,11 @@ from app.services import (
     append_casino_rating_requirement,
     compose_prompt_with_base,
     create_generation_task,
+    create_menu_structure_task,
     ensure_base_prompt_template,
     ensure_content_slug_available,
     ensure_default_prompt_template,
+    ensure_casino_review_prompt_template,
     ensure_competitor_queries,
     fetch_competitor_pages_for_item,
     get_dashboard,
@@ -1318,6 +1321,7 @@ def list_prompt_templates(site_id: str, _: AuthUser, db: Session = Depends(get_d
     site = _get_site_or_404(db, site_id)
     ensure_base_prompt_template(db)
     ensure_default_prompt_template(db, site)
+    ensure_casino_review_prompt_template(db)
     db.commit()
     return _list_global_prompt_templates(db, site)
 
@@ -1527,6 +1531,25 @@ def create_site_task(site_id: str, payload: GenerationTaskCreate, user: AuthUser
     data["site_id"] = site_id
     try:
         return create_generation_task(db, GenerationTaskCreate(**data), created_by_user_id=user["id"])
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/sites/{site_id}/menu-structure-tasks", response_model=GenerationTaskResponse)
+def create_site_menu_structure_task(
+    site_id: str,
+    payload: MenuStructureGenerationCreate,
+    user: AuthUser,
+    db: Session = Depends(get_db),
+) -> Any:
+    site = _get_site_or_404(db, site_id)
+    if payload.ai_provider_id:
+        provider = db.get(models.AiProvider, payload.ai_provider_id)
+        if not provider or not provider.is_active:
+            raise HTTPException(status_code=400, detail="Select an active AI provider")
+    try:
+        return create_menu_structure_task(db, site, payload, created_by_user_id=user["id"])
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail=str(exc)) from exc

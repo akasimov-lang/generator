@@ -4005,6 +4005,7 @@ h2 {
 
 .taskCreateToolbar {
   display: flex;
+  gap: 12px;
   width: 100%;
 }
 
@@ -4183,7 +4184,39 @@ h2 {
   padding: 4px 6px;
 }
 
+.generationOptionsGrid .casinoReviewOption {
+  grid-column: span 2;
+  padding: 4px 6px;
+}
+
+.menuStructureGenerationButton {
+  background: linear-gradient(135deg, #f5f9ff 0%, #eef5ff 100%);
+  border-color: #9eb8dc;
+}
+
+.menuStructureGenerationButton .newGenerationTaskIcon {
+  background: #285f9f;
+}
+
+.menuStructureGenerationButton .newGenerationTaskCopy strong {
+  color: #183a63;
+}
+
+.menuStructureSummary {
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 11px 13px;
+}
+
 @media (max-width: 760px) {
+  .taskCreateToolbar {
+    flex-direction: column;
+  }
+
   .generationOptionsGrid {
     grid-template-columns: 1fr;
   }

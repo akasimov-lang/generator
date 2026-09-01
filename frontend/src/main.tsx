@@ -85,6 +85,8 @@ type Task = {
   generate_title: boolean;
   collect_competitors: boolean;
   include_casino_rating: boolean;
+  generation_mode: "standard" | "casino_reviews" | "menu_structure";
+  auto_publish: boolean;
   archived_at: string | null;
   archived_by_user_id: string | null;
   created_at: string;
@@ -105,6 +107,7 @@ type ContentItem = {
   status: string;
   word_count: number;
   include_casino_rating: boolean;
+  generation_context: Record<string, unknown> | null;
   scheduled_at: string | null;
   published_at: string | null;
   published_url: string | null;
@@ -5166,7 +5169,13 @@ function TasksView({
   const [generateTitle, setGenerateTitle] = React.useState(true);
   const [collectCompetitors, setCollectCompetitors] = React.useState(true);
   const [includeCasinoRating, setIncludeCasinoRating] = React.useState(taskCheckboxPreferences.includeCasinoRating ?? false);
+  const [casinoReviews, setCasinoReviews] = React.useState(false);
   const [createFormExpanded, setCreateFormExpanded] = React.useState(false);
+  const [menuStructureFormExpanded, setMenuStructureFormExpanded] = React.useState(false);
+  const [menuStructureHeader, setMenuStructureHeader] = React.useState(true);
+  const [menuStructureFooter, setMenuStructureFooter] = React.useState(false);
+  const [menuStructureAutoPublish, setMenuStructureAutoPublish] = React.useState(false);
+  const [creatingMenuStructure, setCreatingMenuStructure] = React.useState(false);
   const [creatingTaskAction, setCreatingTaskAction] = React.useState<"draft" | "start" | "">("");
   const [generatingTopics, setGeneratingTopics] = React.useState(false);
   const [generatingTopicCount, setGeneratingTopicCount] = React.useState<1 | 10>(10);
@@ -5221,6 +5230,13 @@ function TasksView({
       description: `Существующий ${target.menuType === "header" ? "Header" : "Footer"}`
     }))
   ], [cachedTaskMenuTargets, sections]);
+  const selectedMenuIdentity = React.useMemo(() => {
+    const section = sections.find((item) => item.id === sectionId);
+    if (section) return [section.external_id, section.name, normalizedTreePath(section.path).replace(/\//g, "")].map((value) => value.toLocaleLowerCase());
+    const cached = cachedTaskMenuTargets.get(sectionId);
+    return cached ? [cached.externalId, cached.name, normalizedTreePath(cached.path).replace(/\//g, "")].map((value) => value.toLocaleLowerCase()) : [];
+  }, [cachedTaskMenuTargets, sectionId, sections]);
+  const casinoSectionSelected = selectedMenuIdentity.some((value) => value === "casino" || value === "casinos");
 
   React.useEffect(() => {
     if (fixedSite && siteId !== fixedSite.id) {
@@ -5231,7 +5247,27 @@ function TasksView({
   React.useEffect(() => {
     setSectionId("");
     setSectionContentMode("nested");
+    setCasinoReviews(false);
   }, [selectedSite?.id]);
+
+  React.useEffect(() => {
+    if (!casinoSectionSelected && casinoReviews) setCasinoReviews(false);
+  }, [casinoReviews, casinoSectionSelected]);
+
+  React.useEffect(() => {
+    const casinoPrompt = promptTemplates.find((prompt) => prompt.name.toLocaleLowerCase() === "обзоры казино");
+    if (casinoReviews) {
+      if (casinoPrompt) setPromptTemplateId(casinoPrompt.id);
+      setSectionContentMode("nested");
+      setGenerateTitle(true);
+      return;
+    }
+    if (casinoPrompt?.id === promptTemplateId) {
+      const workingPrompt = promptTemplates.find((prompt) => prompt.id !== casinoPrompt.id && prompt.is_default)
+        || promptTemplates.find((prompt) => prompt.id !== casinoPrompt.id);
+      if (workingPrompt) setPromptTemplateId(workingPrompt.id);
+    }
+  }, [casinoReviews, promptTemplateId, promptTemplates]);
 
   React.useEffect(() => {
     if (!selectedSite) return;
@@ -5400,6 +5436,8 @@ function TasksView({
         generate_title: generateTitle,
         collect_competitors: collectCompetitors,
         include_casino_rating: includeCasinoRating,
+        generation_mode: casinoReviews ? "casino_reviews" : "standard",
+        auto_publish: false,
         save_as_draft: action === "draft",
         topics: cleanTopics
       };
@@ -5414,6 +5452,49 @@ function TasksView({
       setTaskError(error instanceof Error ? error.message : "Не удалось создать задачу.");
     } finally {
       setCreatingTaskAction("");
+    }
+  }
+
+  async function createMenuStructureTask(event: React.FormEvent) {
+    event.preventDefault();
+    setTaskError("");
+    if (!selectedSite) {
+      setTaskError("Выберите проект для генерации по структуре меню.");
+      return;
+    }
+    const menuTypes = [menuStructureHeader ? "header" : "", menuStructureFooter ? "footer" : ""].filter(Boolean);
+    if (!menuTypes.length) {
+      setTaskError("Выберите Header, Footer или оба меню.");
+      return;
+    }
+    setCreatingMenuStructure(true);
+    try {
+      const task = await api<Task>(`/sites/${selectedSite.id}/menu-structure-tasks`, {
+        method: "POST",
+        body: JSON.stringify({
+          geo,
+          language,
+          ai_provider_id: providerId || null,
+          target_words: targetWords || null,
+          prompt_template_name: selectedPrompt?.name || null,
+          prompt_template: selectedPrompt?.content || null,
+          include_toc: includeToc,
+          include_faq: includeFaq,
+          generate_title: generateTitle,
+          collect_competitors: collectCompetitors,
+          menu_types: menuTypes,
+          section_ids: [],
+          auto_publish: menuStructureAutoPublish,
+          save_as_draft: false
+        })
+      });
+      await api(`/tasks/${task.id}/start`, { method: "POST" });
+      setMenuStructureFormExpanded(false);
+      await onChanged();
+    } catch (error) {
+      setTaskError(error instanceof Error ? error.message : "Не удалось создать генерацию по структуре меню.");
+    } finally {
+      setCreatingMenuStructure(false);
     }
   }
 
@@ -5815,6 +5896,18 @@ function TasksView({
             <small>Добавить темы для генерации текстов</small>
           </span>
         </button>
+        <button
+          className="newGenerationTaskButton menuStructureGenerationButton"
+          type="button"
+          onClick={() => setMenuStructureFormExpanded(true)}
+          aria-haspopup="dialog"
+        >
+          <span className="newGenerationTaskIcon" aria-hidden="true"><ListChecks size={25} strokeWidth={2.1} /></span>
+          <span className="newGenerationTaskCopy">
+            <strong>Генерация по структуре меню</strong>
+            <small>По одному тексту для каждого пункта без вложения</small>
+          </span>
+        </button>
       </div>
       {createFormExpanded ? (
         <Modal
@@ -5923,6 +6016,7 @@ function TasksView({
                   onClick={() => {
                     setSectionId(option.value);
                     setSectionContentMode("menu_page");
+                    setCasinoReviews(false);
                     closeDropdown();
                   }}
                   title="Сгенерировать текст как контент самого пункта меню"
@@ -5957,12 +6051,16 @@ function TasksView({
                 <input type="checkbox" checked={includeCasinoRating} onChange={(event) => setIncludeCasinoRating(event.target.checked)} />
                 <span><b>Собрать рейтинг казино</b><small>Рейтинг из 5–10 казино с оценками и обоснованием мест.</small></span>
               </label>
+              {casinoSectionSelected ? <label className="checkboxRow casinoReviewOption">
+                <input type="checkbox" checked={casinoReviews} onChange={(event) => setCasinoReviews(event.target.checked)} />
+                <span><b>Генерировать обзоры казино</b><small>Каждая строка ниже — отдельный бренд и обзор в разделе casinos.</small></span>
+              </label> : null}
             </div>
           </fieldset>
           <label className="wide">
             <span className="topicFieldHeader">
-              <span>Темы, каждая с новой строки</span>
-              <span className="topicGenerationActions">
+              <span>{casinoReviews ? "Бренды казино, каждый с новой строки" : "Темы, каждая с новой строки"}</span>
+              {!casinoReviews ? <span className="topicGenerationActions">
                 <button
                   className="button compact topicGenerateButton"
                   type="button"
@@ -5983,10 +6081,10 @@ function TasksView({
                   {generatingTopics && generatingTopicCount === 10 ? <CircularOperationProgress value={topicGenerationProgress} /> : <Sparkles size={15} />}
                   {generatingTopics && generatingTopicCount === 10 ? "Генерация тем" : "Сгенерировать 10 тем"}
                 </button>
-              </span>
+              </span> : null}
             </span>
-            <textarea value={topics} onChange={(event) => setTopics(event.target.value)} required rows={10} placeholder="best online casinos in Germany" />
-            <span className="fieldHint">Тем в задаче: {cleanTopics.length}</span>
+            <textarea value={topics} onChange={(event) => setTopics(event.target.value)} required rows={10} placeholder={casinoReviews ? "Brand Casino\nSecond Casino\nThird Casino" : "best online casinos in Germany"} />
+            <span className="fieldHint">{casinoReviews ? "Брендов" : "Тем"} в задаче: {cleanTopics.length}</span>
           </label>
           {taskError ? <span className="formError wide">{taskError}</span> : null}
           <div className="formActions wide">
@@ -5998,6 +6096,38 @@ function TasksView({
             </button>
           </div>
         </form>
+        </Modal>
+      ) : null}
+      {menuStructureFormExpanded ? (
+        <Modal
+          title="Генерация по структуре меню"
+          subtitle="По одному тексту непосредственно для каждого пункта меню"
+          onClose={() => setMenuStructureFormExpanded(false)}
+          wide
+          className="createGenerationTaskModal"
+        >
+          <form className="formGrid createTaskForm" onSubmit={createMenuStructureTask}>
+            <label>Гео<SearchableSelect value={geo} onChange={setGeo} options={COUNTRIES.map((country) => ({ value: country.code, label: `${country.flag} ${country.name} (${country.code})` }))} searchPlaceholder="Введите страну или код" /></label>
+            <label>Язык<SearchableSelect value={language} onChange={setLanguage} options={LANGUAGE_OPTIONS.map((option) => ({ value: option.code, label: `${option.flag} ${option.nativeName} (${option.code.toUpperCase()})`, keywords: option.name }))} searchPlaceholder="Введите язык или код" /></label>
+            <label>AI Provider<SearchableSelect value={providerId} onChange={setProviderId} options={[{ value: "", label: "Stub generator" }, ...providers.filter(isGenerationProvider).map((provider) => ({ value: provider.id, label: provider.name }))]} searchPlaceholder="Найти AI Provider" /></label>
+            <label>Количество слов<input value={targetWords} onChange={(event) => setTargetWords(Number(event.target.value))} type="number" min={300} max={8000} step={100} required /></label>
+            {promptTemplates.length ? <label>Промпт генерации<SearchableSelect value={promptTemplateId} onChange={setPromptTemplateId} options={promptTemplates.map((prompt) => ({ value: prompt.id, label: `${prompt.is_default ? "Default · " : ""}${prompt.name}` }))} searchPlaceholder="Найти промпт" /></label> : null}
+            <fieldset className="generationOptionsGroup wide">
+              <legend>Какие пункты обработать</legend>
+              <div className="generationOptionsGrid">
+                <label className="checkboxRow"><input type="checkbox" checked={menuStructureHeader} onChange={(event) => setMenuStructureHeader(event.target.checked)} /> Header</label>
+                <label className="checkboxRow"><input type="checkbox" checked={menuStructureFooter} onChange={(event) => setMenuStructureFooter(event.target.checked)} /> Footer</label>
+                <label className="checkboxRow"><input type="checkbox" checked={includeToc} onChange={(event) => setIncludeToc(event.target.checked)} /> Добавить содержание</label>
+                <label className="checkboxRow"><input type="checkbox" checked={includeFaq} onChange={(event) => setIncludeFaq(event.target.checked)} /> Создавать FAQ</label>
+                <label className="checkboxRow"><input type="checkbox" checked={generateTitle} onChange={(event) => setGenerateTitle(event.target.checked)} /> Генерировать Title</label>
+                <label className="checkboxRow"><input type="checkbox" checked={collectCompetitors} onChange={(event) => setCollectCompetitors(event.target.checked)} /> Собрать конкурентов</label>
+                <label className="checkboxRow casinoReviewOption"><input type="checkbox" checked={menuStructureAutoPublish} onChange={(event) => setMenuStructureAutoPublish(event.target.checked)} /><span><b>Автоматически принять и опубликовать</b><small>Только тексты, прошедшие проверку качества; ошибки останутся в задаче.</small></span></label>
+              </div>
+            </fieldset>
+            <div className="menuStructureSummary wide">Будут созданы MAIN-тексты для всех пунктов выбранных меню, у которых ещё нет контента. Каждый текст автоматически привязывается к своему URL.</div>
+            {taskError ? <span className="formError wide">{taskError}</span> : null}
+            <div className="formActions wide"><button className="button secondary" type="button" onClick={() => setMenuStructureFormExpanded(false)} disabled={creatingMenuStructure}>Отменить</button><button className="button primary" type="submit" disabled={creatingMenuStructure}><Play size={18} /> {creatingMenuStructure ? "Запускаем" : "Создать и запустить"}</button></div>
+          </form>
         </Modal>
       ) : null}
       <DataPanel title="Все задачи" allowCollapse={false}>
