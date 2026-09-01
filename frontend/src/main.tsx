@@ -2436,7 +2436,10 @@ function ProjectOverviewPanel({ overview, content, sections, logs }: { overview:
           <ResponsiveTable
             columns={["Тема", "Меню", "Статус", "Дата"]}
             rows={content.slice(0, 8).map((item) => [
-              <TopicMetaCell item={item} />,
+              <div className="overviewContentTopic">
+                <TopicMetaCell item={item} />
+                {item.status === "published" ? <a className="publishedPageViewButton" href={projectContentSiteUrl(overview.site, item)} target="_blank" rel="noreferrer" title={`Открыть страницу «${item.topic}» на сайте`} aria-label={`Открыть страницу «${item.topic}» на сайте`}><ExternalLink size={15} /></a> : null}
+              </div>,
               sectionLabel(item.section_id, sections),
               <StatusBadge status={item.status} />,
               item.published_at ? formatDate(item.published_at) : formatDate(item.updated_at)
@@ -4233,6 +4236,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
                 <span className="publishedProcessState" title={item.published_at ? `Опубликовано ${formatDate(item.published_at)}` : "Опубликовано"}>
                   <CheckCircle2 size={14} /> <strong>Опубликовано</strong><span>·</span><time>{item.published_at ? formatDate(item.published_at) : "—"}</time>
                 </span>
+                <a className="button icon compact secondary" href={projectContentSiteUrl(site, item)} target="_blank" rel="noreferrer" title={`Открыть страницу «${item.topic}» на сайте`} aria-label={`Открыть страницу «${item.topic}» на сайте`}><ExternalLink size={14} /></a>
                 <button className="button icon compact danger" type="button" onClick={() => void deletePublishedItem(item)} disabled={deletingProcessItemId === item.id || deletingProcessSelection} title="Удалить текст с проекта" aria-label={`Удалить ${item.topic} с проекта`}>
                   {deletingProcessItemId === item.id ? <LoaderCircle className="spin" size={14} /> : <Trash2 size={14} />}
                 </button>
@@ -8569,7 +8573,7 @@ function nestedContentSlug(sectionPath: string, contentSlug: string): string {
   return parent === "/" ? `/${leaf}/` : `${parent}${leaf}/`;
 }
 
-function projectContentSiteUrl(site: Site, item: ContentItem): string {
+function projectContentSiteUrl(site: Pick<Site, "name" | "base_url"> & Partial<Pick<Site, "cache_canon">>, item: ContentItem): string {
   if (item.published_url) return item.published_url;
   const projectBaseUrl = site.base_url || `https://${site.cache_canon || site.name}`;
   try {

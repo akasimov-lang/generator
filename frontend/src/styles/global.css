@@ -7123,6 +7123,36 @@ td {
   line-height: 1.25;
 }
 
+.overviewContentTopic {
+  align-items: flex-start;
+  display: flex;
+  gap: 7px;
+}
+
+.overviewContentTopic .topicMetaCell {
+  flex: 1 1 auto;
+}
+
+.publishedPageViewButton {
+  align-items: center;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--muted);
+  display: inline-flex;
+  flex: 0 0 28px;
+  height: 28px;
+  justify-content: center;
+  text-decoration: none;
+  width: 28px;
+}
+
+.publishedPageViewButton:hover {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
 .promptBadge {
   align-items: center;
   background: var(--surface-2);
