@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import re
 import threading
+import time
 from typing import Any
 from urllib.parse import quote
 
@@ -48,7 +49,7 @@ async def refresh_project_server_token(client: httpx.AsyncClient) -> str:
 def fetch_project_menu_capabilities(site: models.Site, force: bool = False) -> dict[str, Any]:
     if site.menu_capabilities_checked_at is not None and not force:
         return _site_menu_capabilities(site)
-    template_capabilities = fetch_project_template_capabilities(site)
+    template_capabilities = fetch_project_template_capabilities_resilient(site)
     live_capabilities = fetch_live_menu_capabilities(site)
     return combine_menu_capabilities(template_capabilities, live_capabilities)
 
@@ -75,10 +76,14 @@ def fetch_project_template_capabilities(site: models.Site) -> dict[str, bool]:
 
             project_url = f"{project_server_url(site, '/projects/one')}/{quote(site.name, safe='')}"
             token = get_token()
-            response = client.get(project_url, headers={"Authorization": f"Bearer {token}"})
-            if response.status_code in {401, 403}:
-                token = get_token()
+            for attempt in range(3):
                 response = client.get(project_url, headers={"Authorization": f"Bearer {token}"})
+                if response.status_code in {401, 403}:
+                    token = get_token()
+                    response = client.get(project_url, headers={"Authorization": f"Bearer {token}"})
+                if response.status_code < 500 or attempt == 2:
+                    break
+                time.sleep(0.35 * (attempt + 1))
             response.raise_for_status()
             project = response.json()
     except httpx.HTTPStatusError as error:
@@ -93,6 +98,23 @@ def fetch_project_template_capabilities(site: models.Site) -> dict[str, bool]:
 
     shortcodes = project.get("shortcodes") if isinstance(project, dict) else []
     return analyze_menu_templates(shortcodes)
+
+
+def fetch_project_template_capabilities_resilient(site: models.Site) -> dict[str, bool]:
+    """Use the live canonical site when the project template endpoint has a transient server failure."""
+    try:
+        return fetch_project_template_capabilities(site)
+    except ProjectCacheError as error:
+        recoverable = error.code == "PROJECT_TEMPLATE_REQUEST_FAILED" or error.code.startswith("PROJECT_TEMPLATE_HTTP_5")
+        if not recoverable:
+            raise
+        live = fetch_live_menu_capabilities(site)
+        return {
+            "header_menu_rendered": live["header_menu_rendered"],
+            "header_menu_nested": False,
+            "footer_menu_rendered": live["footer_menu_rendered"],
+            "footer_menu_nested": False,
+        }
 
 
 def combine_menu_capabilities(
@@ -178,7 +200,10 @@ def fetch_live_menu_capabilities(site: models.Site) -> dict[str, bool]:
         from playwright.sync_api import sync_playwright
     except ImportError as error:
         raise ProjectCacheError("Live menu browser is not installed", "LIVE_BROWSER_NOT_INSTALLED") from error
-    project_url = f"https://{_normalize_domain(site.name)}/"
+    project_domain = _normalize_domain(site.cache_canon or site.base_url or site.name)
+    if not project_domain:
+        raise ProjectCacheError("Project public domain is not available", "PROJECT_DOMAIN_MISSING")
+    project_url = f"https://{project_domain}/"
     if not _LIVE_MENU_CHECK_LOCK.acquire(timeout=30):
         raise ProjectCacheError("Live menu browser is busy; repeat the check shortly", "LIVE_BROWSER_BUSY")
     try:

@@ -73,7 +73,7 @@ from app.schemas import (
     UserUpdate,
 )
 from app.menu_templates import MENU_TEMPLATES
-from app.project_cache import ProjectCacheError, fetch_project_cache, fetch_project_template_capabilities, project_server_url, refresh_project_server_id, sync_project_cache
+from app.project_cache import ProjectCacheError, fetch_project_cache, fetch_project_template_capabilities_resilient, project_server_url, refresh_project_server_id, sync_project_cache
 from app.security import AdminUser, AuthUser, create_token, hash_password, verify_password
 from app.services import (
     BASE_PROMPT_TEMPLATE_NAME,
@@ -886,7 +886,12 @@ def get_site_menu_capabilities(site_id: str, _: AuthUser, db: Session = Depends(
 def check_site_menu_template_capabilities(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> dict[str, Any]:
     site = _get_site_or_404(db, site_id)
     try:
-        capabilities = fetch_project_template_capabilities(site)
+        try:
+            refresh_project_server_id(db, site)
+        except ProjectCacheError:
+            if not site.cache_server_ip:
+                raise
+        capabilities = fetch_project_template_capabilities_resilient(site)
     except ProjectCacheError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     site.header_menu_template_rendered = capabilities["header_menu_rendered"]

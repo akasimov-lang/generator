@@ -337,6 +337,40 @@ def test_live_visibility_controls_the_rendered_menu_status() -> None:
     }
 
 
+def test_template_capabilities_fall_back_to_live_site_on_server_error(monkeypatch) -> None:
+    monkeypatch.setattr(
+        project_cache_module,
+        "fetch_project_template_capabilities",
+        lambda site: (_ for _ in ()).throw(
+            project_cache_module.ProjectCacheError(
+                "Project template request returned HTTP 500",
+                "PROJECT_TEMPLATE_HTTP_500",
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        project_cache_module,
+        "fetch_live_menu_capabilities",
+        lambda site: {"header_menu_rendered": True, "footer_menu_rendered": False},
+    )
+
+    capabilities = project_cache_module.fetch_project_template_capabilities_resilient(
+        models.Site(
+            name="folder.example",
+            base_url="https://public.example",
+            publication_endpoint="https://public.example/api/content",
+            cache_server_ip="bear",
+        )
+    )
+
+    assert capabilities == {
+        "header_menu_rendered": True,
+        "header_menu_nested": False,
+        "footer_menu_rendered": False,
+        "footer_menu_nested": False,
+    }
+
+
 def test_menu_capabilities_are_queued_only_by_manual_action(monkeypatch) -> None:
     calls: list[str] = []
     monkeypatch.setattr(
@@ -367,7 +401,7 @@ def test_menu_capabilities_are_queued_only_by_manual_action(monkeypatch) -> None
 
 def test_template_menu_check_does_not_queue_chromium(monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.api.fetch_project_template_capabilities",
+        "app.api.fetch_project_template_capabilities_resilient",
         lambda site: {
             "header_menu_rendered": True,
             "header_menu_nested": True,
