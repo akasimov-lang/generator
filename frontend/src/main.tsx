@@ -125,6 +125,22 @@ type ContentItem = {
   updated_at: string;
 };
 
+type ContentRevision = {
+  id: string;
+  content_item_id: string;
+  requested_by_user_id: string | null;
+  remarks: string;
+  generate_title: boolean;
+  status: string;
+  source_json: Record<string, unknown>;
+  revised_json: Record<string, unknown> | null;
+  source_generated_at: string | null;
+  revised_generated_at: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type ProjectPagePreview = {
   title: string;
   slug: string;
@@ -5171,12 +5187,51 @@ function TasksView({
   const selectedSite = sites.find((site) => site.id === siteId);
   const selectedPrompt = promptTemplates.find((prompt) => prompt.id === promptTemplateId)
     || defaultPromptTemplate(promptTemplates);
+  const cachedTaskMenuTargets = React.useMemo(() => {
+    const targets = new Map<string, { externalId: string; name: string; path: string; menuType: "header" | "footer" }>();
+    if (!selectedSite) return targets;
+    const activeSections = sections.filter((section) => section.sync_status !== "external_deleted");
+    const collect = (items: unknown[], menuType: "header" | "footer") => {
+      items.forEach((rawItem, index) => {
+        const item = menuPreviewItem(rawItem, index);
+        const normalizedPath = normalizedTreePath(item.path);
+        if (normalizedPath && !activeSections.some((section) => section.menu_type === menuType && (
+          section.external_id.toLocaleLowerCase() === item.externalId.toLocaleLowerCase()
+          || normalizedTreePath(section.path) === normalizedPath
+        ))) {
+          const key = `cached:${menuType}:${item.externalId}:${normalizedPath}`;
+          targets.set(key, { externalId: item.externalId, name: item.title, path: normalizedPath, menuType });
+        }
+        collect(nestedPreviewItems(rawItem), menuType);
+      });
+    };
+    collect(Array.isArray(selectedSite.default_menu.header) ? selectedSite.default_menu.header : [], "header");
+    collect(Array.isArray(selectedSite.default_menu.footer) ? selectedSite.default_menu.footer : [], "footer");
+    return targets;
+  }, [sections, selectedSite]);
+  const taskMenuOptions = React.useMemo(() => [
+    { value: "", label: "Выбрать позже" },
+    ...sections.filter((section) => section.sync_status !== "external_deleted").map((section) => ({
+      value: section.id,
+      label: `${section.name} · ${section.path}`
+    })),
+    ...Array.from(cachedTaskMenuTargets.entries()).map(([value, target]) => ({
+      value,
+      label: `${target.name} · ${target.path}`,
+      description: `Существующий ${target.menuType === "header" ? "Header" : "Footer"}`
+    }))
+  ], [cachedTaskMenuTargets, sections]);
 
   React.useEffect(() => {
     if (fixedSite && siteId !== fixedSite.id) {
       setSiteId(fixedSite.id);
     }
   }, [fixedSite, siteId]);
+
+  React.useEffect(() => {
+    setSectionId("");
+    setSectionContentMode("nested");
+  }, [selectedSite?.id]);
 
   React.useEffect(() => {
     if (!selectedSite) return;
@@ -5212,6 +5267,24 @@ function TasksView({
     }
   }, [promptTemplateId, promptTemplates]);
 
+  async function resolveTaskSectionId(value: string): Promise<string> {
+    if (sections.some((section) => section.id === value)) return value;
+    if (!selectedSite) throw new Error("Сначала выберите проект");
+    const target = cachedTaskMenuTargets.get(value);
+    if (!target) throw new Error("Выбранный пункт меню не найден в актуальном меню проекта");
+    const result = await api<{ section: Section; created: boolean }>(`/sites/${selectedSite.id}/sections/content-target`, {
+      method: "POST",
+      body: JSON.stringify({
+        external_id: target.externalId,
+        name: target.name,
+        path: target.path,
+        menu_type: target.menuType,
+        parent_id: null
+      })
+    });
+    return result.section.id;
+  }
+
   async function generateTopicsWithGemini(count: 1 | 10 = 10) {
     setTaskError("");
     if (!selectedSite) {
@@ -5235,13 +5308,14 @@ function TasksView({
     setGeneratingTopicCount(count);
     setGeneratingTopics(true);
     try {
+      const resolvedSectionId = sectionId ? await resolveTaskSectionId(sectionId) : null;
       const response = await api<TopicSuggestionsResponse>(`/sites/${selectedSite.id}/topic-suggestions`, {
         method: "POST",
         body: JSON.stringify({
           geo,
           language,
           ai_provider_id: provider.id,
-          section_id: sectionId || null,
+          section_id: resolvedSectionId,
           count,
           current_topics: cleanTopics
         })
@@ -5306,28 +5380,29 @@ function TasksView({
       setTaskError("Выберите проект для создания задачи.");
       return;
     }
-    const payload = {
-      geo,
-      language,
-      site_id: siteId || null,
-      section_id: sectionId || null,
-      section_content_mode: sectionContentMode,
-      ai_provider_id: providerId || null,
-      payload_mode: "site_default",
-      target_words: targetWords || null,
-      prompt_template_name: selectedPrompt?.name || null,
-      prompt_template: selectedPrompt?.content || null,
-      shortcode: null,
-      include_toc: includeToc,
-      include_faq: includeFaq,
-      generate_title: generateTitle,
-      collect_competitors: collectCompetitors,
-      include_casino_rating: includeCasinoRating,
-      save_as_draft: action === "draft",
-      topics: cleanTopics
-    };
     setCreatingTaskAction(action);
     try {
+      const resolvedSectionId = sectionId ? await resolveTaskSectionId(sectionId) : null;
+      const payload = {
+        geo,
+        language,
+        site_id: siteId || null,
+        section_id: resolvedSectionId,
+        section_content_mode: sectionContentMode,
+        ai_provider_id: providerId || null,
+        payload_mode: "site_default",
+        target_words: targetWords || null,
+        prompt_template_name: selectedPrompt?.name || null,
+        prompt_template: selectedPrompt?.content || null,
+        shortcode: null,
+        include_toc: includeToc,
+        include_faq: includeFaq,
+        generate_title: generateTitle,
+        collect_competitors: collectCompetitors,
+        include_casino_rating: includeCasinoRating,
+        save_as_draft: action === "draft",
+        topics: cleanTopics
+      };
       const task = await api<Task>("/tasks", { method: "POST", body: JSON.stringify(payload) });
       if (action === "start") {
         await api(`/tasks/${task.id}/start`, { method: "POST" });
@@ -5831,36 +5906,34 @@ function TasksView({
               />
             </label>
           ) : null}
-          {sections.length ? (
-            <label>
-              Пункт меню
-              <SearchableSelect
-                value={sectionId}
-                onChange={(value) => {
-                  setSectionId(value);
-                  setSectionContentMode("nested");
-                }}
-                options={[{ value: "", label: "Выбрать позже" }, ...sections.map((section) => ({ value: section.id, label: `${section.name} · ${section.path}` }))]}
-                searchPlaceholder="Найти пункт меню"
-                renderOptionAction={(option, closeDropdown) => option.value ? (
-                  <button
-                    className={`menuMainChoiceButton ${sectionId === option.value && sectionContentMode === "menu_page" ? "active" : ""}`}
-                    type="button"
-                    onClick={() => {
-                      setSectionId(option.value);
-                      setSectionContentMode("menu_page");
-                      closeDropdown();
-                    }}
-                    title="Сгенерировать текст как контент самого пункта меню"
-                    aria-label={`MAIN — создать контент пункта меню ${option.label}`}
-                  >
-                    <FileText size={11} /> MAIN
-                  </button>
-                ) : null}
-              />
-              {sectionId ? <small>{sectionContentMode === "menu_page" ? "Контент пункта меню (MAIN)" : "Вложенная страница"}</small> : null}
-            </label>
-          ) : null}
+          <label>
+            Пункт меню
+            <SearchableSelect
+              value={sectionId}
+              onChange={(value) => {
+                setSectionId(value);
+                setSectionContentMode("nested");
+              }}
+              options={taskMenuOptions}
+              searchPlaceholder="Найти пункт меню"
+              renderOptionAction={(option, closeDropdown) => option.value ? (
+                <button
+                  className={`menuMainChoiceButton ${sectionId === option.value && sectionContentMode === "menu_page" ? "active" : ""}`}
+                  type="button"
+                  onClick={() => {
+                    setSectionId(option.value);
+                    setSectionContentMode("menu_page");
+                    closeDropdown();
+                  }}
+                  title="Сгенерировать текст как контент самого пункта меню"
+                  aria-label={`MAIN — создать контент пункта меню ${option.label}`}
+                >
+                  <FileText size={11} /> MAIN
+                </button>
+              ) : null}
+            />
+            {sectionId ? <small>{sectionContentMode === "menu_page" ? "Контент пункта меню (MAIN)" : "Вложенная страница"}</small> : taskMenuOptions.length === 1 ? <small>В актуальном меню проекта пункты не найдены</small> : null}
+          </label>
           <fieldset className="generationOptionsGroup wide">
             <legend>Параметры генерации</legend>
             <div className="generationOptionsGrid">
@@ -9313,17 +9386,46 @@ function ContentPreviewModal({ item, promptName, actions, api, onChanged, onClos
   onClose: () => void;
 }) {
   const [currentItem, setCurrentItem] = React.useState(item);
-  const [revisionOpen, setRevisionOpen] = React.useState(false);
   const [remarks, setRemarks] = React.useState("");
   const [generateTitle, setGenerateTitle] = React.useState(true);
+  const [revisions, setRevisions] = React.useState<ContentRevision[]>([]);
+  const [selectedVersion, setSelectedVersion] = React.useState<{ revisionId: string; side: "source" | "revised" } | null>(null);
   const [revisionError, setRevisionError] = React.useState("");
   const [revisionSubmitted, setRevisionSubmitted] = React.useState(false);
   const revisionActive = ACTIVE_GENERATION_STATUSES.includes(currentItem.status);
-  const previewDescription = contentItemDescription(currentItem);
+  const revisionBlocked = ["scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "deletion_pending", "deleted"].includes(currentItem.status);
+  const revisionAllowed = !revisionBlocked && Object.keys(currentItem.generated_json || {}).length > 0;
+  const selectedRevision = selectedVersion ? revisions.find((revision) => revision.id === selectedVersion.revisionId) : null;
+  const selectedJson = selectedRevision
+    ? selectedVersion?.side === "source" ? selectedRevision.source_json : selectedRevision.revised_json
+    : null;
+  const previewItem: ContentItem = selectedJson ? {
+    ...currentItem,
+    generated_json: selectedJson,
+    generated_at: selectedVersion?.side === "source" ? selectedRevision?.source_generated_at || null : selectedRevision?.revised_generated_at || null
+  } : currentItem;
+  const previewDescription = contentItemDescription(previewItem);
+  const selectedVersionLabel = selectedRevision && selectedVersion
+    ? `${selectedVersion.side === "source" ? "До" : "После"} доработки №${revisions.findIndex((revision) => revision.id === selectedRevision.id) + 1}`
+    : "Текущая версия";
 
   React.useEffect(() => {
     setCurrentItem(item);
+    setSelectedVersion(null);
   }, [item]);
+
+  React.useEffect(() => {
+    if (!api) return;
+    let cancelled = false;
+    api<ContentRevision[]>(`/content/${currentItem.id}/revisions`)
+      .then((history) => {
+        if (!cancelled) setRevisions(history);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setRevisionError(error instanceof Error ? error.message : "Не удалось загрузить историю версий.");
+      });
+    return () => { cancelled = true; };
+  }, [api, currentItem.id]);
 
   React.useEffect(() => {
     if (!revisionActive || !api) return;
@@ -9335,6 +9437,9 @@ function ContentPreviewModal({ item, promptName, actions, api, onChanged, onClos
         setCurrentItem(refreshed);
         if (!ACTIVE_GENERATION_STATUSES.includes(refreshed.status)) {
           setRevisionSubmitted(false);
+          setRemarks("");
+          setSelectedVersion(null);
+          setRevisions(await api<ContentRevision[]>(`/content/${currentItem.id}/revisions`));
           await onChanged?.();
         }
       } catch (error) {
@@ -9360,7 +9465,8 @@ function ContentPreviewModal({ item, promptName, actions, api, onChanged, onClos
         body: JSON.stringify({ remarks: remarks.trim(), generate_title: generateTitle })
       });
       setCurrentItem(queued);
-      setRevisionOpen(true);
+      setSelectedVersion(null);
+      setRevisions(await api<ContentRevision[]>(`/content/${currentItem.id}/revisions`));
     } catch (error) {
       setRevisionSubmitted(false);
       setRevisionError(error instanceof Error ? error.message : "Не удалось отправить текст на доработку.");
@@ -9376,14 +9482,14 @@ function ContentPreviewModal({ item, promptName, actions, api, onChanged, onClos
 
   const renderedActions = typeof actions === "function" ? actions(currentItem, refreshCurrentItem) : actions;
   return (
-    <Modal onClose={onClose} wide className="contentPreviewModal">
+    <Modal title={contentItemTitle(previewItem)} subtitle={selectedVersionLabel} onClose={onClose} wide className="contentPreviewModal">
       <div className="contentPreviewHeader">
         <div className="contentPreviewInfo">
           <div className="contentPreviewMetaLine">
             <span>URL: <code>{currentItem.slug}</code></span>
             <PromptBadge name={currentItem.generation_prompt_name || promptName} />
             {currentItem.competitor_brief ? <span className="researchBadge">На основе анализа конкурентов</span> : null}
-            <span>Сгенерировано: {currentItem.generated_at ? formatDate(currentItem.generated_at) : "-"}</span>
+            <span>Сгенерировано: {previewItem.generated_at ? formatDate(previewItem.generated_at) : "-"}</span>
           </div>
           <div className="previewDescriptionCompact">
             <strong>Meta Description</strong>
@@ -9392,52 +9498,58 @@ function ContentPreviewModal({ item, promptName, actions, api, onChanged, onClos
         </div>
         <div className="userActions contentPreviewActions">
           <StatusBadge status={currentItem.status} />
-          {currentItem.status === "published" && api ? (
-            <button className="button compact primary" type="button" onClick={() => setRevisionOpen((open) => !open)}><Sparkles size={15} /> Сгенерировать</button>
-          ) : renderedActions}
+          {renderedActions}
         </div>
       </div>
       <div className="contentPreviewGeneration">
         <span className="previewGenerationLabel">Генерация</span>
         <GenerationProgressCell item={currentItem} />
       </div>
-      {api ? (
-        <section className={`revisionAccordion ${revisionOpen || revisionActive ? "open" : ""}`}>
-          {currentItem.status !== "published" ? (
-            <button className="revisionAccordionToggle" type="button" onClick={() => setRevisionOpen((open) => !open)} aria-expanded={revisionOpen || revisionActive}>
-              <span><Sparkles size={15} /> Доработать текст</span>
-              {revisionOpen || revisionActive ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
-            </button>
-          ) : null}
-          {revisionOpen || revisionActive ? (
-            <div className="revisionAccordionBody">
-              {revisionActive ? (
-                <div className="revisionGenerationState">
-                  <CircularOperationProgress value={Math.max(1, currentItem.generation_progress || 0)} />
-                  <span><b>{currentItem.status === "generation_queued" ? "В очереди на доработку" : "Генерирую новую версию"}</b><small>Текущая опубликованная версия остаётся на сайте.</small></span>
+      {api && (revisionAllowed || revisionActive) ? (
+        <section className="revisionAccordion open">
+          <div className="revisionAccordionToggle revisionAccordionHeading"><span><Sparkles size={15} /> Доработать текст</span></div>
+          <div className="revisionAccordionBody">
+            {revisionActive ? (
+              <div className="revisionGenerationState">
+                <CircularOperationProgress value={Math.max(1, currentItem.generation_progress || 0)} />
+                <span><b>{currentItem.status === "generation_queued" ? "В очереди на доработку" : "Генерирую новую версию"}</b><small>Версия до доработки сохранена в истории и остаётся доступной для просмотра.</small></span>
+              </div>
+            ) : (
+              <form onSubmit={requestRevision}>
+                <label>
+                  Замечания к доработке
+                  <textarea value={remarks} onChange={(event) => setRemarks(event.target.value)} rows={4} minLength={3} maxLength={5000} placeholder="Напишите, что в тексте нужно исправить, добавить или доработать" required />
+                </label>
+                <div className="revisionFormFooter">
+                  <label className="checkboxRow"><input type="checkbox" checked={generateTitle} onChange={(event) => setGenerateTitle(event.target.checked)} /> Перегенерировать Title</label>
+                  <button className="button compact primary" type="submit" disabled={revisionSubmitted || remarks.trim().length < 3}><Sparkles size={15} /> {revisionSubmitted ? "Запускаю доработку…" : "Доработать"}</button>
                 </div>
-              ) : (
-                <form onSubmit={requestRevision}>
-                  <label>
-                    Замечания по тексту
-                    <textarea value={remarks} onChange={(event) => setRemarks(event.target.value)} rows={4} minLength={3} maxLength={5000} placeholder="Опишите, что изменить, добавить или убрать в текущем тексте" required />
-                  </label>
-                  <div className="revisionFormFooter">
-                    <label className="checkboxRow"><input type="checkbox" checked={generateTitle} onChange={(event) => setGenerateTitle(event.target.checked)} /> Новый Title</label>
-                    <button className="button compact primary" type="submit" disabled={revisionSubmitted || remarks.trim().length < 3}><Sparkles size={15} /> {revisionSubmitted ? "Отправляю…" : "Отправить на доработку"}</button>
-                  </div>
-                </form>
-              )}
-              {currentItem.status === "generation_failed" && currentItem.generation_error ? <span className="formError">{currentItem.generation_error}</span> : null}
-              {revisionError ? <span className="formError">{revisionError}</span> : null}
-            </div>
-          ) : null}
+              </form>
+            )}
+            {currentItem.status === "generation_failed" && currentItem.generation_error ? <span className="formError">{currentItem.generation_error}</span> : null}
+            {revisionError ? <span className="formError">{revisionError}</span> : null}
+          </div>
+        </section>
+      ) : null}
+      {revisions.length ? (
+        <section className="revisionHistory">
+          <div className="revisionHistoryHeader"><strong>Версии текста</strong><small>Можно сравнить текст до и после каждой доработки.</small></div>
+          <div className="revisionVersionList">
+            <button className={`revisionVersionButton ${selectedVersion === null ? "active" : ""}`} type="button" onClick={() => setSelectedVersion(null)}>Текущая</button>
+            {revisions.map((revision, index) => (
+              <div className="revisionVersionGroup" key={revision.id} title={revision.remarks}>
+                <span>Доработка №{index + 1}</span>
+                <button className={`revisionVersionButton ${selectedVersion?.revisionId === revision.id && selectedVersion.side === "source" ? "active" : ""}`} type="button" onClick={() => setSelectedVersion({ revisionId: revision.id, side: "source" })}>До</button>
+                {revision.revised_json ? <button className={`revisionVersionButton ${selectedVersion?.revisionId === revision.id && selectedVersion.side === "revised" ? "active" : ""}`} type="button" onClick={() => setSelectedVersion({ revisionId: revision.id, side: "revised" })}>После</button> : <small>{revision.status === "failed" ? "Ошибка" : "В работе"}</small>}
+              </div>
+            ))}
+          </div>
         </section>
       ) : null}
       <div className="previewStructureLegend">
         Метки H1–H4 показаны только для проверки структуры и не добавляются в опубликованный текст.
       </div>
-      <ContentPreviewBody item={currentItem} />
+      <ContentPreviewBody item={previewItem} />
     </Modal>
   );
 }

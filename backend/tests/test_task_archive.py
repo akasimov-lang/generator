@@ -5,10 +5,10 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app import models
-from app.api import archive_task, collect_content_competitors, generate_content, get_task, list_archived_tasks, list_tasks, regenerate_all_task_content, restore_task, revise_content, start_task_pipeline, update_content, update_task_section
+from app.api import archive_task, collect_content_competitors, generate_content, get_task, list_archived_tasks, list_content_revisions, list_tasks, regenerate_all_task_content, restore_task, revise_content, start_task_pipeline, update_content, update_task_section
 from app.db import Base
 from app.schemas import ContentRevisionRequest, ContentUpdate, GenerationTaskCreate, GenerationTaskRegenerateAll, GenerationTaskSectionUpdate
-from app.services import create_generation_task, run_task_pipeline
+from app.services import create_generation_task, revise_content_item, run_task_pipeline
 from app.worker import celery_app, generate_content_item_job, generate_task_content_job, revise_content_item_job, run_task_pipeline_job
 
 
@@ -113,7 +113,7 @@ def test_published_content_revision_is_queued_with_editor_options(monkeypatch: p
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     Base.metadata.create_all(bind=engine)
-    queued: list[tuple[str, str, bool]] = []
+    queued: list[tuple[str, str]] = []
     monkeypatch.setattr("app.api.revise_content_item_job.delay", lambda *args: queued.append(args))
 
     with TestingSession() as db:
@@ -136,9 +136,54 @@ def test_published_content_revision_is_queued_with_editor_options(monkeypatch: p
             db,
         )
 
-        assert queued == [(item.id, "Rewrite the payment section", False)]
+        assert len(queued) == 1
+        assert queued[0][0] == item.id
         assert response.status == "generation_queued"
         assert response.generation_progress == 1
+        revisions = list_content_revisions(item.id, {"id": "editor-id", "username": "editor", "is_admin": False}, db)
+        assert len(revisions) == 1
+        assert queued[0][1] == revisions[0].id
+        assert revisions[0].remarks == "Rewrite the payment section"
+        assert revisions[0].generate_title is False
+        assert revisions[0].source_json["pages"][0]["title"] == "Existing title"
+        assert revisions[0].revised_json is None
+
+
+def test_completed_revision_keeps_before_and_after_versions(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+    captured_prompt: dict[str, str] = {}
+
+    async def revised_content(**kwargs: object) -> dict:
+        captured_prompt["value"] = str(kwargs["prompt_template"])
+        return {"pages": [{"title": "Generated replacement", "content": {"blocks": [{"type": "paragraph", "data": {"text": "Revised text"}}]}}]}
+
+    monkeypatch.setattr("app.services.build_ai_content", revised_content)
+
+    with TestingSession() as db:
+        provider = models.AiProvider(name="Gemini", endpoint_url="https://example.test", model="test", is_active=True)
+        db.add(provider)
+        db.flush()
+        task = models.GenerationTask(title="Revise", geo="LV", language="lv", topics_count=1, ai_provider_id=provider.id)
+        source_json = {"pages": [{"title": "Original title", "content": {"blocks": [{"type": "paragraph", "data": {"text": "Original text"}}]}}]}
+        item = models.ContentItem(task=task, topic="Casino review", slug="/casino-review/", generated_json=source_json, status="generating", idempotency_key="completed-revision-item")
+        db.add(item)
+        db.flush()
+        revision = models.ContentRevision(content_item_id=item.id, remarks="Rewrite the text", generate_title=False, source_json=source_json, status="queued")
+        db.add(revision)
+        db.commit()
+
+        revised_item = revise_content_item(db, item, revision)
+        db.refresh(revision)
+
+        assert revision.status == "completed"
+        assert revision.source_json["pages"][0]["content"]["blocks"][0]["data"]["text"] == "Original text"
+        assert revision.revised_json == revised_item.generated_json
+        assert revision.revised_json["pages"][0]["title"] == "Original title"
+        assert revision.revised_json["pages"][0]["content"]["blocks"][0]["data"]["text"] == "Revised text"
+        assert "Rewrite the text" in captured_prompt["value"]
+        assert "Original text" in captured_prompt["value"]
 
 
 def test_task_pipeline_is_queued_for_all_mutable_items(monkeypatch: pytest.MonkeyPatch) -> None:

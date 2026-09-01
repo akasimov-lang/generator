@@ -951,6 +951,10 @@ h2 {
   gap: 7px;
 }
 
+.revisionAccordionHeading {
+  cursor: default;
+}
+
 .revisionAccordionBody {
   background: color-mix(in srgb, var(--primary-soft) 42%, var(--surface));
   border-top: 1px solid var(--border);
@@ -1002,6 +1006,73 @@ h2 {
 .revisionGenerationState small {
   color: var(--muted);
   font-size: 10px;
+}
+
+.revisionHistory {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: grid;
+  gap: 8px;
+  padding: 9px 11px;
+}
+
+.revisionHistoryHeader {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.revisionHistoryHeader strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.revisionHistoryHeader small,
+.revisionVersionGroup small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.revisionVersionList {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.revisionVersionGroup {
+  align-items: center;
+  border-left: 1px solid var(--border);
+  display: inline-flex;
+  gap: 5px;
+  padding-left: 8px;
+}
+
+.revisionVersionGroup > span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.revisionVersionButton {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 750;
+  padding: 4px 8px;
+}
+
+.revisionVersionButton:hover,
+.revisionVersionButton.active {
+  background: var(--primary-soft);
+  border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
+  color: var(--primary-strong);
 }
 
 .siteMenuNestedPageLink {
@@ -5513,9 +5584,14 @@ td {
 }
 
 .modalDialog.contentPreviewModal {
-  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   height: min(920px, calc(100vh - 40px));
   max-height: calc(100vh - 40px);
+}
+
+.modalDialog.contentPreviewModal .contentPreviewBody {
+  flex: 1 1 auto;
 }
 
 .contentPreviewModal .modalContentText {

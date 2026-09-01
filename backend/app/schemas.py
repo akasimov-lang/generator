@@ -581,6 +581,24 @@ class ContentRevisionRequest(BaseModel):
     generate_title: bool = True
 
 
+class ContentRevisionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    content_item_id: str
+    requested_by_user_id: str | None
+    remarks: str
+    generate_title: bool
+    status: str
+    source_json: dict[str, Any]
+    revised_json: dict[str, Any] | None
+    source_generated_at: datetime | None
+    revised_generated_at: datetime | None
+    error_message: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
 class PublicationCampaignCreate(BaseModel):
     name: str = Field(min_length=2, max_length=180)
     site_id: str

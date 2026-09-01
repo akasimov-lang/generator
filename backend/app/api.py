@@ -20,6 +20,7 @@ from app.schemas import (
     CompetitorResearchResponse,
     ContentItemResponse,
     ContentRevisionRequest,
+    ContentRevisionResponse,
     ContentUpdate,
     DuplicateSitesDeleteResponse,
     FavoriteSitesResponse,
@@ -1853,6 +1854,18 @@ def get_content(content_id: str, _: AuthUser, db: Session = Depends(get_db)) -> 
     return item
 
 
+@router.get("/content/{content_id}/revisions", response_model=list[ContentRevisionResponse])
+def list_content_revisions(content_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    item = db.get(models.ContentItem, content_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Content item not found")
+    return db.scalars(
+        select(models.ContentRevision)
+        .where(models.ContentRevision.content_item_id == content_id)
+        .order_by(models.ContentRevision.created_at.asc())
+    ).all()
+
+
 @router.get("/content/{content_id}/competitor-research", response_model=CompetitorResearchResponse)
 def get_content_competitor_research(content_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     item = db.get(models.ContentItem, content_id)
@@ -1984,7 +1997,7 @@ def generate_content(content_id: str, _: AuthUser, db: Session = Depends(get_db)
 
 
 @router.post("/content/{content_id}/revise", response_model=ContentItemResponse)
-def revise_content(content_id: str, payload: ContentRevisionRequest, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+def revise_content(content_id: str, payload: ContentRevisionRequest, user: AuthUser, db: Session = Depends(get_db)) -> Any:
     item = db.get(models.ContentItem, content_id)
     if not item:
         raise HTTPException(status_code=404, detail="Content item not found")
@@ -1995,15 +2008,27 @@ def revise_content(content_id: str, payload: ContentRevisionRequest, _: AuthUser
     if not item.generated_json:
         raise HTTPException(status_code=400, detail="Generate the text before requesting a revision")
     previous_status = item.status
+    revision = models.ContentRevision(
+        content_item_id=item.id,
+        requested_by_user_id=user["id"] if user else None,
+        remarks=payload.remarks.strip(),
+        generate_title=payload.generate_title,
+        source_json=item.generated_json,
+        source_generated_at=item.generated_at,
+        status="queued",
+    )
+    db.add(revision)
     item.status = "generation_queued"
     item.generation_progress = 1
     item.generation_error = None
     db.commit()
     try:
-        revise_content_item_job.delay(item.id, payload.remarks.strip(), payload.generate_title)
+        revise_content_item_job.delay(item.id, revision.id)
     except Exception as exc:
         item.status = previous_status
         item.generation_error = f"{type(exc).__name__}: {exc}"[:500]
+        revision.status = "failed"
+        revision.error_message = item.generation_error
         db.commit()
         raise HTTPException(status_code=502, detail="Failed to queue content revision") from exc
     db.refresh(item)

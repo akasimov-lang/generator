@@ -151,13 +151,31 @@ def generate_content_item_job(content_item_id: str) -> dict:
 
 
 @celery_app.task(name="app.worker.revise_content_item", acks_late=True, reject_on_worker_lost=True)
-def revise_content_item_job(content_item_id: str, remarks: str, generate_title: bool = True) -> dict:
+def revise_content_item_job(content_item_id: str, revision_id: str) -> dict:
     db = SessionLocal()
     try:
         item = db.get(models.ContentItem, content_item_id)
-        if not item:
+        revision = db.get(models.ContentRevision, revision_id)
+        if not item or not revision or revision.content_item_id != content_item_id:
             return {"status": "missing", "content_item_id": content_item_id}
-        revise_content_item(db, item, remarks, generate_title=generate_title)
+        try:
+            revise_content_item(db, item, revision)
+        except Exception as exc:
+            db.rollback()
+            failed_item = db.get(models.ContentItem, content_item_id)
+            failed_revision = db.get(models.ContentRevision, revision_id)
+            error_message = f"{type(exc).__name__}: {exc}"[:500]
+            if failed_item and failed_revision:
+                failed_item.generated_json = failed_revision.source_json
+                failed_item.status = "generation_failed"
+                failed_item.generation_error = error_message
+                failed_revision.status = "failed"
+                failed_revision.error_message = error_message
+                task = db.get(models.GenerationTask, failed_item.task_id)
+                if task:
+                    task.status = "generation_failed"
+                db.commit()
+            raise
         return {"status": "complete", "content_item_id": content_item_id}
     finally:
         db.close()

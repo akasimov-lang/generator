@@ -200,6 +200,22 @@ class ContentItem(Base, TimestampMixin):
     task: Mapped[GenerationTask] = relationship(back_populates="items")
 
 
+class ContentRevision(Base, TimestampMixin):
+    __tablename__ = "content_revisions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    content_item_id: Mapped[str] = mapped_column(ForeignKey("content_items.id", ondelete="CASCADE"), nullable=False, index=True)
+    requested_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    remarks: Mapped[str] = mapped_column(Text, nullable=False)
+    generate_title: Mapped[bool] = mapped_column(Boolean, default=True)
+    status: Mapped[str] = mapped_column(String(40), default="queued", index=True)
+    source_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    revised_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    source_generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revised_generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class CompetitorQuery(Base, TimestampMixin):
     __tablename__ = "competitor_queries"
 

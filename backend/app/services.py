@@ -2751,7 +2751,7 @@ def generate_content_item(db: Session, item: models.ContentItem) -> models.Conte
         raise
 
 
-def revise_content_item(db: Session, item: models.ContentItem, remarks: str, generate_title: bool = True) -> models.ContentItem:
+def revise_content_item(db: Session, item: models.ContentItem, revision: models.ContentRevision) -> models.ContentItem:
     """Create a complete replacement draft from the current text and editor remarks."""
     task = db.get(models.GenerationTask, item.task_id)
     if not task:
@@ -2760,7 +2760,7 @@ def revise_content_item(db: Session, item: models.ContentItem, remarks: str, gen
     if not provider or not provider.is_active:
         raise ValueError("An active AI provider is required to revise content")
     site = db.get(models.Site, task.site_id) if task.site_id else None
-    current_payload = copy.deepcopy(item.generated_json)
+    current_payload = copy.deepcopy(revision.source_json)
     current_pages = current_payload.get("pages") if isinstance(current_payload, dict) else None
     current_title = (
         current_pages[0].get("title")
@@ -2777,7 +2777,7 @@ Keep the same topic, target language, geo, page purpose and URL intent. Preserve
 sections that the remarks do not ask to change. Apply every editor remark precisely.
 
 EDITOR REMARKS:
-{remarks.strip()}
+{revision.remarks.strip()}
 
 CURRENT GENERATED PAGE (source JSON; rewrite its article content):
 {current_text}
@@ -2787,6 +2787,8 @@ CURRENT GENERATED PAGE (source JSON; rewrite its article content):
     item.generation_progress = 15
     item.generation_error = None
     task.status = "generating"
+    revision.status = "generating"
+    revision.error_message = None
     db.commit()
     try:
         item.generated_json = asyncio.run(
@@ -2804,10 +2806,10 @@ CURRENT GENERATED PAGE (source JSON; rewrite its article content):
                 include_faq=task.include_faq,
                 competitor_brief=item.competitor_brief,
                 variation_context=build_task_variation_context(db, item),
-                generate_title=generate_title,
+                generate_title=revision.generate_title,
             )
         )
-        if not generate_title and current_title is not None:
+        if not revision.generate_title and current_title is not None:
             revised_pages = item.generated_json.get("pages") if isinstance(item.generated_json, dict) else None
             if isinstance(revised_pages, list) and revised_pages and isinstance(revised_pages[0], dict):
                 revised_pages[0]["title"] = current_title
@@ -2819,6 +2821,9 @@ CURRENT GENERATED PAGE (source JSON; rewrite its article content):
         item.generated_at = datetime.now(timezone.utc)
         item.status = "generated"
         task.status = "generated"
+        revision.revised_json = copy.deepcopy(item.generated_json)
+        revision.revised_generated_at = item.generated_at
+        revision.status = "completed"
         db.commit()
         db.refresh(item)
         return item
@@ -2826,12 +2831,17 @@ CURRENT GENERATED PAGE (source JSON; rewrite its article content):
         db.rollback()
         failed_item = db.get(models.ContentItem, item.id)
         failed_task = db.get(models.GenerationTask, item.task_id)
+        failed_revision = db.get(models.ContentRevision, revision.id)
+        error_message = f"{type(exc).__name__}: {exc}"[:500]
         if failed_item:
             failed_item.generated_json = current_payload
             failed_item.status = "generation_failed"
-            failed_item.generation_error = f"{type(exc).__name__}: {exc}"[:500]
+            failed_item.generation_error = error_message
         if failed_task:
             failed_task.status = "generation_failed"
+        if failed_revision:
+            failed_revision.status = "failed"
+            failed_revision.error_message = error_message
         db.commit()
         raise
 
