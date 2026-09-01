@@ -465,6 +465,7 @@ type PublicationLog = {
   endpoint_url: string;
   request_payload: Record<string, unknown> | null;
   response_status: number | null;
+  response_body: Record<string, unknown> | null;
   error_message: string | null;
   created_at: string;
 };
@@ -1224,7 +1225,7 @@ function App() {
           localStorage.setItem(`workspace_site_id:${currentUser.username}`, site.id);
           navigateTo("workspace", "topics", false, site.name);
         }} onChanged={loadAll} />}
-        {activeView === "tasks" && <TasksView api={api} sites={sites} providers={providers} tasks={tasks} onChanged={loadAll} />}
+        {activeView === "tasks" && <TasksView api={api} sites={sites} providers={providers} tasks={tasks} content={content} onChanged={loadAll} />}
         {activeView === "taskArchive" && <TaskArchiveView api={api} tasks={archivedTasks} onChanged={loadAll} />}
         {activeView === "content" && <ContentView api={api} sites={sites} content={content} onChanged={loadAll} />}
         {activeView === "publications" && <PublicationsView api={api} sites={sites} content={content} onOpenProject={(site) => {
@@ -1429,6 +1430,10 @@ function DashboardView({ api, dashboard, tasks, content, sites, onOpenTask, onCh
   const selectedReadyItems = selectedReviewItems.filter((item) => Boolean(item.site_id && item.section_id));
   const allReviewSelected = awaitingItemIds.length > 0 && awaitingItemIds.every((id) => selectedReviewIds.includes(id));
   const bulkReviewBusy = actionId.startsWith("bulk:");
+
+  React.useEffect(() => {
+    setSelectedPreview((current) => current ? content.find((item) => item.id === current.id) || current : current);
+  }, [content]);
 
   React.useEffect(() => {
     setSelectedReviewIds((current) => {
@@ -2302,6 +2307,7 @@ function ProjectWorkspaceView({
               sites={sites}
               providers={providers}
               tasks={siteTasks}
+              content={siteContent}
               fixedSite={selectedSite}
               onProjectChange={setSelectedSiteId}
               sections={sections}
@@ -3351,6 +3357,10 @@ function ProjectPromptsPanel({ api, site, promptTemplates, basePrompt, isAdmin, 
 function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewProps & { site: Site; content: ContentItem[]; sections: Section[] }) {
   const [selectedItem, setSelectedItem] = React.useState<ContentItem | null>(null);
   const [previewItem, setPreviewItem] = React.useState<ContentItem | null>(null);
+
+  React.useEffect(() => {
+    setPreviewItem((current) => current ? content.find((item) => item.id === current.id) || current : current);
+  }, [content]);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [bulkSectionId, setBulkSectionId] = React.useState("");
   const [bulkSectionContentMode, setBulkSectionContentMode] = React.useState<"nested" | "menu_page">("nested");
@@ -3903,6 +3913,10 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
   const [publishingAllCampaignId, setPublishingAllCampaignId] = React.useState("");
   const [reschedulingCampaignId, setReschedulingCampaignId] = React.useState("");
   const [previewItem, setPreviewItem] = React.useState<ContentItem | null>(null);
+
+  React.useEffect(() => {
+    setPreviewItem((current) => current ? content.find((item) => item.id === current.id) || current : current);
+  }, [content]);
   const publicationReady = content.filter((item) => Boolean(item.site_id && item.section_id)
     && ["generated", "rejected", "approved"].includes(item.status)
     && (!selectedPublicationSectionIds.length || (item.section_id && selectedPublicationSectionIds.includes(item.section_id))));
@@ -4270,7 +4284,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
             return [
               <div className="compactContentTopic" title={item.topic}><ContentTopicLabel item={item} /></div>,
               sectionLabel(item.section_id, sections),
-              <span className="publicationBacklogError">{errorLog?.error_message || (errorLog?.response_status ? `HTTP ${errorLog.response_status}` : "Ошибка публикации")}</span>,
+              <span className="publicationBacklogError" title={publicationFailureSummary(item, errorLog)}>{publicationFailureSummary(item, errorLog)}</span>,
               errorLog ? formatDate(errorLog.created_at) : formatDate(item.updated_at),
               <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} />
             ];
@@ -4470,7 +4484,19 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
   );
   const persistedSections = React.useMemo(() => sections.filter((section) => !section.is_temporary_parent), [sections]);
   const pendingSections = React.useMemo(() => sections.filter((section) => section.sync_status === "pending"), [sections]);
-  const publishedPages = React.useMemo(() => content.filter((item) => item.status === "published"), [content]);
+  const publicationPages = React.useMemo(
+    () => content.filter((item) => ["published", "publication_failed"].includes(item.status)),
+    [content]
+  );
+  const latestPublicationLogByContentId = React.useMemo(() => {
+    const result = new Map<string, PublicationLog>();
+    [...logs]
+      .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))
+      .forEach((log) => {
+        if (log.content_item_id && !result.has(log.content_item_id)) result.set(log.content_item_id, log);
+      });
+    return result;
+  }, [logs]);
   const menuLibraryListId = React.useId();
 
   const sectionResponseCode = React.useCallback((section: Section) => {
@@ -4969,14 +4995,14 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
           </form> : null}
         </section>
         <div className="projectMenuStructureGrid">
-          <SiteMenuPreviewSection key={`${site.id}:header`} site={site} title="Меню Header" icon={<HeaderMenuIcon />} items={cachedHeader} sections={sections.filter((section) => section.menu_type === "header" && section.sync_status !== "external_deleted")} content={content} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "header" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} deletingNestedPageId={deletingNestedPageId} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onDeletePage={(item) => void deleteNestedPage(item)} onAddContent={(item, section) => void addContentToMenuItem("header", item, section)} onAddChild={(item, section, treeKey) => openChildForm("header", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("header")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Header</button>}>
+          <SiteMenuPreviewSection key={`${site.id}:header`} site={site} title="Меню Header" icon={<HeaderMenuIcon />} items={cachedHeader} sections={sections.filter((section) => section.menu_type === "header" && section.sync_status !== "external_deleted")} content={content} publicationLogs={logs} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "header" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} deletingNestedPageId={deletingNestedPageId} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onDeletePage={(item) => void deleteNestedPage(item)} onAddContent={(item, section) => void addContentToMenuItem("header", item, section)} onAddChild={(item, section, treeKey) => openChildForm("header", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("header")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Header</button>}>
             {inlineMenuType === "header" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "header")}>{menuFields("header")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
           </SiteMenuPreviewSection>
-          <SiteMenuPreviewSection key={`${site.id}:footer`} site={site} title="Меню Footer" icon={<FooterMenuIcon />} items={cachedFooter} sections={sections.filter((section) => section.menu_type === "footer" && section.sync_status !== "external_deleted")} content={content} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "footer" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} deletingNestedPageId={deletingNestedPageId} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onDeletePage={(item) => void deleteNestedPage(item)} onAddContent={(item, section) => void addContentToMenuItem("footer", item, section)} onAddChild={(item, section, treeKey) => openChildForm("footer", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("footer")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Footer</button>}>
+          <SiteMenuPreviewSection key={`${site.id}:footer`} site={site} title="Меню Footer" icon={<FooterMenuIcon />} items={cachedFooter} sections={sections.filter((section) => section.menu_type === "footer" && section.sync_status !== "external_deleted")} content={content} publicationLogs={logs} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "footer" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} deletingNestedPageId={deletingNestedPageId} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onDeletePage={(item) => void deleteNestedPage(item)} onAddContent={(item, section) => void addContentToMenuItem("footer", item, section)} onAddChild={(item, section, treeKey) => openChildForm("footer", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("footer")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Footer</button>}>
             {inlineMenuType === "footer" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "footer")}>{menuFields("footer")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
           </SiteMenuPreviewSection>
         </div>
-        {persistedSections.length || publishedPages.length ? <ResponsiveTable
+        {persistedSections.length || publicationPages.length ? <ResponsiveTable
           wrapperClassName="pendingMenuChangesTable"
           columns={["Название", "Тип", "URL", "Изменено", "Состояние", "Действия"]}
           columnKeys={["name", "type", "url", "changed", "state", "actions"]}
@@ -4995,8 +5021,10 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
                   : <span className="pendingSyncBadge">Не синхронизировано</span>}{responseCode ? <span className="publicationResponseCode">HTTP {responseCode}</span> : null}</span>,
               editing ? <div className="menuSectionEditActions"><button className="button compact secondary" type="button" onClick={cancelSectionEdit} disabled={savingSectionEdit}>Отменить</button><button className="button compact primary" type="button" onClick={() => saveSectionEdit(section)} disabled={savingSectionEdit}>Сохранить</button></div> : <div className="menuSectionEditActions">{section.sync_status === "external_deleted" ? <button className="button compact primary" type="button" onClick={() => restoreSection(section)} disabled={restoringSectionId === section.id || sendingSectionId === section.id}><RefreshCcw size={14} /> {restoringSectionId === section.id ? "Восстанавливаем" : "Восстановить"}</button> : <><button className="button compact primary" type="button" onClick={() => sendSection(section)} disabled={sendingSectionId === section.id || deletingSectionId === section.id}><Send size={14} /> {sendingSectionId === section.id ? "Отправляем" : "Отправить"}</button><button className="button compact secondary" type="button" onClick={() => startSectionEdit(section)} disabled={deletingSectionId === section.id || sendingSectionId === section.id}><Edit3 size={14} /> Изменить</button></>}<button className="button compact danger" type="button" onClick={() => deleteSection(section)} disabled={deletingSectionId === section.id || restoringSectionId === section.id || sendingSectionId === section.id}><Trash2 size={14} /> {deletingSectionId === section.id ? "Удаляем" : "Удалить"}</button></div>
             ];
-          }), ...publishedPages.map((item) => {
+          }), ...publicationPages.map((item) => {
             const section = sections.find((candidate) => candidate.id === item.section_id);
+            const publicationLog = latestPublicationLogByContentId.get(item.id);
+            const failureDetails = item.status === "publication_failed" ? publicationFailureSummary(item, publicationLog) : "";
             const pageType = item.section_id
               ? item.section_content_mode === "menu_page" ? "Страница пункта меню" : "Вложенная страница"
               : "Страница";
@@ -5005,8 +5033,8 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
               <span className="menuTableClamp" title={pageType}>{pageType}</span>,
               <code className="menuTableClamp" title={item.slug}>{item.slug}</code>,
               formatDate(item.published_at || item.updated_at),
-              <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} />,
-              <div className="menuSectionEditActions"><a className="button compact secondary" href={projectContentSiteUrl(site, item)} target="_blank" rel="noreferrer" title="Открыть опубликованную страницу"><ExternalLink size={14} /> URL</a><button className="button compact danger" type="button" onClick={() => void deleteNestedPage(item)} disabled={deletingNestedPageId === item.id} title={`Удалить опубликованную страницу${section ? ` из «${section.name}»` : ""}`}><Trash2 size={14} /> {deletingNestedPageId === item.id ? "Удаляем" : "Удалить"}</button></div>
+              <span className="menuTableState" title={failureDetails || undefined}><PublicationStatus status={item.status} statusCode={item.last_publication_status_code || publicationLog?.response_status} />{failureDetails ? <small className="publicationBacklogError">{failureDetails}</small> : null}</span>,
+              item.status === "published" ? <div className="menuSectionEditActions"><a className="button compact secondary" href={projectContentSiteUrl(site, item)} target="_blank" rel="noreferrer" title="Открыть опубликованную страницу"><ExternalLink size={14} /> URL</a><button className="button compact danger" type="button" onClick={() => void deleteNestedPage(item)} disabled={deletingNestedPageId === item.id} title={`Удалить опубликованную страницу${section ? ` из «${section.name}»` : ""}`}><Trash2 size={14} /> {deletingNestedPageId === item.id ? "Удаляем" : "Удалить"}</button></div> : "—"
             ];
           })]}
         /> : null}
@@ -5134,6 +5162,7 @@ function TasksView({
   sites,
   providers,
   tasks,
+  content = [],
   fixedSite,
   onProjectChange,
   sections = [],
@@ -5143,6 +5172,7 @@ function TasksView({
   sites: Site[];
   providers: AiProvider[];
   tasks: Task[];
+  content?: ContentItem[];
   fixedSite?: Site;
   onProjectChange?: (siteId: string) => void;
   sections?: Section[];
@@ -5237,6 +5267,16 @@ function TasksView({
     return cached ? [cached.externalId, cached.name, normalizedTreePath(cached.path).replace(/\//g, "")].map((value) => value.toLocaleLowerCase()) : [];
   }, [cachedTaskMenuTargets, sectionId, sections]);
   const casinoSectionSelected = selectedMenuIdentity.some((value) => value === "casino" || value === "casinos");
+
+  React.useEffect(() => {
+    if (!content.length) return;
+    const contentById = new Map(content.map((item) => [item.id, item]));
+    setExpandedDetails((current) => current ? {
+      ...current,
+      items: current.items.map((item) => contentById.get(item.id) || item)
+    } : current);
+    setPreviewItem((current) => current ? contentById.get(current.id) || current : current);
+  }, [content]);
 
   React.useEffect(() => {
     if (fixedSite && siteId !== fixedSite.id) {
@@ -6946,6 +6986,10 @@ function ContentView({ api, sites, content, onChanged }: ViewProps & { sites: Si
   const bulkDeleteItems = selectedItems.filter((item) => !isPublicationLocked(item));
 
   React.useEffect(() => {
+    setSelectedPreview((current) => current ? content.find((item) => item.id === current.id) || current : current);
+  }, [content]);
+
+  React.useEffect(() => {
     setSelectedIds((current) => current.filter((id) => selectableIds.includes(id)));
   }, [selectableIds]);
 
@@ -7172,6 +7216,21 @@ function PublicationsView({ api, sites, content, onOpenProject, onChanged }: Vie
   const [selectedPreview, setSelectedPreview] = React.useState<ContentItem | null>(null);
   const [previewLoadingId, setPreviewLoadingId] = React.useState("");
   const [formError, setFormError] = React.useState("");
+
+  React.useEffect(() => {
+    const canonicalById = new Map(content.map((item) => [item.id, item]));
+    setPublicationContent((current) => current.map((item) => {
+      const canonical = canonicalById.get(item.id);
+      return canonical ? {
+        ...item,
+        status: canonical.status,
+        published_at: canonical.published_at,
+        last_publication_status_code: canonical.last_publication_status_code,
+        updated_at: canonical.updated_at
+      } : item;
+    }));
+    setSelectedPreview((current) => current ? canonicalById.get(current.id) || current : current);
+  }, [content]);
   const approved = publicationContent.filter((item) => item.status === "approved" && (!siteId || item.site_id === siteId));
   const publicationProjectGroups = React.useMemo(() => sites
     .map((site) => ({
@@ -8503,12 +8562,21 @@ function projectContentSiteUrl(site: Site, item: ContentItem): string {
   }
 }
 
-function SiteMenuPreviewSection({ title, items, site, sections = [], content = [], icon, action, children, adoptingParentKey, activeParentTreeKey, pagePreviewLoadingKey, deletingNestedPageId, onPreviewPage, onDeletePage, onAddContent, onAddChild }: { title: string; items: unknown[]; site?: Site; sections?: Section[]; content?: ContentItem[]; icon?: React.ReactNode; action?: React.ReactNode; children?: React.ReactNode; adoptingParentKey?: string | null; activeParentTreeKey?: string; pagePreviewLoadingKey?: string | null; deletingNestedPageId?: string | null; onPreviewPage?: (item: MenuPreviewItem, treeKey: string) => void; onDeletePage?: (item: ContentItem) => void; onAddContent?: (item: MenuPreviewItem, section: Section | undefined) => void; onAddChild?: (item: MenuPreviewItem, section: Section | undefined, treeKey: string) => void }) {
+function SiteMenuPreviewSection({ title, items, site, sections = [], content = [], publicationLogs = [], icon, action, children, adoptingParentKey, activeParentTreeKey, pagePreviewLoadingKey, deletingNestedPageId, onPreviewPage, onDeletePage, onAddContent, onAddChild }: { title: string; items: unknown[]; site?: Site; sections?: Section[]; content?: ContentItem[]; publicationLogs?: PublicationLog[]; icon?: React.ReactNode; action?: React.ReactNode; children?: React.ReactNode; adoptingParentKey?: string | null; activeParentTreeKey?: string; pagePreviewLoadingKey?: string | null; deletingNestedPageId?: string | null; onPreviewPage?: (item: MenuPreviewItem, treeKey: string) => void; onDeletePage?: (item: ContentItem) => void; onAddContent?: (item: MenuPreviewItem, section: Section | undefined) => void; onAddChild?: (item: MenuPreviewItem, section: Section | undefined, treeKey: string) => void }) {
   const menuType = title.includes("Footer") ? "footer" : "header";
   const tree = React.useMemo(() => buildMenuTree(items, sections), [items, sections]);
   const [collapsedKeys, setCollapsedKeys] = React.useState<Set<string>>(() => collapsibleMenuKeys(tree));
   const [collapsedPageKeys, setCollapsedPageKeys] = React.useState<Set<string>>(() => new Set());
   const itemCount = countMenuTree(tree);
+  const latestPublicationLogByContentId = React.useMemo(() => {
+    const result = new Map<string, PublicationLog>();
+    [...publicationLogs]
+      .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))
+      .forEach((log) => {
+        if (log.content_item_id && !result.has(log.content_item_id)) result.set(log.content_item_id, log);
+      });
+    return result;
+  }, [publicationLogs]);
   const toggleNode = (key: string) => setCollapsedKeys((current) => {
     const next = new Set(current);
     if (next.has(key)) next.delete(key);
@@ -8558,19 +8626,21 @@ function SiteMenuPreviewSection({ title, items, site, sections = [], content = [
             {activeParentTreeKey === node.key && children ? <div className="siteMenuTreeChildForm">{children}</div> : null}
             {nestedPages.length && !pagesCollapsed ? (
               <ul className="siteMenuNestedPages" aria-label={`Страницы в пункте ${node.item.title}`}>
-                {nestedPages.map((page) => (
-                  <li className={page.status === "published" ? "siteMenuPublishedPageRow" : undefined} key={page.id}>
+                {nestedPages.map((page) => {
+                  const publicationLog = latestPublicationLogByContentId.get(page.id);
+                  const failureDetails = page.status === "publication_failed" ? publicationFailureSummary(page, publicationLog) : "";
+                  return <li className={page.status === "published" ? "siteMenuPublishedPageRow" : undefined} key={page.id} title={failureDetails || undefined}>
                     <span className="siteMenuNestedPageIcon"><FileText size={13} /></span>
                     <span className="siteMenuNestedPageText">
                       {page.status === "published" && site ? <a className="siteMenuNestedPageLink" href={projectContentSiteUrl(site, page)} target="_blank" rel="noreferrer" title={`Открыть на сайте: ${page.topic}`}><strong>{page.topic}</strong></a> : <strong title={page.topic}>{page.topic}</strong>}
                       <code>{nestedContentSlug(node.item.path || node.section?.path || "/", page.slug)}</code>
                     </span>
-                    <StatusBadge status={page.status} />
+                    <span className="menuTableState"><PublicationStatus status={page.status} statusCode={page.last_publication_status_code || publicationLog?.response_status} />{failureDetails ? <small className="publicationBacklogError">{failureDetails}</small> : null}</span>
                     {onDeletePage && page.status === "published" ? <button className="siteMenuNestedPageDelete" type="button" onClick={() => onDeletePage(page)} disabled={deletingNestedPageId === page.id} title="Удалить" aria-label={`Удалить страницу: ${page.topic}`}>
                       {deletingNestedPageId === page.id ? <LoaderCircle size={13} /> : <Trash2 size={13} />}
                     </button> : null}
-                  </li>
-                ))}
+                  </li>;
+                })}
               </ul>
             ) : null}
             {hasChildren && !collapsed ? renderNodes(node.children, depth + 1) : null}
@@ -9801,6 +9871,18 @@ function PublicationStatus({ status, statusCode }: { status: string; statusCode?
       {statusCode != null ? <small className={`publicationResponseCode ${responseClass}`} title={`Код ответа сервера: HTTP ${statusCode}`}>HTTP {statusCode}</small> : null}
     </span>
   );
+}
+
+function publicationFailureSummary(item: ContentItem, log?: PublicationLog): string {
+  const statusCode = item.last_publication_status_code || log?.response_status;
+  const responseBody = log?.response_body;
+  const responseMessage = responseBody
+    ? ["error", "message", "detail", "raw"]
+        .map((key) => responseBody[key])
+        .find((value) => typeof value === "string" && value.trim())
+    : null;
+  const message = log?.error_message || (typeof responseMessage === "string" ? responseMessage : "");
+  return [statusCode ? `HTTP ${statusCode}` : "", message].filter(Boolean).join(" · ") || "Ошибка публикации без HTTP-ответа";
 }
 
 function CampaignStatusBadge({ status }: { status: string }) {
