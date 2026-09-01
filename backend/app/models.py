@@ -11,6 +11,16 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def default_menu_library() -> list[dict[str, str]]:
+    return [{
+        "name": "Casinos",
+        "path": "/casinos/",
+        "external_id": "casinos",
+        "russian_name": "Казино",
+        "description": "Используется для обзоров казино",
+    }]
+
+
 class TimestampMixin:
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
@@ -58,7 +68,7 @@ class Site(Base, TimestampMixin):
     payload_mode: Mapped[str] = mapped_column(String(40), default="simple_page")
     editor_version: Mapped[str] = mapped_column(String(40), default="2.31.0")
     default_menu: Mapped[dict] = mapped_column(JSON, default=lambda: {"header": [], "footer": []})
-    menu_library: Mapped[list] = mapped_column(JSON, default=list)
+    menu_library: Mapped[list] = mapped_column(JSON, default=default_menu_library)
     default_banners: Mapped[list] = mapped_column(JSON, default=list)
     showcase_payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     default_prompt_template_id: Mapped[str | None] = mapped_column(String(36), nullable=True)

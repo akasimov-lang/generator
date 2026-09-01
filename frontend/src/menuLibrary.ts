@@ -5,6 +5,7 @@ export type MenuLibraryItem = {
   path: string;
   parent_external_id?: string | null;
   template_id?: string;
+  description?: string;
 };
 
 const CONCEPTS = [
@@ -17,6 +18,10 @@ const CONCEPTS = [
   ["casino-guides", "/casino-guides/", "Руководства"],
   ["responsible-gambling", "/responsible-gambling/", "Ответственная игра"]
 ] as const;
+
+const UNIVERSAL_ITEMS: MenuLibraryItem[] = [
+  { name: "Casinos", external_id: "casinos", path: "/casinos/", russian_name: "Казино", description: "Используется для обзоров казино" }
+];
 
 const LABELS: Record<string, string[]> = {
   ar: ["مراجعات الكازينوهات", "أفضل الكازينوهات", "مكافآت الكازينو", "ألعاب الكازينو", "طرق الدفع", "كازينوهات الهاتف", "أدلة الكازينو", "اللعب المسؤول"],
@@ -61,5 +66,8 @@ function normalizeLanguage(value: string | null): string {
 
 export function getMenuLibrary(language: string | null): MenuLibraryItem[] {
   const labels = LABELS[normalizeLanguage(language)] || LABELS.en;
-  return CONCEPTS.map(([external_id, path, russian_name], index) => ({ external_id, path, russian_name, name: labels[index] }));
+  return [
+    ...UNIVERSAL_ITEMS,
+    ...CONCEPTS.map(([external_id, path, russian_name], index) => ({ external_id, path, russian_name, name: labels[index] }))
+  ];
 }

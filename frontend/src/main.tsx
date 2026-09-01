@@ -5069,7 +5069,7 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
                   <div className="menuItemLibraryText">
                     <strong>{item.name}</strong>
                     <code>{item.path}</code>
-                    {item.russian_name ? <small>* {item.russian_name}</small> : null}
+                    {item.description ? <small>{item.description}</small> : item.russian_name ? <small>* {item.russian_name}</small> : null}
                   </div>
                   <div className="menuItemLibraryActions">
                     <button className="button compact menuLibraryEditButton" type="button" data-tooltip="Редактировать" aria-label={`Редактировать ${item.name}`} onClick={() => openLibraryEdit(item)}>

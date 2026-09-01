@@ -56,7 +56,10 @@ def test_menu_create_is_logged_and_old_request_logs_are_removed() -> None:
         assert logs[0]["can_retry"] is True
         assert logs[0]["result"] == "Ожидает ответа"
         db.refresh(site)
-        assert site.menu_library == [{"name": "Bonusy", "path": "/bonuses/", "external_id": "bonuses", "russian_name": ""}]
+        assert site.menu_library == [
+            {"name": "Casinos", "path": "/casinos/", "external_id": "casinos", "russian_name": "Казино", "description": "Используется для обзоров казино"},
+            {"name": "Bonusy", "path": "/bonuses/", "external_id": "bonuses", "russian_name": ""},
+        ]
 
 
 def test_menu_request_log_can_be_retried_by_current_admin(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -127,7 +130,8 @@ def test_project_menu_library_stores_custom_items_without_duplicates() -> None:
 
         db.refresh(site)
         assert first == second
-        assert len(site.menu_library) == 1
+        assert len(site.menu_library) == 2
+        assert site.menu_library[0]["external_id"] == "casinos"
 
 
 def test_menu_create_rejects_duplicate_normalized_url() -> None:
@@ -260,13 +264,18 @@ def test_menu_library_edit_is_scoped_to_selected_project() -> None:
         db.refresh(first_site)
         db.refresh(second_site)
         assert result["path"] == "/lokale-anmeldelser/"
-        assert first_site.menu_library == [{
-            "name": "Lokale anmeldelser",
-            "path": "/lokale-anmeldelser/",
-            "external_id": "casino-reviews",
-            "russian_name": "Местные обзоры",
-        }]
-        assert second_site.menu_library == []
+        assert first_site.menu_library == [
+            {"name": "Casinos", "path": "/casinos/", "external_id": "casinos", "russian_name": "Казино", "description": "Используется для обзоров казино"},
+            {
+                "name": "Lokale anmeldelser",
+                "path": "/lokale-anmeldelser/",
+                "external_id": "casino-reviews",
+                "russian_name": "Местные обзоры",
+            },
+        ]
+        assert second_site.menu_library == [
+            {"name": "Casinos", "path": "/casinos/", "external_id": "casinos", "russian_name": "Казино", "description": "Используется для обзоров казино"}
+        ]
 
 
 def test_bulk_create_sections_skips_existing_external_ids() -> None:
@@ -334,7 +343,7 @@ def test_de_casino_review_template_creates_complete_three_level_header_once() ->
         assert by_external_id["de-live-casino"].parent_id == by_external_id["de-casino-games"].id
         assert all(section.menu_type == "header" for section in sections)
         db.refresh(site)
-        assert len(site.menu_library) == 96
+        assert len(site.menu_library) == 97
         oasis = next(item for item in site.menu_library if item["external_id"] == "de-casinos-without-oasis")
         assert oasis["name"] == "Casinos ohne OASIS"
         assert "english_name" not in oasis
