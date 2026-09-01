@@ -154,7 +154,7 @@ def test_fresh_cache_confirms_publication_only_when_slug_is_present() -> None:
         )
         db.add(site)
         db.flush()
-        task = models.GenerationTask(title="Publish", site_id=site.id, geo="LV", language="lv", topics_count=2)
+        task = models.GenerationTask(title="Publish", site_id=site.id, geo="LV", language="lv", topics_count=3)
         db.add(task)
         db.flush()
         absent = models.ContentItem(
@@ -177,7 +177,16 @@ def test_fresh_cache_confirms_publication_only_when_slug_is_present() -> None:
             idempotency_key="publish-present",
             last_publication_status_code=201,
         )
-        db.add_all([absent, present])
+        failed_but_present = models.ContentItem(
+            task=task,
+            site_id=site.id,
+            topic="Failed response, present page",
+            slug="/guides/failed-but-present/",
+            generated_json={"pages": []},
+            status="publication_failed",
+            idempotency_key="publish-failed-but-present",
+        )
+        db.add_all([absent, present, failed_but_present])
         db.commit()
 
         result = sync_project_cache(db, [{
@@ -185,18 +194,24 @@ def test_fresh_cache_confirms_publication_only_when_slug_is_present() -> None:
             "name": site.name,
             "serverId": "camel",
             "settings": {"canon": site.name},
-            "data": {"menu": {"header": [], "footer": []}, "pages": [{"slug": "/guides/present/"}]},
+            "data": {"menu": {"header": [], "footer": []}, "pages": [
+                {"slug": "/guides/present/"},
+                {"slug": "/guides/failed-but-present/"},
+            ]},
         }])
 
         db.refresh(absent)
         db.refresh(present)
+        db.refresh(failed_but_present)
         db.refresh(task)
-        assert result["confirmed_publications_count"] == 1
+        assert result["confirmed_publications_count"] == 2
         assert absent.status == "publication_pending_confirmation"
         assert absent.published_at is None
         assert present.status == "published"
         assert present.published_at is not None
         assert present.published_url == "https://publication-confirmation.example/guides/present/"
+        assert failed_but_present.status == "published"
+        assert failed_but_present.published_at is not None
         assert task.status != "published"
         confirmation_log = db.scalar(
             select(models.PublicationLog).where(

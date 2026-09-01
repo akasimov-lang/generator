@@ -2233,6 +2233,16 @@ async def publish_content_immediately(content_id: str, user: AuthUser, db: Sessi
     site = _get_site_or_404(db, item.site_id)
     campaign_id = item.publication_campaign_id
     try:
+        if item.status == "publication_failed":
+            try:
+                sync_project_cache(db, fetch_project_cache([site.name]))
+                db.refresh(item)
+                if item.status == "published":
+                    return item
+            except ProjectCacheError:
+                db.rollback()
+                item = db.get(models.ContentItem, content_id)
+                site = _get_site_or_404(db, item.site_id)
         validate_content_for_publication(item)
         await publish_item(db, item, site, initiator_username=_request_username(user))
         if item.status == "published":

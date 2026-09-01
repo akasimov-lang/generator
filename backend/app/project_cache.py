@@ -444,7 +444,7 @@ def _confirm_published_content(db: Session, site: models.Site, project: dict[str
     pending_items = db.scalars(
         select(models.ContentItem).where(
             models.ContentItem.site_id == site.id,
-            models.ContentItem.status == "publication_pending_confirmation",
+            models.ContentItem.status.in_({"publication_pending_confirmation", "publication_failed"}),
         )
     ).all()
     confirmed = 0
