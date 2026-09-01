@@ -53,12 +53,15 @@ def test_casino_review_mode_uses_system_prompt_and_brand_context(db: Session) ->
             topics=["Alpha Casino", "Alpha Casino", "Beta Casino"],
             generation_mode="casino_reviews",
             collect_competitors=False,
+            include_casino_rating=True,
         ),
     )
 
     assert task.title == "Обзоры казино · 2 брендов · PL-PL"
     assert task.prompt_template_name == CASINO_REVIEW_PROMPT_NAME
     assert task.generation_mode == "casino_reviews"
+    assert task.include_casino_rating is False
+    assert all(item.include_casino_rating is False for item in task.items)
     assert [item.generation_context["casino_brand"] for item in task.items] == ["Alpha Casino", "Beta Casino"]
     assert all(item.generation_context["hero_image_slot"] == "hero_after_h1" for item in task.items)
     assert db.scalar(select(models.PromptTemplate).where(models.PromptTemplate.name == CASINO_REVIEW_PROMPT_NAME))

@@ -5251,8 +5251,8 @@ function TasksView({
   }, [selectedSite?.id]);
 
   React.useEffect(() => {
-    if (!casinoSectionSelected && casinoReviews) setCasinoReviews(false);
-  }, [casinoReviews, casinoSectionSelected]);
+    setCasinoReviews(casinoSectionSelected);
+  }, [casinoSectionSelected]);
 
   React.useEffect(() => {
     const casinoPrompt = promptTemplates.find((prompt) => prompt.name.toLocaleLowerCase() === "обзоры казино");
@@ -5260,6 +5260,7 @@ function TasksView({
       if (casinoPrompt) setPromptTemplateId(casinoPrompt.id);
       setSectionContentMode("nested");
       setGenerateTitle(true);
+      setIncludeCasinoRating(false);
       return;
     }
     if (casinoPrompt?.id === promptTemplateId) {
@@ -6047,10 +6048,10 @@ function TasksView({
                 <input type="checkbox" checked={collectCompetitors} onChange={(event) => setCollectCompetitors(event.target.checked)} />
                 Собрать конкурентов
               </label>
-              <label className="checkboxRow casinoRatingOption">
+              {!casinoReviews ? <label className="checkboxRow casinoRatingOption">
                 <input type="checkbox" checked={includeCasinoRating} onChange={(event) => setIncludeCasinoRating(event.target.checked)} />
                 <span><b>Собрать рейтинг казино</b><small>Рейтинг из 5–10 казино с оценками и обоснованием мест.</small></span>
-              </label>
+              </label> : null}
               {casinoSectionSelected ? <label className="checkboxRow casinoReviewOption">
                 <input type="checkbox" checked={casinoReviews} onChange={(event) => setCasinoReviews(event.target.checked)} />
                 <span><b>Генерировать обзоры казино</b><small>Каждая строка ниже — отдельный бренд и обзор в разделе casinos.</small></span>

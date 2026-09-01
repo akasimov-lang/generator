@@ -7194,17 +7194,20 @@ label {
   padding: 9px 11px;
 }
 
-.casinoRatingOption > span {
+.casinoRatingOption > span,
+.casinoReviewOption > span {
   display: grid;
   gap: 2px;
 }
 
-.casinoRatingOption b {
+.casinoRatingOption b,
+.casinoReviewOption b {
   color: var(--text);
   font-size: 12px;
 }
 
-.casinoRatingOption small {
+.casinoRatingOption small,
+.casinoReviewOption small {
   color: var(--muted);
   font-size: 10px;
   font-weight: 550;

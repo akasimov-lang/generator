@@ -2590,7 +2590,8 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
     else:
         prompt_template = compose_prompt_with_base(db, payload.prompt_template)
         prompt_template_name = payload.prompt_template_name
-    prompt_template = append_casino_rating_requirement(prompt_template, payload.include_casino_rating)
+    include_casino_rating = payload.include_casino_rating and payload.generation_mode != "casino_reviews"
+    prompt_template = append_casino_rating_requirement(prompt_template, include_casino_rating)
     site = db.get(models.Site, payload.site_id) if payload.site_id else None
     section = db.get(models.Section, payload.section_id) if payload.section_id else None
     if payload.generation_mode == "casino_reviews":
@@ -2648,7 +2649,7 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
         include_faq=payload.include_faq,
         generate_title=payload.generate_title,
         collect_competitors=payload.collect_competitors,
-        include_casino_rating=payload.include_casino_rating,
+        include_casino_rating=include_casino_rating,
         generation_mode=payload.generation_mode,
         auto_publish=payload.auto_publish,
         status="draft" if payload.save_as_draft else ("research_queries_ready" if payload.collect_competitors else "created"),
@@ -2680,7 +2681,7 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
             section_id=payload.section_id,
             section_content_mode=payload.section_content_mode,
             generation_prompt_name=prompt_template_name,
-            include_casino_rating=payload.include_casino_rating,
+            include_casino_rating=include_casino_rating,
             generation_context=(
                 {
                     "content_kind": "casino_review",
