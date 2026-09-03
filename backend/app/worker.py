@@ -133,7 +133,11 @@ def generate_task_content_job(task_id: str) -> dict:
         task = db.get(models.GenerationTask, task_id)
         if not task:
             return {"status": "missing", "task_id": task_id}
-        item_ids = [item.id for item in task.items if item.status == "generation_queued"]
+        item_ids = [
+            item.id
+            for item in task.items
+            if item.status == "generation_queued" or (task.auto_publish and item.status == "generated")
+        ]
         for item_id in item_ids:
             run_content_item_pipeline_job.delay(item_id, False)
         return {"status": "queued", "task_id": task_id, "items": len(item_ids)}
@@ -148,7 +152,11 @@ def run_task_pipeline_job(task_id: str) -> dict:
         task = db.get(models.GenerationTask, task_id)
         if not task:
             return {"status": "missing", "task_id": task_id}
-        item_ids = [item.id for item in task.items if item.status == "generation_queued"]
+        item_ids = [
+            item.id
+            for item in task.items
+            if item.status == "generation_queued" or (task.auto_publish and item.status == "generated")
+        ]
         for item_id in item_ids:
             run_content_item_pipeline_job.delay(item_id, True)
         return {"status": "queued", "task_id": task_id, "items": len(item_ids)}
@@ -187,17 +195,19 @@ def run_content_item_pipeline_job(self, content_item_id: str, collect_competitor
         )
         if not item:
             return {"status": "missing", "content_item_id": content_item_id}
-        redelivered = bool((self.request.delivery_info or {}).get("redelivered"))
-        if item.status != "generation_queued" and not (redelivered and item.status == "generating"):
-            return {"status": "skipped", "content_item_id": content_item_id}
         task_id = item.task_id
-        item.status = "generating"
-        item.generation_progress = max(1, item.generation_progress or 0)
-        item.generation_error = None
-        db.commit()
-
         task = db.get(models.GenerationTask, task_id)
-        if collect_competitors and task and task.collect_competitors and not item.competitor_brief:
+        publish_generated = bool(task and task.auto_publish and item.status == "generated")
+        redelivered = bool((self.request.delivery_info or {}).get("redelivered"))
+        if item.status != "generation_queued" and not publish_generated and not (redelivered and item.status == "generating"):
+            return {"status": "skipped", "content_item_id": content_item_id}
+        if not publish_generated:
+            item.status = "generating"
+            item.generation_progress = max(1, item.generation_progress or 0)
+            item.generation_error = None
+            db.commit()
+
+        if not publish_generated and collect_competitors and task and task.collect_competitors and not item.competitor_brief:
             research_error: Exception | None = None
             for attempt_index in range(COMPETITOR_RESEARCH_MAX_ATTEMPTS):
                 try:
@@ -229,7 +239,8 @@ def run_content_item_pipeline_job(self, content_item_id: str, collect_competitor
         item = db.get(models.ContentItem, content_item_id)
         if not item:
             return {"status": "missing", "content_item_id": content_item_id}
-        generate_content_item(db, item)
+        if not publish_generated:
+            generate_content_item(db, item)
         task = db.get(models.GenerationTask, task_id)
         if task and task.auto_publish:
             site = db.get(models.Site, item.site_id or task.site_id) if (item.site_id or task.site_id) else None
