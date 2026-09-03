@@ -1,4 +1,4 @@
-from app.services import analyze_content_quality, build_blocks_from_ai_text, concise_h1_from_topic, extract_ai_article_parts, faq_block, header_block, paragraph_block
+from app.services import analyze_content_quality, build_blocks_from_ai_text, concise_h1_from_topic, extract_ai_article_parts, faq_block, header_block, normalize_editor_inline_markup, paragraph_block
 
 
 def test_quality_check_flags_metadata_and_risky_phrases() -> None:
@@ -100,6 +100,32 @@ Ein weiterer Absatz."""
     headings = [block["data"]["text"] for block in blocks if block["type"] == "header"]
 
     assert headings == ["Test H1", "Echter Abschnitt"]
+
+
+def test_markdown_bold_is_converted_to_html_in_generated_and_legacy_blocks() -> None:
+    blocks = build_blocks_from_ai_text(
+        "- **Identifier les plaintes structurelles** : vérifier les retards\n- __Analyser le support__ : comparer les réponses",
+        "Notes et avis",
+        shortcode=None,
+        include_toc=False,
+        include_faq=False,
+    )
+    assert blocks[1]["data"]["items"] == [
+        "<strong>Identifier les plaintes structurelles</strong> : vérifier les retards",
+        "<strong>Analyser le support</strong> : comparer les réponses",
+    ]
+
+    legacy = normalize_editor_inline_markup({
+        "pages": [{"content": {"blocks": [
+            {"type": "paragraph", "data": {"text": "Texte avec **mise en évidence**."}},
+            {"type": "faq", "data": [{"question": "**Question**", "answer": "__Réponse__"}]},
+        ]}}],
+    })
+    assert legacy["pages"][0]["content"]["blocks"][0]["data"]["text"] == "Texte avec <strong>mise en évidence</strong>."
+    assert legacy["pages"][0]["content"]["blocks"][1]["data"][0] == {
+        "question": "<strong>Question</strong>",
+        "answer": "<strong>Réponse</strong>",
+    }
 
 
 def test_concise_h1_uses_primary_topic_part_and_preserves_title_case() -> None:

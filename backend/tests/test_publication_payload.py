@@ -55,3 +55,20 @@ def test_publication_payload_can_update_the_menu_page_itself() -> None:
     assert payload["publication_target"]["content_mode"] == "menu_page"
     assert payload["pages"][0]["slug"] == "/online-casinos/"
     assert payload["pages"][0]["sectionContentMode"] == "menu_page"
+
+
+def test_publication_payload_converts_legacy_markdown_bold_to_html() -> None:
+    section = SimpleNamespace(external_id="guides", name="Guides", path="/guides/", menu_type="header")
+    item = SimpleNamespace(
+        section_id="section-id",
+        section_content_mode="menu_page",
+        section_source_slug="/guides/",
+        generated_json={"pages": [{
+            "slug": "/guides/",
+            "content": {"blocks": [{"type": "paragraph", "data": {"text": "Lire **les conditions** avant de jouer."}}]},
+        }]},
+    )
+
+    payload = build_publication_payload(FakeDb(section), item)
+
+    assert payload["pages"][0]["content"]["blocks"][0]["data"]["text"] == "Lire <strong>les conditions</strong> avant de jouer."

@@ -579,6 +579,7 @@ def test_generated_review_structure_is_appended_with_parent_paths(db: Session, m
 def test_project_page_payload_matches_receiver_dto(db: Session) -> None:
     site, item = make_content(db)
     site.name = "nauchi52.ru"
+    item.generated_json["pages"][0]["content"]["blocks"][2]["data"]["text"] = "Reviewed **publication content**."
     moment = datetime(2026, 8, 20, 9, 17, 4, 551000, tzinfo=timezone.utc)
 
     payload = build_project_page_payload(item, site, "fresh-token", moment)
@@ -591,6 +592,7 @@ def test_project_page_payload_matches_receiver_dto(db: Session) -> None:
     assert payload["page"]["slug"] == "/test/"
     assert payload["page"]["publishedTime"] == "2026-08-20 09:17:04"
     assert payload["page"]["content"]["time"] == "2026-08-20T09:17:04.551Z"
+    assert payload["page"]["content"]["blocks"][2]["data"]["text"] == "Reviewed <strong>publication content</strong>."
     assert payload["token"] == "fresh-token"
     assert payload["dateTime"] == "2026-08-20 09:17:04"
 

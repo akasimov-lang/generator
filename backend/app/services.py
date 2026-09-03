@@ -2656,7 +2656,7 @@ def build_blocks_from_ai_text(
     include_faq: bool,
 ) -> list[dict]:
     title = topic.strip()
-    lines = [line.strip(" #*\t") for line in generated_text.splitlines() if line.strip()]
+    lines = [line.strip() for line in generated_text.splitlines() if line.strip()]
     blocks: list[dict] = [header_block(title, 1)]
     headings: list[str] = [title]
     pending_paragraphs: list[str] = []
@@ -2844,23 +2844,73 @@ def build_editor_page(
 
 
 def header_block(text: str, level: int) -> dict:
-    return {"id": make_block_id(), "type": "header", "data": {"text": text, "level": level}}
+    return {"id": make_block_id(), "type": "header", "data": {"text": inline_markdown_to_html(text), "level": level}}
 
 
 def paragraph_block(text: str) -> dict:
-    return {"id": make_block_id(), "type": "paragraph", "data": {"text": text}}
+    return {"id": make_block_id(), "type": "paragraph", "data": {"text": inline_markdown_to_html(text)}}
 
 
 def list_block(style: str, items: list[str]) -> dict:
-    return {"id": make_block_id(), "type": "list", "data": {"style": style, "items": items}}
+    return {"id": make_block_id(), "type": "list", "data": {"style": style, "items": [inline_markdown_to_html(item) for item in items]}}
 
 
 def table_block(rows: list[list[str]]) -> dict:
-    return {"id": make_block_id(), "type": "table", "data": {"withHeadings": False, "stretched": False, "content": rows}}
+    return {"id": make_block_id(), "type": "table", "data": {"withHeadings": False, "stretched": False, "content": [[inline_markdown_to_html(cell) for cell in row] for row in rows]}}
 
 
 def faq_block(items: list[dict]) -> dict:
-    return {"id": make_block_id(), "type": "faq", "data": items}
+    return {
+        "id": make_block_id(),
+        "type": "faq",
+        "data": [
+            {
+                **item,
+                "question": inline_markdown_to_html(str(item.get("question") or "")),
+                "answer": inline_markdown_to_html(str(item.get("answer") or "")),
+            }
+            for item in items
+        ],
+    }
+
+
+def inline_markdown_to_html(value: str) -> str:
+    """Convert Gemini inline bold markers into Editor.js-compatible HTML."""
+    text = str(value or "").replace(r"\*\*", "**").replace(r"\_\_", "__")
+    text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
+    text = re.sub(r"__(.+?)__", r"<strong>\1</strong>", text)
+    return text.replace("**", "").replace("__", "")
+
+
+def normalize_editor_inline_markup(payload: dict) -> dict:
+    """Normalize inline Markdown in generated and legacy Editor.js payloads."""
+    normalized = copy.deepcopy(payload)
+    for page in normalized.get("pages", []):
+        if not isinstance(page, dict):
+            continue
+        content = page.get("content")
+        blocks = content.get("blocks") if isinstance(content, dict) else []
+        for block in blocks if isinstance(blocks, list) else []:
+            if not isinstance(block, dict) or not isinstance(block.get("data"), (dict, list)):
+                continue
+            block_type = block.get("type")
+            data = block["data"]
+            if block_type in {"paragraph", "header"} and isinstance(data, dict):
+                data["text"] = inline_markdown_to_html(str(data.get("text") or ""))
+            elif block_type == "list" and isinstance(data, dict) and isinstance(data.get("items"), list):
+                data["items"] = [inline_markdown_to_html(str(item)) for item in data["items"]]
+            elif block_type == "table" and isinstance(data, dict) and isinstance(data.get("content"), list):
+                data["content"] = [
+                    [inline_markdown_to_html(str(cell)) for cell in row]
+                    for row in data["content"]
+                    if isinstance(row, list)
+                ]
+            elif block_type == "faq" and isinstance(data, list):
+                for faq_item in data:
+                    if isinstance(faq_item, dict):
+                        for key in ("question", "answer"):
+                            faq_item[key] = inline_markdown_to_html(str(faq_item.get(key) or ""))
+    return normalized
 
 
 def toc_block(headings: list[str]) -> dict:
@@ -4587,7 +4637,8 @@ def build_project_page_payload(
 ) -> dict:
     current_time = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     numeric_id = int(current_time.timestamp() * 1000)
-    pages = item.generated_json.get("pages") if isinstance(item.generated_json, dict) else []
+    normalized_payload = normalize_editor_inline_markup(item.generated_json) if isinstance(item.generated_json, dict) else {}
+    pages = normalized_payload.get("pages") if isinstance(normalized_payload, dict) else []
     page = pages[0] if isinstance(pages, list) and pages and isinstance(pages[0], dict) else {}
     content = copy.deepcopy(page.get("content")) if isinstance(page.get("content"), dict) else {"blocks": []}
     content["blocks"] = content.get("blocks") if isinstance(content.get("blocks"), list) else []
@@ -4804,7 +4855,7 @@ async def delete_published_item(
 
 
 def build_publication_payload(db: Session, item: models.ContentItem) -> dict:
-    payload = copy.deepcopy(item.generated_json)
+    payload = normalize_editor_inline_markup(item.generated_json)
     if not item.section_id:
         return payload
 
