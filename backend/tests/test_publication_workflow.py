@@ -561,7 +561,7 @@ def test_generated_review_structure_is_appended_with_parent_paths(db: Session, m
         "children": [{"title": f"Brand {index}", "content_kind": "casino_review"} for index in range(1, 11)],
     }]
 
-    result = asyncio.run(apply_generated_menu_structure(db, site, "header", 2, "casino_reviews", raw_items))
+    result = asyncio.run(apply_generated_menu_structure(db, site, "header", 2, 5, "casino_reviews", raw_items))
 
     assert result["success"] is True
     assert result["created_count"] == 11

@@ -61,6 +61,26 @@ def test_generated_casino_review_structure_rejects_wrong_brand_count() -> None:
         )
 
 
+def test_generated_thematic_structure_enforces_selected_top_level_count() -> None:
+    raw_items = [{"title": "Bonuses"}, {"title": "Games"}, {"title": "Guides"}]
+
+    items = normalize_generated_menu_structure(
+        raw_items,
+        levels=1,
+        mode="thematic",
+        top_level_count=3,
+    )
+
+    assert [item["title"] for item in items] == ["Bonuses", "Games", "Guides"]
+    with pytest.raises(ValueError, match="exactly 4 top-level"):
+        normalize_generated_menu_structure(
+            raw_items,
+            levels=1,
+            mode="thematic",
+            top_level_count=4,
+        )
+
+
 def test_casino_review_mode_uses_system_prompt_and_brand_context(db: Session) -> None:
     site = make_site(db)
     section = models.Section(site_id=site.id, external_id="casinos", name="Casinos", path="/casinos/")

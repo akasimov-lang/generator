@@ -397,6 +397,7 @@ class GeneratedMenuItem(BaseModel):
 class MenuStructurePreviewRequest(BaseModel):
     menu_type: Literal["header", "footer"] = "header"
     levels: int = Field(default=2, ge=1, le=3)
+    top_level_count: int = Field(default=5, ge=2, le=8)
     mode: Literal["thematic", "casino_reviews"] = "thematic"
     ai_provider_id: str | None = None
 
@@ -404,6 +405,7 @@ class MenuStructurePreviewRequest(BaseModel):
 class MenuStructurePreviewResponse(BaseModel):
     menu_type: Literal["header", "footer"]
     levels: int
+    top_level_count: int
     mode: Literal["thematic", "casino_reviews"]
     geo: str
     language: str
@@ -413,6 +415,7 @@ class MenuStructurePreviewResponse(BaseModel):
 class GeneratedMenuStructureApply(BaseModel):
     menu_type: Literal["header", "footer"] = "header"
     levels: int = Field(default=2, ge=1, le=3)
+    top_level_count: int = Field(default=5, ge=2, le=8)
     mode: Literal["thematic", "casino_reviews"] = "thematic"
     items: list[GeneratedMenuItem] = Field(min_length=1, max_length=20)
 

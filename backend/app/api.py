@@ -1030,6 +1030,7 @@ async def apply_site_generated_menu_structure(
             site,
             payload.menu_type,
             payload.levels,
+            payload.top_level_count,
             payload.mode,
             [item.model_dump() for item in payload.items],
             initiator_username=_request_username(user),

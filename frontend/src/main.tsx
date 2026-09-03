@@ -4436,6 +4436,7 @@ type GeneratedMenuStructureItem = {
 type GeneratedMenuStructurePreview = {
   menu_type: "header" | "footer";
   levels: number;
+  top_level_count: number;
   mode: "thematic" | "casino_reviews";
   geo: string;
   language: string;
@@ -4489,9 +4490,11 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
   const [menuGeneratorOpen, setMenuGeneratorOpen] = React.useState(false);
   const [generatedMenuType, setGeneratedMenuType] = React.useState<"header" | "footer">("header");
   const [generatedMenuLevels, setGeneratedMenuLevels] = React.useState(2);
+  const [generatedMenuTopLevelCount, setGeneratedMenuTopLevelCount] = React.useState(5);
   const [generatedMenuMode, setGeneratedMenuMode] = React.useState<"thematic" | "casino_reviews">("thematic");
   const [generatedMenuPreview, setGeneratedMenuPreview] = React.useState<GeneratedMenuStructurePreview | null>(null);
   const [generatingMenuPreview, setGeneratingMenuPreview] = React.useState(false);
+  const [menuGenerationProgress, setMenuGenerationProgress] = useSimulatedOperationProgress(generatingMenuPreview);
   const [applyingGeneratedMenu, setApplyingGeneratedMenu] = React.useState(false);
   const cachedHeader = Array.isArray(site.default_menu.header) ? site.default_menu.header : [];
   const cachedFooter = Array.isArray(site.default_menu.footer) ? site.default_menu.footer : [];
@@ -4915,6 +4918,7 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
   }
 
   async function generateMenuStructurePreview() {
+    setMenuGenerationProgress(3);
     setGeneratingMenuPreview(true);
     setGeneratedMenuPreview(null);
     setFormError("");
@@ -4924,14 +4928,19 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
         body: JSON.stringify({
           menu_type: generatedMenuType,
           levels: generatedMenuMode === "casino_reviews" ? 2 : generatedMenuLevels,
+          top_level_count: generatedMenuTopLevelCount,
           mode: generatedMenuMode
         })
       });
       setGeneratedMenuPreview(preview);
+      setMenuGenerationProgress(100);
+      await new Promise((resolve) => window.setTimeout(resolve, 350));
     } catch (error) {
+      setMenuGenerationProgress(0);
       setFormError(error instanceof Error ? error.message : "Не удалось сгенерировать структуру меню");
     } finally {
       setGeneratingMenuPreview(false);
+      window.setTimeout(() => setMenuGenerationProgress(0), 120);
     }
   }
 
@@ -4946,6 +4955,7 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
         body: JSON.stringify({
           menu_type: generatedMenuPreview.menu_type,
           levels: generatedMenuPreview.levels,
+          top_level_count: generatedMenuPreview.mode === "casino_reviews" ? generatedMenuTopLevelCount : generatedMenuPreview.top_level_count,
           mode: generatedMenuPreview.mode,
           items: generatedMenuPreview.items
         })
@@ -5314,6 +5324,9 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
             <label>Тип меню<select value={generatedMenuType} onChange={(event) => { setGeneratedMenuType(event.target.value as "header" | "footer"); setGeneratedMenuPreview(null); }}><option value="header">Header</option><option value="footer">Footer</option></select></label>
             <label>Тип структуры<select value={generatedMenuMode} onChange={(event) => { const mode = event.target.value as "thematic" | "casino_reviews"; setGeneratedMenuMode(mode); if (mode === "casino_reviews") setGeneratedMenuLevels(2); setGeneratedMenuPreview(null); }}><option value="thematic">По тематике проекта</option><option value="casino_reviews">Обзоры казино: 10 брендов</option></select></label>
             <label>Уровней вложенности<select value={generatedMenuMode === "casino_reviews" ? 2 : generatedMenuLevels} onChange={(event) => { setGeneratedMenuLevels(Number(event.target.value)); setGeneratedMenuPreview(null); }} disabled={generatedMenuMode === "casino_reviews"}><option value={1}>1 уровень</option><option value={2}>2 уровня</option><option value={3}>3 уровня</option></select></label>
+            {generatedMenuMode === "casino_reviews"
+              ? <label>Пунктов верхнего уровня<input value="1 — общий раздел" disabled /></label>
+              : <label>Пунктов верхнего уровня<select value={generatedMenuTopLevelCount} onChange={(event) => { setGeneratedMenuTopLevelCount(Number(event.target.value)); setGeneratedMenuPreview(null); }}>{[2, 3, 4, 5, 6, 7, 8].map((count) => <option value={count} key={count}>{count}</option>)}</select></label>}
           </div>
           <div className="menuStructureSummary">
             {generatedMenuMode === "casino_reviews"
@@ -5323,13 +5336,13 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
           {formError ? <div className="formError">{formError}</div> : null}
           {generatedMenuPreview ? (
             <section className="generatedMenuPreview">
-              <header><strong>Предпросмотр</strong><span>{generatedMenuPreview.language.toUpperCase()} · {generatedMenuPreview.geo.toUpperCase()} · {generatedMenuPreview.levels} ур.</span></header>
+              <header><strong>Предпросмотр</strong><span>{generatedMenuPreview.language.toUpperCase()} · {generatedMenuPreview.geo.toUpperCase()} · {generatedMenuPreview.levels} ур. · верхних пунктов: {generatedMenuPreview.top_level_count}</span></header>
               {renderGeneratedMenuPreview(generatedMenuPreview.items)}
             </section>
           ) : <div className="siteMenuPreviewEmpty">Нажмите «Сгенерировать», чтобы увидеть будущую структуру.</div>}
           <div className="modalActions">
             <button className="button secondary" type="button" onClick={() => setMenuGeneratorOpen(false)} disabled={generatingMenuPreview || applyingGeneratedMenu}>Отменить</button>
-            <button className="button secondary" type="button" onClick={() => void generateMenuStructurePreview()} disabled={generatingMenuPreview || applyingGeneratedMenu}>{generatingMenuPreview ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />} {generatedMenuPreview ? "Сгенерировать заново" : "Сгенерировать"}</button>
+            <button className="button secondary" type="button" onClick={() => void generateMenuStructurePreview()} disabled={generatingMenuPreview || applyingGeneratedMenu}>{generatingMenuPreview ? <CircularOperationProgress value={menuGenerationProgress} /> : <Sparkles size={16} />} {generatingMenuPreview ? `Генерация ${Math.round(menuGenerationProgress)}%` : generatedMenuPreview ? "Сгенерировать заново" : "Сгенерировать"}</button>
             <button className="button primary" type="button" onClick={() => void addGeneratedMenuToSite()} disabled={!generatedMenuPreview || generatingMenuPreview || applyingGeneratedMenu}>{applyingGeneratedMenu ? <LoaderCircle className="spin" size={16} /> : <Send size={16} />} {applyingGeneratedMenu ? "Добавляем…" : "Добавить на сайт"}</button>
           </div>
         </Modal>

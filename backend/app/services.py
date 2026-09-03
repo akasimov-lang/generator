@@ -1595,7 +1595,12 @@ async def generate_topic_suggestions(
     return accepted
 
 
-def normalize_generated_menu_structure(raw_items: object, levels: int, mode: str) -> list[dict]:
+def normalize_generated_menu_structure(
+    raw_items: object,
+    levels: int,
+    mode: str,
+    top_level_count: int | None = None,
+) -> list[dict]:
     if levels not in {1, 2, 3}:
         raise ValueError("Menu structure depth must be between 1 and 3")
     if not isinstance(raw_items, list) or not raw_items:
@@ -1636,8 +1641,11 @@ def normalize_generated_menu_structure(raw_items: object, levels: int, mode: str
         for child in normalized[0]["children"]:
             child["content_kind"] = "casino_review"
             child["children"] = []
-    elif deepest_depth != levels:
-        raise ValueError(f"Generated menu structure must contain exactly {levels} nesting level(s)")
+    else:
+        if deepest_depth != levels:
+            raise ValueError(f"Generated menu structure must contain exactly {levels} nesting level(s)")
+        if top_level_count is not None and len(normalized) != top_level_count:
+            raise ValueError(f"Generated menu structure must contain exactly {top_level_count} top-level items")
     return normalized
 
 
@@ -1661,7 +1669,7 @@ async def generate_menu_structure_preview(
 Each child title must be the exact name of a real casino brand relevant and available to players in GEO {geo}.
 Do not invent brands. Do not add grandchildren. The parent is a dropdown/category page; every child is a casino review page."""
         if payload.mode == "casino_reviews"
-        else f"Create a topical SEO menu with exactly {levels} levels. Use 4-8 useful top-level items and 2-5 children for every non-final node. Final-level nodes must have no children."
+        else f"Create a topical SEO menu with exactly {levels} levels and exactly {payload.top_level_count} top-level items. Use 2-5 children for every non-final node. Final-level nodes must have no children."
     )
     prompt = f"""You are a senior information architect for an SEO website.
 Generate a new menu structure matching the project's actual topic, audience, GEO and content language.
@@ -1698,7 +1706,12 @@ Return only valid JSON without Markdown: {{"items":[{{"title":"...","children":[
         decoded = json.loads(response_text[object_start : object_end + 1])
     except ValueError as exc:
         raise ValueError("Gemini returned invalid JSON for the menu structure") from exc
-    items = normalize_generated_menu_structure(decoded.get("items") if isinstance(decoded, dict) else None, levels, payload.mode)
+    items = normalize_generated_menu_structure(
+        decoded.get("items") if isinstance(decoded, dict) else None,
+        levels,
+        payload.mode,
+        payload.top_level_count if payload.mode == "thematic" else None,
+    )
     preview_items, _ = transliterate_project_menu_tree(items)
     provider.validation_status = "valid"
     provider.validation_message = "Gemini API key is valid"
@@ -1706,6 +1719,7 @@ Return only valid JSON without Markdown: {{"items":[{{"title":"...","children":[
     return {
         "menu_type": payload.menu_type,
         "levels": levels,
+        "top_level_count": 1 if payload.mode == "casino_reviews" else payload.top_level_count,
         "mode": payload.mode,
         "geo": geo,
         "language": language,
@@ -4198,6 +4212,7 @@ async def apply_generated_menu_structure(
     site: models.Site,
     menu_type: str,
     levels: int,
+    top_level_count: int,
     mode: str,
     raw_items: list[dict],
     initiator_username: str | None = None,
@@ -4205,7 +4220,12 @@ async def apply_generated_menu_structure(
     if menu_type not in {"header", "footer"}:
         raise ValueError("Menu type must be header or footer")
     effective_levels = 2 if mode == "casino_reviews" else levels
-    normalized_items = normalize_generated_menu_structure(raw_items, effective_levels, mode)
+    normalized_items = normalize_generated_menu_structure(
+        raw_items,
+        effective_levels,
+        mode,
+        top_level_count if mode == "thematic" else None,
+    )
     generated_items, changes = transliterate_project_menu_tree(normalized_items)
     current_menu = copy.deepcopy(site.default_menu) if isinstance(site.default_menu, dict) else {}
     current_items = current_menu.get(menu_type) if isinstance(current_menu.get(menu_type), list) else []
