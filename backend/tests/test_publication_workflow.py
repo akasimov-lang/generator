@@ -405,6 +405,50 @@ def test_project_menu_payload_updates_existing_slug_in_place(db: Session) -> Non
     ]
 
 
+def test_project_menu_payload_preserves_existing_nested_structure(db: Session) -> None:
+    site = models.Site(
+        name="nested-menu.example",
+        base_url="https://nested-menu.example",
+        publication_endpoint="https://nested-menu.example/api/content",
+        default_menu={
+            "header": [{
+                "id": 100,
+                "title": "Casino bonusser",
+                "slug": "/casino-bonusser/",
+                "order": 0,
+                "children": [
+                    {"id": 101, "title": "Velkomstbonusser", "slug": "/velkomstbonusser/", "order": 0},
+                    {"id": 102, "title": "Gratis spins", "slug": "/gratis-spins/", "order": 1},
+                ],
+            }],
+            "footer": [],
+        },
+    )
+    section = models.Section(
+        site=site,
+        external_id="100",
+        name="Casino bonusser",
+        path="/casino-bonusser/",
+        menu_type="header",
+        sync_status="pending",
+    )
+    db.add_all([site, section])
+    db.commit()
+
+    payload = build_project_menu_payload(db, site, "header")
+
+    assert payload["list"] == [{
+        "id": 100,
+        "title": "Casino bonusser",
+        "slug": "/casino-bonusser/",
+        "order": 0,
+        "children": [
+            {"id": 101, "title": "Velkomstbonusser", "slug": "/velkomstbonusser/", "order": 0},
+            {"id": 102, "title": "Gratis spins", "slug": "/gratis-spins/", "order": 1},
+        ],
+    }]
+
+
 def test_project_page_payload_matches_receiver_dto(db: Session) -> None:
     site, item = make_content(db)
     site.name = "nauchi52.ru"

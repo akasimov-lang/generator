@@ -3577,6 +3577,68 @@ def _numeric_menu_id(value: object, fallback: int) -> int:
     return numeric if numeric > 0 else fallback
 
 
+def _cached_menu_children(item: dict) -> list:
+    for key in ("children", "items", "submenu", "subMenu"):
+        value = item.get(key)
+        if isinstance(value, list):
+            return value
+    return []
+
+
+def _flatten_project_menu_items(items: list[dict]) -> list[dict]:
+    flattened: list[dict] = []
+    for item in items:
+        flattened.append(item)
+        children = item.get("children")
+        if isinstance(children, list):
+            flattened.extend(_flatten_project_menu_items(children))
+    return flattened
+
+
+def _project_menu_item_from_cache(cached: dict, index: int, generated_id: int, sequence: list[int]) -> dict | None:
+    title = str(cached.get("title") or cached.get("name") or "").strip()
+    if not title:
+        return None
+    slug = _normalized_project_slug(cached.get("slug") or cached.get("path") or cached.get("url"))
+    try:
+        order = int(cached.get("order"))
+    except (TypeError, ValueError):
+        order = index
+    fallback_id = generated_id + sequence[0]
+    sequence[0] += 1
+    item = {
+        "id": _numeric_menu_id(cached.get("id"), fallback_id),
+        "title": title,
+        "slug": slug,
+        "order": order,
+    }
+    children = [
+        child
+        for child_index, raw_child in enumerate(_cached_menu_children(cached))
+        if isinstance(raw_child, dict)
+        and (child := _project_menu_item_from_cache(raw_child, child_index, generated_id, sequence)) is not None
+    ]
+    if children:
+        item["children"] = children
+    return item
+
+
+def _remove_project_menu_slugs(items: list[dict], deleted_slugs: set[str]) -> list[dict]:
+    remaining: list[dict] = []
+    for item in items:
+        if item["slug"] in deleted_slugs:
+            continue
+        children = item.get("children")
+        if isinstance(children, list):
+            nested = _remove_project_menu_slugs(children, deleted_slugs)
+            if nested:
+                item["children"] = nested
+            else:
+                item.pop("children", None)
+        remaining.append(item)
+    return remaining
+
+
 def build_project_menu_payload(db: Session, site: models.Site, menu_type: str, now: datetime | None = None) -> dict:
     if menu_type not in {"header", "footer"}:
         raise ValueError("Menu type must be header or footer")
@@ -3584,23 +3646,14 @@ def build_project_menu_payload(db: Session, site: models.Site, menu_type: str, n
     cached_menu = site.default_menu if isinstance(site.default_menu, dict) else {}
     cached_items = cached_menu.get(menu_type) if isinstance(cached_menu.get(menu_type), list) else []
     items: list[dict] = []
+    sequence = [0]
     for index, cached in enumerate(cached_items):
         if not isinstance(cached, dict):
             continue
-        title = str(cached.get("title") or cached.get("name") or "").strip()
-        slug = _normalized_project_slug(cached.get("slug") or cached.get("path") or cached.get("url"))
-        if not title:
-            continue
-        try:
-            order = int(cached.get("order"))
-        except (TypeError, ValueError):
-            order = index
-        items.append({
-            "id": _numeric_menu_id(cached.get("id"), generated_id + index),
-            "title": title,
-            "slug": slug,
-            "order": order,
-        })
+        item = _project_menu_item_from_cache(cached, index, generated_id, sequence)
+        if item is not None:
+            items.append(item)
+    cached_node_count = len(_flatten_project_menu_items(items))
 
     pending_logs = [
         log
@@ -3620,7 +3673,7 @@ def build_project_menu_payload(db: Session, site: models.Site, menu_type: str, n
         if log.request_payload.get("action") == "menu_item_delete"
     }
     if deleted_slugs:
-        items = [item for item in items if item["slug"] not in deleted_slugs]
+        items = _remove_project_menu_slugs(items, deleted_slugs)
 
     sections = db.scalars(
         select(models.Section)
@@ -3638,15 +3691,20 @@ def build_project_menu_payload(db: Session, site: models.Site, menu_type: str, n
         and isinstance(log.response_body, dict)
         and log.response_body.get("section_id")
     }
+    all_site_sections = db.scalars(
+        select(models.Section).where(models.Section.site_id == site.id, models.Section.menu_type == menu_type)
+    ).all()
+    sections_by_id = {candidate.id: candidate for candidate in all_site_sections}
     next_order = 0 if not items else max(max(item["order"] for item in items) + 1, len(items) + 1)
     for section_index, section in enumerate(sections):
         slug = _normalized_project_slug(section.path)
         update_log = update_logs_by_section_id.get(str(section.id))
         previous_slug = _normalized_project_slug(update_log.request_payload.get("previous_path")) if update_log else ""
+        flat_items = _flatten_project_menu_items(items)
         existing = next(
             (
                 item
-                for item in items
+                for item in flat_items
                 if item["slug"] == slug
                 or str(item["id"]).strip().casefold() == section.external_id.strip().casefold()
                 or bool(previous_slug and item["slug"] == previous_slug)
@@ -3657,15 +3715,40 @@ def build_project_menu_payload(db: Session, site: models.Site, menu_type: str, n
             existing["title"] = section.name
             existing["slug"] = slug
             continue
-        items.append({
+        new_item = {
             "id": generated_id + len(cached_items) + section_index,
             "title": section.name,
             "slug": slug,
             "order": next_order,
-        })
+        }
+        parent = sections_by_id.get(section.parent_id) if section.parent_id else None
+        parent_item = next(
+            (
+                item
+                for item in flat_items
+                if parent is not None
+                and (
+                    str(item["id"]).strip().casefold() == parent.external_id.strip().casefold()
+                    or item["slug"] == _normalized_project_slug(parent.path)
+                )
+            ),
+            None,
+        )
+        if parent_item is not None:
+            siblings = parent_item.setdefault("children", [])
+            new_item["order"] = 0 if not siblings else max(item["order"] for item in siblings) + 1
+            siblings.append(new_item)
+        else:
+            items.append(new_item)
         next_order += 1
 
     items.sort(key=lambda item: (item["order"], item["title"].casefold()))
+    payload_node_count = len(_flatten_project_menu_items(items))
+    if payload_node_count < cached_node_count - len(deleted_slugs):
+        raise ValueError(
+            f"Refusing to synchronize {menu_type} menu: the payload lost existing nested items "
+            f"({cached_node_count} cached, {payload_node_count} prepared)"
+        )
     return {"type": menu_type, "folder": site.name, "list": items}
 
 
