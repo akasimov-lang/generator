@@ -18,6 +18,7 @@ import {
   ChevronUp,
   CheckCircle2,
   CircleAlert,
+  Clock3,
   Copy,
   CornerDownRight,
   Database,
@@ -42,6 +43,7 @@ import {
   Plus,
   RefreshCcw,
   Search,
+  SearchCheck,
   Send,
   Settings,
   ShieldCheck,
@@ -4248,8 +4250,8 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
           </button>
         </div>
         <ResponsiveTable
-          columns={["", "Тема", "Меню", "Slug", "Действия"]}
-          columnKeys={["select", "topic", "menu", "slug", "actions"]}
+          columns={["", "Тема", "Меню", "Slug", "Индексация", "Действия"]}
+          columnKeys={["select", "topic", "menu", "slug", "indexing", "actions"]}
           columnHeaders={{
             0: (
               <label className={`tableSelectAllButton ${processSelectableIds.length ? "" : "disabled"}`} title="Выбрать все неопубликованные тексты">
@@ -4270,6 +4272,17 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
             <div className="compactContentTopic" title={item.topic}><ContentTopicLabel item={item} /></div>,
             sectionLabel(item.section_id, sections),
             item.slug,
+            item.indexing_task_id ? (
+              <span className="publicationIndexingTask" title="ID задания на индексацию">
+                <SearchCheck size={14} /> <span>ID: <b>{item.indexing_task_id}</b></span>
+              </span>
+            ) : item.indexing_status === "queued" ? (
+              <span className="publicationIndexingTask pending"><Clock3 size={14} /> В очереди</span>
+            ) : item.indexing_status === "submitting" ? (
+              <span className="publicationIndexingTask pending"><LoaderCircle className="spin" size={14} /> Отправляется</span>
+            ) : item.indexing_status === "failed" ? (
+              <span className="publicationIndexingTask failed" title={item.indexing_error || "Ошибка индексации"}><AlertTriangle size={14} /> Ошибка</span>
+            ) : <span className="publicationIndexingTask muted">—</span>,
             item.status === "published" ? (
               <span className="publicationProcessActions">
                 <span className="publishedProcessState" title={item.published_at ? `Опубликовано ${formatDate(item.published_at)}` : "Опубликовано"}>

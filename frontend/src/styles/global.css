@@ -6946,6 +6946,24 @@ td {
   max-width: 100%;
 }
 
+.publicationIndexingTask {
+  align-items: center;
+  color: var(--primary-dark);
+  display: inline-flex;
+  font-size: 12px;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.publicationIndexingTask.pending,
+.publicationIndexingTask.muted {
+  color: var(--muted);
+}
+
+.publicationIndexingTask.failed {
+  color: var(--danger);
+}
+
 .publishedProcessState {
   align-items: center;
   background: var(--primary-soft);
