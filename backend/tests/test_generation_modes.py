@@ -1,3 +1,6 @@
+import asyncio
+import json
+
 import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
@@ -5,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from app import models, services as service_module
 from app.db import Base
-from app.schemas import GenerationTaskCreate, MenuStructureGenerationCreate
+from app.schemas import GenerationTaskCreate, MenuStructureGenerationCreate, MenuStructurePreviewRequest
 from app.services import (
     CASINO_REVIEW_PROMPT_NAME,
     MENU_STRUCTURE_PROMPT_MARKER,
@@ -79,6 +82,64 @@ def test_generated_thematic_structure_enforces_selected_top_level_count() -> Non
             mode="thematic",
             top_level_count=4,
         )
+
+
+def test_menu_preview_retries_titles_already_used_by_another_project_in_same_geo(
+    db: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    site = make_site(db)
+    site.cache_geo = "PL"
+    site.cache_language = "pl"
+    site.homepage_title = "Kasyna online"
+    other_site = models.Site(
+        name="other-casino.example",
+        base_url="https://other-casino.example",
+        publication_endpoint="https://other-casino.example/api/content",
+        cache_geo="PL",
+        cache_language="pl",
+        default_menu={
+            "header": [{"id": 1, "title": "Bonusy", "slug": "/bonusy/", "order": 0}],
+            "footer": [],
+        },
+    )
+    provider = models.AiProvider(
+        name="Gemini",
+        provider_type="gemini",
+        endpoint_url="https://gemini.example",
+        model="test",
+        api_key="secret",
+        is_active=True,
+    )
+    db.add_all([other_site, provider])
+    db.commit()
+    responses = [
+        {"items": [{"title": "Bonusy"}, {"title": "Gry"}]},
+        {"items": [{"title": "Metody płatności"}, {"title": "Bezpieczna gra"}]},
+    ]
+    prompts: list[str] = []
+
+    async def fake_call_gemini(_provider: models.AiProvider, prompt: str) -> dict:
+        prompts.append(prompt)
+        payload = responses.pop(0)
+        return {"candidates": [{"content": {"parts": [{"text": json.dumps(payload)}]}}], "usageMetadata": {}}
+
+    monkeypatch.setattr(service_module, "call_gemini", fake_call_gemini)
+
+    preview = asyncio.run(service_module.generate_menu_structure_preview(
+        db,
+        provider,
+        site,
+        MenuStructurePreviewRequest(menu_type="header", levels=1, top_level_count=2, mode="thematic"),
+    ))
+
+    assert [item["title"] for item in preview["items"]] == ["Metody płatności", "Bezpieczna gra"]
+    assert len(prompts) == 2
+    assert "independent search intent" in prompts[0]
+    assert "already used in this GEO" in prompts[1]
+    preview_log = db.scalar(select(models.PublicationLog).where(models.PublicationLog.response_status == 200))
+    assert preview_log is not None
+    assert preview_log.request_payload["action"] == "menu_structure_preview"
 
 
 def test_casino_review_mode_uses_system_prompt_and_brand_context(db: Session) -> None:

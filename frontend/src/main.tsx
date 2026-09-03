@@ -5330,7 +5330,7 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
           </div>
           <div className="menuStructureSummary">
             {generatedMenuMode === "casino_reviews"
-              ? `Система подберёт 10 реальных брендов для GEO проекта (${site.cache_geo || "не задано"}), создаст общий выпадающий раздел и пометит дочерние страницы как обзоры казино.`
+              ? `Система подберёт 10 реальных брендов для GEO проекта (${site.cache_geo || "не задано"}) и создаст общий выпадающий раздел. После нажатия «Добавить на сайт» весь блок будет добавлен первым пунктом меню. Существующая структура сохранится без удаления и пересоздания.`
               : `Структура будет создана на языке проекта (${site.cache_language || "не задан"}) с учётом его тематики и GEO (${site.cache_geo || "не задано"}).`}
           </div>
           {formError ? <div className="formError">{formError}</div> : null}

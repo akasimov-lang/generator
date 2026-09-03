@@ -1005,7 +1005,7 @@ async def preview_site_menu_structure(
     if not provider:
         raise HTTPException(status_code=400, detail="Select an active Gemini provider to generate a menu structure")
     try:
-        result = await generate_menu_structure_preview(provider, site, payload)
+        result = await generate_menu_structure_preview(db, provider, site, payload)
     except ValueError as error:
         db.commit()
         raise HTTPException(status_code=400, detail=str(error)) from error

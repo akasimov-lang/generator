@@ -565,10 +565,11 @@ def test_generated_review_structure_is_appended_with_parent_paths(db: Session, m
 
     assert result["success"] is True
     assert result["created_count"] == 11
-    assert site.default_menu["header"][0]["slug"] == "/home/"
-    generated_root = site.default_menu["header"][1]
+    generated_root = site.default_menu["header"][0]
     assert generated_root["slug"] == "/casino-reviews/"
     assert generated_root["children"][0]["slug"] == "/casino-reviews/brand-1/"
+    assert site.default_menu["header"][1]["slug"] == "/home/"
+    assert site.default_menu["header"][1]["id"] == 1
     sections = db.scalars(select(models.Section).where(models.Section.site_id == site.id)).all()
     parent = next(section for section in sections if section.name == "Casino Reviews")
     first_brand = next(section for section in sections if section.name == "Brand 1")
