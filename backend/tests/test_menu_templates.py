@@ -427,6 +427,31 @@ def test_editing_adopted_menu_item_makes_it_durable_and_logs_original_slug() -> 
         assert log.request_payload["previous_path"] == "/bonuses/"
 
 
+def test_cached_menu_item_with_placeholder_slug_can_be_adopted_by_id() -> None:
+    with make_session() as db:
+        site = models.Site(
+            name="placeholder.example",
+            base_url="https://placeholder.example",
+            publication_endpoint="https://placeholder.example/api/content",
+            default_menu={
+                "header": [{"id": 1787216707470, "title": "Online casinoer", "slug": "#", "order": 0}],
+                "footer": [],
+            },
+        )
+        db.add(site)
+        db.commit()
+
+        adopted = adopt_cached_section(
+            site.id,
+            SectionCreate(external_id="1787216707470", name="Online casinoer", path="", menu_type="header"),
+            None,  # type: ignore[arg-type]
+            db,
+        )["section"]
+
+        assert adopted.external_id == "1787216707470"
+        assert adopted.path == "/"
+
+
 def test_added_menu_item_can_be_deleted() -> None:
     with make_session() as db:
         site = models.Site(
