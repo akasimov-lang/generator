@@ -7368,6 +7368,15 @@ td {
   font-weight: 700;
 }
 
+.generationProgressCell.compact {
+  gap: 4px;
+  min-width: 112px;
+}
+
+.generationProgressCell.compact .generationProgress {
+  width: 112px;
+}
+
 .generationProgress {
   background: var(--border);
   border-radius: 999px;

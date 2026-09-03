@@ -3484,12 +3484,13 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
 
   React.useEffect(() => {
     const awaitingLiveUpdate = content.some((item) =>
-      item.status === "publication_pending_confirmation"
+      ACTIVE_GENERATION_STATUSES.includes(item.status)
+      || item.status === "publication_pending_confirmation"
       || item.indexing_status === "queued"
       || item.indexing_status === "submitting"
     );
     if (!awaitingLiveUpdate) return;
-    const timer = window.setInterval(() => void onChanged(), 2500);
+    const timer = window.setInterval(() => void onChanged(), 1500);
     return () => window.clearInterval(timer);
   }, [content, onChanged]);
 
@@ -3840,7 +3841,9 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
               {item.section_id ? <small>{item.section_content_mode === "menu_page" ? "Контент пункта меню" : "Вложенная страница"}</small> : null}
             </span>,
             item.word_count,
-            <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} />,
+            ACTIVE_GENERATION_STATUSES.includes(item.status)
+              ? <GenerationProgressCell item={item} compact />
+              : <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} />,
             item.published_at ? (
               <span className="publishedIndexingCell">
                 <span>{formatDate(item.published_at)}</span>
@@ -7112,27 +7115,33 @@ function competitorStatusLabel(item: ContentItem, research?: CompetitorResearch)
   return "Нет";
 }
 
-function GenerationProgressCell({ item }: { item: ContentItem }) {
+function GenerationProgressCell({ item, compact = false }: { item: ContentItem; compact?: boolean }) {
   const complete = ["generated", "approved", "scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published"].includes(item.status);
-  const progress = Math.max(0, Math.min(100, complete ? 100 : item.generation_progress || 0));
-  const stage = item.status === "generation_queued"
-    ? "В очереди"
-    : item.status === "generating"
-      ? "Gemini генерирует текст"
-      : item.status === "generation_failed"
-        ? "Ошибка генерации"
-        : complete
-          ? "Готово"
-          : "Не запускалась";
+  const researchInProgress = compact
+    && item.status === "generation_queued"
+    && ACTIVE_RESEARCH_STATUSES.includes(item.competitor_research_status);
+  const progressValue = researchInProgress ? item.competitor_research_progress : item.generation_progress;
+  const progress = Math.max(0, Math.min(100, complete ? 100 : progressValue || 0));
+  const stage = researchInProgress
+    ? competitorStatusLabel(item)
+    : item.status === "generation_queued"
+      ? "В очереди"
+      : item.status === "generating"
+        ? "Gemini генерирует текст"
+        : item.status === "generation_failed"
+          ? "Ошибка генерации"
+          : complete
+            ? "Готово"
+            : "Не запускалась";
   return (
-    <div className="generationProgressCell" title={item.generation_error || undefined}>
-      <span>{item.generated_at ? formatDate(item.generated_at) : "-"}</span>
+    <div className={`generationProgressCell ${compact ? "compact" : ""}`} title={item.generation_error || undefined}>
+      {!compact ? <span>{item.generated_at ? formatDate(item.generated_at) : "-"}</span> : null}
       <small className={item.generation_error ? "danger" : ""}>{stage}</small>
       <div className="generationProgress" aria-label={`Прогресс генерации текста: ${progress}%`}>
         <span style={{ width: `${progress}%` }} />
       </div>
       <b>{progress}%</b>
-      <small className="generationWordCount">Слов: {item.word_count > 0 ? item.word_count.toLocaleString("ru-RU") : "—"}</small>
+      {!compact ? <small className="generationWordCount">Слов: {item.word_count > 0 ? item.word_count.toLocaleString("ru-RU") : "—"}</small> : null}
     </div>
   );
 }
