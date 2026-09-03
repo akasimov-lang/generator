@@ -378,17 +378,19 @@ def test_menu_structure_task_rejects_manual_task_level_section_assignment() -> N
             topics_count=1,
             generation_mode="menu_structure",
         )
+        db.add(section)
+        db.flush()
         item = models.ContentItem(
             task=task,
             site_id=site.id,
-            section=section,
+            section_id=section.id,
             section_content_mode="menu_page",
             topic="Games",
             slug="/games/",
             generated_json={},
             idempotency_key="automatic-menu-section",
         )
-        db.add_all([section, task, item])
+        db.add_all([task, item])
         db.commit()
 
         with pytest.raises(HTTPException) as error:
