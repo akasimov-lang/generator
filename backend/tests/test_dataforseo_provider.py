@@ -54,11 +54,13 @@ def test_interrupted_page_collection_resumes_from_existing_serp(monkeypatch: pyt
     async def fake_fetch(db, item) -> models.ContentItem:
         calls.append("pages")
         item.competitor_research_status = "pages_fetched"
+        db.commit()
         return item
 
     def fake_brief(db, item) -> models.ContentItem:
         calls.append("brief")
         item.competitor_brief = {"analyzed_pages_count": 1}
+        db.commit()
         return item
 
     monkeypatch.setattr(service_module, "fetch_competitor_pages_for_item", fake_fetch)

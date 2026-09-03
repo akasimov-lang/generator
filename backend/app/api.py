@@ -1771,6 +1771,11 @@ def update_task_section(task_id: str, payload: GenerationTaskSectionUpdate, _: A
     task = db.get(models.GenerationTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    if task.generation_mode == "menu_structure":
+        raise HTTPException(
+            status_code=400,
+            detail="Menu-structure content is assigned to its corresponding menu item automatically",
+        )
     section = None
     if payload.section_id:
         if not task.site_id:

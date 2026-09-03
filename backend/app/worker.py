@@ -245,8 +245,12 @@ def run_content_item_pipeline_job(self, content_item_id: str, collect_competitor
         db.rollback()
         item = db.get(models.ContentItem, content_item_id)
         if item:
-            item.status = "generation_failed" if item.status not in {"publication_failed", "publication_pending_confirmation", "published"} else item.status
-            item.generation_error = f"{type(error).__name__}: {error}"[:500]
+            task = db.get(models.GenerationTask, item.task_id)
+            automatic_publication_failed = bool(task and task.auto_publish and item.status in {"generated", "approved"})
+            if item.status not in {"publication_failed", "publication_pending_confirmation", "published"}:
+                item.status = "publication_failed" if automatic_publication_failed else "generation_failed"
+            error_prefix = "Автопубликация" if automatic_publication_failed else type(error).__name__
+            item.generation_error = f"{error_prefix}: {error}"[:500]
             db.commit()
             _refresh_parallel_task_status(db, item.task_id)
         raise

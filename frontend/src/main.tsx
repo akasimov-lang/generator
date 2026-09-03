@@ -6525,8 +6525,8 @@ function TasksView({
           onChanged={onChanged}
           actions={(currentPreviewItem, refreshItem) => (
             <>
-              {canApproveContent(currentPreviewItem) ? <button className="button compact approve" type="button" onClick={async () => { await approveTaskContent(currentPreviewItem); await refreshItem(); }} disabled={taskActionId.startsWith(currentPreviewItem.id)}><CheckCircle2 size={15} /> Принять</button> : null}
-              {canPublishContentImmediately(currentPreviewItem) ? <button className="button compact primary" type="button" onClick={async () => { await publishTaskContent(currentPreviewItem); await refreshItem(); }} disabled={taskActionId.startsWith(currentPreviewItem.id)}><Send size={15} /> {taskActionId === `${currentPreviewItem.id}:publish` ? "Публикуем…" : "Опубликовать"}</button> : null}
+              {canApproveContent(currentPreviewItem) ? <button className="button compact approve" type="button" onClick={async () => { await approveTaskContent(currentPreviewItem); await refreshItem(); }} disabled={Boolean(expandedDetails?.task.auto_publish) || taskActionId.startsWith(currentPreviewItem.id)} title={expandedDetails?.task.auto_publish ? "Автоматическое принятие включено" : undefined}><CheckCircle2 size={15} /> Принять</button> : null}
+              {canPublishContentImmediately(currentPreviewItem) ? <button className="button compact primary" type="button" onClick={async () => { await publishTaskContent(currentPreviewItem); await refreshItem(); }} disabled={Boolean(expandedDetails?.task.auto_publish) || taskActionId.startsWith(currentPreviewItem.id)} title={expandedDetails?.task.auto_publish ? "Автоматическая публикация включена" : undefined}><Send size={15} /> {taskActionId === `${currentPreviewItem.id}:publish` ? "Публикуем…" : "Опубликовать"}</button> : null}
             </>
           )}
         />
@@ -6669,6 +6669,7 @@ function AdminTasksAccordion({
   const generatedDates = expandedItems.map((item) => item.generated_at).filter(Boolean) as string[];
   const sortedGeneratedDates = generatedDates.sort();
   const latestGeneration = sortedGeneratedDates.length ? sortedGeneratedDates[sortedGeneratedDates.length - 1] : null;
+  const automaticPublication = expandedTask?.auto_publish ?? false;
 
   React.useEffect(() => {
     setSelectedIds([]);
@@ -6812,16 +6813,22 @@ function AdminTasksAccordion({
                   <td data-label="Гео">{countryLabel(task.geo)}</td>
                   <td data-label="Язык">{languageLabel(task.language)}</td>
                   <td data-label="Пункт меню" onClick={(event) => event.stopPropagation()}>
-                    <select
-                      className={`taskMenuSectionSelect ${task.section_id ? "hasValue" : ""}`}
-                      value={task.section_id || ""}
-                      onChange={(event) => onSectionChange(task, event.target.value)}
-                      disabled={actionId === `${task.id}:section` || !sections.length}
-                      aria-label={`Пункт меню задачи ${task.title}`}
-                    >
-                      <option value="">Не выбран</option>
-                      {sections.map((section) => <option value={section.id} key={section.id}>{section.name} · {section.path}</option>)}
-                    </select>
+                    {task.generation_mode === "menu_structure" ? (
+                      <span className="taskAutomaticMenuAssignment" title="Каждый текст уже связан со своим пунктом согласованной структуры меню">
+                        <CheckCircle2 size={14} /> По структуре автоматически
+                      </span>
+                    ) : (
+                      <select
+                        className={`taskMenuSectionSelect ${task.section_id ? "hasValue" : ""}`}
+                        value={task.section_id || ""}
+                        onChange={(event) => onSectionChange(task, event.target.value)}
+                        disabled={actionId === `${task.id}:section` || !sections.length}
+                        aria-label={`Пункт меню задачи ${task.title}`}
+                      >
+                        <option value="">Не выбран</option>
+                        {sections.map((section) => <option value={section.id} key={section.id}>{section.name} · {section.path}</option>)}
+                      </select>
+                    )}
                   </td>
                   <td data-label="Промпт" onClick={(event) => event.stopPropagation()}>
                     <span className="taskPromptSummary">
@@ -6852,8 +6859,8 @@ function AdminTasksAccordion({
                           event.stopPropagation();
                           onApproveAll(task);
                         }}
-                        disabled={loading || actionId === `${task.id}:approve-all` || ["generation_queued", "generating"].includes(task.status)}
-                        title="Принять все готовые тексты этой задачи"
+                        disabled={task.auto_publish || loading || actionId === `${task.id}:approve-all` || ["generation_queued", "generating"].includes(task.status)}
+                        title={task.auto_publish ? "Автоматическое принятие и публикация включены для этой задачи" : "Принять все готовые тексты этой задачи"}
                       >
                         <CheckCircle2 size={15} /> {actionId === `${task.id}:approve-all` ? "Принимаю" : "Принять"}
                       </button>
@@ -6969,10 +6976,10 @@ function AdminTasksAccordion({
                               Выбрать все
                             </label>
                             <span className="fieldHint">Выбрано: {selectedIds.length}</span>
-                            <button className="button compact approve" type="button" onClick={handleBulkApprove} disabled={!bulkApproveItems.length || actionId === "bulk:approve"}>
+                            <button className="button compact approve" type="button" onClick={handleBulkApprove} disabled={automaticPublication || !bulkApproveItems.length || actionId === "bulk:approve"} title={automaticPublication ? "Тексты принимаются автоматически сразу после генерации" : undefined}>
                               <CheckCircle2 size={15} /> {actionId === "bulk:approve" ? "Принимаю" : `Принять (${bulkApproveItems.length})`}
                             </button>
-                            <button className="button compact primary" type="button" onClick={handleBulkPublish} disabled={!bulkPublishItems.length || actionId === "bulk:publish"} title="Сразу отправить JSON выбранных текстов на сервер проекта">
+                            <button className="button compact primary" type="button" onClick={handleBulkPublish} disabled={automaticPublication || !bulkPublishItems.length || actionId === "bulk:publish"} title={automaticPublication ? "Тексты публикуются автоматически сразу после генерации" : "Сразу отправить JSON выбранных текстов на сервер проекта"}>
                               <Send size={15} /> {actionId === "bulk:publish" ? "Публикуем…" : `Опубликовать (${bulkPublishItems.length})`}
                             </button>
                             <button className="button compact" type="button" onClick={handleBulkCollectCompetitors} disabled={!bulkCollectItems.length || actionId === "bulk:collect-competitors"}>
@@ -7016,10 +7023,10 @@ function AdminTasksAccordion({
                                   <button className="button compact" type="button" onClick={() => onRegenerate(item)} disabled={busy || isPublicationLocked(item)}>
                                     <Play size={15} /> {actionId === `${item.id}:generate` ? "Генерация" : "Сгенерировать заново"}
                                   </button>
-                                  {canApproveContent(item) ? <button className="button compact approve" type="button" onClick={() => void onApprove(item)} disabled={busy} title="Принять текст">
+                                  {canApproveContent(item) ? <button className="button compact approve" type="button" onClick={() => void onApprove(item)} disabled={automaticPublication || busy} title={automaticPublication ? "Автоматическое принятие включено" : "Принять текст"}>
                                     <CheckCircle2 size={15} /> {actionId === `${item.id}:approve` ? "Принимаю" : "Принять"}
                                   </button> : null}
-                                  <button className="button compact primary" type="button" onClick={() => void onPublish(item)} disabled={busy || !canPublishContentImmediately(item)} title="Сразу отправить JSON текста на сервер проекта">
+                                  <button className="button compact primary" type="button" onClick={() => void onPublish(item)} disabled={automaticPublication || busy || !canPublishContentImmediately(item)} title={automaticPublication ? "Автоматическая публикация включена" : "Сразу отправить JSON текста на сервер проекта"}>
                                     <Send size={15} /> {actionId === `${item.id}:publish` ? "Публикуем…" : "Опубликовать"}
                                   </button>
                                   <button className="button compact danger" type="button" onClick={() => onDelete(item)} disabled={busy || deleteDisabled} title={deleteDisabled ? "Нельзя удалить scheduled/published контент" : undefined}>

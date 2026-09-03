@@ -3163,6 +3163,16 @@ h2 {
   min-width: 0;
 }
 
+.taskAutomaticMenuAssignment {
+  align-items: center;
+  color: var(--primary-dark);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 5px;
+  white-space: nowrap;
+}
+
 .menuStructureGeneratorToolbar {
   align-items: center;
   display: flex;

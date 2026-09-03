@@ -360,6 +360,44 @@ def test_task_menu_section_updates_all_mutable_items() -> None:
         assert item.section_id == section.id
 
 
+def test_menu_structure_task_rejects_manual_task_level_section_assignment() -> None:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    with TestingSession() as db:
+        site = models.Site(name="menu.example", base_url="https://menu.example", publication_endpoint="https://menu.example/api/content")
+        db.add(site)
+        db.flush()
+        section = models.Section(site=site, external_id="games", name="Games", path="/games/", menu_type="header")
+        task = models.GenerationTask(
+            title="Structure task",
+            site_id=site.id,
+            geo="DK",
+            language="da",
+            topics_count=1,
+            generation_mode="menu_structure",
+        )
+        item = models.ContentItem(
+            task=task,
+            site_id=site.id,
+            section=section,
+            section_content_mode="menu_page",
+            topic="Games",
+            slug="/games/",
+            generated_json={},
+            idempotency_key="automatic-menu-section",
+        )
+        db.add_all([section, task, item])
+        db.commit()
+
+        with pytest.raises(HTTPException) as error:
+            update_task_section(task.id, GenerationTaskSectionUpdate(section_id=section.id), None, db)  # type: ignore[arg-type]
+
+        assert error.value.status_code == 400
+        assert item.section_id == section.id
+
+
 def test_content_menu_section_is_reflected_in_generation_task() -> None:
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
