@@ -13,6 +13,7 @@ from app.services import (
     build_gemini_prompt,
     create_generation_task,
     create_menu_structure_task,
+    normalize_generated_menu_structure,
 )
 
 
@@ -35,6 +36,29 @@ def make_site(db: Session) -> models.Site:
     db.add(site)
     db.flush()
     return site
+
+
+def test_generated_casino_review_structure_requires_one_geo_parent_and_ten_brands() -> None:
+    raw_items = [{
+        "title": "Kasyno online recenzje",
+        "children": [{"title": f"Casino Brand {index}"} for index in range(1, 11)],
+    }]
+
+    items = normalize_generated_menu_structure(raw_items, levels=2, mode="casino_reviews")
+
+    assert len(items) == 1
+    assert items[0]["content_kind"] == "menu_page"
+    assert len(items[0]["children"]) == 10
+    assert all(item["content_kind"] == "casino_review" for item in items[0]["children"])
+
+
+def test_generated_casino_review_structure_rejects_wrong_brand_count() -> None:
+    with pytest.raises(ValueError, match="exactly 10"):
+        normalize_generated_menu_structure(
+            [{"title": "Reviews", "children": [{"title": "Only Brand"}]}],
+            levels=2,
+            mode="casino_reviews",
+        )
 
 
 def test_casino_review_mode_uses_system_prompt_and_brand_context(db: Session) -> None:
@@ -154,6 +178,41 @@ def test_menu_structure_mode_adopts_cached_children_and_expands_selected_root(db
         "Online casinoer",
         "Bedste online casinoer",
     ]
+
+
+def test_menu_structure_mode_uses_casino_review_prompt_context_for_generated_brand_paths(db: Session) -> None:
+    site = make_site(db)
+    root = models.Section(site_id=site.id, external_id="100", name="Casino reviews", path="/casino-reviews/", menu_type="header", sync_status="synced")
+    db.add(root)
+    db.flush()
+    brand = models.Section(site_id=site.id, external_id="101", name="Alpha Casino", path="/casino-reviews/alpha-casino/", menu_type="header", parent_id=root.id, sync_status="synced")
+    db.add(brand)
+    db.add(models.PublicationLog(
+        endpoint_url="internal://generated-menu",
+        response_status=200,
+        request_payload={
+            "action": "generated_menu_structure_apply",
+            "project_name": site.name,
+            "review_paths": ["/casino-reviews/alpha-casino/"],
+        },
+    ))
+    db.commit()
+
+    task = create_menu_structure_task(
+        db,
+        site,
+        MenuStructureGenerationCreate(
+            geo="PL",
+            language="pl",
+            collect_competitors=False,
+            menu_types=["header"],
+        ),
+    )
+
+    brand_item = next(item for item in task.items if item.section_id == brand.id)
+    assert brand_item.generation_prompt_name == CASINO_REVIEW_PROMPT_NAME
+    assert brand_item.generation_context["content_kind"] == "casino_review"
+    assert brand_item.generation_context["casino_brand"] == "Alpha Casino"
 
 
 def test_generation_context_is_rendered_for_gemini() -> None:

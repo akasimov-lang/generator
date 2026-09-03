@@ -15,6 +15,7 @@ from app.db import Base
 from app.schemas import PublicationCampaignCreate
 from app.services import (
     approve_and_schedule_item,
+    apply_generated_menu_structure,
     build_project_menu_payload,
     build_project_page_payload,
     build_nested_page_slug,
@@ -25,6 +26,7 @@ from app.services import (
     reschedule_campaign,
     schedule_campaign,
     sync_project_menus,
+    transliterate_project_menu_tree,
     update_campaign_status,
     validate_content_for_publication,
 )
@@ -450,6 +452,127 @@ def test_project_menu_payload_preserves_existing_nested_structure(db: Session) -
 
     parent = payload["list"][0]
     assert [child["id"] for child in parent["children"]] == [101, 102]
+
+
+def test_menu_transliteration_builds_child_slugs_from_the_full_parent_path() -> None:
+    original = [{
+        "id": 100,
+        "title": "Gry kasynowe",
+        "slug": "/#/",
+        "order": 7,
+        "children": [
+            {"id": 101, "title": "Kasyno na żywo", "slug": "/old-live/", "order": 2},
+            {"id": 102, "title": "Metody płatności", "slug": "/old-payments/", "order": 3},
+            {"id": 103, "title": "Sådan vælger du casino", "slug": "/old-guide/", "order": 4},
+        ],
+    }]
+
+    transformed, changes = transliterate_project_menu_tree(original)
+
+    assert transformed[0]["slug"] == "/gry-kasynowe/"
+    assert [child["slug"] for child in transformed[0]["children"]] == [
+        "/gry-kasynowe/kasyno-na-zywo/",
+        "/gry-kasynowe/metody-platnosci/",
+        "/gry-kasynowe/sadan-vaelger-du-casino/",
+    ]
+    assert transformed[0]["id"] == 100
+    assert transformed[0]["order"] == 7
+    assert [child["id"] for child in transformed[0]["children"]] == [101, 102, 103]
+    assert len(changes) == 4
+    assert original[0]["slug"] == "/#/"
+
+
+def test_menu_transliteration_makes_duplicate_sibling_paths_unique() -> None:
+    transformed, _ = transliterate_project_menu_tree([
+        {"id": 1, "title": "Бонус", "slug": "#", "order": 0},
+        {"id": 2, "title": "Бонус", "slug": "#", "order": 1},
+    ])
+
+    assert [item["slug"] for item in transformed] == ["/bonus/", "/bonus-2/"]
+
+
+def test_menu_transliteration_rolls_back_when_project_sync_fails(db: Session, monkeypatch: pytest.MonkeyPatch) -> None:
+    site = models.Site(
+        name="rollback-menu.example",
+        base_url="https://rollback-menu.example",
+        publication_endpoint="https://rollback-menu.example/api/content",
+        default_menu={
+            "header": [{"id": 10, "title": "Metody płatności", "slug": "/old-path/", "order": 0}],
+            "footer": [],
+        },
+    )
+    section = models.Section(
+        site=site,
+        external_id="10",
+        name="Metody płatności",
+        path="/old-path/",
+        menu_type="header",
+        sync_status="synced",
+    )
+    db.add_all([site, section])
+    db.commit()
+
+    async def failed_sync(*args, **kwargs) -> dict:
+        return {
+            "success": False,
+            "status_codes": [500],
+            "last_status_code": 500,
+            "results": [{"type": "header", "status_code": 500, "success": False}],
+        }
+
+    monkeypatch.setattr(service_module, "sync_project_menus", failed_sync)
+
+    result = asyncio.run(service_module.transliterate_project_menu_slugs(db, site, "header"))
+
+    assert result["success"] is False
+    assert result["rolled_back"] is True
+    assert site.default_menu["header"][0]["slug"] == "/old-path/"
+    assert section.path == "/old-path/"
+    backup = db.scalar(
+        select(models.PublicationLog).where(
+            models.PublicationLog.request_payload["action"].as_string() == "menu_slug_transliteration_backup"
+        )
+    )
+    assert backup is not None
+    assert backup.response_status == 500
+
+
+def test_generated_review_structure_is_appended_with_parent_paths(db: Session, monkeypatch: pytest.MonkeyPatch) -> None:
+    site = models.Site(
+        name="generated-menu.example",
+        base_url="https://generated-menu.example",
+        publication_endpoint="https://generated-menu.example/api/content",
+        default_menu={"header": [{"id": 1, "title": "Home", "slug": "/home/", "order": 0}], "footer": []},
+    )
+    db.add(site)
+    db.commit()
+
+    async def successful_sync(*args, **kwargs) -> dict:
+        return {
+            "success": True,
+            "status_codes": [201],
+            "last_status_code": 201,
+            "results": [{"type": "header", "status_code": 201, "success": True}],
+        }
+
+    monkeypatch.setattr(service_module, "sync_project_menus", successful_sync)
+    raw_items = [{
+        "title": "Casino Reviews",
+        "children": [{"title": f"Brand {index}", "content_kind": "casino_review"} for index in range(1, 11)],
+    }]
+
+    result = asyncio.run(apply_generated_menu_structure(db, site, "header", 2, "casino_reviews", raw_items))
+
+    assert result["success"] is True
+    assert result["created_count"] == 11
+    assert site.default_menu["header"][0]["slug"] == "/home/"
+    generated_root = site.default_menu["header"][1]
+    assert generated_root["slug"] == "/casino-reviews/"
+    assert generated_root["children"][0]["slug"] == "/casino-reviews/brand-1/"
+    sections = db.scalars(select(models.Section).where(models.Section.site_id == site.id)).all()
+    parent = next(section for section in sections if section.name == "Casino Reviews")
+    first_brand = next(section for section in sections if section.name == "Brand 1")
+    assert first_brand.parent_id == parent.id
 
 
 def test_project_page_payload_matches_receiver_dto(db: Session) -> None:

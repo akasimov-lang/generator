@@ -4426,6 +4426,22 @@ function ProjectCampaignTreeItem({
   );
 }
 
+type GeneratedMenuStructureItem = {
+  title: string;
+  slug: string;
+  content_kind: "menu_page" | "casino_review";
+  children?: GeneratedMenuStructureItem[];
+};
+
+type GeneratedMenuStructurePreview = {
+  menu_type: "header" | "footer";
+  levels: number;
+  mode: "thematic" | "casino_reviews";
+  geo: string;
+  language: string;
+  items: GeneratedMenuStructureItem[];
+};
+
 function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities, onAddContent, onChanged }: ViewProps & { site: Site; sections: Section[]; content: ContentItem[]; logs: PublicationLog[]; menuCapabilities: MenuCapabilities | null; onAddContent: (section: Section) => void }) {
   const [name, setName] = React.useState("");
   const [path, setPath] = React.useState("");
@@ -4469,6 +4485,14 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
   const [pagePreviewLoadingKey, setPagePreviewLoadingKey] = React.useState<string | null>(null);
   const [deletingNestedPageId, setDeletingNestedPageId] = React.useState<string | null>(null);
   const [retryingNestedPageId, setRetryingNestedPageId] = React.useState<string | null>(null);
+  const [transliteratingMenuType, setTransliteratingMenuType] = React.useState<"header" | "footer" | null>(null);
+  const [menuGeneratorOpen, setMenuGeneratorOpen] = React.useState(false);
+  const [generatedMenuType, setGeneratedMenuType] = React.useState<"header" | "footer">("header");
+  const [generatedMenuLevels, setGeneratedMenuLevels] = React.useState(2);
+  const [generatedMenuMode, setGeneratedMenuMode] = React.useState<"thematic" | "casino_reviews">("thematic");
+  const [generatedMenuPreview, setGeneratedMenuPreview] = React.useState<GeneratedMenuStructurePreview | null>(null);
+  const [generatingMenuPreview, setGeneratingMenuPreview] = React.useState(false);
+  const [applyingGeneratedMenu, setApplyingGeneratedMenu] = React.useState(false);
   const cachedHeader = Array.isArray(site.default_menu.header) ? site.default_menu.header : [];
   const cachedFooter = Array.isArray(site.default_menu.footer) ? site.default_menu.footer : [];
   const menuLibrary = React.useMemo(() => {
@@ -4549,6 +4573,9 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
     setEditingTreeKey(null);
     setOpeningTreeEditKey(null);
     setMenuNestingNotice("");
+    setTransliteratingMenuType(null);
+    setMenuGeneratorOpen(false);
+    setGeneratedMenuPreview(null);
   }, [site.id]);
 
   async function openPagePreview(item: MenuPreviewItem, treeKey: string) {
@@ -4864,6 +4891,88 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
     }
   }
 
+  async function transliterateMenuSlugs(targetMenuType: "header" | "footer") {
+    const menuLabel = targetMenuType === "header" ? "Header" : "Footer";
+    if (!window.confirm(`Пересчитать slug всех пунктов меню ${menuLabel} из их заголовков? Дочерние пункты получат полный путь с slug родителей.`)) return;
+    setTransliteratingMenuType(targetMenuType);
+    setFormError("");
+    setMenuNestingNotice("");
+    try {
+      const result = await api<ProjectChangesSyncResult & { updated_count: number; rolled_back: boolean }>(`/sites/${site.id}/menu/${targetMenuType}/transliterate-slugs`, { method: "POST" });
+      if (!result.success) {
+        const failure = result.results.find((item) => !item.success);
+        throw new Error(failure?.error || "Проект не принял новые slug; изменения отменены");
+      }
+      setUpdatedAt(new Date().toISOString());
+      setMenuNestingNotice(`Slug меню ${menuLabel} обновлены: ${result.updated_count}. Вложенность и идентификаторы сохранены.`);
+      await onChanged();
+    } catch (error) {
+      setMenuNestingNotice(error instanceof Error ? error.message : "Не удалось транслитерировать slug меню");
+      await onChanged();
+    } finally {
+      setTransliteratingMenuType(null);
+    }
+  }
+
+  async function generateMenuStructurePreview() {
+    setGeneratingMenuPreview(true);
+    setGeneratedMenuPreview(null);
+    setFormError("");
+    try {
+      const preview = await api<GeneratedMenuStructurePreview>(`/sites/${site.id}/menu-structure-preview`, {
+        method: "POST",
+        body: JSON.stringify({
+          menu_type: generatedMenuType,
+          levels: generatedMenuMode === "casino_reviews" ? 2 : generatedMenuLevels,
+          mode: generatedMenuMode
+        })
+      });
+      setGeneratedMenuPreview(preview);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось сгенерировать структуру меню");
+    } finally {
+      setGeneratingMenuPreview(false);
+    }
+  }
+
+  async function addGeneratedMenuToSite() {
+    if (!generatedMenuPreview) return;
+    if (!window.confirm(`Добавить показанную структуру в меню ${generatedMenuPreview.menu_type === "header" ? "Header" : "Footer"} и отправить её на сайт?`)) return;
+    setApplyingGeneratedMenu(true);
+    setFormError("");
+    try {
+      const result = await api<ProjectChangesSyncResult & { created_count: number; rolled_back: boolean }>(`/sites/${site.id}/generated-menu-structure/apply`, {
+        method: "POST",
+        body: JSON.stringify({
+          menu_type: generatedMenuPreview.menu_type,
+          levels: generatedMenuPreview.levels,
+          mode: generatedMenuPreview.mode,
+          items: generatedMenuPreview.items
+        })
+      });
+      if (!result.success) throw new Error("Проект не принял структуру; добавление отменено");
+      setMenuGeneratorOpen(false);
+      setGeneratedMenuPreview(null);
+      setUpdatedAt(new Date().toISOString());
+      setMenuNestingNotice(`На сайт добавлена сгенерированная структура: ${result.created_count} пунктов.`);
+      await onChanged();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Не удалось добавить структуру на сайт");
+      await onChanged();
+    } finally {
+      setApplyingGeneratedMenu(false);
+    }
+  }
+
+  function renderGeneratedMenuPreview(items: GeneratedMenuStructureItem[]): React.ReactNode {
+    return <ul className="generatedMenuPreviewTree">{items.map((item) => (
+      <li key={item.slug}>
+        <div><strong>{item.title}</strong><code>{item.slug}</code>{item.content_kind === "casino_review" ? <span>Обзор казино</span> : null}</div>
+        {item.children?.length ? renderGeneratedMenuPreview(item.children) : null}
+      </li>
+    ))}</ul>;
+  }
+
   async function saveMenuItem(targetMenuType: "header" | "footer", item?: MenuLibraryItem) {
     const itemName = (item?.name || name).trim();
     const itemPath = (item?.path || path).trim();
@@ -5040,6 +5149,12 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
     <section className="viewStack">
       <DataPanel title="Структура меню проекта" allowCollapse={false}>
         {menuNestingNotice ? <div className="notice menuNestingNotice" role="note"><AlertTriangle size={17} /><span>{menuNestingNotice}</span></div> : null}
+        <div className="menuStructureGeneratorToolbar">
+          <button className="button primary" type="button" onClick={() => { setFormError(""); setGeneratedMenuPreview(null); setMenuGeneratorOpen(true); }}>
+            <Sparkles size={17} /> Сгенерировать структуру для проекта
+          </button>
+          <span>Предпросмотр структуры перед добавлением на сайт</span>
+        </div>
         <section className={`menuAddPanel embeddedMenuAddPanel ${addExpanded ? "expanded" : ""}`}>
           <button className="menuAddToggle" type="button" onClick={() => { setInlineMenuType(null); setAddExpanded((current) => !current); }} aria-expanded={addExpanded}>
             <span className="menuAddToggleIcon"><Plus size={18} /></span>
@@ -5060,10 +5175,10 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
           </form> : null}
         </section>
         <div className="projectMenuStructureGrid">
-          <SiteMenuPreviewSection key={`${site.id}:header`} site={site} title="Меню Header" icon={<HeaderMenuIcon />} items={cachedHeader} sections={sections.filter((section) => section.menu_type === "header" && section.sync_status !== "external_deleted")} content={content} publicationLogs={logs} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "header" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} editingTreeKey={editingTreeKey} openingEditKey={openingTreeEditKey} editName={editingSectionName} editPath={editingSectionPath} savingEdit={savingSectionEdit} editError={formError} deletingNestedPageId={deletingNestedPageId} retryingNestedPageId={retryingNestedPageId} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onEditItem={(item, section, treeKey) => void openTreeSectionEdit("header", item, section, treeKey)} onEditNameChange={setEditingSectionName} onEditPathChange={setEditingSectionPath} onSaveEdit={() => { if (editingTreeSection) void saveSectionEdit(editingTreeSection, true); }} onCancelEdit={cancelSectionEdit} onDeletePage={(item) => void deleteNestedPage(item)} onRetryPage={(item) => void retryNestedPagePublication(item)} onAddContent={(item, section) => void addContentToMenuItem("header", item, section)} onAddChild={(item, section, treeKey) => openChildForm("header", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("header")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Header</button>}>
+          <SiteMenuPreviewSection key={`${site.id}:header`} site={site} title="Меню Header" icon={<HeaderMenuIcon />} headerAction={<button className="button compact secondary siteMenuTransliterateButton" type="button" onClick={() => void transliterateMenuSlugs("header")} disabled={!cachedHeader.length || transliteratingMenuType !== null}>{transliteratingMenuType === "header" ? <LoaderCircle size={14} /> : <Sparkles size={14} />} {transliteratingMenuType === "header" ? "Обновляем…" : "Транслитерация"}</button>} items={cachedHeader} sections={sections.filter((section) => section.menu_type === "header" && section.sync_status !== "external_deleted")} content={content} publicationLogs={logs} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "header" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} editingTreeKey={editingTreeKey} openingEditKey={openingTreeEditKey} editName={editingSectionName} editPath={editingSectionPath} savingEdit={savingSectionEdit} editError={formError} deletingNestedPageId={deletingNestedPageId} retryingNestedPageId={retryingNestedPageId} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onEditItem={(item, section, treeKey) => void openTreeSectionEdit("header", item, section, treeKey)} onEditNameChange={setEditingSectionName} onEditPathChange={setEditingSectionPath} onSaveEdit={() => { if (editingTreeSection) void saveSectionEdit(editingTreeSection, true); }} onCancelEdit={cancelSectionEdit} onDeletePage={(item) => void deleteNestedPage(item)} onRetryPage={(item) => void retryNestedPagePublication(item)} onAddContent={(item, section) => void addContentToMenuItem("header", item, section)} onAddChild={(item, section, treeKey) => openChildForm("header", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("header")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Header</button>}>
             {inlineMenuType === "header" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "header")}>{menuFields("header")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
           </SiteMenuPreviewSection>
-          <SiteMenuPreviewSection key={`${site.id}:footer`} site={site} title="Меню Footer" icon={<FooterMenuIcon />} items={cachedFooter} sections={sections.filter((section) => section.menu_type === "footer" && section.sync_status !== "external_deleted")} content={content} publicationLogs={logs} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "footer" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} editingTreeKey={editingTreeKey} openingEditKey={openingTreeEditKey} editName={editingSectionName} editPath={editingSectionPath} savingEdit={savingSectionEdit} editError={formError} deletingNestedPageId={deletingNestedPageId} retryingNestedPageId={retryingNestedPageId} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onEditItem={(item, section, treeKey) => void openTreeSectionEdit("footer", item, section, treeKey)} onEditNameChange={setEditingSectionName} onEditPathChange={setEditingSectionPath} onSaveEdit={() => { if (editingTreeSection) void saveSectionEdit(editingTreeSection, true); }} onCancelEdit={cancelSectionEdit} onDeletePage={(item) => void deleteNestedPage(item)} onRetryPage={(item) => void retryNestedPagePublication(item)} onAddContent={(item, section) => void addContentToMenuItem("footer", item, section)} onAddChild={(item, section, treeKey) => openChildForm("footer", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("footer")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Footer</button>}>
+          <SiteMenuPreviewSection key={`${site.id}:footer`} site={site} title="Меню Footer" icon={<FooterMenuIcon />} headerAction={<button className="button compact secondary siteMenuTransliterateButton" type="button" onClick={() => void transliterateMenuSlugs("footer")} disabled={!cachedFooter.length || transliteratingMenuType !== null}>{transliteratingMenuType === "footer" ? <LoaderCircle size={14} /> : <Sparkles size={14} />} {transliteratingMenuType === "footer" ? "Обновляем…" : "Транслитерация"}</button>} items={cachedFooter} sections={sections.filter((section) => section.menu_type === "footer" && section.sync_status !== "external_deleted")} content={content} publicationLogs={logs} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "footer" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} editingTreeKey={editingTreeKey} openingEditKey={openingTreeEditKey} editName={editingSectionName} editPath={editingSectionPath} savingEdit={savingSectionEdit} editError={formError} deletingNestedPageId={deletingNestedPageId} retryingNestedPageId={retryingNestedPageId} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onEditItem={(item, section, treeKey) => void openTreeSectionEdit("footer", item, section, treeKey)} onEditNameChange={setEditingSectionName} onEditPathChange={setEditingSectionPath} onSaveEdit={() => { if (editingTreeSection) void saveSectionEdit(editingTreeSection, true); }} onCancelEdit={cancelSectionEdit} onDeletePage={(item) => void deleteNestedPage(item)} onRetryPage={(item) => void retryNestedPagePublication(item)} onAddContent={(item, section) => void addContentToMenuItem("footer", item, section)} onAddChild={(item, section, treeKey) => openChildForm("footer", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("footer")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Footer</button>}>
             {inlineMenuType === "footer" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "footer")}>{menuFields("footer")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
           </SiteMenuPreviewSection>
         </div>
@@ -5184,6 +5299,38 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
             })}
           </div>
       </DataPanel>
+      {menuGeneratorOpen ? (
+        <Modal
+          title="Сгенерировать структуру меню"
+          subtitle="Сначала проверьте результат; сайт изменится только после нажатия «Добавить на сайт»"
+          onClose={() => { if (!generatingMenuPreview && !applyingGeneratedMenu) setMenuGeneratorOpen(false); }}
+          wide
+          className="generatedMenuStructureModal"
+        >
+          <div className="generatedMenuStructureControls">
+            <label>Тип меню<select value={generatedMenuType} onChange={(event) => { setGeneratedMenuType(event.target.value as "header" | "footer"); setGeneratedMenuPreview(null); }}><option value="header">Header</option><option value="footer">Footer</option></select></label>
+            <label>Тип структуры<select value={generatedMenuMode} onChange={(event) => { const mode = event.target.value as "thematic" | "casino_reviews"; setGeneratedMenuMode(mode); if (mode === "casino_reviews") setGeneratedMenuLevels(2); setGeneratedMenuPreview(null); }}><option value="thematic">По тематике проекта</option><option value="casino_reviews">Обзоры казино: 10 брендов</option></select></label>
+            <label>Уровней вложенности<select value={generatedMenuMode === "casino_reviews" ? 2 : generatedMenuLevels} onChange={(event) => { setGeneratedMenuLevels(Number(event.target.value)); setGeneratedMenuPreview(null); }} disabled={generatedMenuMode === "casino_reviews"}><option value={1}>1 уровень</option><option value={2}>2 уровня</option><option value={3}>3 уровня</option></select></label>
+          </div>
+          <div className="menuStructureSummary">
+            {generatedMenuMode === "casino_reviews"
+              ? `Система подберёт 10 реальных брендов для GEO проекта (${site.cache_geo || "не задано"}), создаст общий выпадающий раздел и пометит дочерние страницы как обзоры казино.`
+              : `Структура будет создана на языке проекта (${site.cache_language || "не задан"}) с учётом его тематики и GEO (${site.cache_geo || "не задано"}).`}
+          </div>
+          {formError ? <div className="formError">{formError}</div> : null}
+          {generatedMenuPreview ? (
+            <section className="generatedMenuPreview">
+              <header><strong>Предпросмотр</strong><span>{generatedMenuPreview.language.toUpperCase()} · {generatedMenuPreview.geo.toUpperCase()} · {generatedMenuPreview.levels} ур.</span></header>
+              {renderGeneratedMenuPreview(generatedMenuPreview.items)}
+            </section>
+          ) : <div className="siteMenuPreviewEmpty">Нажмите «Сгенерировать», чтобы увидеть будущую структуру.</div>}
+          <div className="modalActions">
+            <button className="button secondary" type="button" onClick={() => setMenuGeneratorOpen(false)} disabled={generatingMenuPreview || applyingGeneratedMenu}>Отменить</button>
+            <button className="button secondary" type="button" onClick={() => void generateMenuStructurePreview()} disabled={generatingMenuPreview || applyingGeneratedMenu}>{generatingMenuPreview ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />} {generatedMenuPreview ? "Сгенерировать заново" : "Сгенерировать"}</button>
+            <button className="button primary" type="button" onClick={() => void addGeneratedMenuToSite()} disabled={!generatedMenuPreview || generatingMenuPreview || applyingGeneratedMenu}>{applyingGeneratedMenu ? <LoaderCircle className="spin" size={16} /> : <Send size={16} />} {applyingGeneratedMenu ? "Добавляем…" : "Добавить на сайт"}</button>
+          </div>
+        </Modal>
+      ) : null}
       {editingLibraryItem ? (
         <Modal title="Редактировать пункт библиотеки" subtitle="Изменения сохранятся только для выбранного проекта" onClose={() => setEditingLibraryItem(null)}>
           <form className="menuLibraryEditForm" onSubmit={saveLibraryEdit}>
@@ -8645,6 +8792,7 @@ type SiteMenuPreviewSectionProps = {
   content?: ContentItem[];
   publicationLogs?: PublicationLog[];
   icon?: React.ReactNode;
+  headerAction?: React.ReactNode;
   action?: React.ReactNode;
   children?: React.ReactNode;
   adoptingParentKey?: string | null;
@@ -8670,7 +8818,7 @@ type SiteMenuPreviewSectionProps = {
   onAddChild?: (item: MenuPreviewItem, section: Section | undefined, treeKey: string) => void;
 };
 
-function SiteMenuPreviewSection({ title, items, site, sections = [], content = [], publicationLogs = [], icon, action, children, adoptingParentKey, activeParentTreeKey, pagePreviewLoadingKey, editingTreeKey, openingEditKey, editName = "", editPath = "", savingEdit = false, editError = "", deletingNestedPageId, retryingNestedPageId, onPreviewPage, onEditItem, onEditNameChange, onEditPathChange, onSaveEdit, onCancelEdit, onDeletePage, onRetryPage, onAddContent, onAddChild }: SiteMenuPreviewSectionProps) {
+function SiteMenuPreviewSection({ title, items, site, sections = [], content = [], publicationLogs = [], icon, headerAction, action, children, adoptingParentKey, activeParentTreeKey, pagePreviewLoadingKey, editingTreeKey, openingEditKey, editName = "", editPath = "", savingEdit = false, editError = "", deletingNestedPageId, retryingNestedPageId, onPreviewPage, onEditItem, onEditNameChange, onEditPathChange, onSaveEdit, onCancelEdit, onDeletePage, onRetryPage, onAddContent, onAddChild }: SiteMenuPreviewSectionProps) {
   const menuType = title.includes("Footer") ? "footer" : "header";
   const tree = React.useMemo(() => buildMenuTree(items, sections), [items, sections]);
   const [collapsedKeys, setCollapsedKeys] = React.useState<Set<string>>(() => collapsibleMenuKeys(tree));
@@ -8786,7 +8934,7 @@ function SiteMenuPreviewSection({ title, items, site, sections = [], content = [
 
   return (
     <section className="siteMenuPreviewSection">
-      <h3><span className="siteMenuPreviewTitle">{icon}{title} <span>{itemCount}</span></span></h3>
+      <h3><span className="siteMenuPreviewTitle">{icon}{title} <span>{itemCount}</span></span>{headerAction}</h3>
       {itemCount ? (
         <div className="siteMenuTreeViewport">{renderNodes(tree)}</div>
       ) : <div className="siteMenuPreviewEmpty">Пунктов нет</div>}

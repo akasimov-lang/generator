@@ -28,6 +28,7 @@ from app.schemas import (
     GenerationTaskRegenerateAll,
     GenerationTaskResponse,
     GenerationTaskSectionUpdate,
+    GeneratedMenuStructureApply,
     LoginRequest,
     MenuTemplateApplyResponse,
     MenuTemplateResponse,
@@ -35,6 +36,8 @@ from app.schemas import (
     MenuLibraryItemResponse,
     MenuLibraryItemUpdate,
     MenuStructureGenerationCreate,
+    MenuStructurePreviewRequest,
+    MenuStructurePreviewResponse,
     MenuVisibilityCheckResponse,
     PasswordChange,
     PublishedContentBulkDeleteRequest,
@@ -79,6 +82,7 @@ from app.services import (
     BASE_PROMPT_TEMPLATE_NAME,
     approve_and_schedule_item,
     apply_content_section_slug,
+    apply_generated_menu_structure,
     build_campaign_publication_bundle,
     build_competitor_brief_for_item,
     collect_competitor_serp_for_item,
@@ -96,6 +100,7 @@ from app.services import (
     fetch_competitor_pages_for_item,
     get_dashboard,
     generate_topic_suggestions,
+    generate_menu_structure_preview,
     publish_item,
     refresh_campaign_status,
     regenerate_competitor_queries,
@@ -103,6 +108,7 @@ from app.services import (
     schedule_campaign,
     reschedule_campaign,
     sync_project_menus,
+    transliterate_project_menu_slugs,
     update_campaign_status,
     validate_content_for_publication,
     validate_ai_provider_key,
@@ -957,6 +963,80 @@ async def sync_site_changes(site_id: str, _: AuthUser, db: Session = Depends(get
     site = _get_site_or_404(db, site_id)
     try:
         return await sync_project_menus(db, site, initiator_username=_request_username(_))
+    except ProjectCacheError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@router.post("/sites/{site_id}/menu/{menu_type}/transliterate-slugs")
+async def transliterate_site_menu_slugs(
+    site_id: str,
+    menu_type: str,
+    user: AuthUser,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    site = _get_site_or_404(db, site_id)
+    try:
+        return await transliterate_project_menu_slugs(
+            db,
+            site,
+            menu_type,
+            initiator_username=_request_username(user),
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except ProjectCacheError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@router.post("/sites/{site_id}/menu-structure-preview", response_model=MenuStructurePreviewResponse)
+async def preview_site_menu_structure(
+    site_id: str,
+    payload: MenuStructurePreviewRequest,
+    _: AuthUser,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    site = _get_site_or_404(db, site_id)
+    provider = db.get(models.AiProvider, payload.ai_provider_id) if payload.ai_provider_id else db.scalar(
+        select(models.AiProvider)
+        .where(models.AiProvider.provider_type == "gemini", models.AiProvider.is_active.is_(True))
+        .order_by(models.AiProvider.created_at.desc())
+        .limit(1)
+    )
+    if not provider:
+        raise HTTPException(status_code=400, detail="Select an active Gemini provider to generate a menu structure")
+    try:
+        result = await generate_menu_structure_preview(provider, site, payload)
+    except ValueError as error:
+        db.commit()
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except Exception as error:
+        db.commit()
+        raise HTTPException(status_code=502, detail=str(error)[:500]) from error
+    db.commit()
+    return result
+
+
+@router.post("/sites/{site_id}/generated-menu-structure/apply")
+async def apply_site_generated_menu_structure(
+    site_id: str,
+    payload: GeneratedMenuStructureApply,
+    user: AuthUser,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    site = _get_site_or_404(db, site_id)
+    try:
+        return await apply_generated_menu_structure(
+            db,
+            site,
+            payload.menu_type,
+            payload.levels,
+            payload.mode,
+            [item.model_dump() for item in payload.items],
+            initiator_username=_request_username(user),
+        )
+    except ValueError as error:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(error)) from error
     except ProjectCacheError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
 

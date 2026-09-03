@@ -3112,6 +3112,94 @@ h2 {
   width: 24px;
 }
 
+.siteMenuTransliterateButton {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.siteMenuTransliterateButton .lucide-loader-circle {
+  animation: spin 0.9s linear infinite;
+}
+
+.menuStructureGeneratorToolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.menuStructureGeneratorToolbar > span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.generatedMenuStructureControls {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.generatedMenuStructureControls label {
+  display: grid;
+  gap: 6px;
+}
+
+.generatedMenuPreview {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-top: 14px;
+  max-height: min(52vh, 560px);
+  overflow: auto;
+  padding: 14px;
+}
+
+.generatedMenuPreview > header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.generatedMenuPreview > header span,
+.generatedMenuPreviewTree code {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.generatedMenuPreviewTree {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 18px;
+}
+
+.generatedMenuPreviewTree:first-of-type {
+  padding-left: 0;
+}
+
+.generatedMenuPreviewTree li > div {
+  align-items: baseline;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 4px;
+}
+
+.generatedMenuPreviewTree li > div > span {
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  border-radius: 999px;
+  color: var(--primary);
+  font-size: 11px;
+  padding: 2px 7px;
+}
+
+@media (max-width: 760px) {
+  .generatedMenuStructureControls {
+    grid-template-columns: 1fr;
+  }
+}
+
 .siteMenuInlineAddButton {
   align-items: center;
   background: transparent;

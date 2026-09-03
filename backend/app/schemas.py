@@ -388,6 +388,35 @@ class MenuStructureGenerationCreate(BaseModel):
     save_as_draft: bool = False
 
 
+class GeneratedMenuItem(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    children: list["GeneratedMenuItem"] = Field(default_factory=list, max_length=20)
+    content_kind: Literal["menu_page", "casino_review"] = "menu_page"
+
+
+class MenuStructurePreviewRequest(BaseModel):
+    menu_type: Literal["header", "footer"] = "header"
+    levels: int = Field(default=2, ge=1, le=3)
+    mode: Literal["thematic", "casino_reviews"] = "thematic"
+    ai_provider_id: str | None = None
+
+
+class MenuStructurePreviewResponse(BaseModel):
+    menu_type: Literal["header", "footer"]
+    levels: int
+    mode: Literal["thematic", "casino_reviews"]
+    geo: str
+    language: str
+    items: list[dict[str, Any]]
+
+
+class GeneratedMenuStructureApply(BaseModel):
+    menu_type: Literal["header", "footer"] = "header"
+    levels: int = Field(default=2, ge=1, le=3)
+    mode: Literal["thematic", "casino_reviews"] = "thematic"
+    items: list[GeneratedMenuItem] = Field(min_length=1, max_length=20)
+
+
 class TopicSuggestionsRequest(BaseModel):
     geo: str = Field(min_length=2, max_length=20)
     language: str = Field(min_length=2, max_length=20)
