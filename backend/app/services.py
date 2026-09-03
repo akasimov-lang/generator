@@ -1842,6 +1842,7 @@ Return only valid JSON without Markdown: {{"items":[{{"title":"...","children":[
         response_status=200,
         response_body={"items": preview_items},
     ))
+    db.flush()
     return {
         "menu_type": payload.menu_type,
         "levels": levels,

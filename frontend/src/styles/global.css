@@ -2375,6 +2375,31 @@ h2 {
   border-top: 1px solid var(--border);
 }
 
+.workspaceMenuGeneratorShortcut {
+  align-items: center;
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--primary) 45%, var(--border));
+  border-radius: 8px;
+  color: var(--primary);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 11px;
+}
+
+.workspaceMenuGeneratorShortcut:hover {
+  background: color-mix(in srgb, var(--primary) 16%, var(--surface));
+}
+
+.workspaceMenuGeneratorShortcut:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .projectWorkspaceView {
   gap: 10px;
 }

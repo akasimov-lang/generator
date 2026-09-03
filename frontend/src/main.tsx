@@ -2272,6 +2272,19 @@ function ProjectWorkspaceView({
             attention={pendingSectionsCount > 0}
             onClick={() => onTabChange("menu", selectedSite?.name)}
           />
+          <button
+            className="workspaceMenuGeneratorShortcut"
+            type="button"
+            disabled={!selectedSite}
+            onClick={() => {
+              if (!selectedSite) return;
+              sessionStorage.setItem("open_menu_structure_generator", selectedSite.id);
+              onTabChange("menu", selectedSite.name);
+              window.setTimeout(() => window.dispatchEvent(new CustomEvent("open-menu-structure-generator", { detail: { siteId: selectedSite.id } })), 0);
+            }}
+          >
+            <Sparkles size={15} /> Сгенерировать структуру меню
+          </button>
         </div>
         {workspaceError ? <div className="notice">{workspaceError}</div> : null}
       </DataPanel>
@@ -4579,6 +4592,20 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
     setTransliteratingMenuType(null);
     setMenuGeneratorOpen(false);
     setGeneratedMenuPreview(null);
+  }, [site.id]);
+
+  React.useEffect(() => {
+    const openGenerator = (event?: Event) => {
+      const requestedSiteId = event instanceof CustomEvent ? String(event.detail?.siteId || "") : sessionStorage.getItem("open_menu_structure_generator") || "";
+      if (requestedSiteId !== site.id) return;
+      sessionStorage.removeItem("open_menu_structure_generator");
+      setFormError("");
+      setGeneratedMenuPreview(null);
+      setMenuGeneratorOpen(true);
+    };
+    openGenerator();
+    window.addEventListener("open-menu-structure-generator", openGenerator);
+    return () => window.removeEventListener("open-menu-structure-generator", openGenerator);
   }, [site.id]);
 
   async function openPagePreview(item: MenuPreviewItem, treeKey: string) {
