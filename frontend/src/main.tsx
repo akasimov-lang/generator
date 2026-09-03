@@ -10403,6 +10403,20 @@ function previewPlainText(value: unknown) {
   return String(value ?? "").replace(/<[^>]+>/g, "").trim();
 }
 
+function PreviewInlineText({ value }: { value: unknown }) {
+  const normalized = String(value ?? "")
+    .replace(/<(strong|b)\b[^>]*>/gi, "**")
+    .replace(/<\/(strong|b)>/gi, "**")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\\\*\\\*/g, "**")
+    .replace(/\\_\\_/g, "__")
+    .replace(/__(.+?)__/g, "**$1**");
+  const parts = normalized.split(/(\*\*.+?\*\*)/g).filter(Boolean);
+  return <>{parts.map((part, index) => part.startsWith("**") && part.endsWith("**")
+    ? <strong key={index}>{part.slice(2, -2)}</strong>
+    : <React.Fragment key={index}>{part.replace(/\*\*/g, "")}</React.Fragment>)}</>;
+}
+
 function ContentPreviewBody({ item, generatedJson }: { item?: ContentItem; generatedJson?: Record<string, unknown> }) {
   const source = generatedJson || item?.generated_json || {};
   const pages = source.pages;
@@ -10429,23 +10443,23 @@ function ContentPreviewBody({ item, generatedJson }: { item?: ContentItem; gener
           return (
             <section className={`previewHeading previewHeadingH${level}`} key={String(block.id || blockIndex)}>
               <span className="previewBlockLabel">{headingLabels[level]}</span>
-              <HeadingTag>{previewPlainText(data.text)}</HeadingTag>
+              <HeadingTag><PreviewInlineText value={data.text} /></HeadingTag>
             </section>
           );
         }
         if (block.type === "paragraph" && data && !Array.isArray(data)) {
-          return <p className="previewParagraph" key={String(block.id || blockIndex)}>{previewPlainText(data.text)}</p>;
+          return <p className="previewParagraph" key={String(block.id || blockIndex)}><PreviewInlineText value={data.text} /></p>;
         }
         if (block.type === "list" && data && !Array.isArray(data) && Array.isArray(data.items)) {
           const items = data.items as unknown[];
           const ListTag = data.style === "ordered" ? "ol" : "ul";
-          return <ListTag className="previewList" key={String(block.id || blockIndex)}>{items.map((entry, entryIndex) => <li key={entryIndex}>{previewPlainText(entry)}</li>)}</ListTag>;
+          return <ListTag className="previewList" key={String(block.id || blockIndex)}>{items.map((entry, entryIndex) => <li key={entryIndex}><PreviewInlineText value={entry} /></li>)}</ListTag>;
         }
         if (block.type === "table" && data && !Array.isArray(data) && Array.isArray(data.content)) {
           return (
             <div className="previewTableWrap" key={String(block.id || blockIndex)}>
               <table className="previewTable"><tbody>{(data.content as unknown[]).map((row, rowIndex) => (
-                <tr key={rowIndex}>{(Array.isArray(row) ? row : [row]).map((cell, cellIndex) => <td key={cellIndex}>{previewPlainText(cell)}</td>)}</tr>
+                <tr key={rowIndex}>{(Array.isArray(row) ? row : [row]).map((cell, cellIndex) => <td key={cellIndex}><PreviewInlineText value={cell} /></td>)}</tr>
               ))}</tbody></table>
             </div>
           );
@@ -10456,7 +10470,7 @@ function ContentPreviewBody({ item, generatedJson }: { item?: ContentItem; gener
               <span className="previewBlockLabel">FAQ</span>
               {data.map((entry, entryIndex) => {
                 const faq = entry as { question?: unknown; answer?: unknown };
-                return <div key={entryIndex}><strong>{previewPlainText(faq.question)}</strong><p>{previewPlainText(faq.answer)}</p></div>;
+                return <div key={entryIndex}><strong><PreviewInlineText value={faq.question} /></strong><p><PreviewInlineText value={faq.answer} /></p></div>;
               })}
             </section>
           );
