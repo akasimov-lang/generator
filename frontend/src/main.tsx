@@ -4964,11 +4964,14 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
     }
   }
 
-  function renderGeneratedMenuPreview(items: GeneratedMenuStructureItem[]): React.ReactNode {
-    return <ul className="generatedMenuPreviewTree">{items.map((item) => (
+  function renderGeneratedMenuPreview(items: GeneratedMenuStructureItem[], depth = 0): React.ReactNode {
+    return <ul className={`generatedMenuPreviewTree ${depth === 0 ? "root" : "nested"}`}>{items.map((item) => (
       <li key={item.slug}>
-        <div><strong>{item.title}</strong><code>{item.slug}</code>{item.content_kind === "casino_review" ? <span>Обзор казино</span> : null}</div>
-        {item.children?.length ? renderGeneratedMenuPreview(item.children) : null}
+        <div className={`generatedMenuPreviewRow level${depth + 1}`}>
+          <span className="generatedMenuPreviewBranch" aria-hidden="true">{depth === 0 ? <FolderKanban size={16} /> : <CornerDownRight size={16} />}</span>
+          <span className="generatedMenuPreviewText"><span><b>Уровень {depth + 1}</b><strong>{item.title}</strong>{item.content_kind === "casino_review" ? <em>Обзор казино</em> : null}</span><code>{item.slug}</code></span>
+        </div>
+        {item.children?.length ? renderGeneratedMenuPreview(item.children, depth + 1) : null}
       </li>
     ))}</ul>;
   }

@@ -3170,28 +3170,91 @@ h2 {
 .generatedMenuPreviewTree {
   list-style: none;
   margin: 0;
-  padding: 0 0 0 18px;
+  padding: 0;
 }
 
-.generatedMenuPreviewTree:first-of-type {
-  padding-left: 0;
+.generatedMenuPreviewTree.nested {
+  border-left: 2px solid color-mix(in srgb, var(--primary) 35%, var(--border));
+  margin-left: 18px;
+  padding-left: 24px;
 }
 
-.generatedMenuPreviewTree li > div {
-  align-items: baseline;
-  border-bottom: 1px solid var(--border);
+.generatedMenuPreviewTree > li {
+  position: relative;
+}
+
+.generatedMenuPreviewTree.nested > li::before {
+  border-top: 2px solid color-mix(in srgb, var(--primary) 35%, var(--border));
+  content: "";
+  left: -24px;
+  position: absolute;
+  top: 25px;
+  width: 22px;
+}
+
+.generatedMenuPreviewRow {
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--primary);
+  border-radius: 8px;
+  display: flex;
+  gap: 10px;
+  margin: 7px 0;
+  min-height: 48px;
+  padding: 7px 10px;
+}
+
+.generatedMenuPreviewRow.level2 {
+  border-left-color: color-mix(in srgb, var(--primary) 70%, #6b8cff);
+}
+
+.generatedMenuPreviewRow.level3 {
+  border-left-color: color-mix(in srgb, var(--primary) 45%, #9b7bea);
+}
+
+.generatedMenuPreviewBranch {
+  align-items: center;
+  color: var(--primary);
+  display: inline-flex;
+  flex: 0 0 22px;
+  justify-content: center;
+}
+
+.generatedMenuPreviewText {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.generatedMenuPreviewText > span {
+  align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 8px 4px;
 }
 
-.generatedMenuPreviewTree li > div > span {
+.generatedMenuPreviewText b {
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  border-radius: 999px;
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 750;
+  padding: 2px 7px;
+  text-transform: uppercase;
+}
+
+.generatedMenuPreviewText em {
   background: color-mix(in srgb, var(--primary) 12%, transparent);
   border-radius: 999px;
   color: var(--primary);
   font-size: 11px;
+  font-style: normal;
   padding: 2px 7px;
+}
+
+.generatedMenuPreviewText code {
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 760px) {
