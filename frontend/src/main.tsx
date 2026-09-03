@@ -5264,6 +5264,7 @@ function TasksView({
   const [generateTitle, setGenerateTitle] = React.useState(true);
   const [collectCompetitors, setCollectCompetitors] = React.useState(true);
   const [includeCasinoRating, setIncludeCasinoRating] = React.useState(taskCheckboxPreferences.includeCasinoRating ?? false);
+  const [autoPublish, setAutoPublish] = React.useState(false);
   const [casinoReviews, setCasinoReviews] = React.useState(false);
   const [createFormExpanded, setCreateFormExpanded] = React.useState(false);
   const [menuStructureFormExpanded, setMenuStructureFormExpanded] = React.useState(false);
@@ -5543,7 +5544,7 @@ function TasksView({
         collect_competitors: collectCompetitors,
         include_casino_rating: includeCasinoRating,
         generation_mode: casinoReviews ? "casino_reviews" : "standard",
-        auto_publish: false,
+        auto_publish: autoPublish,
         save_as_draft: action === "draft",
         topics: cleanTopics
       };
@@ -5552,6 +5553,7 @@ function TasksView({
         await api(`/tasks/${task.id}/start`, { method: "POST" });
       }
       setTopics("");
+      setAutoPublish(false);
       setCreateFormExpanded(false);
       await onChanged();
     } catch (error) {
@@ -5595,6 +5597,7 @@ function TasksView({
         })
       });
       await api(`/tasks/${task.id}/start`, { method: "POST" });
+      setMenuStructureAutoPublish(false);
       setMenuStructureFormExpanded(false);
       await onChanged();
     } catch (error) {
@@ -6011,7 +6014,7 @@ function TasksView({
           <span className="newGenerationTaskIcon" aria-hidden="true"><ListChecks size={25} strokeWidth={2.1} /></span>
           <span className="newGenerationTaskCopy">
             <strong>Генерация по структуре меню</strong>
-            <small>По одному тексту для каждого пункта без вложения</small>
+            <small>Тексты для всех пунктов и дочерних разделов</small>
           </span>
         </button>
       </div>
@@ -6153,6 +6156,10 @@ function TasksView({
                 <input type="checkbox" checked={collectCompetitors} onChange={(event) => setCollectCompetitors(event.target.checked)} />
                 Собрать конкурентов
               </label>
+              <label className="checkboxRow casinoReviewOption">
+                <input type="checkbox" checked={autoPublish} onChange={(event) => setAutoPublish(event.target.checked)} />
+                <span><b>Принять и опубликовать</b><small>После генерации система автоматически примет и опубликует каждый готовый текст; ошибки останутся в задаче.</small></span>
+              </label>
               {!casinoReviews ? <label className="checkboxRow casinoRatingOption">
                 <input type="checkbox" checked={includeCasinoRating} onChange={(event) => setIncludeCasinoRating(event.target.checked)} />
                 <span><b>Собрать рейтинг казино</b><small>Рейтинг из 5–10 казино с оценками и обоснованием мест.</small></span>
@@ -6207,7 +6214,7 @@ function TasksView({
       {menuStructureFormExpanded ? (
         <Modal
           title="Генерация по структуре меню"
-          subtitle="По одному тексту непосредственно для каждого пункта меню"
+          subtitle="По одному релевантному тексту для каждого пункта и всех его дочерних разделов"
           onClose={() => setMenuStructureFormExpanded(false)}
           wide
           className="createGenerationTaskModal"
@@ -6227,10 +6234,10 @@ function TasksView({
                 <label className="checkboxRow"><input type="checkbox" checked={includeFaq} onChange={(event) => setIncludeFaq(event.target.checked)} /> Создавать FAQ</label>
                 <label className="checkboxRow"><input type="checkbox" checked={generateTitle} onChange={(event) => setGenerateTitle(event.target.checked)} /> Генерировать Title</label>
                 <label className="checkboxRow"><input type="checkbox" checked={collectCompetitors} onChange={(event) => setCollectCompetitors(event.target.checked)} /> Собрать конкурентов</label>
-                <label className="checkboxRow casinoReviewOption"><input type="checkbox" checked={menuStructureAutoPublish} onChange={(event) => setMenuStructureAutoPublish(event.target.checked)} /><span><b>Автоматически принять и опубликовать</b><small>Только тексты, прошедшие проверку качества; ошибки останутся в задаче.</small></span></label>
+                <label className="checkboxRow casinoReviewOption"><input type="checkbox" checked={menuStructureAutoPublish} onChange={(event) => setMenuStructureAutoPublish(event.target.checked)} /><span><b>Принять и опубликовать</b><small>После генерации система автоматически примет и опубликует каждый готовый текст; ошибки останутся в задаче.</small></span></label>
               </div>
             </fieldset>
-            <div className="menuStructureSummary wide">Будут созданы MAIN-тексты для всех пунктов выбранных меню, у которых ещё нет контента. Каждый текст автоматически привязывается к своему URL.</div>
+            <div className="menuStructureSummary wide">Будут созданы релевантные MAIN-тексты для всех корневых и дочерних пунктов выбранных меню, у которых ещё нет контента. Каждый текст автоматически привязывается к своему пункту и URL.</div>
             {taskError ? <span className="formError wide">{taskError}</span> : null}
             <div className="formActions wide"><button className="button secondary" type="button" onClick={() => setMenuStructureFormExpanded(false)} disabled={creatingMenuStructure}>Отменить</button><button className="button primary" type="submit" disabled={creatingMenuStructure}><Play size={18} /> {creatingMenuStructure ? "Запускаем" : "Создать и запустить"}</button></div>
           </form>

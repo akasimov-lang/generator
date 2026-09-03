@@ -96,6 +96,66 @@ def test_menu_structure_mode_creates_one_main_page_per_unique_path(db: Session) 
     assert MENU_STRUCTURE_PROMPT_MARKER in task.prompt_template
 
 
+def test_menu_structure_mode_adopts_cached_children_and_expands_selected_root(db: Session) -> None:
+    site = make_site(db)
+    root = models.Section(
+        site_id=site.id,
+        external_id="100",
+        name="Online casinoer",
+        path="/online-casinoer/",
+        menu_type="header",
+        sync_status="synced",
+    )
+    db.add(root)
+    db.flush()
+    site.default_menu = {
+        "header": [
+            {
+                "id": 100,
+                "title": "Online casinoer",
+                "slug": "/online-casinoer/",
+                "order": 0,
+                "children": [
+                    {"id": 101, "title": "Bedste online casinoer", "slug": "/bedste-online-casinoer/", "order": 0},
+                    {"id": 102, "title": "Nye casinoer", "slug": "/nye-casinoer/", "order": 1},
+                ],
+            },
+            {"id": 200, "title": "Guides", "slug": "/guides/", "order": 1},
+        ],
+        "footer": [],
+    }
+    db.commit()
+
+    task = create_menu_structure_task(
+        db,
+        site,
+        MenuStructureGenerationCreate(
+            geo="DK",
+            language="da",
+            collect_competitors=False,
+            menu_types=["header"],
+            section_ids=[root.id],
+        ),
+    )
+
+    assert task.topics_count == 3
+    assert {item.topic for item in task.items} == {
+        "Online casinoer",
+        "Bedste online casinoer",
+        "Nye casinoer",
+    }
+    child_sections = {section.name: section for section in db.scalars(
+        select(models.Section).where(models.Section.site_id == site.id)
+    ).all()}
+    assert child_sections["Bedste online casinoer"].parent_id == root.id
+    assert child_sections["Nye casinoer"].parent_id == root.id
+    child_item = next(item for item in task.items if item.topic == "Bedste online casinoer")
+    assert child_item.generation_context["current_section"]["breadcrumb"] == [
+        "Online casinoer",
+        "Bedste online casinoer",
+    ]
+
+
 def test_generation_context_is_rendered_for_gemini() -> None:
     context = {
         "content_kind": "casino_review",

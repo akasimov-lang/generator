@@ -2714,6 +2714,70 @@ def create_menu_structure_task(
 ) -> models.GenerationTask:
     menu_types = set(payload.menu_types or ["header"])
     requested_ids = set(payload.section_ids)
+    cached_menu = site.default_menu if isinstance(site.default_menu, dict) else {}
+    existing_sections = db.scalars(
+        select(models.Section).where(models.Section.site_id == site.id)
+    ).all()
+    sections_by_external_id = {
+        section.external_id.strip().casefold(): section
+        for section in existing_sections
+        if section.external_id.strip()
+    }
+    sections_by_menu_path = {
+        (section.menu_type, _normalized_project_slug(section.path)): section
+        for section in existing_sections
+    }
+
+    def adopt_cached_items(raw_items: list, menu_type: str, parent: models.Section | None = None) -> None:
+        for index, raw_item in enumerate(raw_items):
+            if not isinstance(raw_item, dict):
+                continue
+            name = clean_text(raw_item.get("title") or raw_item.get("name"))
+            if not name:
+                continue
+            raw_path = clean_text(raw_item.get("slug") or raw_item.get("path") or raw_item.get("url"))
+            normalized_path = _normalized_project_slug(raw_path)
+            if normalized_path in {"/", "/#/"}:
+                normalized_path = f"/{slugify(name) or f'menu-item-{index + 1}'}/"
+            external_id = clean_text(
+                raw_item.get("external_id") or raw_item.get("externalId") or raw_item.get("id")
+            ) or f"cached-{menu_type}-{slugify(name) or index + 1}"
+            section = sections_by_external_id.get(external_id.casefold()) or sections_by_menu_path.get(
+                (menu_type, normalized_path)
+            )
+            if section is None:
+                section = models.Section(
+                    site_id=site.id,
+                    external_id=external_id,
+                    name=name,
+                    path=normalized_path,
+                    menu_type=menu_type,
+                    parent_id=parent.id if parent else None,
+                    is_temporary_parent=False,
+                    sync_status="synced",
+                    synced_at=site.cache_synced_at or datetime.now(timezone.utc),
+                )
+                db.add(section)
+                db.flush()
+                existing_sections.append(section)
+            else:
+                section.name = name
+                section.path = normalized_path
+                section.menu_type = menu_type
+                section.parent_id = parent.id if parent else None
+                section.is_temporary_parent = False
+                section.sync_status = "synced"
+                section.synced_at = site.cache_synced_at or datetime.now(timezone.utc)
+            sections_by_external_id[external_id.casefold()] = section
+            sections_by_menu_path[(menu_type, normalized_path)] = section
+            adopt_cached_items(_cached_menu_children(raw_item), menu_type, section)
+
+    for menu_type in menu_types:
+        raw_items = cached_menu.get(menu_type)
+        if isinstance(raw_items, list):
+            adopt_cached_items(raw_items, menu_type)
+    db.flush()
+
     all_sections = db.scalars(
         select(models.Section)
         .where(
@@ -2726,6 +2790,20 @@ def create_menu_structure_task(
     section_by_id = {section.id: section for section in all_sections}
     if requested_ids - section_by_id.keys():
         raise ValueError("Один или несколько выбранных пунктов меню не найдены")
+    if requested_ids:
+        children_by_parent: dict[str, list[str]] = {}
+        for section in all_sections:
+            if section.parent_id:
+                children_by_parent.setdefault(section.parent_id, []).append(section.id)
+        selected_with_descendants = set(requested_ids)
+        queue = list(requested_ids)
+        while queue:
+            child_ids = children_by_parent.get(queue.pop(), [])
+            for child_id in child_ids:
+                if child_id not in selected_with_descendants:
+                    selected_with_descendants.add(child_id)
+                    queue.append(child_id)
+        requested_ids = selected_with_descendants
 
     eligible: list[models.Section] = []
     seen_paths: set[str] = set()
