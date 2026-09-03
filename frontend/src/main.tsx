@@ -10226,6 +10226,10 @@ function slugFromText(value: string) {
   return value
     .trim()
     .toLowerCase()
+    .replace(/æ/g, "ae")
+    .replace(/ø/g, "o")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9а-яё]+/gi, "-")
     .replace(/^-+|-+$/g, "") || "menu-item";
 }

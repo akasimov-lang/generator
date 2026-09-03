@@ -3595,6 +3595,17 @@ def _flatten_project_menu_items(items: list[dict]) -> list[dict]:
     return flattened
 
 
+def _project_menu_parent_ids(items: list[dict], parent_id: int | None = None) -> dict[int, int | None]:
+    result: dict[int, int | None] = {}
+    for item in items:
+        item_id = int(item["id"])
+        result[item_id] = parent_id
+        children = item.get("children")
+        if isinstance(children, list):
+            result.update(_project_menu_parent_ids(children, item_id))
+    return result
+
+
 def _project_menu_item_from_cache(cached: dict, index: int, generated_id: int, sequence: list[int]) -> dict | None:
     title = str(cached.get("title") or cached.get("name") or "").strip()
     if not title:
@@ -3654,6 +3665,7 @@ def build_project_menu_payload(db: Session, site: models.Site, menu_type: str, n
         if item is not None:
             items.append(item)
     cached_node_count = len(_flatten_project_menu_items(items))
+    cached_parent_ids = _project_menu_parent_ids(items)
 
     pending_logs = [
         log
@@ -3748,6 +3760,17 @@ def build_project_menu_payload(db: Session, site: models.Site, menu_type: str, n
         raise ValueError(
             f"Refusing to synchronize {menu_type} menu: the payload lost existing nested items "
             f"({cached_node_count} cached, {payload_node_count} prepared)"
+        )
+    payload_parent_ids = _project_menu_parent_ids(items)
+    moved_existing_ids = {
+        item_id
+        for item_id, parent_id in cached_parent_ids.items()
+        if item_id in payload_parent_ids and payload_parent_ids[item_id] != parent_id
+    }
+    if moved_existing_ids:
+        raise ValueError(
+            f"Refusing to synchronize {menu_type} menu: existing parent-child relationships changed "
+            f"for IDs {sorted(moved_existing_ids)}"
         )
     return {"type": menu_type, "folder": site.name, "list": items}
 

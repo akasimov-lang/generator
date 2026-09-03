@@ -448,6 +448,9 @@ def test_project_menu_payload_preserves_existing_nested_structure(db: Session) -
         ],
     }]
 
+    parent = payload["list"][0]
+    assert [child["id"] for child in parent["children"]] == [101, 102]
+
 
 def test_project_page_payload_matches_receiver_dto(db: Session) -> None:
     site, item = make_content(db)
