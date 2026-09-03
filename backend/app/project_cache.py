@@ -483,6 +483,10 @@ def _confirm_published_content(db: Session, site: models.Site, project: dict[str
         item.status = "published"
         item.published_at = now
         item.scheduled_at = None
+        item.indexing_status = "queued"
+        item.indexing_task_id = None
+        item.indexing_requested_at = None
+        item.indexing_error = None
         page_url = str(page.get("url") or page.get("href") or "").strip()
         if page_url.startswith(("http://", "https://")):
             item.published_url = page_url

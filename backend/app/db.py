@@ -136,6 +136,10 @@ def apply_lightweight_migrations() -> None:
                 "competitor_brief_text": "TEXT",
                 "section_content_mode": "VARCHAR(24) DEFAULT 'nested' NOT NULL",
                 "section_source_slug": "VARCHAR(240)",
+                "indexing_status": "VARCHAR(24)",
+                "indexing_task_id": "VARCHAR(120)",
+                "indexing_requested_at": "TIMESTAMP WITH TIME ZONE",
+                "indexing_error": "TEXT",
             },
         )
         backfill_content_site_ids()

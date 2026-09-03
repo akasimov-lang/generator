@@ -112,6 +112,10 @@ type ContentItem = {
   published_at: string | null;
   published_url: string | null;
   last_publication_status_code: number | null;
+  indexing_status: string | null;
+  indexing_task_id: string | null;
+  indexing_requested_at: string | null;
+  indexing_error: string | null;
   deletion_requested_at: string | null;
   deletion_confirmed_at: string | null;
   deletion_error: string | null;
@@ -3478,6 +3482,17 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
     setSelectedIds((current) => current.filter((id) => selectableIds.includes(id)));
   }, [selectableIds]);
 
+  React.useEffect(() => {
+    const awaitingLiveUpdate = content.some((item) =>
+      item.status === "publication_pending_confirmation"
+      || item.indexing_status === "queued"
+      || item.indexing_status === "submitting"
+    );
+    if (!awaitingLiveUpdate) return;
+    const timer = window.setInterval(() => void onChanged(), 2500);
+    return () => window.clearInterval(timer);
+  }, [content, onChanged]);
+
   function toggleSelected(id: string) {
     setSelectedIds((current) => current.includes(id) ? current.filter((itemId) => itemId !== id) : [...current, id]);
   }
@@ -3826,7 +3841,15 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
             </span>,
             item.word_count,
             <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} />,
-            item.published_url ? <a href={item.published_url} target="_blank" rel="noreferrer"><ExternalLink size={15} /> URL</a> : item.published_at ? formatDate(item.published_at) : "-",
+            item.published_at ? (
+              <span className="publishedIndexingCell">
+                <span>{formatDate(item.published_at)}</span>
+                {item.indexing_task_id ? <small>ID индексации: <b>{item.indexing_task_id}</b></small> : null}
+                {item.indexing_status === "queued" || item.indexing_status === "submitting" ? <small className="pending">Отправка на индексацию…</small> : null}
+                {item.indexing_status === "failed" ? <small className="failed" title={item.indexing_error || undefined}>Ошибка индексации</small> : null}
+                {item.published_url ? <a href={item.published_url} target="_blank" rel="noreferrer"><ExternalLink size={13} /> URL</a> : null}
+              </span>
+            ) : "-",
             <div className="userActions projectContentActions">
               <button className="button compact" type="button" onClick={() => openEditor(item)} disabled={isPublicationLocked(item)} title="Открыть и редактировать JSON payload"><Database size={15} /> JSON</button>
               {canApproveContent(item) ? <button className="button compact approve" type="button" onClick={() => approve(item)} title="Принять текст"><CheckCircle2 size={15} /> Принять</button> : null}
@@ -4973,7 +4996,6 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
 
   async function addGeneratedMenuToSite() {
     if (!generatedMenuPreview) return;
-    if (!window.confirm(`Добавить показанную структуру в меню ${generatedMenuPreview.menu_type === "header" ? "Header" : "Footer"} и отправить её на сайт?`)) return;
     setApplyingGeneratedMenu(true);
     setFormError("");
     try {

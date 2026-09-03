@@ -210,6 +210,7 @@ def test_fresh_cache_confirms_publication_only_when_slug_is_present() -> None:
         assert present.status == "published"
         assert present.published_at is not None
         assert present.published_url == "https://publication-confirmation.example/guides/present/"
+        assert present.indexing_status == "queued"
         assert failed_but_present.status == "published"
         assert failed_but_present.published_at is not None
         assert task.status != "published"

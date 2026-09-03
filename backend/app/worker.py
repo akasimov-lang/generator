@@ -7,6 +7,7 @@ from sqlalchemy import select
 from app import models
 from app.core.config import get_settings
 from app.db import SessionLocal
+from app.indexing import submit_pending_content_indexing
 from app.project_cache import ProjectCacheError, fetch_project_cache, fetch_project_menu_capabilities, refresh_project_server_id, sync_project_data_update
 from app.services import COMPETITOR_RESEARCH_MAX_ATTEMPTS, collect_competitor_research_for_item, generate_content_item, generate_task_items, publish_campaign_bundle, publish_item, refresh_campaign_status, revise_content_item, run_task_pipeline
 
@@ -21,8 +22,21 @@ celery_app.conf.beat_schedule = {
     "publish-due-items-every-minute": {
         "task": "app.worker.publish_due_items",
         "schedule": 60.0,
-    }
+    },
+    "submit-pending-content-indexing": {
+        "task": "app.worker.submit_pending_content_indexing",
+        "schedule": 5.0,
+    },
 }
+
+
+@celery_app.task(name="app.worker.submit_pending_content_indexing")
+def submit_pending_content_indexing_job() -> dict[str, int]:
+    db = SessionLocal()
+    try:
+        return submit_pending_content_indexing(db)
+    finally:
+        db.close()
 
 
 @celery_app.task(name="app.worker.check_site_menu_visibility")

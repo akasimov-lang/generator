@@ -507,6 +507,10 @@ class ContentItemResponse(BaseModel):
     published_at: datetime | None
     published_url: str | None
     last_publication_status_code: int | None
+    indexing_status: str | None
+    indexing_task_id: str | None
+    indexing_requested_at: datetime | None
+    indexing_error: str | None
     deletion_requested_at: datetime | None
     deletion_confirmed_at: datetime | None
     deletion_error: str | None
