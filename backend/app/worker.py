@@ -168,6 +168,9 @@ def _refresh_parallel_task_status(db, task_id: str) -> None:
     task = db.get(models.GenerationTask, task_id)
     if not task:
         return
+    # Another worker can finish an item while this session still holds an older
+    # relationship snapshot. Always calculate the aggregate from current rows.
+    db.expire(task, ["items"])
     statuses = [item.status for item in task.items]
     if any(status in {"generation_queued", "generating"} for status in statuses):
         task.status = "generating"
