@@ -3146,6 +3146,23 @@ h2 {
   animation: spin 0.9s linear infinite;
 }
 
+.siteMenuMainContentIcon {
+  align-items: center;
+  background: var(--primary-soft);
+  border-radius: 6px;
+  color: var(--primary);
+  display: inline-flex;
+  flex: 0 0 24px;
+  height: 24px;
+  justify-content: center;
+  width: 24px;
+}
+
+.siteMenuPreviewItemLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .menuStructureGeneratorToolbar {
   align-items: center;
   display: flex;
@@ -3576,12 +3593,15 @@ h2 {
 }
 
 .siteMenuPreviewItemEditTrigger {
+  align-items: center;
   background: transparent;
   border: 0;
   border-radius: 7px;
   color: inherit;
   cursor: pointer;
+  display: flex;
   font: inherit;
+  gap: 7px;
   padding: 4px 6px;
   position: relative;
   text-align: left;

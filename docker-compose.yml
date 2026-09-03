@@ -54,7 +54,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: celery -A app.worker.celery_app worker --loglevel=info
+    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=4
 
   menu_check_worker:
     image: generator-backend

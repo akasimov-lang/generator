@@ -9,12 +9,13 @@ from app.api import archive_task, collect_content_competitors, generate_content,
 from app.db import Base
 from app.schemas import ContentRevisionRequest, ContentUpdate, GenerationTaskCreate, GenerationTaskRegenerateAll, GenerationTaskSectionUpdate
 from app.services import create_generation_task, revise_content_item, run_task_pipeline
-from app.worker import celery_app, generate_content_item_job, generate_task_content_job, revise_content_item_job, run_task_pipeline_job
+from app.worker import celery_app, generate_content_item_job, generate_task_content_job, revise_content_item_job, run_content_item_pipeline_job, run_task_pipeline_job
 
 
 def test_generation_jobs_return_to_queue_when_worker_is_lost() -> None:
     assert celery_app.conf.worker_prefetch_multiplier == 1
-    for job in (generate_content_item_job, generate_task_content_job, revise_content_item_job, run_task_pipeline_job):
+    assert celery_app.conf.worker_concurrency == 4
+    for job in (generate_content_item_job, generate_task_content_job, revise_content_item_job, run_content_item_pipeline_job, run_task_pipeline_job):
         assert job.acks_late is True
         assert job.reject_on_worker_lost is True
 

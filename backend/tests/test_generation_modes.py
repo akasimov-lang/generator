@@ -12,6 +12,7 @@ from app.schemas import GenerationTaskCreate, MenuStructureGenerationCreate, Men
 from app.services import (
     CASINO_REVIEW_PROMPT_NAME,
     MENU_STRUCTURE_PROMPT_MARKER,
+    apply_content_section_slug,
     auto_publish_generated_task,
     build_gemini_prompt,
     create_generation_task,
@@ -319,6 +320,56 @@ def test_generation_context_is_rendered_for_gemini() -> None:
     assert "Brand=Alpha Casino" in prompt
     assert '"path": "/casinos/"' in prompt
     assert "{{BRAND_NAME}}" not in prompt
+
+
+def test_top_level_menu_page_prompt_uses_exact_homepage_title_as_brand_context(db: Session) -> None:
+    site = make_site(db)
+    site.homepage_title = "Beste Ausländische Online Casinos Schweiz 2026 | Top 10 Online Casino"
+
+    prompt = build_gemini_prompt(
+        topic="Modes de Paiement",
+        geo="FR",
+        language="fr",
+        target_words=1800,
+        site=site,
+        prompt_template="Homepage={{HOMEPAGE_TITLE}} Brand={{PROJECT_BRAND}}",
+        shortcode=None,
+        include_toc=True,
+        include_faq=True,
+        generate_title=False,
+        generation_context={
+            "content_kind": "menu_page",
+            "current_section": {
+                "name": "Modes de Paiement",
+                "path": "/modes-de-paiement/",
+                "breadcrumb": ["Modes de Paiement"],
+            },
+        },
+    )
+
+    assert site.homepage_title in prompt
+    assert "Infer the project brand only from that homepage title" in prompt
+    assert "internal page SEO title distinct from the homepage" in prompt
+    assert "Title must repeat the Topic exactly" not in prompt
+
+
+def test_matching_menu_page_never_becomes_a_nested_duplicate() -> None:
+    section = models.Section(name="Modes de Paiement", path="/modes-de-paiement/")
+    item = models.ContentItem(
+        topic="Modes de Paiement",
+        slug="/modes-de-paiement/",
+        section_content_mode="nested",
+        generated_json={
+            "pages": [{"title": "Modes de Paiement", "slug": "/modes-de-paiement/", "content": {"blocks": []}}],
+        },
+        idempotency_key="matching-menu-page",
+    )
+
+    slug = apply_content_section_slug(item, section)
+
+    assert slug == "/modes-de-paiement/"
+    assert item.section_content_mode == "menu_page"
+    assert item.generated_json["pages"][0]["slug"] == "/modes-de-paiement/"
 
 
 def test_auto_publish_accepts_and_publishes_each_valid_item(db: Session, monkeypatch: pytest.MonkeyPatch) -> None:

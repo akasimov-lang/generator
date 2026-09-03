@@ -9,7 +9,7 @@ from app.core.config import get_settings
 from app.db import SessionLocal
 from app.indexing import submit_pending_content_indexing
 from app.project_cache import ProjectCacheError, fetch_project_cache, fetch_project_menu_capabilities, refresh_project_server_id, sync_project_data_update
-from app.services import COMPETITOR_RESEARCH_MAX_ATTEMPTS, collect_competitor_research_for_item, generate_content_item, generate_task_items, publish_campaign_bundle, publish_item, refresh_campaign_status, revise_content_item, run_task_pipeline
+from app.services import COMPETITOR_RESEARCH_MAX_ATTEMPTS, collect_competitor_research_for_item, continue_competitor_research_for_item, generate_content_item, publish_campaign_bundle, publish_item, refresh_campaign_status, revise_content_item, validate_content_for_publication
 
 settings = get_settings()
 
@@ -17,6 +17,7 @@ celery_app = Celery("generator", broker=settings.celery_broker_url, backend=sett
 celery_app.conf.update(
     timezone="UTC",
     worker_prefetch_multiplier=1,
+    worker_concurrency=4,
 )
 celery_app.conf.beat_schedule = {
     "publish-due-items-every-minute": {
@@ -132,8 +133,10 @@ def generate_task_content_job(task_id: str) -> dict:
         task = db.get(models.GenerationTask, task_id)
         if not task:
             return {"status": "missing", "task_id": task_id}
-        generate_task_items(db, task)
-        return {"status": "complete", "task_id": task_id}
+        item_ids = [item.id for item in task.items if item.status == "generation_queued"]
+        for item_id in item_ids:
+            run_content_item_pipeline_job.delay(item_id, False)
+        return {"status": "queued", "task_id": task_id, "items": len(item_ids)}
     finally:
         db.close()
 
@@ -145,8 +148,108 @@ def run_task_pipeline_job(task_id: str) -> dict:
         task = db.get(models.GenerationTask, task_id)
         if not task:
             return {"status": "missing", "task_id": task_id}
-        run_task_pipeline(db, task)
-        return {"status": "complete", "task_id": task_id}
+        item_ids = [item.id for item in task.items if item.status == "generation_queued"]
+        for item_id in item_ids:
+            run_content_item_pipeline_job.delay(item_id, True)
+        return {"status": "queued", "task_id": task_id, "items": len(item_ids)}
+    finally:
+        db.close()
+
+
+def _refresh_parallel_task_status(db, task_id: str) -> None:
+    task = db.get(models.GenerationTask, task_id)
+    if not task:
+        return
+    statuses = [item.status for item in task.items]
+    if any(status in {"generation_queued", "generating"} for status in statuses):
+        task.status = "generating"
+    elif any(status == "generation_failed" for status in statuses):
+        task.status = "generation_failed"
+    elif task.auto_publish and any(status == "publication_failed" for status in statuses):
+        task.status = "publication_failed"
+    elif task.auto_publish and any(status in {"approved", "publishing", "publication_pending_confirmation"} for status in statuses):
+        task.status = "publishing"
+    elif task.auto_publish and statuses and all(status in {"published", "deleted"} for status in statuses):
+        task.status = "published"
+    else:
+        task.status = "generated"
+    db.commit()
+
+
+@celery_app.task(bind=True, name="app.worker.run_content_item_pipeline", acks_late=True, reject_on_worker_lost=True)
+def run_content_item_pipeline_job(self, content_item_id: str, collect_competitors: bool) -> dict:
+    db = SessionLocal()
+    try:
+        item = db.scalar(
+            select(models.ContentItem)
+            .where(models.ContentItem.id == content_item_id)
+            .with_for_update()
+        )
+        if not item:
+            return {"status": "missing", "content_item_id": content_item_id}
+        redelivered = bool((self.request.delivery_info or {}).get("redelivered"))
+        if item.status != "generation_queued" and not (redelivered and item.status == "generating"):
+            return {"status": "skipped", "content_item_id": content_item_id}
+        task_id = item.task_id
+        item.status = "generating"
+        item.generation_progress = max(1, item.generation_progress or 0)
+        item.generation_error = None
+        db.commit()
+
+        task = db.get(models.GenerationTask, task_id)
+        if collect_competitors and task and task.collect_competitors and not item.competitor_brief:
+            research_error: Exception | None = None
+            for attempt_index in range(COMPETITOR_RESEARCH_MAX_ATTEMPTS):
+                try:
+                    asyncio.run(continue_competitor_research_for_item(db, item))
+                    research_error = None
+                    break
+                except Exception as error:
+                    research_error = error
+                    db.rollback()
+                    item = db.get(models.ContentItem, content_item_id)
+                    if not item:
+                        break
+                    has_next_attempt = attempt_index + 1 < COMPETITOR_RESEARCH_MAX_ATTEMPTS
+                    item.competitor_research_status = "queued" if has_next_attempt else "research_failed"
+                    item.competitor_research_error = (
+                        f"Attempt {attempt_index + 1}/{COMPETITOR_RESEARCH_MAX_ATTEMPTS}: "
+                        f"{type(error).__name__}: {error}"
+                    )[:500]
+                    db.commit()
+            if research_error is not None:
+                item = db.get(models.ContentItem, content_item_id)
+                if item:
+                    item.status = "generation_failed"
+                    item.generation_error = f"Не удалось собрать конкурентов: {type(research_error).__name__}: {research_error}"[:500]
+                    db.commit()
+                _refresh_parallel_task_status(db, task_id)
+                return {"status": "failed", "content_item_id": content_item_id}
+
+        item = db.get(models.ContentItem, content_item_id)
+        if not item:
+            return {"status": "missing", "content_item_id": content_item_id}
+        generate_content_item(db, item)
+        task = db.get(models.GenerationTask, task_id)
+        if task and task.auto_publish:
+            site = db.get(models.Site, item.site_id or task.site_id) if (item.site_id or task.site_id) else None
+            if not site:
+                raise ValueError("Automatic publication requires a project")
+            validate_content_for_publication(item)
+            item.status = "approved"
+            db.commit()
+            asyncio.run(publish_item(db, item, site, initiator_username="automatic-menu-generation"))
+        _refresh_parallel_task_status(db, task_id)
+        return {"status": "complete", "content_item_id": content_item_id}
+    except Exception as error:
+        db.rollback()
+        item = db.get(models.ContentItem, content_item_id)
+        if item:
+            item.status = "generation_failed" if item.status not in {"publication_failed", "publication_pending_confirmation", "published"} else item.status
+            item.generation_error = f"{type(error).__name__}: {error}"[:500]
+            db.commit()
+            _refresh_parallel_task_status(db, item.task_id)
+        raise
     finally:
         db.close()
 

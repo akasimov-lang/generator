@@ -1,14 +1,18 @@
-from app import models
+import asyncio
+
+import pytest
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app import models, services as service_module
 from app.db import Base
 from app.services import (
     COMPETITOR_RESULTS_PER_QUERY,
     build_competitor_brief_for_item,
     build_dataforseo_locations_url,
     build_dataforseo_user_data_url,
+    continue_competitor_research_for_item,
     extract_dataforseo_country_location_codes,
     generate_competitor_search_queries,
     normalize_slug,
@@ -39,6 +43,56 @@ def test_dataforseo_user_data_url_is_built_from_base_endpoint() -> None:
         build_dataforseo_user_data_url("https://api.dataforseo.com/v3/appendix/user_data")
         == "https://api.dataforseo.com/v3/appendix/user_data"
     )
+
+
+def test_interrupted_page_collection_resumes_from_existing_serp(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+    calls: list[str] = []
+
+    async def fake_fetch(db, item) -> models.ContentItem:
+        calls.append("pages")
+        item.competitor_research_status = "pages_fetched"
+        return item
+
+    def fake_brief(db, item) -> models.ContentItem:
+        calls.append("brief")
+        item.competitor_brief = {"analyzed_pages_count": 1}
+        return item
+
+    monkeypatch.setattr(service_module, "fetch_competitor_pages_for_item", fake_fetch)
+    monkeypatch.setattr(service_module, "build_competitor_brief_for_item", fake_brief)
+
+    with TestingSession() as db:
+        task = models.GenerationTask(title="Research", geo="FR", language="fr", topics_count=1)
+        item = models.ContentItem(
+            task=task,
+            topic="Modes de Paiement",
+            slug="/modes-de-paiement/",
+            generated_json={},
+            competitor_research_status="fetching_pages",
+            idempotency_key="resume-pages",
+        )
+        db.add_all([task, item])
+        db.flush()
+        query = models.CompetitorQuery(content_item_id=item.id, query="modes paiement casino", position=1)
+        db.add(query)
+        db.flush()
+        db.add(models.CompetitorResult(
+            content_item_id=item.id,
+            query_id=query.id,
+            query_text=query.query,
+            position=1,
+            url="https://competitor.example/payments",
+            normalized_url="https://competitor.example/payments",
+        ))
+        db.commit()
+
+        asyncio.run(continue_competitor_research_for_item(db, item))
+
+        assert calls == ["pages", "brief"]
+        assert item.competitor_brief == {"analyzed_pages_count": 1}
 
 
 def test_dataforseo_locations_catalog_is_dynamic_for_all_country_codes() -> None:

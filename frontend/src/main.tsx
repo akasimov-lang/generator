@@ -7118,7 +7118,7 @@ function competitorStatusLabel(item: ContentItem, research?: CompetitorResearch)
 function GenerationProgressCell({ item, compact = false }: { item: ContentItem; compact?: boolean }) {
   const complete = ["generated", "approved", "scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published"].includes(item.status);
   const researchInProgress = compact
-    && item.status === "generation_queued"
+    && ACTIVE_GENERATION_STATUSES.includes(item.status)
     && ACTIVE_RESEARCH_STATUSES.includes(item.competitor_research_status);
   const progressValue = researchInProgress ? item.competitor_research_progress : item.generation_progress;
   const progress = Math.max(0, Math.min(100, complete ? 100 : progressValue || 0));
@@ -8940,13 +8940,16 @@ function SiteMenuPreviewSection({ title, items, site, sections = [], content = [
         const editing = editingTreeKey === node.key;
         const nestedPages = node.section
           ? content
-              .filter((item) => item.status !== "deleted" && item.section_id === node.section?.id && (Boolean(item.generated_at) || item.status === "published"))
+              .filter((item) => item.status !== "deleted" && item.section_id === node.section?.id && item.section_content_mode === "nested" && (Boolean(item.generated_at) || item.status === "published"))
               .sort((left, right) => {
                 if (left.status === "published" && right.status !== "published") return 1;
                 if (left.status !== "published" && right.status === "published") return -1;
                 return left.topic.localeCompare(right.topic);
               })
           : [];
+        const menuPageContent = node.section
+          ? content.find((item) => item.status !== "deleted" && item.section_id === node.section?.id && item.section_content_mode === "menu_page")
+          : undefined;
         return (
           <li className="siteMenuTreeNode" key={node.key} role="treeitem" aria-expanded={hasChildren ? !collapsed : undefined}>
             <div className="siteMenuTreeRow">
@@ -8963,7 +8966,9 @@ function SiteMenuPreviewSection({ title, items, site, sections = [], content = [
                 </div>
               ) : (
                 <button className="siteMenuPreviewItemText siteMenuPreviewItemEditTrigger" type="button" onClick={() => onEditItem?.(node.item, node.section, node.key)} disabled={!onEditItem || openingEditKey === node.key} title="Нажмите, чтобы изменить название или slug">
-                  <strong>{node.item.title}</strong>{node.item.path ? <code>{node.item.path}</code> : null}{openingEditKey === node.key ? <LoaderCircle className="siteMenuInlineEditLoader" size={14} /> : null}
+                  {menuPageContent ? <span className="siteMenuMainContentIcon" title={`Есть контент пункта меню: ${menuPageContent.topic}`}><FileText size={13} /></span> : null}
+                  <span className="siteMenuPreviewItemLabel"><strong>{node.item.title}</strong>{node.item.path ? <code>{node.item.path}</code> : null}</span>
+                  {openingEditKey === node.key ? <LoaderCircle className="siteMenuInlineEditLoader" size={14} /> : null}
                 </button>
               )}
               {onPreviewPage ? <button className="siteMenuPagePreviewButton" type="button" onClick={() => onPreviewPage(node.item, node.key)} disabled={pagePreviewLoadingKey === node.key} title="Просмотреть текст страницы" aria-label={`Просмотреть текст страницы: ${node.item.title}`}>{pagePreviewLoadingKey === node.key ? <LoaderCircle size={14} /> : <Eye size={14} />}</button> : null}

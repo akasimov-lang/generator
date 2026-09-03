@@ -1190,7 +1190,14 @@ async def build_gemini_content(
         raise ValueError("Gemini returned an empty response")
 
     article_parts = extract_ai_article_parts(generated_text, topic)
-    page_title = article_parts["title"].strip() if generate_title else topic.strip()
+    current_section = (generation_context or {}).get("current_section")
+    breadcrumb = current_section.get("breadcrumb") if isinstance(current_section, dict) else []
+    top_level_menu_page = (
+        str((generation_context or {}).get("content_kind") or "") == "menu_page"
+        and isinstance(breadcrumb, list)
+        and len(breadcrumb) == 1
+    )
+    page_title = article_parts["title"].strip() if generate_title or top_level_menu_page else topic.strip()
     special_mode = str((generation_context or {}).get("content_kind") or "") in {"casino_review", "menu_page"}
     page_h1 = article_parts["h1"].strip() if special_mode and article_parts["h1"].strip() else concise_h1_from_topic(topic)
     page["title"] = page_title
@@ -1246,6 +1253,14 @@ def build_gemini_prompt(
     template = prompt_template.strip() if prompt_template and prompt_template.strip() else DEFAULT_CONTENT_PROMPT_TEMPLATE
     slug = normalize_slug(topic)
     competitor_values = prompt_context_from_brief(competitor_brief)
+    homepage_title = clean_text(site.homepage_title) if site and site.homepage_title else "not specified"
+    current_section = (generation_context or {}).get("current_section")
+    breadcrumb = current_section.get("breadcrumb") if isinstance(current_section, dict) else []
+    is_top_level_menu_page = (
+        str((generation_context or {}).get("content_kind") or "") == "menu_page"
+        and isinstance(breadcrumb, list)
+        and len(breadcrumb) == 1
+    )
     values = {
         "topic": topic,
         "geo": geo,
@@ -1254,6 +1269,8 @@ def build_gemini_prompt(
         "target_words": str(target_words or "not specified"),
         "site_name": site.name if site else "not specified",
         "site_base_url": site.base_url if site else "",
+        "homepage_title": homepage_title,
+        "project_brand": homepage_title,
         "slug": slug,
         "current_year": str(datetime.now(timezone.utc).year),
         "shortcode": shortcode or "none",
@@ -1271,7 +1288,9 @@ def build_gemini_prompt(
     if PROMPT_FORMAT_CONTRACT_MARKER not in prompt:
         prompt = f"{prompt.rstrip()}\n\n{PROMPT_FORMAT_CONTRACT}"
     title_constraint = (
-        "- Title must be an original, concise SEO page title relevant to the Topic and must not repeat the Topic verbatim.\n"
+        "- Title must be an original, concise internal-page SEO title relevant to the Topic and naturally include the project brand inferred from the homepage title.\n"
+        if is_top_level_menu_page
+        else "- Title must be an original, concise SEO page title relevant to the Topic and must not repeat the Topic verbatim.\n"
         if generate_title
         else "- Title must repeat the Topic exactly, without additions, rewriting, or a year that is absent from the Topic.\n"
     )
@@ -1288,6 +1307,14 @@ def build_gemini_prompt(
         f"- Shortcode block context: {shortcode or 'none'}\n"
         "- Return plain article text only. Do not return JSON or Markdown fences.\n"
     )
+    if is_top_level_menu_page:
+        prompt += (
+            "\nTop-level menu page and project brand context:\n"
+            f"- The exact homepage title is: {homepage_title}\n"
+            "- Infer the project brand only from that homepage title; do not invent, translate, or replace the brand.\n"
+            "- Make the internal page SEO title distinct from the homepage while naturally including the exact project brand.\n"
+            "- Keep the page focused on its own menu topic and use the brand context to improve relevance, not for repetition or keyword stuffing.\n"
+        )
     if competitor_brief:
         prompt += (
             "\n\nCompetitor research context:\n"
@@ -2505,6 +2532,32 @@ async def collect_competitor_research_for_item(db: Session, item: models.Content
     return item
 
 
+async def continue_competitor_research_for_item(db: Session, item: models.ContentItem) -> models.ContentItem:
+    """Resume the latest complete research stage instead of skipping or discarding useful results."""
+    if item.competitor_brief:
+        return item
+    research_status = item.competitor_research_status
+    pages_count = db.scalar(
+        select(func.count(models.CompetitorPage.id)).where(models.CompetitorPage.content_item_id == item.id)
+    ) or 0
+    results_count = db.scalar(
+        select(func.count(models.CompetitorResult.id)).where(models.CompetitorResult.content_item_id == item.id)
+    ) or 0
+    if research_status == "collecting_serp" or not results_count:
+        await collect_competitor_serp_for_item(db, item)
+        await fetch_competitor_pages_for_item(db, item)
+        build_competitor_brief_for_item(db, item)
+    elif research_status != "pages_fetched" or not pages_count:
+        # Page fetching is restartable: it retains the collected localized SERP
+        # and rebuilds the incomplete page set after a worker interruption.
+        await fetch_competitor_pages_for_item(db, item)
+        build_competitor_brief_for_item(db, item)
+    else:
+        build_competitor_brief_for_item(db, item)
+    db.refresh(item)
+    return item
+
+
 def render_competitor_brief_for_prompt(brief: dict | None) -> str:
     if not brief:
         return "No competitor research was collected."
@@ -2853,6 +2906,18 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
     prompt_template = append_casino_rating_requirement(prompt_template, include_casino_rating)
     site = db.get(models.Site, payload.site_id) if payload.site_id else None
     section = db.get(models.Section, payload.section_id) if payload.section_id else None
+    section_breadcrumb: list[str] = []
+    if section:
+        section_breadcrumb = [section.name]
+        parent_id = section.parent_id
+        visited = {section.id}
+        while parent_id and len(section_breadcrumb) < 8:
+            parent = db.get(models.Section, parent_id)
+            if not parent or parent.id in visited:
+                break
+            section_breadcrumb.insert(0, parent.name)
+            visited.add(parent.id)
+            parent_id = parent.parent_id
     if payload.generation_mode == "casino_reviews":
         if not site or not section or section.site_id != site.id:
             raise ValueError("Для обзоров казино выберите проект и пункт меню casinos")
@@ -2949,6 +3014,18 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
                     "hero_image_slot": "hero_after_h1",
                 }
                 if payload.generation_mode == "casino_reviews"
+                else {
+                    "content_kind": "menu_page",
+                    "homepage_title": site.homepage_title if site else None,
+                    "current_section": {
+                        "id": section.id,
+                        "name": section.name,
+                        "path": _normalized_project_slug(section.path),
+                        "menu_type": section.menu_type,
+                        "breadcrumb": section_breadcrumb,
+                    },
+                }
+                if section and payload.section_content_mode == "menu_page"
                 else None
             ),
             competitor_research_status="queries_ready" if payload.collect_competitors else "not_requested",
@@ -3183,6 +3260,8 @@ def create_menu_structure_task(
             include_casino_rating=False,
             generation_context={
                 "content_kind": "casino_review" if is_casino_review else "menu_page",
+                "homepage_title": site.homepage_title,
+                "menu_depth": len(current_section["breadcrumb"]),
                 **(
                     {
                         "casino_brand": section.name,
@@ -3872,7 +3951,14 @@ def apply_content_section_slug(item: models.ContentItem, section: models.Section
     source_slug = item.section_source_slug or (page.get("slug") if page else item.slug) or item.slug
     if not item.section_source_slug:
         item.section_source_slug = _normalized_project_slug(source_slug)
-    if section and _normalized_project_slug(source_slug) == _normalized_project_slug(section.path):
+    duplicates_menu_item = bool(
+        section
+        and (
+            _normalized_project_slug(source_slug) == _normalized_project_slug(section.path)
+            or clean_text(item.topic).casefold() == clean_text(section.name).casefold()
+        )
+    )
+    if duplicates_menu_item:
         item.section_content_mode = "menu_page"
     if section and item.section_content_mode == "menu_page":
         full_slug = _normalized_project_slug(section.path)
