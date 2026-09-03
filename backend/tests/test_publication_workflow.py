@@ -373,6 +373,38 @@ def test_project_menu_payload_appends_new_items_after_existing_order(db: Session
     }
 
 
+def test_project_menu_payload_updates_existing_slug_in_place(db: Session) -> None:
+    site = models.Site(
+        name="edit-menu.example",
+        base_url="https://edit-menu.example",
+        publication_endpoint="https://edit-menu.example/api/content",
+        default_menu={
+            "header": [
+                {"id": 1787216707470, "title": "Old title", "slug": "/old-slug/", "order": 3},
+                {"id": 1787216707471, "title": "Other", "slug": "/other/", "order": 4},
+            ],
+            "footer": [],
+        },
+    )
+    section = models.Section(
+        site=site,
+        external_id="1787216707470",
+        name="New title",
+        path="/new-slug/",
+        menu_type="header",
+        sync_status="pending",
+    )
+    db.add_all([site, section])
+    db.commit()
+
+    payload = build_project_menu_payload(db, site, "header")
+
+    assert payload["list"] == [
+        {"id": 1787216707470, "title": "New title", "slug": "/new-slug/", "order": 3},
+        {"id": 1787216707471, "title": "Other", "slug": "/other/", "order": 4},
+    ]
+
+
 def test_project_page_payload_matches_receiver_dto(db: Session) -> None:
     site, item = make_content(db)
     site.name = "nauchi52.ru"

@@ -1142,6 +1142,10 @@ def update_section(site_id: str, section_id: str, payload: SectionUpdate, user: 
     )
     section.name = payload.name.strip()
     section.path = normalized_path
+    # An adopted cache entry becomes a durable section as soon as the user edits it.
+    # Otherwise it would stay hidden from the list of managed menu items and could
+    # later be released as if it were only a temporary parent reference.
+    section.is_temporary_parent = False
     section.sync_status = "pending"
     section.synced_at = None
     assigned_content = db.scalars(
@@ -1172,6 +1176,7 @@ def update_section(site_id: str, section_id: str, payload: SectionUpdate, user: 
                 "menu_type": section.menu_type,
                 "previous_name": old_name,
                 "previous_path": old_path,
+                "external_id": section.external_id,
                 "username": _request_username(user),
             },
             response_status=None,

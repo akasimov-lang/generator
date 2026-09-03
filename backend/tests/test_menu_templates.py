@@ -387,6 +387,46 @@ def test_menu_item_can_be_edited_and_returns_to_pending_sync() -> None:
         assert site.menu_library[0]["path"] == "/casino-bonus/"
 
 
+def test_editing_adopted_menu_item_makes_it_durable_and_logs_original_slug() -> None:
+    with make_session() as db:
+        site = models.Site(
+            name="review.example",
+            base_url="https://review.example",
+            publication_endpoint="https://review.example/api/content",
+            default_menu={
+                "header": [{"id": 1787216707470, "title": "Bonusy", "slug": "/bonuses/", "order": 0}],
+                "footer": [],
+            },
+        )
+        db.add(site)
+        db.commit()
+        adopted = adopt_cached_section(
+            site.id,
+            SectionCreate(external_id="1787216707470", name="Bonusy", path="/bonuses/", menu_type="header"),
+            None,  # type: ignore[arg-type]
+            db,
+        )["section"]
+        assert adopted.is_temporary_parent is True
+
+        updated = update_section(
+            site.id,
+            adopted.id,
+            SectionUpdate(name="Casino bonuses", path="/casino-bonuses/"),
+            {"username": "anton"},  # type: ignore[arg-type]
+            db,
+        )
+
+        assert updated.is_temporary_parent is False
+        log = next(
+            log
+            for log in db.scalars(select(models.PublicationLog)).all()
+            if log.request_payload.get("action") == "menu_item_update"
+        )
+        assert log is not None
+        assert log.request_payload["external_id"] == "1787216707470"
+        assert log.request_payload["previous_path"] == "/bonuses/"
+
+
 def test_added_menu_item_can_be_deleted() -> None:
     with make_session() as db:
         site = models.Site(

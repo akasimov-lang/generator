@@ -3631,12 +3631,31 @@ def build_project_menu_payload(db: Session, site: models.Site, menu_type: str, n
         )
         .order_by(models.Section.created_at.asc())
     ).all()
+    update_logs_by_section_id = {
+        str(log.response_body.get("section_id")): log
+        for log in pending_logs
+        if log.request_payload.get("action") == "menu_item_update"
+        and isinstance(log.response_body, dict)
+        and log.response_body.get("section_id")
+    }
     next_order = 0 if not items else max(max(item["order"] for item in items) + 1, len(items) + 1)
     for section_index, section in enumerate(sections):
         slug = _normalized_project_slug(section.path)
-        existing = next((item for item in items if item["slug"] == slug), None)
+        update_log = update_logs_by_section_id.get(str(section.id))
+        previous_slug = _normalized_project_slug(update_log.request_payload.get("previous_path")) if update_log else ""
+        existing = next(
+            (
+                item
+                for item in items
+                if item["slug"] == slug
+                or str(item["id"]).strip().casefold() == section.external_id.strip().casefold()
+                or bool(previous_slug and item["slug"] == previous_slug)
+            ),
+            None,
+        )
         if existing:
             existing["title"] = section.name
+            existing["slug"] = slug
             continue
         items.append({
             "id": generated_id + len(cached_items) + section_index,
