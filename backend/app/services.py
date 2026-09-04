@@ -3593,8 +3593,18 @@ def revise_content_item(db: Session, item: models.ContentItem, revision: models.
         if isinstance(current_pages, list) and current_pages and isinstance(current_pages[0], dict)
         else None
     )
+    current_page_slug = (
+        current_pages[0].get("slug")
+        if isinstance(current_pages, list) and current_pages and isinstance(current_pages[0], dict)
+        else None
+    )
+    options = revision.generation_options if isinstance(revision.generation_options, dict) else {}
+    base_prompt = str(options.get("prompt_template") or task.prompt_template or DEFAULT_CONTENT_PROMPT_TEMPLATE)
+    include_casino_rating = bool(options.get("include_casino_rating", task.include_casino_rating))
+    if include_casino_rating:
+        base_prompt = append_casino_rating_requirement(base_prompt, True)
     current_text = json.dumps(current_payload, ensure_ascii=False, indent=2)
-    revision_prompt = f"""{task.prompt_template or DEFAULT_CONTENT_PROMPT_TEMPLATE}
+    revision_prompt = f"""{base_prompt}
 
 === EDITOR REVISION REQUEST ===
 Revise the existing generated page according to the editor's remarks below.
@@ -3612,7 +3622,8 @@ CURRENT GENERATED PAGE (source JSON; rewrite its article content):
     item.status = "generating"
     item.generation_progress = 15
     item.generation_error = None
-    task.status = "generating"
+    if not revision.is_published_replacement:
+        task.status = "generating"
     revision.status = "generating"
     revision.error_message = None
     db.commit()
@@ -3623,14 +3634,14 @@ CURRENT GENERATED PAGE (source JSON; rewrite its article content):
                 topic=item.topic,
                 geo=task.geo,
                 language=task.language,
-                target_words=task.target_words,
+                target_words=options.get("target_words", task.target_words),
                 site=site,
                 payload_mode=task.payload_mode,
                 prompt_template=revision_prompt,
                 shortcode=None,
-                include_toc=task.include_toc,
-                include_faq=task.include_faq,
-                competitor_brief=item.competitor_brief,
+                include_toc=bool(options.get("include_toc", task.include_toc)),
+                include_faq=bool(options.get("include_faq", task.include_faq)),
+                competitor_brief=item.competitor_brief if options.get("use_competitor_brief", True) else None,
                 variation_context=build_task_variation_context(db, item),
                 generate_title=revision.generate_title,
                 generation_context=item.generation_context,
@@ -3640,14 +3651,30 @@ CURRENT GENERATED PAGE (source JSON; rewrite its article content):
             revised_pages = item.generated_json.get("pages") if isinstance(item.generated_json, dict) else None
             if isinstance(revised_pages, list) and revised_pages and isinstance(revised_pages[0], dict):
                 revised_pages[0]["title"] = current_title
+        if revision.is_published_replacement:
+            revised_pages = item.generated_json.get("pages") if isinstance(item.generated_json, dict) else None
+            if isinstance(revised_pages, list) and revised_pages and isinstance(revised_pages[0], dict):
+                revised_pages[0]["slug"] = current_page_slug or item.slug
         item.word_count = count_words(item.generated_json)
         section = db.get(models.Section, item.section_id) if item.section_id else None
         ensure_content_slug_available(db, item, section=section)
         item.generation_progress = 100
-        item.generation_prompt_name = task.prompt_template_name
+        item.generation_prompt_name = str(options.get("prompt_template_name") or task.prompt_template_name or "") or None
+        item.include_casino_rating = include_casino_rating
         item.generated_at = datetime.now(timezone.utc)
         item.status = "generated"
-        task.status = "generated"
+        if revision.is_published_replacement:
+            item.idempotency_key = f"published-replacement-{item.id}-{uuid.uuid4().hex[:12]}"
+            item.publication_campaign_id = None
+            item.scheduled_at = None
+            item.published_at = None
+            item.last_publication_status_code = None
+            item.indexing_status = None
+            item.indexing_task_id = None
+            item.indexing_requested_at = None
+            item.indexing_error = None
+        else:
+            task.status = "generated"
         revision.revised_json = copy.deepcopy(item.generated_json)
         revision.revised_generated_at = item.generated_at
         revision.status = "completed"
@@ -3662,9 +3689,10 @@ CURRENT GENERATED PAGE (source JSON; rewrite its article content):
         error_message = f"{type(exc).__name__}: {exc}"[:500]
         if failed_item:
             failed_item.generated_json = current_payload
-            failed_item.status = "generation_failed"
+            failed_item.status = revision.source_status or "generation_failed"
+            failed_item.generation_progress = 100 if failed_item.status == "published" else failed_item.generation_progress
             failed_item.generation_error = error_message
-        if failed_task:
+        if failed_task and not revision.is_published_replacement:
             failed_task.status = "generation_failed"
         if failed_revision:
             failed_revision.status = "failed"

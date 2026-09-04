@@ -144,6 +144,18 @@ def apply_lightweight_migrations() -> None:
         )
         backfill_content_site_ids()
 
+    if "content_revisions" in tables:
+        columns = {column["name"] for column in inspector.get_columns("content_revisions")}
+        _add_missing_columns(
+            "content_revisions",
+            columns,
+            {
+                "generation_options": "JSON",
+                "source_status": "VARCHAR(40) DEFAULT 'generated' NOT NULL",
+                "is_published_replacement": "BOOLEAN DEFAULT FALSE NOT NULL",
+            },
+        )
+
     if "publication_campaigns" in tables:
         columns = {column["name"] for column in inspector.get_columns("publication_campaigns")}
         _add_missing_columns(

@@ -5945,6 +5945,105 @@ td {
   max-height: none;
 }
 
+.modalDialog.publishedRegenerationModal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: min(920px, calc(100vh - 40px));
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+}
+
+.publishedRegenerationNotice,
+.publishedRegenerationProgress,
+.publishedRegenerationReady,
+.publishedRegenerationSuccess {
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border));
+  border-radius: var(--radius);
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+}
+
+.publishedRegenerationNotice,
+.publishedRegenerationSuccess {
+  background: color-mix(in srgb, var(--primary-soft) 58%, var(--surface));
+  color: var(--primary-dark);
+}
+
+.publishedRegenerationNotice > span,
+.publishedRegenerationProgress > span {
+  display: grid;
+  gap: 3px;
+}
+
+.publishedRegenerationNotice small,
+.publishedRegenerationProgress small,
+.publishedRegenerationPreviewHeader small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.publishedRegenerationForm {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: grid;
+  gap: 11px;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.45fr);
+  padding: 13px;
+}
+
+.publishedRegenerationForm > label:not(.checkboxRow) {
+  display: grid;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 6px;
+}
+
+.publishedRegenerationForm .wide {
+  grid-column: 1 / -1;
+}
+
+.publishedRegenerationForm textarea {
+  resize: vertical;
+}
+
+.publishedRegenerationOptions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px 18px;
+}
+
+.publishedRegenerationProgress {
+  background: var(--surface-3);
+  display: grid;
+  grid-template-columns: auto minmax(190px, auto) minmax(220px, 1fr);
+}
+
+.publishedRegenerationReady {
+  background: var(--primary-soft);
+  justify-content: space-between;
+}
+
+.publishedRegenerationReady > span {
+  align-items: center;
+  display: inline-flex;
+  gap: 7px;
+}
+
+.publishedRegenerationPreviewHeader {
+  display: grid;
+  gap: 3px;
+}
+
+.publishedRegenerationModal .contentPreviewBody {
+  flex: 1 0 360px;
+  min-height: 360px;
+}
+
 .bulkToolbar {
   align-items: center;
   background: var(--surface-3);
@@ -6936,7 +7035,7 @@ td {
 
 .projectPublicationProcessTable th:last-child,
 .projectPublicationProcessTable td:last-child {
-  width: 300px;
+  width: 440px;
 }
 
 .publicationProcessActions {

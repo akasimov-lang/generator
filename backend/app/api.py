@@ -40,6 +40,7 @@ from app.schemas import (
     MenuStructurePreviewResponse,
     MenuVisibilityCheckResponse,
     PasswordChange,
+    PublishedContentRegenerationRequest,
     PublishedContentBulkDeleteRequest,
     PublishedContentBulkDeleteResponse,
     PublicationCampaignResponse,
@@ -2132,6 +2133,7 @@ def revise_content(content_id: str, payload: ContentRevisionRequest, user: AuthU
         requested_by_user_id=user["id"] if user else None,
         remarks=payload.remarks.strip(),
         generate_title=payload.generate_title,
+        source_status=previous_status,
         source_json=item.generated_json,
         source_generated_at=item.generated_at,
         status="queued",
@@ -2150,6 +2152,68 @@ def revise_content(content_id: str, payload: ContentRevisionRequest, user: AuthU
         revision.error_message = item.generation_error
         db.commit()
         raise HTTPException(status_code=502, detail="Failed to queue content revision") from exc
+    db.refresh(item)
+    return item
+
+
+@router.post("/content/{content_id}/regenerate-published", response_model=ContentItemResponse)
+def regenerate_published_content(
+    content_id: str,
+    payload: PublishedContentRegenerationRequest,
+    user: AuthUser,
+    db: Session = Depends(get_db),
+) -> Any:
+    """Generate a replacement draft without deleting or changing the live page."""
+    item = db.get(models.ContentItem, content_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Content item not found")
+    if item.status in {"generation_queued", "generating"}:
+        return item
+    if item.status != "published":
+        raise HTTPException(status_code=400, detail="Only published content can be regenerated here")
+    if not item.generated_json:
+        raise HTTPException(status_code=400, detail="Published content has no source JSON")
+
+    task = db.get(models.GenerationTask, item.task_id)
+    if not task:
+        raise HTTPException(status_code=400, detail="Generation task not found")
+    prompt_template = payload.prompt_template if payload.prompt_template is not None else task.prompt_template
+    prompt_name = payload.prompt_template_name if payload.prompt_template_name is not None else task.prompt_template_name
+    revision = models.ContentRevision(
+        content_item_id=item.id,
+        requested_by_user_id=user["id"] if user else None,
+        remarks=payload.instructions.strip() or "Полностью перегенерировать текст.",
+        generate_title=payload.generate_title,
+        generation_options={
+            "prompt_template_name": prompt_name,
+            "prompt_template": prompt_template,
+            "target_words": payload.target_words if payload.target_words is not None else task.target_words,
+            "include_toc": payload.include_toc,
+            "include_faq": payload.include_faq,
+            "use_competitor_brief": payload.use_competitor_brief,
+            "include_casino_rating": payload.include_casino_rating,
+        },
+        source_status="published",
+        is_published_replacement=True,
+        source_json=item.generated_json,
+        source_generated_at=item.generated_at,
+        status="queued",
+    )
+    db.add(revision)
+    item.status = "generation_queued"
+    item.generation_progress = 1
+    item.generation_error = None
+    db.commit()
+    try:
+        revise_content_item_job.delay(item.id, revision.id)
+    except Exception as exc:
+        item.status = "published"
+        item.generation_progress = 100
+        item.generation_error = f"{type(exc).__name__}: {exc}"[:500]
+        revision.status = "failed"
+        revision.error_message = item.generation_error
+        db.commit()
+        raise HTTPException(status_code=502, detail="Failed to queue published content regeneration") from exc
     db.refresh(item)
     return item
 

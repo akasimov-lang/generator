@@ -639,6 +639,18 @@ class ContentRevisionRequest(BaseModel):
     generate_title: bool = True
 
 
+class PublishedContentRegenerationRequest(BaseModel):
+    instructions: str = Field(default="Полностью перегенерировать текст, сохранив назначение страницы и поисковый интент.", max_length=5000)
+    prompt_template_name: str | None = Field(default=None, max_length=160)
+    prompt_template: str | None = Field(default=None, max_length=100000)
+    target_words: int | None = Field(default=None, ge=300, le=10000)
+    include_toc: bool = True
+    include_faq: bool = True
+    generate_title: bool = True
+    use_competitor_brief: bool = True
+    include_casino_rating: bool = False
+
+
 class ContentRevisionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -647,6 +659,9 @@ class ContentRevisionResponse(BaseModel):
     requested_by_user_id: str | None
     remarks: str
     generate_title: bool
+    generation_options: dict[str, Any] | None = None
+    source_status: str = "generated"
+    is_published_replacement: bool = False
     status: str
     source_json: dict[str, Any]
     revised_json: dict[str, Any] | None

@@ -302,12 +302,14 @@ def revise_content_item_job(content_item_id: str, revision_id: str) -> dict:
             error_message = f"{type(exc).__name__}: {exc}"[:500]
             if failed_item and failed_revision:
                 failed_item.generated_json = failed_revision.source_json
-                failed_item.status = "generation_failed"
+                failed_item.status = failed_revision.source_status or "generation_failed"
+                if failed_item.status == "published":
+                    failed_item.generation_progress = 100
                 failed_item.generation_error = error_message
                 failed_revision.status = "failed"
                 failed_revision.error_message = error_message
                 task = db.get(models.GenerationTask, failed_item.task_id)
-                if task:
+                if task and not failed_revision.is_published_replacement:
                     task.status = "generation_failed"
                 db.commit()
             raise

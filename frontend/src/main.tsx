@@ -2336,12 +2336,12 @@ function ProjectWorkspaceView({
           </WorkspaceTabPane>
           <WorkspaceTabPane active={activeTab === "content" || activeTab === "publication"} storagePrefix={`${currentUsername}:${selectedSite.id}:content`}>
             {publicationWorkflowSection === "campaigns" ? <>
-              <FastProjectPublicationPanel key={`${selectedSite.id}:publication-launch`} mode="launch" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} onChanged={refreshProject} />
-              <FastProjectPublicationPanel key={`${selectedSite.id}:publication-campaigns`} mode="campaigns" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} onChanged={refreshProject} />
+              <FastProjectPublicationPanel key={`${selectedSite.id}:publication-launch`} mode="launch" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} promptTemplates={promptTemplates} onChanged={refreshProject} />
+              <FastProjectPublicationPanel key={`${selectedSite.id}:publication-campaigns`} mode="campaigns" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} promptTemplates={promptTemplates} onChanged={refreshProject} />
             </> : null}
             {publicationWorkflowSection === "content" ? <FastProjectContentPanel key={`${selectedSite.id}:content`} api={api} site={selectedSite} content={siteContent} sections={sections} onChanged={refreshProject} /> : null}
             {publicationWorkflowSection !== "content" && publicationWorkflowSection !== "campaigns" ? (
-              <FastProjectPublicationPanel key={`${selectedSite.id}:publication-workflow`} mode="workflow" workflowSection={publicationWorkflowSection} api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} onChanged={refreshProject} />
+              <FastProjectPublicationPanel key={`${selectedSite.id}:publication-workflow`} mode="workflow" workflowSection={publicationWorkflowSection} api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} promptTemplates={promptTemplates} onChanged={refreshProject} />
             ) : null}
           </WorkspaceTabPane>
           <WorkspaceTabPane active={activeTab === "menu"} storagePrefix={`${currentUsername}:${selectedSite.id}:menu`}>
@@ -3942,7 +3942,7 @@ function PublicationWorkflowNav({ content, campaigns, activeSection, onSectionCh
   );
 }
 
-function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs, mode, workflowSection = "process", onChanged }: ViewProps & { site: Site; content: ContentItem[]; sections: Section[]; campaigns: PublicationCampaign[]; logs: PublicationLog[]; mode: "launch" | "campaigns" | "workflow"; workflowSection?: PublicationWorkflowSection }) {
+function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs, promptTemplates, mode, workflowSection = "process", onChanged }: ViewProps & { site: Site; content: ContentItem[]; sections: Section[]; campaigns: PublicationCampaign[]; logs: PublicationLog[]; promptTemplates: PromptTemplate[]; mode: "launch" | "campaigns" | "workflow"; workflowSection?: PublicationWorkflowSection }) {
   const [launchExpanded, setLaunchExpanded] = usePersistentWorkspacePanelState("publication-launch", false);
   const [name, setName] = React.useState("Daily publication");
   const [itemsPerDay, setItemsPerDay] = React.useState(1);
@@ -3957,9 +3957,11 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
   const [publishingAllCampaignId, setPublishingAllCampaignId] = React.useState("");
   const [reschedulingCampaignId, setReschedulingCampaignId] = React.useState("");
   const [previewItem, setPreviewItem] = React.useState<ContentItem | null>(null);
+  const [regenerationItem, setRegenerationItem] = React.useState<ContentItem | null>(null);
 
   React.useEffect(() => {
     setPreviewItem((current) => current ? content.find((item) => item.id === current.id) || current : current);
+    setRegenerationItem((current) => current ? content.find((item) => item.id === current.id) || current : current);
   }, [content]);
   const publicationReady = content.filter((item) => Boolean(item.site_id && item.section_id)
     && ["generated", "rejected", "approved"].includes(item.status)
@@ -4288,6 +4290,9 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
                 <span className="publishedProcessState" title={item.published_at ? `Опубликовано ${formatDate(item.published_at)}` : "Опубликовано"}>
                   <CheckCircle2 size={14} /> <strong>Опубликовано</strong><span>·</span><time>{item.published_at ? formatDate(item.published_at) : "—"}</time>
                 </span>
+                <button className="button compact secondary regeneratePublishedButton" type="button" onClick={() => setRegenerationItem(item)} title="Перегенерировать текст и заменить только эту страницу">
+                  <Sparkles size={14} /> Перегенерировать
+                </button>
                 <a className="button icon compact secondary" href={projectContentSiteUrl(site, item)} target="_blank" rel="noreferrer" title={`Открыть страницу «${item.topic}» на сайте`} aria-label={`Открыть страницу «${item.topic}» на сайте`}><ExternalLink size={14} /></a>
                 <button className="button icon compact danger" type="button" onClick={() => void deletePublishedItem(item)} disabled={deletingProcessItemId === item.id || deletingProcessSelection} title="Удалить текст с проекта" aria-label={`Удалить ${item.topic} с проекта`}>
                   {deletingProcessItemId === item.id ? <LoaderCircle className="spin" size={14} /> : <Trash2 size={14} />}
@@ -4351,6 +4356,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
         />
       </DataPanel> : null}
       {previewItem ? <ContentPreviewModal api={api} item={previewItem} onChanged={onChanged} onClose={() => setPreviewItem(null)} /> : null}
+      {regenerationItem ? <PublishedContentRegenerationModal api={api} item={regenerationItem} promptTemplates={promptTemplates} onChanged={onChanged} onClose={() => setRegenerationItem(null)} /> : null}
     </section>
   );
 }
@@ -9956,6 +9962,137 @@ function Modal({ title, subtitle, children, onClose, wide, className = "", heade
         {children}
       </div>
     </div>
+  );
+}
+
+function PublishedContentRegenerationModal({ item, promptTemplates, api, onChanged, onClose }: {
+  item: ContentItem;
+  promptTemplates: PromptTemplate[];
+  api: <T>(path: string, options?: RequestInit) => Promise<T>;
+  onChanged: () => void | Promise<void>;
+  onClose: () => void;
+}) {
+  const matchingPrompt = promptTemplates.find((prompt) => prompt.name === item.generation_prompt_name)
+    || defaultPromptTemplate(promptTemplates);
+  const [currentItem, setCurrentItem] = React.useState(item);
+  const [promptId, setPromptId] = React.useState(matchingPrompt?.id || "");
+  const [targetWords, setTargetWords] = React.useState("");
+  const [instructions, setInstructions] = React.useState("Полностью перегенерировать текст, сохранив тематику, поисковый интент и полезность страницы.");
+  const [includeToc, setIncludeToc] = React.useState(true);
+  const [includeFaq, setIncludeFaq] = React.useState(true);
+  const [generateTitle, setGenerateTitle] = React.useState(true);
+  const [useCompetitorBrief, setUseCompetitorBrief] = React.useState(Boolean(item.competitor_brief));
+  const [includeCasinoRating, setIncludeCasinoRating] = React.useState(item.include_casino_rating);
+  const [submitted, setSubmitted] = React.useState(false);
+  const [publishing, setPublishing] = React.useState(false);
+  const [started, setStarted] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const generating = ACTIVE_GENERATION_STATUSES.includes(currentItem.status);
+  const awaitingConfirmation = ["publishing", "publication_pending_confirmation"].includes(currentItem.status);
+  const replacementReady = ["generated", "approved", "rejected", "publication_failed"].includes(currentItem.status) && started;
+  const replacementPublished = currentItem.status === "published" && started && !generating && !currentItem.generation_error;
+
+  React.useEffect(() => {
+    setCurrentItem(item);
+  }, [item]);
+
+  React.useEffect(() => {
+    if (!started || (!generating && !awaitingConfirmation)) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const refreshed = await api<ContentItem>(`/content/${currentItem.id}`);
+        if (cancelled) return;
+        setCurrentItem(refreshed);
+        if (!ACTIVE_GENERATION_STATUSES.includes(refreshed.status) && !["publishing", "publication_pending_confirmation"].includes(refreshed.status)) {
+          setSubmitted(false);
+          setPublishing(false);
+          await onChanged();
+        }
+      } catch (pollError) {
+        if (!cancelled) setError(pollError instanceof Error ? pollError.message : "Не удалось обновить статус.");
+      }
+    };
+    void poll();
+    const intervalId = window.setInterval(() => void poll(), 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [api, awaitingConfirmation, currentItem.id, generating, onChanged, started]);
+
+  async function regenerate(event: React.FormEvent) {
+    event.preventDefault();
+    const selectedPrompt = promptTemplates.find((prompt) => prompt.id === promptId) || null;
+    setError("");
+    setStarted(true);
+    setSubmitted(true);
+    try {
+      const queued = await api<ContentItem>(`/content/${currentItem.id}/regenerate-published`, {
+        method: "POST",
+        body: JSON.stringify({
+          instructions: instructions.trim(),
+          prompt_template_name: selectedPrompt?.name || null,
+          prompt_template: selectedPrompt?.content || null,
+          target_words: targetWords ? Number(targetWords) : null,
+          include_toc: includeToc,
+          include_faq: includeFaq,
+          generate_title: generateTitle,
+          use_competitor_brief: useCompetitorBrief,
+          include_casino_rating: includeCasinoRating
+        })
+      });
+      setCurrentItem(queued);
+      await onChanged();
+    } catch (requestError) {
+      setSubmitted(false);
+      setError(requestError instanceof Error ? requestError.message : "Не удалось запустить перегенерацию.");
+    }
+  }
+
+  async function publishReplacement() {
+    setError("");
+    setPublishing(true);
+    try {
+      const sent = await api<ContentItem>(`/content/${currentItem.id}/publish-immediately`, { method: "POST" });
+      setCurrentItem(sent);
+      await onChanged();
+    } catch (publishError) {
+      setPublishing(false);
+      setError(publishError instanceof Error ? publishError.message : "Не удалось отправить замену на сайт.");
+    }
+  }
+
+  return (
+    <Modal title={`Перегенерировать: ${item.topic}`} subtitle="Новая версия заменит только эту страницу" onClose={onClose} wide className="publishedRegenerationModal">
+      <div className="publishedRegenerationNotice">
+        <ShieldCheck size={18} />
+        <span><strong>URL останется прежним: <code>{item.slug}</code></strong><small>Пункт меню, вложенность и остальные страницы проекта не изменяются.</small></span>
+      </div>
+      {!started || (currentItem.status === "published" && currentItem.generation_error) ? (
+        <form className="publishedRegenerationForm" onSubmit={regenerate}>
+          <label className="wide">Пожелания к новой версии<textarea rows={3} maxLength={5000} value={instructions} onChange={(event) => setInstructions(event.target.value)} /></label>
+          {promptTemplates.length ? <label>Промпт<select value={promptId} onChange={(event) => setPromptId(event.target.value)}>{promptTemplates.map((prompt) => <option value={prompt.id} key={prompt.id}>{prompt.is_default ? "Default · " : ""}{prompt.name}</option>)}</select></label> : null}
+          <label>Объём текста<input type="number" min={300} max={10000} step={100} value={targetWords} onChange={(event) => setTargetWords(event.target.value)} placeholder="Как в исходной задаче" /></label>
+          <div className="publishedRegenerationOptions wide">
+            <label className="checkboxRow"><input type="checkbox" checked={generateTitle} onChange={(event) => setGenerateTitle(event.target.checked)} /> Перегенерировать Title</label>
+            <label className="checkboxRow"><input type="checkbox" checked={includeToc} onChange={(event) => setIncludeToc(event.target.checked)} /> Оглавление</label>
+            <label className="checkboxRow"><input type="checkbox" checked={includeFaq} onChange={(event) => setIncludeFaq(event.target.checked)} /> FAQ</label>
+            <label className="checkboxRow"><input type="checkbox" checked={useCompetitorBrief} disabled={!item.competitor_brief} onChange={(event) => setUseCompetitorBrief(event.target.checked)} /> Использовать анализ конкурентов</label>
+            <label className="checkboxRow"><input type="checkbox" checked={includeCasinoRating} onChange={(event) => setIncludeCasinoRating(event.target.checked)} /> Рейтинг казино</label>
+          </div>
+          <div className="formActions wide"><button className="button primary" type="submit" disabled={submitted}><Sparkles size={16} /> {submitted ? "Запускаю…" : "Сгенерировать новую версию"}</button></div>
+        </form>
+      ) : null}
+      {generating ? <div className="publishedRegenerationProgress"><CircularOperationProgress value={Math.max(1, currentItem.generation_progress || 0)} /><span><strong>{currentItem.status === "generation_queued" ? "Ожидает запуска" : "Генерируется новая версия"}</strong><small>Текущая опубликованная страница продолжает работать без изменений.</small></span><GenerationProgressCell item={currentItem} /></div> : null}
+      {replacementReady ? <div className="publishedRegenerationReady"><span><CheckCircle2 size={17} /><strong>Новая версия готова к просмотру</strong></span><button className="button primary" type="button" onClick={() => void publishReplacement()} disabled={publishing}><Send size={16} /> {publishing ? "Отправляем…" : "Заменить страницу на сайте"}</button></div> : null}
+      {awaitingConfirmation ? <div className="publicationConfirmationPending"><LoaderCircle className="spin" size={15} /><strong>Новая версия отправлена, ожидаем подтверждение проекта</strong></div> : null}
+      {replacementPublished ? <div className="publishedRegenerationSuccess"><CheckCircle2 size={18} /><strong>Страница успешно заменена. URL и структура проекта сохранены.</strong></div> : null}
+      {currentItem.generation_error ? <span className="formError">{currentItem.generation_error}</span> : null}
+      {error ? <span className="formError">{error}</span> : null}
+      <div className="publishedRegenerationPreviewHeader"><strong>{replacementReady || replacementPublished ? "Предпросмотр новой версии" : "Текущая опубликованная версия"}</strong><small>{contentItemDescription(currentItem) || "Meta Description не заполнен"}</small></div>
+      <ContentPreviewBody item={currentItem} />
+    </Modal>
   );
 }
 
