@@ -1,5 +1,5 @@
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import re
 import threading
@@ -363,6 +363,75 @@ def fetch_project_cache(names: list[str] | None = None) -> list[dict[str, Any]]:
     if not isinstance(payload, list):
         raise ProjectCacheError("Project cache returned an unexpected response")
     return [project for project in payload if isinstance(project, dict)]
+
+
+def reconcile_pending_publications(
+    db: Session,
+    *,
+    min_age_seconds: int = 30,
+    limit: int = 100,
+) -> dict[str, int]:
+    """Recover publication confirmations missed by the project event stream.
+
+    A successful create response intentionally remains provisional until the
+    requested slug is visible in fresh project data.  The SSE stream normally
+    triggers that check; this periodic fallback makes the confirmation durable
+    when an event is lost during a disconnect.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=max(0, min_age_seconds))
+    pending_items = db.scalars(
+        select(models.ContentItem)
+        .where(models.ContentItem.status == "publication_pending_confirmation")
+        .where(models.ContentItem.site_id.is_not(None))
+        .where(models.ContentItem.updated_at <= cutoff)
+        .order_by(models.ContentItem.updated_at.asc())
+        .limit(max(1, limit))
+    ).all()
+    if not pending_items:
+        return {"checked_projects": 0, "checked_items": 0, "confirmed": 0, "remaining": 0, "missing_projects": 0}
+
+    item_ids = [item.id for item in pending_items]
+    site_ids = {item.site_id for item in pending_items if item.site_id}
+    sites = db.scalars(select(models.Site).where(models.Site.id.in_(site_ids))).all()
+    project_names = sorted({site.name for site in sites if site.name})
+    if not project_names:
+        return {
+            "checked_projects": 0,
+            "checked_items": len(item_ids),
+            "confirmed": 0,
+            "remaining": len(item_ids),
+            "missing_projects": 0,
+        }
+
+    projects = fetch_project_cache(project_names)
+    projects_by_name = {
+        str(project.get("name") or "").strip(): project
+        for project in projects
+        if str(project.get("name") or "").strip() in project_names
+    }
+    for project_name, project in projects_by_name.items():
+        sync_project_data_update(db, project_name, project)
+
+    db.expire_all()
+    confirmed = db.scalar(
+        select(func.count(models.ContentItem.id)).where(
+            models.ContentItem.id.in_(item_ids),
+            models.ContentItem.status == "published",
+        )
+    ) or 0
+    remaining = db.scalar(
+        select(func.count(models.ContentItem.id)).where(
+            models.ContentItem.id.in_(item_ids),
+            models.ContentItem.status == "publication_pending_confirmation",
+        )
+    ) or 0
+    return {
+        "checked_projects": len(projects_by_name),
+        "checked_items": len(item_ids),
+        "confirmed": confirmed,
+        "remaining": remaining,
+        "missing_projects": len(set(project_names) - set(projects_by_name)),
+    }
 
 
 def refresh_project_server_id(db: Session, site: models.Site) -> str:

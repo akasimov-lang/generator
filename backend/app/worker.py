@@ -8,7 +8,7 @@ from app import models
 from app.core.config import get_settings
 from app.db import SessionLocal
 from app.indexing import submit_pending_content_indexing
-from app.project_cache import ProjectCacheError, fetch_project_cache, fetch_project_menu_capabilities, refresh_project_server_id, sync_project_data_update
+from app.project_cache import ProjectCacheError, fetch_project_cache, fetch_project_menu_capabilities, reconcile_pending_publications, refresh_project_server_id, sync_project_data_update
 from app.services import COMPETITOR_RESEARCH_MAX_ATTEMPTS, collect_competitor_research_for_item, continue_competitor_research_for_item, generate_content_item, publish_campaign_bundle, publish_item, refresh_campaign_status, revise_content_item, validate_content_for_publication
 
 settings = get_settings()
@@ -28,6 +28,10 @@ celery_app.conf.beat_schedule = {
         "task": "app.worker.submit_pending_content_indexing",
         "schedule": 5.0,
     },
+    "reconcile-pending-publications": {
+        "task": "app.worker.reconcile_pending_publications",
+        "schedule": 30.0,
+    },
 }
 
 
@@ -36,6 +40,15 @@ def submit_pending_content_indexing_job() -> dict[str, int]:
     db = SessionLocal()
     try:
         return submit_pending_content_indexing(db)
+    finally:
+        db.close()
+
+
+@celery_app.task(name="app.worker.reconcile_pending_publications")
+def reconcile_pending_publications_job() -> dict[str, int]:
+    db = SessionLocal()
+    try:
+        return reconcile_pending_publications(db)
     finally:
         db.close()
 

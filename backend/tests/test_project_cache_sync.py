@@ -7,7 +7,7 @@ from sqlalchemy.pool import StaticPool
 from app import models
 from app.api import _find_project_page, check_site_menu_template_capabilities, enqueue_site_menu_capabilities_check, get_site_menu_capabilities
 from app.db import Base
-from app.project_cache import analyze_menu_templates, sync_project_cache
+from app.project_cache import analyze_menu_templates, reconcile_pending_publications, sync_project_cache
 from app import project_cache as project_cache_module
 
 
@@ -237,6 +237,112 @@ def test_fresh_cache_confirms_publication_only_when_slug_is_present() -> None:
         db.refresh(task)
         assert final_result["confirmed_publications_count"] == 1
         assert task.status == "published"
+
+
+def test_periodic_reconciliation_recovers_confirmation_missed_by_stream(monkeypatch) -> None:
+    with make_session() as db:
+        site = models.Site(
+            name="missed-event.example",
+            base_url="https://missed-event.example",
+            publication_endpoint="https://missed-event.example/api/content",
+            external_project_id="missed-event",
+        )
+        db.add(site)
+        db.flush()
+        task = models.GenerationTask(
+            title="Recovered publish",
+            site_id=site.id,
+            geo="CZ",
+            language="cs",
+            topics_count=1,
+            status="publishing",
+        )
+        db.add(task)
+        db.flush()
+        item = models.ContentItem(
+            task=task,
+            site_id=site.id,
+            topic="Free spiny dnes",
+            slug="/akce-a-spiny/free-spiny-dnes/",
+            generated_json={"pages": []},
+            status="publication_pending_confirmation",
+            idempotency_key="missed-stream-event",
+            last_publication_status_code=201,
+            updated_at=datetime(2026, 9, 4, 8, 0, tzinfo=timezone.utc),
+        )
+        db.add(item)
+        db.commit()
+
+        requested_names: list[list[str]] = []
+
+        def fake_fetch(names: list[str] | None = None) -> list[dict]:
+            requested_names.append(list(names or []))
+            return [{
+                "id": "missed-event",
+                "name": site.name,
+                "serverId": "bear",
+                "data": {
+                    "menu": {"header": [], "footer": []},
+                    "pages": [{"slug": "/akce-a-spiny/free-spiny-dnes/"}],
+                },
+            }]
+
+        monkeypatch.setattr(project_cache_module, "fetch_project_cache", fake_fetch)
+        result = reconcile_pending_publications(db, min_age_seconds=0)
+
+        db.refresh(item)
+        db.refresh(task)
+        assert requested_names == [[site.name]]
+        assert result == {
+            "checked_projects": 1,
+            "checked_items": 1,
+            "confirmed": 1,
+            "remaining": 0,
+            "missing_projects": 0,
+        }
+        assert item.status == "published"
+        assert item.indexing_status == "queued"
+        assert item.published_at is not None
+        assert task.status == "published"
+
+
+def test_periodic_reconciliation_skips_recent_pending_items(monkeypatch) -> None:
+    with make_session() as db:
+        site = models.Site(
+            name="recent-publish.example",
+            base_url="https://recent-publish.example",
+            publication_endpoint="https://recent-publish.example/api/content",
+            external_project_id="recent-publish",
+        )
+        db.add(site)
+        db.flush()
+        task = models.GenerationTask(title="Recent", site_id=site.id, geo="CZ", language="cs", topics_count=1)
+        db.add(task)
+        db.flush()
+        db.add(models.ContentItem(
+            task=task,
+            site_id=site.id,
+            topic="Recent page",
+            slug="/recent/",
+            generated_json={"pages": []},
+            status="publication_pending_confirmation",
+            idempotency_key="recent-publish",
+        ))
+        db.commit()
+
+        def unexpected_fetch(names: list[str] | None = None) -> list[dict]:
+            raise AssertionError(f"fresh pending publication must not be fetched: {names}")
+
+        monkeypatch.setattr(project_cache_module, "fetch_project_cache", unexpected_fetch)
+        result = reconcile_pending_publications(db, min_age_seconds=30)
+
+        assert result == {
+            "checked_projects": 0,
+            "checked_items": 0,
+            "confirmed": 0,
+            "remaining": 0,
+            "missing_projects": 0,
+        }
 
 
 def test_menu_capabilities_are_detected_per_template() -> None:
