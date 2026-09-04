@@ -2134,6 +2134,7 @@ def revise_content(content_id: str, payload: ContentRevisionRequest, user: AuthU
         remarks=payload.remarks.strip(),
         generate_title=payload.generate_title,
         source_status=previous_status,
+        is_published_replacement=previous_status == "published",
         source_json=item.generated_json,
         source_generated_at=item.generated_at,
         status="queued",

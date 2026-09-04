@@ -10112,7 +10112,7 @@ function ContentPreviewModal({ item, promptName, actions, api, onChanged, onClos
   const [revisionError, setRevisionError] = React.useState("");
   const [revisionSubmitted, setRevisionSubmitted] = React.useState(false);
   const revisionActive = ACTIVE_GENERATION_STATUSES.includes(currentItem.status);
-  const revisionBlocked = ["scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "deletion_pending", "deleted"].includes(currentItem.status);
+  const revisionBlocked = ["scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published", "deletion_pending", "deleted"].includes(currentItem.status);
   const revisionAllowed = !revisionBlocked && Object.keys(currentItem.generated_json || {}).length > 0;
   const selectedRevision = selectedVersion ? revisions.find((revision) => revision.id === selectedVersion.revisionId) : null;
   const selectedJson = selectedRevision

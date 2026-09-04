@@ -146,6 +146,8 @@ def test_published_content_revision_is_queued_with_editor_options(monkeypatch: p
         assert queued[0][1] == revisions[0].id
         assert revisions[0].remarks == "Rewrite the payment section"
         assert revisions[0].generate_title is False
+        assert revisions[0].source_status == "published"
+        assert revisions[0].is_published_replacement is True
         assert revisions[0].source_json["pages"][0]["title"] == "Existing title"
         assert revisions[0].revised_json is None
 
