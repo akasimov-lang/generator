@@ -378,6 +378,7 @@ def reconcile_pending_publications(
     triggers that check; this periodic fallback makes the confirmation durable
     when an event is lost during a disconnect.
     """
+    reconciled_tasks = _reconcile_completed_publication_tasks(db, limit=limit)
     cutoff = datetime.now(timezone.utc) - timedelta(seconds=max(0, min_age_seconds))
     pending_items = db.scalars(
         select(models.ContentItem)
@@ -388,7 +389,14 @@ def reconcile_pending_publications(
         .limit(max(1, limit))
     ).all()
     if not pending_items:
-        return {"checked_projects": 0, "checked_items": 0, "confirmed": 0, "remaining": 0, "missing_projects": 0}
+        return {
+            "checked_projects": 0,
+            "checked_items": 0,
+            "confirmed": 0,
+            "remaining": 0,
+            "missing_projects": 0,
+            "reconciled_tasks": reconciled_tasks,
+        }
 
     item_ids = [item.id for item in pending_items]
     site_ids = {item.site_id for item in pending_items if item.site_id}
@@ -401,6 +409,7 @@ def reconcile_pending_publications(
             "confirmed": 0,
             "remaining": len(item_ids),
             "missing_projects": 0,
+            "reconciled_tasks": reconciled_tasks,
         }
 
     projects = fetch_project_cache(project_names)
@@ -411,6 +420,8 @@ def reconcile_pending_publications(
     }
     for project_name, project in projects_by_name.items():
         sync_project_data_update(db, project_name, project)
+
+    reconciled_tasks += _reconcile_completed_publication_tasks(db, limit=limit)
 
     db.expire_all()
     confirmed = db.scalar(
@@ -431,7 +442,38 @@ def reconcile_pending_publications(
         "confirmed": confirmed,
         "remaining": remaining,
         "missing_projects": len(set(project_names) - set(projects_by_name)),
+        "reconciled_tasks": reconciled_tasks,
     }
+
+
+def _reconcile_completed_publication_tasks(db: Session, *, limit: int) -> int:
+    """Repair an aggregate task status after concurrent confirmation updates."""
+    tasks = db.scalars(
+        select(models.GenerationTask)
+        .where(models.GenerationTask.status == "publishing")
+        .order_by(models.GenerationTask.updated_at.asc())
+        .limit(max(1, limit))
+    ).all()
+    reconciled = 0
+    for task in tasks:
+        remaining = db.scalar(
+            select(func.count(models.ContentItem.id)).where(
+                models.ContentItem.task_id == task.id,
+                models.ContentItem.status.notin_(["published", "deleted"]),
+            )
+        ) or 0
+        published = db.scalar(
+            select(func.count(models.ContentItem.id)).where(
+                models.ContentItem.task_id == task.id,
+                models.ContentItem.status == "published",
+            )
+        ) or 0
+        if published and not remaining:
+            task.status = "published"
+            reconciled += 1
+    if reconciled:
+        db.commit()
+    return reconciled
 
 
 def refresh_project_server_id(db: Session, site: models.Site) -> str:

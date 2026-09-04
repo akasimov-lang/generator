@@ -299,6 +299,7 @@ def test_periodic_reconciliation_recovers_confirmation_missed_by_stream(monkeypa
             "confirmed": 1,
             "remaining": 0,
             "missing_projects": 0,
+            "reconciled_tasks": 0,
         }
         assert item.status == "published"
         assert item.indexing_status == "queued"
@@ -342,7 +343,52 @@ def test_periodic_reconciliation_skips_recent_pending_items(monkeypatch) -> None
             "confirmed": 0,
             "remaining": 0,
             "missing_projects": 0,
+            "reconciled_tasks": 0,
         }
+
+
+def test_periodic_reconciliation_repairs_stale_aggregate_task_status(monkeypatch) -> None:
+    with make_session() as db:
+        site = models.Site(
+            name="aggregate-race.example",
+            base_url="https://aggregate-race.example",
+            publication_endpoint="https://aggregate-race.example/api/content",
+            external_project_id="aggregate-race",
+        )
+        db.add(site)
+        db.flush()
+        task = models.GenerationTask(
+            title="Already published",
+            site_id=site.id,
+            geo="CZ",
+            language="cs",
+            topics_count=1,
+            status="publishing",
+        )
+        db.add(task)
+        db.flush()
+        db.add(models.ContentItem(
+            task=task,
+            site_id=site.id,
+            topic="Published page",
+            slug="/published/",
+            generated_json={"pages": []},
+            status="published",
+            idempotency_key="aggregate-race",
+            published_at=datetime.now(timezone.utc),
+        ))
+        db.commit()
+
+        def unexpected_fetch(names: list[str] | None = None) -> list[dict]:
+            raise AssertionError(f"no pending page should be fetched: {names}")
+
+        monkeypatch.setattr(project_cache_module, "fetch_project_cache", unexpected_fetch)
+        result = reconcile_pending_publications(db)
+
+        db.refresh(task)
+        assert result["reconciled_tasks"] == 1
+        assert result["checked_items"] == 0
+        assert task.status == "published"
 
 
 def test_menu_capabilities_are_detected_per_template() -> None:
