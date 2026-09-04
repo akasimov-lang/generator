@@ -3587,6 +3587,10 @@ def revise_content_item(db: Session, item: models.ContentItem, revision: models.
         raise ValueError("An active AI provider is required to revise content")
     site = db.get(models.Site, task.site_id) if task.site_id else None
     current_payload = copy.deepcopy(revision.source_json)
+    current_item_slug = item.slug
+    current_section_id = item.section_id
+    current_section_source_slug = item.section_source_slug
+    current_section_content_mode = item.section_content_mode
     current_pages = current_payload.get("pages") if isinstance(current_payload, dict) else None
     current_title = (
         current_pages[0].get("title")
@@ -3657,7 +3661,13 @@ CURRENT GENERATED PAGE (source JSON; rewrite its article content):
                 revised_pages[0]["slug"] = current_page_slug or item.slug
         item.word_count = count_words(item.generated_json)
         section = db.get(models.Section, item.section_id) if item.section_id else None
-        ensure_content_slug_available(db, item, section=section)
+        if revision.is_published_replacement:
+            item.slug = current_item_slug
+            item.section_id = current_section_id
+            item.section_source_slug = current_section_source_slug
+            item.section_content_mode = current_section_content_mode
+        else:
+            ensure_content_slug_available(db, item, section=section)
         item.generation_progress = 100
         item.generation_prompt_name = str(options.get("prompt_template_name") or task.prompt_template_name or "") or None
         item.include_casino_rating = include_casino_rating
