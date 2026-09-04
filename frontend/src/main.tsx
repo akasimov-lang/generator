@@ -3387,14 +3387,10 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
   const [bulkSectionId, setBulkSectionId] = React.useState("");
   const [bulkSectionContentMode, setBulkSectionContentMode] = React.useState<"nested" | "menu_page">("nested");
   const [bulkBusy, setBulkBusy] = React.useState(false);
+  const [bulkDeleting, setBulkDeleting] = React.useState(false);
   const [publishingItemId, setPublishingItemId] = React.useState("");
   const [deletingItemId, setDeletingItemId] = React.useState("");
   const [sectionSavingItemId, setSectionSavingItemId] = React.useState("");
-  const [createMenuVisible, setCreateMenuVisible] = React.useState(false);
-  const [menuName, setMenuName] = React.useState("");
-  const [menuExternalId, setMenuExternalId] = React.useState("");
-  const [menuPath, setMenuPath] = React.useState("");
-  const [menuType, setMenuType] = React.useState<"header" | "footer">("header");
   const [jsonDraft, setJsonDraft] = React.useState("");
   const [sectionId, setSectionId] = React.useState("");
   const [sectionContentMode, setSectionContentMode] = React.useState<"nested" | "menu_page">("nested");
@@ -3405,6 +3401,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
   const selectedItems = content.filter((item) => selectedIds.includes(item.id));
   const bulkApproveItems = selectedItems.filter(canApproveContent);
   const bulkPublishItems = selectedItems.filter(canPublishContentImmediately);
+  const bulkDeleteItems = selectedItems.filter((item) => !isPublicationLocked(item));
   const awaitingPublicationCount = content.filter((item) => Boolean(item.generated_at) && item.status !== "published").length;
   const cachedContentTargets = React.useMemo(() => {
     const targets = new Map<string, { externalId: string; name: string; path: string; menuType: "header" | "footer" }>();
@@ -3595,30 +3592,32 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
     }
   }
 
-  async function createMenuItem(event: React.FormEvent) {
-    event.preventDefault();
+  async function deleteSelected() {
+    if (!bulkDeleteItems.length) return;
+    if (!window.confirm(`Удалить выбранные тексты (${bulkDeleteItems.length})?`)) return;
     setEditorError("");
     setBulkBusy(true);
+    setBulkDeleting(true);
     try {
-      const created = await api<Section>(`/sites/${site.id}/sections`, {
-        method: "POST",
-        body: JSON.stringify({
-          name: menuName.trim(),
-          external_id: menuExternalId.trim() || slugFromText(menuName),
-          path: menuPath.trim() || `/${slugFromText(menuName)}/`,
-          menu_type: menuType
-        })
-      });
-      setMenuName("");
-      setMenuExternalId("");
-      setMenuPath("");
-      setMenuType("header");
-      setBulkSectionId(created.id);
-      setCreateMenuVisible(false);
+      const deletedIds = new Set<string>();
+      let failed = 0;
+      for (const item of bulkDeleteItems) {
+        try {
+          await api(`/content/${item.id}`, { method: "DELETE" });
+          deletedIds.add(item.id);
+        } catch {
+          failed += 1;
+        }
+      }
+      setSelectedIds((current) => current.filter((id) => !deletedIds.has(id)));
+      setSelectedItem((current) => current && deletedIds.has(current.id) ? null : current);
+      setPreviewItem((current) => current && deletedIds.has(current.id) ? null : current);
       await onChanged();
+      if (failed) setEditorError(`Не удалось удалить ${failed} текстов.`);
     } catch (error) {
-      setEditorError(error instanceof Error ? error.message : "Не удалось создать пункт меню.");
+      setEditorError(error instanceof Error ? error.message : "Не удалось удалить выбранные тексты.");
     } finally {
+      setBulkDeleting(false);
       setBulkBusy(false);
     }
   }
@@ -3764,37 +3763,10 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
           <button className="button compact primary" type="button" onClick={publishSelected} disabled={!bulkPublishItems.length || bulkBusy} title={selectedIds.length && !bulkPublishItems.length ? "Сначала назначьте пункт меню" : "Сразу отправить JSON выбранных текстов на сервер проекта"}>
             <Send size={15} /> Опубликовать ({bulkPublishItems.length})
           </button>
-          <button className="button compact secondary createMenuButton" type="button" onClick={() => setCreateMenuVisible((current) => !current)} disabled={bulkBusy}>
-            <span className="buttonPlusIcon"><Plus size={15} /></span> Новый пункт меню
+          <button className="button compact danger" type="button" onClick={() => void deleteSelected()} disabled={!bulkDeleteItems.length || bulkBusy}>
+            <Trash2 size={15} /> {bulkDeleting ? "Удаляем…" : `Удалить (${bulkDeleteItems.length})`}
           </button>
         </div>
-        {createMenuVisible ? (
-          <form className="inlineMenuCreate" onSubmit={createMenuItem}>
-            <label>
-              Название пункта
-              <input value={menuName} onChange={(event) => setMenuName(event.target.value)} placeholder="Casino bonus" required />
-            </label>
-            <label>
-              External ID
-              <input value={menuExternalId} onChange={(event) => setMenuExternalId(event.target.value)} placeholder="Сформируется автоматически" />
-            </label>
-            <label>
-              Path
-              <input value={menuPath} onChange={(event) => setMenuPath(event.target.value)} placeholder="/casino-bonus/" />
-            </label>
-            <label>
-              Тип меню
-              <select value={menuType} onChange={(event) => setMenuType(event.target.value as "header" | "footer")}>
-                <option value="header">Header</option>
-                <option value="footer">Footer</option>
-              </select>
-            </label>
-            <div className="formActions alignEnd">
-              <button className="button compact secondary" type="button" onClick={() => setCreateMenuVisible(false)}>Отмена</button>
-              <button className="button compact primary" type="submit" disabled={bulkBusy}><span className="buttonPlusIcon"><Plus size={15} /></span> Создать</button>
-            </div>
-          </form>
-        ) : null}
         <ResponsiveTable
           columns={["Выбор", "Тема", "Меню", "Слова", "Состояние", "Опубликовано", "Действия"]}
           columnKeys={["select", "topic", "menu", "words", "status", "published", "actions"]}
