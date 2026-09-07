@@ -2072,6 +2072,58 @@ h2 {
   margin-top: 3px;
 }
 
+.projectCanonActions > [data-tooltip] {
+  position: relative;
+}
+
+.projectCanonActions > [data-tooltip]::before,
+.projectCanonActions > [data-tooltip]::after {
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
+  visibility: hidden;
+  z-index: 100;
+}
+
+.projectCanonActions > [data-tooltip]::before {
+  background: #1d2939;
+  bottom: calc(100% + 5px);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  content: "";
+  height: 5px;
+  left: 50%;
+  transform: translate(-50%, 3px);
+  width: 9px;
+}
+
+.projectCanonActions > [data-tooltip]::after {
+  background: #1d2939;
+  border-radius: 6px;
+  bottom: calc(100% + 10px);
+  box-shadow: 0 5px 14px rgba(15, 23, 42, 0.22);
+  color: #fff;
+  content: attr(data-tooltip);
+  font-size: 11px;
+  font-weight: 600;
+  left: 50%;
+  line-height: 1.25;
+  max-width: 340px;
+  padding: 6px 8px;
+  text-align: center;
+  transform: translate(-50%, 3px);
+  white-space: nowrap;
+}
+
+.projectCanonActions > [data-tooltip]:hover::before,
+.projectCanonActions > [data-tooltip]:hover::after,
+.projectCanonActions > [data-tooltip]:focus-visible::before,
+.projectCanonActions > [data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  visibility: visible;
+}
+
 .projectCanonOpenButton,
 .projectCanonCopyButton,
 .projectUniversalAdminButton,
