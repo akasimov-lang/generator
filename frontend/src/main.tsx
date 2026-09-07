@@ -19,7 +19,6 @@ import {
   CheckCircle2,
   CircleAlert,
   Clock3,
-  Code2,
   Copy,
   CornerDownRight,
   Database,
@@ -2214,8 +2213,10 @@ function ProjectWorkspaceView({
                           title="Открыть проект в web-dev"
                           aria-label={`Открыть проект ${selectedSite.name} в web-dev`}
                         >
-                          <Code2 size={14} />
-                          <span>web-dev</span>
+                          <span className="projectWebDevLabel" aria-hidden="true">
+                            <span>web</span>
+                            <span>dev</span>
+                          </span>
                         </a>
                       </span>
                     </span>
