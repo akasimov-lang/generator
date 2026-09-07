@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   CircleAlert,
   Clock3,
+  Code2,
   Copy,
   CornerDownRight,
   Database,
@@ -2204,6 +2205,17 @@ function ProjectWorkspaceView({
                           aria-label={`Открыть универсальную админку проекта ${selectedSite.name}`}
                         >
                           <MonitorCog size={14} />
+                        </a>
+                        <a
+                          className="projectWebDevButton"
+                          href={`https://webdev-alfasearch.ru/projects/${encodeURIComponent(selectedSite.name)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="Открыть проект в web-dev"
+                          aria-label={`Открыть проект ${selectedSite.name} в web-dev`}
+                        >
+                          <Code2 size={14} />
+                          <span>web-dev</span>
                         </a>
                       </span>
                     </span>
@@ -9140,7 +9152,7 @@ function UserGuideView() {
             <h3>Что находится в верхней панели</h3>
             <ol>
               <li><strong>Домен и MAIN</strong> — идентифицируют выбранный проект.</li>
-              <li><strong>Три иконки MAIN</strong> — перейти на сайт, копировать адрес и открыть универсальную админку.</li>
+              <li><strong>Иконки MAIN</strong> — перейти на сайт, копировать адрес, открыть универсальную админку или проект в web-dev.</li>
               <li><strong>Обновить проект</strong> — получает с сервера актуальные страницы и меню.</li>
               <li><strong>Header и Footer</strong> — показывают результат проверки рендеринга меню.</li>
             </ol>

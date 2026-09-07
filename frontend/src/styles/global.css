@@ -2074,7 +2074,8 @@ h2 {
 
 .projectCanonOpenButton,
 .projectCanonCopyButton,
-.projectUniversalAdminButton {
+.projectUniversalAdminButton,
+.projectWebDevButton {
   align-items: center;
   background: var(--primary-soft);
   border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border));
@@ -2094,9 +2095,28 @@ h2 {
 .projectCanonCopyButton:hover,
 .projectCanonCopyButton:focus-visible,
 .projectUniversalAdminButton:hover,
-.projectUniversalAdminButton:focus-visible {
+.projectUniversalAdminButton:focus-visible,
+.projectWebDevButton:hover,
+.projectWebDevButton:focus-visible {
   background: #d8f6e2;
   box-shadow: 0 3px 8px rgba(20, 112, 59, 0.18);
+}
+
+.projectWebDevButton {
+  flex-direction: column;
+  gap: 0;
+  height: 30px;
+  padding: 2px 0 1px;
+  text-decoration: none;
+  width: 34px;
+}
+
+.projectWebDevButton span {
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .projectTopDetails > .projectMetricCard {
