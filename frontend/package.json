@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
+    "test:project-search": "node --experimental-strip-types --test tests/projectSearch.test.mjs",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
@@ -14,9 +15,11 @@
     "typescript": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "lucide-react": "latest"
+    "lucide-react": "latest",
+    "punycode": "2.3.1"
   },
   "devDependencies": {
+    "@types/punycode": "2.1.4",
     "@types/react": "latest",
     "@types/react-dom": "latest"
   },

@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { createPortal } from "react-dom";
 import { LANGUAGE_OPTIONS, type LanguageOption } from "./languageOptions";
 import { getMenuLibrary, type MenuLibraryItem } from "./menuLibrary";
+import { matchesProjectSearch, projectSearchKeywords } from "./projectSearch";
 import {
   Activity,
   AlertTriangle,
@@ -8013,7 +8014,7 @@ function projectSearchOption(site: Site): SearchableSelectOption {
     label: site.name,
     leading: flag ? <span className="projectSelectFlag" aria-hidden="true">{flag}</span> : undefined,
     indicator: <ProjectVerificationMedal status={projectMenuMedalStatus(site)} />,
-    keywords: [site.name, site.cache_canon || "", site.base_url, ...networkDomains].filter(Boolean).join(" ")
+    keywords: projectSearchKeywords([site.name, site.cache_canon || "", site.base_url, ...networkDomains])
   };
 }
 
@@ -8235,8 +8236,8 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
     && statusFilters.includes(row.projectStatus)
     && menuTypeFilters.includes(row.menuTypeKey)
     && (!geoFilter || (row.geo || "").trim().toLowerCase() === geoFilter)
-    && (!normalizedBrandFilter || [row.name, row.homepageTitle || "", row.canon, ...row.domains].some((value) => value.toLowerCase().includes(normalizedBrandFilter)))
-    && (!normalizedQuery || [row.name, row.homepageTitle || "", row.canon, row.externalProjectId || "", row.projectStatus, ...row.domains].some((value) => value.toLowerCase().includes(normalizedQuery)))
+    && (!normalizedBrandFilter || [row.name, row.homepageTitle || "", row.canon, ...row.domains].some((value) => matchesProjectSearch(value, normalizedBrandFilter)))
+    && (!normalizedQuery || [row.name, row.homepageTitle || "", row.canon, row.externalProjectId || "", row.projectStatus, ...row.domains].some((value) => matchesProjectSearch(value, normalizedQuery)))
   ));
   const totalPages = rowsPerPage === "all" ? 1 : Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
   const activePage = Math.min(currentPage, totalPages);
@@ -9705,7 +9706,7 @@ function SearchableSelect({
   const normalizedQuery = query.trim().toLocaleLowerCase("ru-RU");
   const visibleOptions = optionPredicate ? options.filter(optionPredicate) : options;
   const filteredOptions = normalizedQuery
-    ? visibleOptions.filter((option) => `${option.label} ${option.value} ${option.keywords || ""}`.toLocaleLowerCase("ru-RU").includes(normalizedQuery))
+    ? visibleOptions.filter((option) => matchesProjectSearch(`${option.label} ${option.value} ${option.keywords || ""}`, normalizedQuery))
     : visibleOptions;
 
   const updateDropdownPosition = React.useCallback(() => {
