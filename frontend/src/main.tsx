@@ -2189,10 +2189,10 @@ function ProjectWorkspaceView({
                     <span className="projectCanonValue">
                       <AutoFitDomain value={selectedSite.cache_canon || selectedSite.base_url} />
                       <span className="projectCanonActions">
-                        <a className="projectCanonOpenButton" href={selectedSite.base_url} target="_blank" rel="noreferrer" title="Перейти на сайт" aria-label={`Перейти на сайт ${selectedSite.cache_canon || selectedSite.base_url}`}>
+                        <a className="projectCanonOpenButton" href={selectedSite.base_url} target="_blank" rel="noreferrer" title={`Открыть MAIN-сайт: ${selectedSite.cache_canon || selectedSite.base_url}`} aria-label={`Открыть MAIN-сайт ${selectedSite.cache_canon || selectedSite.base_url}`}>
                           <ExternalLink size={14} />
                         </a>
-                        <button className="projectCanonCopyButton" type="button" onClick={copyCanon} title={canonCopied ? "Скопировано" : "Копировать"} aria-label="Копировать адрес MAIN">
+                        <button className="projectCanonCopyButton" type="button" onClick={copyCanon} title={canonCopied ? "Адрес MAIN скопирован" : `Скопировать MAIN: ${selectedSite.cache_canon || selectedSite.base_url}`} aria-label="Копировать адрес MAIN">
                           {canonCopied ? <CheckCircle2 size={14} /> : <Copy size={14} />}
                         </button>
                         <a
@@ -2200,7 +2200,7 @@ function ProjectWorkspaceView({
                           href={`https://johnny.g4fj2fhghgwg.top/projects/${encodeURIComponent(selectedSite.name)}`}
                           target="_blank"
                           rel="noreferrer"
-                          title="Универсальная админка"
+                          title={`Открыть проект ${selectedSite.name} в универсальной админке`}
                           aria-label={`Открыть универсальную админку проекта ${selectedSite.name}`}
                         >
                           <MonitorCog size={14} />
@@ -2210,7 +2210,7 @@ function ProjectWorkspaceView({
                           href={`https://webdev-alfasearch.ru/projects/${encodeURIComponent(selectedSite.name)}`}
                           target="_blank"
                           rel="noreferrer"
-                          title="Открыть проект в web-dev"
+                          title={`Открыть проект ${selectedSite.name} в web-dev`}
                           aria-label={`Открыть проект ${selectedSite.name} в web-dev`}
                         >
                           <span className="projectWebDevLabel" aria-hidden="true">
