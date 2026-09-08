@@ -3108,7 +3108,7 @@ def create_menu_structure_task(
         select(models.Section).where(models.Section.site_id == site.id)
     ).all()
     sections_by_external_id = {
-        section.external_id.strip().casefold(): section
+        (section.menu_type, section.external_id.strip().casefold()): section
         for section in existing_sections
         if section.external_id.strip()
     }
@@ -3131,7 +3131,7 @@ def create_menu_structure_task(
             external_id = clean_text(
                 raw_item.get("external_id") or raw_item.get("externalId") or raw_item.get("id")
             ) or f"cached-{menu_type}-{slugify(name) or index + 1}"
-            section = sections_by_external_id.get(external_id.casefold()) or sections_by_menu_path.get(
+            section = sections_by_external_id.get((menu_type, external_id.casefold())) or sections_by_menu_path.get(
                 (menu_type, normalized_path)
             )
             if section is None:
@@ -3157,7 +3157,7 @@ def create_menu_structure_task(
                 section.is_temporary_parent = False
                 section.sync_status = "synced"
                 section.synced_at = site.cache_synced_at or datetime.now(timezone.utc)
-            sections_by_external_id[external_id.casefold()] = section
+            sections_by_external_id[(menu_type, external_id.casefold())] = section
             sections_by_menu_path[(menu_type, normalized_path)] = section
             adopt_cached_items(_cached_menu_children(raw_item), menu_type, section)
 
@@ -3236,23 +3236,6 @@ def create_menu_structure_task(
         for section in all_sections
         if section.menu_type in menu_types
     ]
-    generated_review_paths: set[str] = set()
-    for log in db.scalars(
-        select(models.PublicationLog)
-        .where(models.PublicationLog.response_status == 200)
-        .order_by(models.PublicationLog.created_at.desc())
-        .limit(5000)
-    ).all():
-        request_payload = log.request_payload if isinstance(log.request_payload, dict) else {}
-        if (
-            request_payload.get("action") == "generated_menu_structure_apply"
-            and request_payload.get("project_name") == site.name
-        ):
-            generated_review_paths.update(
-                _normalized_project_slug(path)
-                for path in request_payload.get("review_paths", [])
-                if isinstance(path, str)
-            )
     prompt_template = compose_prompt_with_base(db, payload.prompt_template)
     if MENU_STRUCTURE_PROMPT_MARKER not in prompt_template:
         prompt_template = f"{prompt_template.rstrip()}\n\n{MENU_STRUCTURE_PROMPT_INSTRUCTION}\n"
@@ -3298,7 +3281,7 @@ def create_menu_structure_task(
             "menu_type": section.menu_type,
             "breadcrumb": breadcrumb(section),
         }
-        is_casino_review = current_section["path"] in generated_review_paths
+        is_casino_review = section.is_review
         item = models.ContentItem(
             task_id=task.id,
             site_id=site.id,
@@ -3392,7 +3375,7 @@ def generate_task_items(db: Session, task: models.GenerationTask) -> models.Gene
             section = db.get(models.Section, item.section_id) if item.section_id else None
             ensure_content_slug_available(db, item, section=section)
             item.generation_progress = 90
-            item.generation_prompt_name = task.prompt_template_name
+            item.generation_prompt_name = CASINO_REVIEW_PROMPT_NAME if (item.generation_context or {}).get("content_kind") == "casino_review" else task.prompt_template_name
             item.include_casino_rating = task.include_casino_rating
             item.generated_at = datetime.now(timezone.utc)
             item.status = "generated"
@@ -3563,7 +3546,7 @@ def generate_content_item(db: Session, item: models.ContentItem) -> models.Conte
         section = db.get(models.Section, item.section_id) if item.section_id else None
         ensure_content_slug_available(db, item, section=section)
         item.generation_progress = 90
-        item.generation_prompt_name = task.prompt_template_name
+        item.generation_prompt_name = CASINO_REVIEW_PROMPT_NAME if (item.generation_context or {}).get("content_kind") == "casino_review" else task.prompt_template_name
         item.include_casino_rating = task.include_casino_rating
         item.generated_at = datetime.now(timezone.utc)
         item.status = "generated"

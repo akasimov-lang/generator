@@ -262,12 +262,13 @@ def test_menu_structure_mode_adopts_cached_children_and_expands_selected_root(db
     ]
 
 
-def test_menu_structure_mode_uses_casino_review_prompt_context_for_generated_brand_paths(db: Session) -> None:
+@pytest.mark.parametrize("enabled", [False, True])
+def test_menu_structure_mode_uses_explicit_review_switch(db: Session, enabled: bool) -> None:
     site = make_site(db)
     root = models.Section(site_id=site.id, external_id="100", name="Casino reviews", path="/casino-reviews/", menu_type="header", sync_status="synced")
     db.add(root)
     db.flush()
-    brand = models.Section(site_id=site.id, external_id="101", name="Alpha Casino", path="/casino-reviews/alpha-casino/", menu_type="header", parent_id=root.id, sync_status="synced")
+    brand = models.Section(site_id=site.id, external_id="101", name="Alpha Casino", path="/casino-reviews/alpha-casino/", menu_type="header", parent_id=root.id, sync_status="synced", is_review=enabled)
     db.add(brand)
     db.add(models.PublicationLog(
         endpoint_url="internal://generated-menu",
@@ -292,9 +293,15 @@ def test_menu_structure_mode_uses_casino_review_prompt_context_for_generated_bra
     )
 
     brand_item = next(item for item in task.items if item.section_id == brand.id)
-    assert brand_item.generation_prompt_name == CASINO_REVIEW_PROMPT_NAME
-    assert brand_item.generation_context["content_kind"] == "casino_review"
-    assert brand_item.generation_context["casino_brand"] == "Alpha Casino"
+    assert brand_item.generation_context["content_kind"] == ("casino_review" if enabled else "menu_page")
+    if enabled:
+        assert brand_item.generation_prompt_name == CASINO_REVIEW_PROMPT_NAME
+        assert brand_item.generation_context["casino_brand"] == "Alpha Casino"
+        assert service_module._prompt_template_for_task_item(db, task, brand_item)
+    else:
+        assert "casino_brand" not in brand_item.generation_context
+    root_item = next(item for item in task.items if item.section_id == root.id)
+    assert root_item.generation_context["content_kind"] == "menu_page"
 
 
 def test_generation_context_is_rendered_for_gemini() -> None:

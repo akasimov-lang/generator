@@ -210,6 +210,10 @@ class SectionCreate(BaseModel):
     parent_id: str | None = None
 
 
+class SectionReviewUpdate(SectionCreate):
+    is_review: bool = False
+
+
 class SectionUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     path: str = Field(min_length=1, max_length=240)
@@ -264,6 +268,7 @@ class SectionResponse(BaseModel):
     menu_type: str
     parent_id: str | None
     is_temporary_parent: bool
+    is_review: bool = False
     sync_status: str
     synced_at: datetime | None
     created_at: datetime

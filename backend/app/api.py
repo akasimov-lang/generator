@@ -64,6 +64,7 @@ from app.schemas import (
     SectionCreate,
     SectionAdoptResponse,
     SectionResponse,
+    SectionReviewUpdate,
     SectionUpdate,
     SectionsBulkCreate,
     SectionsBulkCreateResponse,
@@ -1160,6 +1161,27 @@ def adopt_cached_section_for_content(site_id: str, payload: SectionCreate, user:
         db.commit()
         db.refresh(section)
     return result
+
+
+@router.patch("/sites/{site_id}/sections/review", response_model=SectionResponse)
+def update_section_review(site_id: str, payload: SectionReviewUpdate, user: AuthUser,
+                          db: Session = Depends(get_db)) -> Any:
+    _get_site_or_404(db, site_id)
+    db.execute(select(models.Site.id).where(models.Site.id == site_id).with_for_update())
+    section = db.scalar(select(models.Section).where(
+        models.Section.site_id == site_id,
+        models.Section.menu_type == payload.menu_type,
+        models.Section.path == _normalized_menu_path(payload.path),
+    ))
+    if section is None:
+        section = adopt_cached_section(site_id, payload, user, db)["section"]
+    if section.sync_status == "external_deleted":
+        raise HTTPException(status_code=409, detail="Восстановите пункт меню перед изменением Review")
+    section.is_review = payload.is_review
+    section.is_temporary_parent = False
+    db.commit()
+    db.refresh(section)
+    return section
 
 
 @router.post("/sites/{site_id}/sections/{section_id}/restore", response_model=SectionResponse)
