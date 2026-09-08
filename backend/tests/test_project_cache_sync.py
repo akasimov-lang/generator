@@ -886,3 +886,20 @@ def test_sync_confirms_nested_menu_item_only_under_its_parent() -> None:
 
         assert nested_result["confirmed_sections_count"] == 1
         assert child.sync_status == "synced"
+
+
+def test_adopted_nested_node_repairs_missing_parent_and_confirms_status():
+    with make_session() as db:
+        project = {"id": "repair", "name": "repair.example", "data": {"menu": {"header": [{"id": 1, "title": "Reviews", "slug": "/reviews/", "submenu": [{"id": 2, "title": "Brand", "slug": "/reviews/brand/"}]}], "footer": []}, "pages": []}}
+        sync_project_cache(db, [project])
+        site = db.scalar(select(models.Site).where(models.Site.name == "repair.example"))
+        child = models.Section(site_id=site.id, external_id="2", name="Brand", path="/reviews/brand/", menu_type="header", sync_status="pending", is_review=True)
+        db.add(child)
+        db.commit()
+        sync_project_cache(db, [project])
+        assert child.parent_id and child.sync_status == "synced" and child.is_review
+        assert db.get(models.Section, child.parent_id).path == "/reviews/"
+        child.name = "Changed locally"
+        db.commit()
+        sync_project_cache(db, [project])
+        assert child.sync_status == "pending"

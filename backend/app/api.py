@@ -10,6 +10,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app import models
+from app.content_trash import trash_content, restore_content
 from app.published_content import article_characters
 from app.menu_deletion import MenuBranchDelete, delete_menu_branch
 from app import technical_pages
@@ -1133,6 +1134,9 @@ def adopt_cached_section(site_id: str, payload: SectionCreate, _: AuthUser, db: 
         None,
     )
     if existing:
+        from app.project_cache import repair_cached_section_parents
+        repair_cached_section_parents(db, site, cached_menu)
+        db.commit()
         return {"section": existing, "created": False}
 
     section = models.Section(
@@ -1146,6 +1150,9 @@ def adopt_cached_section(site_id: str, payload: SectionCreate, _: AuthUser, db: 
         synced_at=site.cache_synced_at or datetime.now(timezone.utc),
     )
     db.add(section)
+    db.flush()
+    from app.project_cache import repair_cached_section_parents
+    repair_cached_section_parents(db, site, cached_menu)
     db.commit()
     db.refresh(section)
     return {"section": section, "created": True}
@@ -1881,7 +1888,7 @@ def generate_task(task_id: str, _: AuthUser, db: Session = Depends(get_db)) -> A
         raise HTTPException(status_code=404, detail="Task not found")
     if task.archived_at is not None:
         raise HTTPException(status_code=400, detail="Archived task must be restored before generation")
-    mutable_items = [item for item in task.items if item.status not in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published"}]
+    mutable_items = [item for item in task.items if item.status not in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published", "deleted", "deletion_pending"}]
     if not mutable_items:
         raise HTTPException(status_code=400, detail="Task has no content that can be generated")
     if any(item.status in {"generation_queued", "generating"} for item in mutable_items):
@@ -1918,7 +1925,7 @@ def regenerate_all_task_content(
     if task.archived_at is not None:
         raise HTTPException(status_code=400, detail="Archived task must be restored before generation")
 
-    locked_statuses = {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published"}
+    locked_statuses = {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published", "deleted", "deletion_pending"}
     mutable_items = [item for item in task.items if item.status not in locked_statuses]
     if not mutable_items:
         raise HTTPException(status_code=400, detail="Task has no content that can be regenerated")
@@ -1971,7 +1978,7 @@ def start_task_pipeline(task_id: str, _: AuthUser, db: Session = Depends(get_db)
         raise HTTPException(status_code=404, detail="Task not found")
     if task.archived_at is not None:
         raise HTTPException(status_code=400, detail="Archived task must be restored before generation")
-    mutable_items = [item for item in task.items if item.status not in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published"}]
+    mutable_items = [item for item in task.items if item.status not in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published", "deleted", "deletion_pending"}]
     if not mutable_items:
         raise HTTPException(status_code=400, detail="Task has no content that can be generated")
     if any(item.status in {"generation_queued", "generating"} for item in mutable_items):
@@ -2163,7 +2170,7 @@ def generate_content(content_id: str, _: AuthUser, db: Session = Depends(get_db)
     item = db.get(models.ContentItem, content_id)
     if not item:
         raise HTTPException(status_code=404, detail="Content item not found")
-    if item.status in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published"}:
+    if item.status in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published", "deleted", "deletion_pending"}:
         raise HTTPException(status_code=400, detail=f"Content in status '{item.status}' cannot be regenerated")
     if item.status in {"generation_queued", "generating"}:
         return item
@@ -2290,7 +2297,7 @@ def update_content(content_id: str, payload: ContentUpdate, _: AuthUser, db: Ses
     item = db.get(models.ContentItem, content_id)
     if not item:
         raise HTTPException(status_code=404, detail="Content item not found")
-    if item.status in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published"}:
+    if item.status in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published", "deleted", "deletion_pending"}:
         raise HTTPException(status_code=400, detail=f"Content in status '{item.status}' cannot be edited")
 
     selected_section = db.get(models.Section, item.section_id) if item.section_id else None
@@ -2342,22 +2349,27 @@ def delete_content(content_id: str, _: AuthUser, db: Session = Depends(get_db)) 
     item = db.get(models.ContentItem, content_id)
     if not item:
         raise HTTPException(status_code=404, detail="Content item not found")
-    if item.status in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published"}:
-        raise HTTPException(status_code=400, detail="Scheduled or published content cannot be deleted")
-
-    task = db.get(models.GenerationTask, item.task_id)
-    db.execute(delete(models.CompetitorPage).where(models.CompetitorPage.content_item_id == item.id))
-    db.execute(delete(models.CompetitorResult).where(models.CompetitorResult.content_item_id == item.id))
-    db.execute(delete(models.CompetitorQuery).where(models.CompetitorQuery.content_item_id == item.id))
-    db.execute(delete(models.PublicationLog).where(models.PublicationLog.content_item_id == item.id))
-    db.delete(item)
-    db.flush()
-    if task:
-        task.topics_count = db.scalar(select(func.count(models.ContentItem.id)).where(models.ContentItem.task_id == task.id)) or 0
-        if task.topics_count == 0:
-            task.status = "empty"
+    try:
+        trash_content(db, item)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     db.commit()
-    return {"status": "ok"}
+    return {"status": "deleted"}
+
+
+@router.post("/content/{content_id}/restore", response_model=ContentItemResponse)
+def restore_deleted_content(content_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    item = db.scalar(select(models.ContentItem).where(models.ContentItem.id == content_id).with_for_update())
+    if not item:
+        raise HTTPException(status_code=404, detail="Content item not found")
+    try:
+        restore_content(db, item)
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    db.refresh(item)
+    return item
 
 
 @router.post("/content/{content_id}/delete-published", response_model=ContentItemResponse)

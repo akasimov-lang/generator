@@ -775,7 +775,7 @@ def _flatten_menu_items(items: list[Any]) -> list[Any]:
         flattened.append(item)
         if not isinstance(item, dict):
             continue
-        children = item.get("children") or item.get("items")
+        children = item.get("children") or item.get("items") or item.get("submenu") or item.get("subMenu")
         if isinstance(children, list):
             flattened.extend(_flatten_menu_items(children))
     return flattened
@@ -784,7 +784,7 @@ def _flatten_menu_items(items: list[Any]) -> list[Any]:
 def _menu_item_children(item: Any) -> list[Any]:
     if not isinstance(item, dict):
         return []
-    children = item.get("children") or item.get("items")
+    children = item.get("children") or item.get("items") or item.get("submenu") or item.get("subMenu")
     return children if isinstance(children, list) else []
 
 
@@ -810,7 +810,57 @@ def _menu_item_in_expected_position(
     return next((item for item in candidates if _menu_item_matches_section(item, section)), None)
 
 
+def repair_cached_section_parents(db: Session, site: models.Site, menu: dict) -> int:
+    """Restore missing parent references of adopted nodes from the authoritative tree."""
+    sections = db.scalars(select(models.Section).where(models.Section.site_id == site.id)).all()
+    repaired = 0
+    for menu_type in ("header", "footer"):
+        paths = {}
+        def visit(nodes, ancestors):
+            for node in nodes:
+                if not isinstance(node, dict):
+                    continue
+                path = _normalize_menu_path(node.get("path") or node.get("url") or node.get("href") or node.get("slug"))
+                if path:
+                    paths.setdefault(path, []).append((node, ancestors))
+                visit(_menu_item_children(node), [*ancestors, node])
+        visit(menu.get(menu_type) or [], [])
+        by_path = {_normalize_menu_path(section.path): section for section in sections if section.menu_type == menu_type}
+        for section in list(by_path.values()):
+            matches = paths.get(_normalize_menu_path(section.path), [])
+            if section.parent_id or len(matches) != 1 or not matches[0][1]:
+                continue
+            parent = None
+            for ancestor in matches[0][1]:
+                path = _normalize_menu_path(ancestor.get("path") or ancestor.get("url") or ancestor.get("href") or ancestor.get("slug"))
+                if not path or len(paths.get(path, [])) != 1:
+                    parent = None
+                    break
+                local = by_path.get(path)
+                if local is None:
+                    name = str(ancestor.get("title") or ancestor.get("name") or ancestor.get("label") or "").strip()
+                    if not name:
+                        parent = None
+                        break
+                    local = models.Section(site_id=site.id, menu_type=menu_type, name=name, path=path,
+                        external_id=str(ancestor.get("id") or ancestor.get("external_id") or ancestor.get("externalId") or f"cached-{menu_type}-{path}"),
+                        is_temporary_parent=True, sync_status="synced", synced_at=datetime.now(timezone.utc),
+                        parent_id=parent.id if parent else None)
+                    db.add(local)
+                    db.flush()
+                    by_path[path] = local
+                elif parent and not local.parent_id:
+                    local.parent_id = parent.id
+                parent = local
+            if parent and parent.id != section.id:
+                section.parent_id = parent.id
+                repaired += 1
+    db.flush()
+    return repaired
+
+
 def _confirm_synchronized_sections(db: Session, site: models.Site, menu: dict[str, list[Any]]) -> int:
+    repair_cached_section_parents(db, site, menu)
     sections = db.scalars(
         select(models.Section).where(models.Section.site_id == site.id)
     ).all()
@@ -820,11 +870,9 @@ def _confirm_synchronized_sections(db: Session, site: models.Site, menu: dict[st
         root_items = menu.get(section.menu_type, [])
         menu_items = _flatten_menu_items(root_items)
         exists_anywhere = any(_menu_item_matches_section(item, section) for item in menu_items)
-        exists_in_expected_position = _menu_item_in_expected_position(
-            section,
-            sections_by_id,
-            root_items,
-        ) is not None
+        expected_item = _menu_item_in_expected_position(section, sections_by_id, root_items)
+        expected_name = str(expected_item.get("title") or expected_item.get("name") or expected_item.get("label") or expected_item.get("text") or "").strip() if isinstance(expected_item, dict) else str(expected_item or "").strip()
+        exists_in_expected_position = expected_item is not None and (not expected_name or expected_name.casefold() == section.name.strip().casefold())
         if not exists_in_expected_position:
             if section.sync_status == "synced":
                 section.sync_status = "pending" if exists_anywhere else "external_deleted"

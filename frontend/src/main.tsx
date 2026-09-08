@@ -1238,7 +1238,11 @@ function App() {
         }} onChanged={loadAll} />}
         {activeView === "tasks" && <TasksView api={api} sites={sites} providers={providers} tasks={tasks} content={content} onChanged={loadAll} />}
         {activeView === "taskArchive" && <TaskArchiveView api={api} tasks={archivedTasks} onChanged={loadAll} />}
-        {isAdmin && activeView === "published" && <AdminPublishedView api={api} sites={sites} onChanged={loadAll} onOpenProject={(name) => navigateTo("workspace", "overview", false, name)} />}
+        {isAdmin && activeView === "published" && <AdminPublishedView api={api} sites={sites} onChanged={loadAll} onOpenProject={(name) => {
+          const site = sites.find((candidate) => candidate.name === name);
+          if (site) localStorage.setItem(`workspace_site_id:${currentUser.username}`, site.id);
+          navigateTo("workspace", "overview", false, name);
+        }} />}
         {activeView === "content" && <ContentView api={api} sites={sites} content={content} onChanged={loadAll} />}
         {activeView === "publications" && <PublicationsView api={api} sites={sites} content={content} onOpenProject={(site) => {
           localStorage.setItem(`workspace_site_id:${currentUser.username}`, site.id);
@@ -1763,7 +1767,13 @@ function ProjectWorkspaceView({
   onTabChange: (tab: WorkspaceTab, projectName?: string) => void;
 }) {
   const workspaceSiteStorageKey = `workspace_site_id:${currentUsername}`;
-  const [selectedSiteId, setSelectedSiteId] = React.useState(() => localStorage.getItem(workspaceSiteStorageKey) || localStorage.getItem("workspace_site_id") || "");
+  const [selectedSiteId, setSelectedSiteId] = React.useState(() => {
+    const name = workspaceProjectNameFromPath(window.location.pathname);
+    if (name) return sites.find((site) => site.name === name)?.id || "";
+    return localStorage.getItem(workspaceSiteStorageKey) || localStorage.getItem("workspace_site_id") || "";
+  });
+  const selectedSiteIdRef = React.useRef(selectedSiteId);
+  selectedSiteIdRef.current = selectedSiteId;
   const [overview, setOverview] = React.useState<SiteOverview | null>(null);
   const [siteTasks, setSiteTasks] = React.useState<Task[]>([]);
   const [siteContent, setSiteContent] = React.useState<ContentItem[]>([]);
@@ -1787,7 +1797,7 @@ function ProjectWorkspaceView({
   const selectedSite = sites.find((site) => site.id === selectedSiteId) || null;
   const routeProjectName = workspaceProjectNameFromPath(window.location.pathname);
   const pendingSectionsCount = sections.filter((section) => section.sync_status === "pending").length;
-  const unpublishedGeneratedContentCount = siteContent.filter((item) => Boolean(item.generated_at) && item.status !== "published").length;
+  const unpublishedGeneratedContentCount = siteContent.filter((item) => Boolean(item.generated_at) && !["published", "deleted", "deletion_pending"].includes(item.status)).length;
   const headerNestingRequired = projectRequiresHeaderNesting(sections, siteContent);
   const headerNestingRenderingMissing = Boolean(
     headerNestingRequired
@@ -1817,7 +1827,7 @@ function ProjectWorkspaceView({
   React.useEffect(() => {
     if (!selectedSiteId) return;
     const saved = window.localStorage.getItem(`publication_workspace_section:${currentUsername}:${selectedSiteId}`) as PublicationWorkspaceSection | null;
-    if (saved && ["content", "campaigns", "process", "queue", "backlog"].includes(saved)) setPublicationWorkflowSection(saved);
+    if (saved && ["content", "campaigns", "process", "queue", "backlog", "deleted"].includes(saved)) setPublicationWorkflowSection(saved);
     else setPublicationWorkflowSection("campaigns");
   }, [currentUsername, selectedSiteId]);
 
@@ -1833,7 +1843,7 @@ function ProjectWorkspaceView({
   }, [contentOpenRequest, currentUsername, selectedSiteId]);
 
   const loadProject = React.useCallback(async (refreshCapabilities = false) => {
-    if (!selectedSiteId) return { success: false, errorCode: "NO_PROJECT" };
+    if (!selectedSiteId || selectedSiteIdRef.current !== selectedSiteId) return { success: false, errorCode: "NO_PROJECT" };
     const requestId = projectLoadRequestRef.current + 1;
     projectLoadRequestRef.current = requestId;
     setWorkspaceError("");
@@ -1860,7 +1870,7 @@ function ProjectWorkspaceView({
       requestResource<PublicationCampaign[]>(`/sites/${selectedSiteId}/publication-campaigns`),
       requestResource<MenuCapabilities>(`/sites/${selectedSiteId}/menu-capabilities${refreshCapabilities ? "?refresh=true" : ""}`)
     ]);
-    if (requestId !== projectLoadRequestRef.current) return { success: false, errorCode: "CANCELLED" };
+    if (requestId !== projectLoadRequestRef.current || selectedSiteIdRef.current !== selectedSiteId) return { success: false, errorCode: "CANCELLED" };
     if (nextOverview.value) setOverview(nextOverview.value);
     if (nextTasks.value) setSiteTasks(nextTasks.value);
     if (nextContent.value) setSiteContent(nextContent.value);
@@ -1888,6 +1898,7 @@ function ProjectWorkspaceView({
     let cacheError = "";
     try {
       await api<ProjectCacheSyncResult>(`/sites/${selectedSiteId}/cache/refresh`, { method: "POST" });
+      if (selectedSiteIdRef.current !== selectedSiteId) return;
       await onChanged();
     } catch (error) {
       cacheError = error instanceof Error ? `Не удалось получить свежий кеш проекта: ${error.message}` : "Не удалось получить свежий кеш проекта";
@@ -1962,10 +1973,10 @@ function ProjectWorkspaceView({
   }, [routeProjectName, selectedSiteId, sites, workspaceSiteStorageKey]);
 
   React.useEffect(() => {
-    if (!selectedSite) return;
+    if (!selectedSite || (routeProjectName && routeProjectName !== selectedSite.name)) return;
     const projectPath = pathForRoute("workspace", activeTab, selectedSite.name);
     if (window.location.pathname !== projectPath) window.history.replaceState(null, "", projectPath);
-  }, [activeTab, selectedSite]);
+  }, [activeTab, selectedSite, routeProjectName]);
 
   React.useEffect(() => {
     if (selectedSiteId) {
@@ -2347,7 +2358,7 @@ function ProjectWorkspaceView({
               tasks={siteTasks}
               content={siteContent}
               fixedSite={selectedSite}
-              onProjectChange={setSelectedSiteId}
+              onProjectChange={selectWorkspaceSite}
               sections={sections}
               promptTemplates={promptTemplates}
               onChanged={refreshProject}
@@ -2358,8 +2369,9 @@ function ProjectWorkspaceView({
               <FastProjectPublicationPanel key={`${selectedSite.id}:publication-launch`} mode="launch" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} promptTemplates={promptTemplates} onChanged={refreshProject} />
               <FastProjectPublicationPanel key={`${selectedSite.id}:publication-campaigns`} mode="campaigns" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} promptTemplates={promptTemplates} onChanged={refreshProject} />
             </> : null}
+            {publicationWorkflowSection === "deleted" ? <DeletedContentPanel api={api} content={siteContent} onChanged={refreshProject} /> : null}
             {publicationWorkflowSection === "content" ? <FastProjectContentPanel key={`${selectedSite.id}:content`} api={api} site={selectedSite} content={siteContent} sections={sections} onChanged={refreshProject} /> : null}
-            {publicationWorkflowSection !== "content" && publicationWorkflowSection !== "campaigns" ? (
+            {publicationWorkflowSection !== "content" && publicationWorkflowSection !== "campaigns" && publicationWorkflowSection !== "deleted" ? (
               <FastProjectPublicationPanel key={`${selectedSite.id}:publication-workflow`} mode="workflow" workflowSection={publicationWorkflowSection} api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} promptTemplates={promptTemplates} onChanged={refreshProject} />
             ) : null}
           </WorkspaceTabPane>
@@ -3395,7 +3407,8 @@ function ProjectPromptsPanel({ api, site, promptTemplates, basePrompt, isAdmin, 
   );
 }
 
-function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewProps & { site: Site; content: ContentItem[]; sections: Section[] }) {
+function ProjectContentPanel({ api, site, content: allContent, sections, onChanged }: ViewProps & { site: Site; content: ContentItem[]; sections: Section[] }) {
+  const content = React.useMemo(() => allContent.filter((item) => !["deleted", "deletion_pending"].includes(item.status)), [allContent]);
   const [selectedItem, setSelectedItem] = React.useState<ContentItem | null>(null);
   const [previewItem, setPreviewItem] = React.useState<ContentItem | null>(null);
 
@@ -3421,7 +3434,7 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
   const bulkApproveItems = selectedItems.filter(canApproveContent);
   const bulkPublishItems = selectedItems.filter(canPublishContentImmediately);
   const bulkDeleteItems = selectedItems.filter((item) => !isPublicationLocked(item));
-  const awaitingPublicationCount = content.filter((item) => Boolean(item.generated_at) && item.status !== "published").length;
+  const awaitingPublicationCount = content.filter((item) => Boolean(item.generated_at) && !["published", "deleted", "deletion_pending"].includes(item.status)).length;
   const cachedContentTargets = React.useMemo(() => {
     const targets = new Map<string, { externalId: string; name: string; path: string; menuType: "header" | "footer" }>();
     const collect = (items: unknown[], menuType: "header" | "footer") => {
@@ -3899,11 +3912,48 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
   );
 }
 
+function DeletedContentPanel({ api, content, onChanged }: ViewProps & { content: ContentItem[] }) {
+  const items = content.filter((item) => ["deleted", "deletion_pending"].includes(item.status)).sort((a, b) => new Date(b.deletion_confirmed_at || b.deletion_requested_at || b.updated_at).getTime() - new Date(a.deletion_confirmed_at || a.deletion_requested_at || a.updated_at).getTime());
+  const [selected, setSelected] = React.useState<string[]>([]);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [preview, setPreview] = React.useState<ContentItem | null>(null);
+  const restorable = items.filter((item) => item.status === "deleted");
+  async function restore(ids: string[]) {
+    setBusy(true);
+    setError("");
+    const errors: string[] = [];
+    for (const id of ids) {
+      try { await api(`/content/${id}/restore`, { method: "POST" }); }
+      catch (reason) { errors.push(reason instanceof Error ? reason.message : "Не удалось восстановить текст"); }
+    }
+    try { await onChanged(); }
+    catch (reason) { errors.push(reason instanceof Error ? reason.message : "Не удалось обновить список"); }
+    setSelected([]);
+    setError(errors.join(" · "));
+    setBusy(false);
+  }
+  return <DataPanel title={`Удалённые тексты · ${items.length}`}>
+    <p>Восстановленные тексты появятся в «Контенте». Для возврата на сайт потребуется повторная публикация.</p>
+    {error ? <p className="formError" role="alert">{error}</p> : null}
+    <div className="formActions"><label className="checkboxRow"><input type="checkbox" disabled={busy || !restorable.length} checked={Boolean(restorable.length) && restorable.every((item) => selected.includes(item.id))} onChange={(event) => setSelected(event.target.checked ? restorable.map((item) => item.id) : [])} /> Выбрать все</label><button type="button" className="button secondary compact" disabled={busy || !selected.length} onClick={() => void restore(selected)}><RefreshCcw size={14} /> Восстановить выбранные ({selected.length})</button></div>
+    <ResponsiveTable columns={["Выбор", "Текст", "Слова", "Удалён", "Состояние", "Действия"]} rows={items.map((item) => [
+      <input type="checkbox" aria-label={`Выбрать ${item.topic}`} disabled={busy || item.status !== "deleted"} checked={selected.includes(item.id)} onChange={(event) => setSelected(event.target.checked ? [...selected, item.id] : selected.filter((id) => id !== item.id))} />,
+      <button type="button" className="compactContentTopic publicationTopicButton" onClick={() => setPreview(item)}><ContentTopicLabel item={item} /></button>,
+      item.word_count,
+      item.deletion_confirmed_at || item.deletion_requested_at ? formatDate((item.deletion_confirmed_at || item.deletion_requested_at)!) : "—",
+      item.status === "deleted" ? "Удалён" : "Ожидает подтверждения удаления",
+      <button type="button" className="button secondary compact" disabled={busy || item.status !== "deleted"} onClick={() => void restore([item.id])}><RefreshCcw size={14} /> Восстановить</button>,
+    ])} />
+    {preview ? <ContentPreviewModal item={preview} onClose={() => setPreview(null)} /> : null}
+  </DataPanel>;
+}
+
 type PublicationWorkflowSection = "process" | "queue" | "backlog";
-type PublicationWorkspaceSection = "content" | "campaigns" | PublicationWorkflowSection;
+type PublicationWorkspaceSection = "deleted" | "content" | "campaigns" | PublicationWorkflowSection;
 
 function PublicationWorkflowNav({ content, campaigns, activeSection, onSectionChange }: { content: ContentItem[]; campaigns: PublicationCampaign[]; activeSection: PublicationWorkspaceSection; onSectionChange: (section: PublicationWorkspaceSection) => void }) {
-  const awaitingPublicationCount = content.filter((item) => Boolean(item.generated_at) && item.status !== "published").length;
+  const awaitingPublicationCount = content.filter((item) => Boolean(item.generated_at) && !["published", "deleted", "deletion_pending"].includes(item.status)).length;
   const activeCampaignCount = campaigns.filter((campaign) => ["active", "paused", "created", "publishing_all"].includes(campaign.status)).length;
   const completedCampaignCount = campaigns.filter((campaign) => ["completed", "completed_with_errors"].includes(campaign.status)).length;
   const processReadyCount = content.filter((item) => Boolean(item.site_id && item.section_id) && ["generated", "rejected", "approved"].includes(item.status)).length;
@@ -3918,7 +3968,7 @@ function PublicationWorkflowNav({ content, campaigns, activeSection, onSectionCh
         <FolderKanban size={17} /> <span className="publicationWorkflowLabel"><strong>Кампании</strong><small>{activeCampaignCount} в работе · {completedCampaignCount} завершено</small></span><span>{campaigns.length}</span>
       </button>
       <button className={activeSection === "content" ? "active" : ""} type="button" onClick={() => onSectionChange("content")}>
-        <FileText size={17} /> <span className="publicationWorkflowLabel"><strong>Контент</strong><small>{awaitingPublicationCount} ожидает публикации</small></span><span>{content.length}</span>
+        <FileText size={17} /> <span className="publicationWorkflowLabel"><strong>Контент</strong><small>{awaitingPublicationCount} ожидает публикации</small></span><span>{content.filter((item) => !["deleted", "deletion_pending"].includes(item.status)).length}</span>
       </button>
       <button className={activeSection === "process" ? "active" : ""} type="button" onClick={() => onSectionChange("process")}>
         <Activity size={17} /> <span className="publicationWorkflowLabel"><strong>Процесс</strong><small>Готовы к запуску: {processReadyCount} · Опубликовано: {processPublishedCount}</small></span><span>{processCount}</span>
@@ -3928,6 +3978,9 @@ function PublicationWorkflowNav({ content, campaigns, activeSection, onSectionCh
       </button>
       <button className={`${activeSection === "backlog" ? "active" : ""} ${errorCount ? "danger" : ""}`} type="button" onClick={() => onSectionChange("backlog")}>
         <AlertTriangle size={17} /> <span className="publicationWorkflowLabel"><strong>Ошибки</strong><small>нужна проверка</small></span><span>{errorCount}</span>
+      </button>
+      <button className={activeSection === "deleted" ? "active" : ""} type="button" onClick={() => onSectionChange("deleted")}>
+        <Trash2 size={17} /> <span className="publicationWorkflowLabel"><strong>Удалённые</strong><small>можно восстановить</small></span><span>{content.filter((item) => ["deleted", "deletion_pending"].includes(item.status)).length}</span>
       </button>
     </nav>
   );
@@ -3958,7 +4011,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
     && ["generated", "rejected", "approved"].includes(item.status)
     && (!selectedPublicationSectionIds.length || (item.section_id && selectedPublicationSectionIds.includes(item.section_id))));
   const publishedContent = content
-    .filter((item) => ["publication_pending_confirmation", "published", "deletion_pending", "deleted"].includes(item.status))
+    .filter((item) => ["publication_pending_confirmation", "published"].includes(item.status))
     .sort((left, right) => new Date(left.published_at || left.deletion_requested_at || 0).getTime() - new Date(right.published_at || right.deletion_requested_at || 0).getTime());
   const publicationProcessItems = [...publicationReady, ...publishedContent];
   const processSelectableIds = publicationProcessItems
@@ -7361,7 +7414,8 @@ function AdminPublishedView({ api, sites, onChanged, onOpenProject }: ViewProps 
   </DataPanel>{preview ? <ContentPreviewModal api={api} item={preview} onChanged={async () => { await onChanged(); setRefresh((value) => value + 1); }} onClose={() => setPreview(null)} /> : null}</section>;
 }
 
-function ContentView({ api, sites, content, onChanged }: ViewProps & { sites: Site[]; content: ContentItem[] }) {
+function ContentView({ api, sites, content: allContent, onChanged }: ViewProps & { sites: Site[]; content: ContentItem[] }) {
+  const content = allContent.filter((item) => !["deleted", "deletion_pending"].includes(item.status));
   const [selectedPreview, setSelectedPreview] = React.useState<ContentItem | null>(null);
   const [contentActionId, setContentActionId] = React.useState("");
   const [contentError, setContentError] = React.useState("");
@@ -9309,6 +9363,7 @@ function UserGuideView() {
           <article><Eye size={22} /><h3>Просмотреть</h3><p>Иконка глаза открывает текст, URL, meta description и структуру заголовков.</p></article>
           <article><SquareCheckBig size={22} /><h3>Принять</h3><p>Подтверждает готовность текста. Материал получает статус «Ожидает публикации».</p></article>
           <article><Send size={22} /><h3>Опубликовать</h3><p>Отправляет выбранные страницы сразу, даже если они находятся в очереди кампании.</p></article>
+          <article><Trash2 size={22} /><h3>Удалённые</h3><p>Удалённые тексты хранятся в отдельной вкладке с историей версий. Можно восстановить один текст или выбранные: они вернутся в «Контент» для проверки и ручной публикации. Если URL занят, восстановление покажет ошибку.</p></article>
         </div>
       </section>
 

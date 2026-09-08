@@ -261,10 +261,10 @@ def test_regular_user_can_delete_generated_content() -> None:
     response = client.delete(f"/api/content/{item_id}")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json() == {"status": "deleted"}
     with TestingSession() as db:
-        assert db.get(models.ContentItem, item_id) is None
-        assert db.get(models.GenerationTask, task_id).status == "empty"
+        assert db.get(models.ContentItem, item_id).status == "deleted"
+        assert db.get(models.GenerationTask, task_id).topics_count == 1
 
 
 def test_user_can_manage_personal_favorite_sites() -> None:

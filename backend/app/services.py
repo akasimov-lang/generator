@@ -3338,7 +3338,7 @@ def _prompt_template_for_task_item(db: Session, task: models.GenerationTask, ite
 
 
 def generate_task_items(db: Session, task: models.GenerationTask) -> models.GenerationTask:
-    mutable_items = [item for item in task.items if item.status not in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published"}]
+    mutable_items = [item for item in task.items if item.status not in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published", "deleted", "deletion_pending"}]
     if not mutable_items:
         raise ValueError("Task has no content that can be generated")
     task.status = "generating"
@@ -3404,7 +3404,7 @@ def run_task_pipeline(
     task: models.GenerationTask,
     competitor_attempts: int = COMPETITOR_RESEARCH_MAX_ATTEMPTS,
 ) -> models.GenerationTask:
-    locked_statuses = {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published"}
+    locked_statuses = {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published", "deleted", "deletion_pending"}
     item_ids = [item.id for item in task.items if item.status not in locked_statuses]
     if not item_ids:
         raise ValueError("Task has no content that can be generated")
@@ -3509,7 +3509,7 @@ def auto_publish_generated_task(db: Session, task: models.GenerationTask) -> mod
 
 
 def generate_content_item(db: Session, item: models.ContentItem) -> models.ContentItem:
-    if item.status in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published"}:
+    if item.status in {"scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published", "deleted", "deletion_pending"}:
         raise ValueError(f"Content in status '{item.status}' cannot be regenerated")
     task = db.get(models.GenerationTask, item.task_id)
     if not task:
@@ -4415,6 +4415,8 @@ async def sync_project_menus(
                     current_menu = dict(site.default_menu) if isinstance(site.default_menu, dict) else {}
                     current_menu[menu_type] = payload["list"]
                     site.default_menu = current_menu
+                    from app.project_cache import _confirm_synchronized_sections
+                    _confirm_synchronized_sections(db, site, current_menu)
                 results.append({"type": menu_type, "status_code": response.status_code, "success": successful})
                 db.commit()
             except Exception as exc:

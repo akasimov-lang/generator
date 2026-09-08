@@ -6923,7 +6923,7 @@ td {
   box-shadow: var(--shadow);
   display: grid;
   gap: 6px;
-  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  grid-template-columns: repeat(6, minmax(150px, 1fr));
   padding: 6px;
   scroll-margin-top: 16px;
 }
