@@ -9170,3 +9170,19 @@ a {
     grid-template-columns: 1fr;
   }
 }
+
+/* Technical page generation uses the same modal and form controls as regular tasks. */
+.technicalPagesFields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.technicalPageSelection { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.technicalPageSelectionHeader { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.technicalPageChoice { align-items: flex-start; padding: 10px; border: 1px solid var(--border, #dde3eb); border-radius: 8px; }
+.technicalPageChoice span, .technicalPagePreviewRow span { display: grid; gap: 4px; }
+.technicalPageChoice small, .technicalPagePreviewRow small { font-weight: normal; opacity: .7; }
+.technicalPagesPreview { display: grid; gap: 12px; }
+.technicalPagePreviewRow { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: center; }
+.technicalPagesForm label > small { font-weight: normal; line-height: 1.5; }
+@media (max-width: 640px) {
+  .technicalPageSelection, .technicalPagePreviewRow { grid-template-columns: 1fr; }
+}
+
+.technicalPagesForm .checkboxRow > span { display: grid; gap: 4px; }

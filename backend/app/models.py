@@ -77,6 +77,7 @@ class Site(Base, TimestampMixin):
     cache_language: Mapped[str | None] = mapped_column(String(40), nullable=True)
     cache_geo: Mapped[str | None] = mapped_column(String(40), nullable=True)
     homepage_title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    technical_page_settings: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     internal_pages_count: Mapped[int] = mapped_column(Integer, default=0)
     domains_count: Mapped[int] = mapped_column(Integer, default=0)
     cache_domains: Mapped[list] = mapped_column(JSON, default=list)
@@ -215,6 +216,17 @@ class ContentItem(Base, TimestampMixin):
     deletion_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     task: Mapped[GenerationTask] = relationship(back_populates="items")
+
+
+class TechnicalPageText(Base, TimestampMixin):
+    """Immutable comparison corpus, retained even when tasks are archived/deleted."""
+    __tablename__ = "technical_page_texts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    content_item_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    group_key: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
 class ContentRevision(Base, TimestampMixin):

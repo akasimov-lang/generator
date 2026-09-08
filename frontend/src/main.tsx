@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { LANGUAGE_OPTIONS, type LanguageOption } from "./languageOptions";
 import { getMenuLibrary, type MenuLibraryItem } from "./menuLibrary";
 import { matchesProjectSearch, projectSearchKeywords } from "./projectSearch";
+import { TechnicalPagesForm } from "./TechnicalPagesForm";
 import {
   Activity,
   AlertTriangle,
@@ -88,7 +89,7 @@ type Task = {
   generate_title: boolean;
   collect_competitors: boolean;
   include_casino_rating: boolean;
-  generation_mode: "standard" | "casino_reviews" | "menu_structure";
+  generation_mode: "standard" | "casino_reviews" | "menu_structure" | "technical_pages";
   auto_publish: boolean;
   archived_at: string | null;
   archived_by_user_id: string | null;
@@ -5488,6 +5489,7 @@ function TasksView({
   const [casinoReviews, setCasinoReviews] = React.useState(false);
   const [createFormExpanded, setCreateFormExpanded] = React.useState(false);
   const [menuStructureFormExpanded, setMenuStructureFormExpanded] = React.useState(false);
+  const [technicalPagesExpanded, setTechnicalPagesExpanded] = React.useState(false);
   const [menuStructureHeader, setMenuStructureHeader] = React.useState(true);
   const [menuStructureFooter, setMenuStructureFooter] = React.useState(false);
   const [menuStructureAutoPublish, setMenuStructureAutoPublish] = React.useState(false);
@@ -6020,6 +6022,10 @@ function TasksView({
   }
 
   async function regenerateContent(item: ContentItem) {
+    if (item.generation_context?.content_kind === "technical_page" && item.generated_at) {
+      setPreviewItem(item);
+      return;
+    }
     setTaskError("");
     setTaskActionId(`${item.id}:generate`);
     try {
@@ -6237,6 +6243,10 @@ function TasksView({
             <small>Тексты для всех пунктов и дочерних разделов</small>
           </span>
         </button>
+        <button className="newGenerationTaskButton menuStructureGenerationButton" type="button" onClick={() => setTechnicalPagesExpanded(true)} aria-haspopup="dialog">
+          <span className="newGenerationTaskIcon" aria-hidden="true"><ShieldCheck size={25} strokeWidth={2.1} /></span>
+          <span className="newGenerationTaskCopy"><strong>Технические страницы</strong><small>Политики, контакты и правила · Header или Footer</small></span>
+        </button>
       </div>
       {createFormExpanded ? (
         <Modal
@@ -6429,6 +6439,11 @@ function TasksView({
             </button>
           </div>
         </form>
+        </Modal>
+      ) : null}
+      {technicalPagesExpanded ? (
+        <Modal title="Технические страницы" subtitle="Выберите страницы, проверьте подписи меню и запустите генерацию" onClose={() => setTechnicalPagesExpanded(false)} wide className="createGenerationTaskModal">
+          <TechnicalPagesForm api={api} sites={(fixedSite ? [fixedSite] : sites).map((site) => ({ id: site.id, name: site.name, homepage_title: site.homepage_title, geo: projectGeoCode(site), language: projectLanguageCode(site) }))} providers={providers.filter((provider) => provider.provider_type === "gemini" && provider.is_active)} initialSiteId={siteId} initialProviderId={providerId} onCreated={onChanged} onClose={() => setTechnicalPagesExpanded(false)} />
         </Modal>
       ) : null}
       {menuStructureFormExpanded ? (
@@ -6818,7 +6833,7 @@ function AdminTasksAccordion({
                   <td data-label="Гео">{countryLabel(task.geo)}</td>
                   <td data-label="Язык">{languageLabel(task.language)}</td>
                   <td data-label="Пункт меню" onClick={(event) => event.stopPropagation()}>
-                    {task.generation_mode === "menu_structure" ? (
+                    {(task.generation_mode === "menu_structure" || task.generation_mode === "technical_pages") ? (
                       <span className="taskAutomaticMenuAssignment" title="Каждый текст уже связан со своим пунктом согласованной структуры меню">
                         <CheckCircle2 size={14} /> По структуре автоматически
                       </span>
@@ -9180,6 +9195,16 @@ function UserGuideView() {
         </div>
       </section>
 
+      <section className="guideSection" id="guide-technical-pages">
+        <GuideSectionTitle number="03а" title="Технические страницы" subtitle="Во вкладке «Генерация» нажмите «Технические страницы»." />
+        <div className="guideChecklist"><ol>
+          <li>Отметьте нужные страницы и выберите хедер или футер.</li>
+          <li>При необходимости добавьте замечания или реальные сведения о проекте.</li>
+          <li>Нажмите «Подготовить страницы»: проверьте короткие подписи меню и URL латиницей.</li>
+          <li>Запустите генерацию. Язык, гео и тематика берутся из проекта, ориентир объёма — 500–600 слов.</li>
+        </ol><p>Автопубликация принимает готовые тексты и добавляет их в меню. Отключите её для предварительного просмотра. Замечания к готовому тексту можно отправить из просмотра страницы; новая опубликованная версия сохраняет URL. Существующие страницы повторно не создаются. Тексты сравниваются между проектами одного гео и языка, а при известном бренде — только внутри этого бренда. При совпадениях выполняется не более двух автоматических доработок; если проверка снова не пройдена, публикация останавливается.</p></div>
+      </section>
+
       <section className="guideSection" id="guide-content">
         <GuideSectionTitle number="04" title="Проверка и публикация контента" subtitle="Принятие подтверждает готовность редакции, публикация отправляет страницу на сервер." />
         <figure className="guideScreenshot wide"><img src="/guide/content-publication.svg" alt="Таблица контента с действиями" /><figcaption>Выбирайте отдельные строки или все материалы чекбоксом в заголовке.</figcaption></figure>
@@ -9958,14 +9983,15 @@ function PublishedContentRegenerationModal({ item, promptTemplates, api, onChang
   onChanged: () => void | Promise<void>;
   onClose: () => void;
 }) {
+  const technical = item.generation_context?.content_kind === "technical_page";
   const matchingPrompt = promptTemplates.find((prompt) => prompt.name === item.generation_prompt_name)
     || defaultPromptTemplate(promptTemplates);
   const [currentItem, setCurrentItem] = React.useState(item);
   const [promptId, setPromptId] = React.useState(matchingPrompt?.id || "");
   const [targetWords, setTargetWords] = React.useState("");
   const [instructions, setInstructions] = React.useState("Полностью перегенерировать текст, сохранив тематику, поисковый интент и полезность страницы.");
-  const [includeToc, setIncludeToc] = React.useState(true);
-  const [includeFaq, setIncludeFaq] = React.useState(true);
+  const [includeToc, setIncludeToc] = React.useState(!technical);
+  const [includeFaq, setIncludeFaq] = React.useState(!technical);
   const [generateTitle, setGenerateTitle] = React.useState(true);
   const [useCompetitorBrief, setUseCompetitorBrief] = React.useState(Boolean(item.competitor_brief));
   const [includeCasinoRating, setIncludeCasinoRating] = React.useState(item.include_casino_rating);
@@ -10018,8 +10044,8 @@ function PublishedContentRegenerationModal({ item, promptTemplates, api, onChang
         method: "POST",
         body: JSON.stringify({
           instructions: instructions.trim(),
-          prompt_template_name: selectedPrompt?.name || null,
-          prompt_template: selectedPrompt?.content || null,
+          prompt_template_name: technical ? "Технические страницы" : selectedPrompt?.name || null,
+          prompt_template: technical ? null : selectedPrompt?.content || null,
           target_words: targetWords ? Number(targetWords) : null,
           include_toc: includeToc,
           include_faq: includeFaq,
@@ -10058,14 +10084,14 @@ function PublishedContentRegenerationModal({ item, promptTemplates, api, onChang
       {!started || (currentItem.status === "published" && currentItem.generation_error) ? (
         <form className="publishedRegenerationForm" onSubmit={regenerate}>
           <label className="wide">Пожелания к новой версии<textarea rows={3} maxLength={5000} value={instructions} onChange={(event) => setInstructions(event.target.value)} /></label>
-          {promptTemplates.length ? <label>Промпт<select value={promptId} onChange={(event) => setPromptId(event.target.value)}>{promptTemplates.map((prompt) => <option value={prompt.id} key={prompt.id}>{prompt.is_default ? "Default · " : ""}{prompt.name}</option>)}</select></label> : null}
+          {!technical && promptTemplates.length ? <label>Промпт<select value={promptId} onChange={(event) => setPromptId(event.target.value)}>{promptTemplates.map((prompt) => <option value={prompt.id} key={prompt.id}>{prompt.is_default ? "Default · " : ""}{prompt.name}</option>)}</select></label> : null}
           <label>Объём текста<input type="number" min={300} max={10000} step={100} value={targetWords} onChange={(event) => setTargetWords(event.target.value)} placeholder="Как в исходной задаче" /></label>
           <div className="publishedRegenerationOptions wide">
             <label className="checkboxRow"><input type="checkbox" checked={generateTitle} onChange={(event) => setGenerateTitle(event.target.checked)} /> Перегенерировать Title</label>
-            <label className="checkboxRow"><input type="checkbox" checked={includeToc} onChange={(event) => setIncludeToc(event.target.checked)} /> Оглавление</label>
+            {!technical ? <><label className="checkboxRow"><input type="checkbox" checked={includeToc} onChange={(event) => setIncludeToc(event.target.checked)} /> Оглавление</label>
             <label className="checkboxRow"><input type="checkbox" checked={includeFaq} onChange={(event) => setIncludeFaq(event.target.checked)} /> FAQ</label>
             <label className="checkboxRow"><input type="checkbox" checked={useCompetitorBrief} disabled={!item.competitor_brief} onChange={(event) => setUseCompetitorBrief(event.target.checked)} /> Использовать анализ конкурентов</label>
-            <label className="checkboxRow"><input type="checkbox" checked={includeCasinoRating} onChange={(event) => setIncludeCasinoRating(event.target.checked)} /> Рейтинг казино</label>
+            <label className="checkboxRow"><input type="checkbox" checked={includeCasinoRating} onChange={(event) => setIncludeCasinoRating(event.target.checked)} /> Рейтинг казино</label></> : null}
           </div>
           <div className="formActions wide"><button className="button primary" type="submit" disabled={submitted}><Sparkles size={16} /> {submitted ? "Запускаю…" : "Сгенерировать новую версию"}</button></div>
         </form>

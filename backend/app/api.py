@@ -10,6 +10,8 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app import models
+from app import technical_pages
+from app.technical_pages import TechnicalPagesRequest
 from app.core.config import get_settings
 from app.db import get_db
 from app.schemas import (
@@ -1628,6 +1630,35 @@ def create_site_task(site_id: str, payload: GenerationTaskCreate, user: AuthUser
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
+@router.get("/sites/{site_id}/technical-pages")
+def technical_page_settings(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    site = _get_site_or_404(db, site_id)
+    return {"catalog": technical_pages.CATALOG, "settings": site.technical_page_settings,
+            "existing": technical_pages.existing_pages(db, site)}
+
+
+@router.post("/sites/{site_id}/technical-pages/preview")
+async def preview_technical_pages(site_id: str, payload: TechnicalPagesRequest, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    site = _get_site_or_404(db, site_id)
+    try:
+        result = await technical_pages.preview_pages(db, site, payload)
+        db.commit()
+        return result
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/sites/{site_id}/technical-pages/tasks", response_model=GenerationTaskResponse)
+def create_technical_pages_task(site_id: str, payload: TechnicalPagesRequest, user: AuthUser, db: Session = Depends(get_db)) -> Any:
+    site = _get_site_or_404(db, site_id)
+    try:
+        return technical_pages.create_task(db, site, payload, user["id"])
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @router.post("/sites/{site_id}/menu-structure-tasks", response_model=GenerationTaskResponse)
 def create_site_menu_structure_task(
     site_id: str,
@@ -1772,7 +1803,7 @@ def update_task_section(task_id: str, payload: GenerationTaskSectionUpdate, _: A
     task = db.get(models.GenerationTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    if task.generation_mode == "menu_structure":
+    if task.generation_mode in {"menu_structure", "technical_pages"}:
         raise HTTPException(
             status_code=400,
             detail="Menu-structure content is assigned to its corresponding menu item automatically",

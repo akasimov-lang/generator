@@ -18,6 +18,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import models
+from app.technical_pages import is_technical, generate_checked, validate_publication as validate_technical_publication, sync_menu as sync_technical_menu
 from app.core.config import get_settings
 from app.project_cache import ProjectCacheError, fetch_project_cache, fetch_project_template_capabilities, project_server_url, refresh_project_server_id, refresh_project_server_token
 from app.schemas import GenerationTaskCreate, MenuStructureGenerationCreate, MenuStructurePreviewRequest, PublicationCampaignCreate
@@ -1010,6 +1011,8 @@ def validate_content_for_publication(item: models.ContentItem) -> dict:
         "publication_failed",
     }:
         raise ValueError(f"Content in status '{item.status}' cannot be approved or published")
+    if is_technical(item):
+        validate_technical_publication(item)
     quality = analyze_content_quality(item.generated_json)
     if quality["issues"]:
         messages = [str(issue.get("message") or issue.get("code") or "Invalid content") for issue in quality["issues"]]
@@ -1198,10 +1201,10 @@ async def build_gemini_content(
         and len(breadcrumb) == 1
     )
     page_title = article_parts["title"].strip() if generate_title or top_level_menu_page else topic.strip()
-    special_mode = str((generation_context or {}).get("content_kind") or "") in {"casino_review", "menu_page"}
+    special_mode = str((generation_context or {}).get("content_kind") or "") in {"casino_review", "menu_page", "technical_page"}
     page_h1 = article_parts["h1"].strip() if special_mode and article_parts["h1"].strip() else concise_h1_from_topic(topic)
     page["title"] = page_title
-    page["breadcrumb"] = topic.strip()
+    page["breadcrumb"] = str(current_section.get("name") or page_h1) if (generation_context or {}).get("content_kind") == "technical_page" and isinstance(current_section, dict) else topic.strip()
     page["description"] = article_parts["meta_description"] or clean_text(article_parts["body"])[:155] or page["description"]
     page["content"]["blocks"] = build_blocks_from_ai_text(
         generated_text=article_parts["body"] or generated_text,
@@ -3337,6 +3340,13 @@ def create_menu_structure_task(
     return task
 
 
+async def _build_task_content(db: Session, item: models.ContentItem, **kwargs) -> dict:
+    if is_technical(item):
+        return await generate_checked(db, item, **kwargs)
+    kwargs.pop("technical_revision", None)
+    return await build_ai_content(**kwargs)
+
+
 def _prompt_template_for_task_item(db: Session, task: models.GenerationTask, item: models.ContentItem) -> str | None:
     generation_context = item.generation_context if isinstance(item.generation_context, dict) else {}
     if generation_context.get("content_kind") == "casino_review":
@@ -3358,9 +3368,9 @@ def generate_task_items(db: Session, task: models.GenerationTask) -> models.Gene
             item.generation_progress = 15
             item.generation_error = None
             db.commit()
-            if provider and provider.is_active:
+            if (provider and provider.is_active) or is_technical(item):
                 item.generated_json = asyncio.run(
-                    build_ai_content(
+                    _build_task_content(db, item,
                         provider=provider,
                         topic=item.topic,
                         geo=task.geo,
@@ -3529,9 +3539,9 @@ def generate_content_item(db: Session, item: models.ContentItem) -> models.Conte
     task.status = "generating"
     db.commit()
     try:
-        if provider and provider.is_active:
+        if (provider and provider.is_active) or is_technical(item):
             item.generated_json = asyncio.run(
-                build_ai_content(
+                _build_task_content(db, item,
                     provider=provider,
                     topic=item.topic,
                     geo=task.geo,
@@ -3604,7 +3614,7 @@ def revise_content_item(db: Session, item: models.ContentItem, revision: models.
     )
     options = revision.generation_options if isinstance(revision.generation_options, dict) else {}
     base_prompt = str(options.get("prompt_template") or task.prompt_template or DEFAULT_CONTENT_PROMPT_TEMPLATE)
-    include_casino_rating = bool(options.get("include_casino_rating", task.include_casino_rating))
+    include_casino_rating = False if is_technical(item) else bool(options.get("include_casino_rating", task.include_casino_rating))
     if include_casino_rating:
         base_prompt = append_casino_rating_requirement(base_prompt, True)
     current_text = json.dumps(current_payload, ensure_ascii=False, indent=2)
@@ -3633,7 +3643,7 @@ CURRENT GENERATED PAGE (source JSON; rewrite its article content):
     db.commit()
     try:
         item.generated_json = asyncio.run(
-            build_ai_content(
+            _build_task_content(db, item, technical_revision=True,
                 provider=provider,
                 topic=item.topic,
                 geo=task.geo,
@@ -4297,6 +4307,14 @@ def build_project_menu_payload(db: Session, site: models.Site, menu_type: str, n
     sections_by_id = {candidate.id: candidate for candidate in all_site_sections}
     next_order = 0 if not items else max(max(item["order"] for item in items) + 1, len(items) + 1)
     for section_index, section in enumerate(sections):
+        technical_item = db.scalar(select(models.ContentItem).where(
+            models.ContentItem.section_id == section.id,
+            models.ContentItem.site_id == site.id,
+        ).order_by(models.ContentItem.created_at.desc()).limit(1))
+        if technical_item and is_technical(technical_item) and technical_item.status not in {
+            "generated", "approved", "publishing", "publication_pending_confirmation", "published", "publication_failed"
+        }:
+            continue
         slug = _normalized_project_slug(section.path)
         update_log = update_logs_by_section_id.get(str(section.id))
         previous_slug = _normalized_project_slug(update_log.request_payload.get("previous_path")) if update_log else ""
@@ -4731,6 +4749,14 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
         refresh_campaign_status(db, item.publication_campaign_id)
         db.commit()
         return
+    if is_technical(item):
+        try:
+            await sync_technical_menu(db, item, site, initiator_username)
+        except Exception as exc:
+            item.status = "publication_failed"
+            item.generation_error = f"Меню технической страницы: {exc}"[:500]
+            db.commit()
+            return
     item.status = "publishing"
     db.commit()
 
