@@ -208,6 +208,7 @@ class ContentItem(Base, TimestampMixin):
     published_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_publication_status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
     indexing_status: Mapped[str | None] = mapped_column(String(24), nullable=True, index=True)
+    publication_author: Mapped[str | None] = mapped_column(String(80), nullable=True)
     indexing_task_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     indexing_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     indexing_error: Mapped[str | None] = mapped_column(Text, nullable=True)

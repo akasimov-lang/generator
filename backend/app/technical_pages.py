@@ -293,8 +293,8 @@ async def generate_checked(db: Session, item: models.ContentItem, **kwargs) -> d
         raise ValueError("Для технических страниц требуется активный Gemini-провайдер")
     kwargs["include_toc"] = False
     kwargs["include_faq"] = False
-    revision = kwargs.pop("technical_revision", False)
-    compare = not bool(item.generated_at) and not revision
+    kwargs.pop("technical_revision", None)
+    compare = True
     base_prompt = str(kwargs.get("prompt_template") or "") + "\n" + technical_prompt(db, item, compare=compare)
     error = ""
     rejected_text = ""

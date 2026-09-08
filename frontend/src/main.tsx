@@ -526,7 +526,7 @@ type PublicationCampaignQueue = {
 
 type ThemeMode = "light" | "dark";
 type InputStyle = "balanced" | "classic" | "soft" | "inset" | "underline" | "emerald" | "graphite" | "rounded" | "contrast" | "glass";
-type AppView = "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "favorites" | "guide" | "settings";
+type AppView = "published" | "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "favorites" | "guide" | "settings";
 type WorkspaceTab = "overview" | "topics" | "content" | "publication" | "menu";
 
 type WorkspaceAccordionContextValue = {
@@ -659,6 +659,7 @@ const MAIN_VIEW_PATHS: Record<Exclude<AppView, "workspace">, string> = {
   taskArchive: "/task-archive",
   content: "/content",
   publications: "/publications",
+  published: "/published",
   providers: "/ai-providers",
   sites: "/sites",
   favorites: "/favorites",
@@ -727,7 +728,7 @@ function pathForRoute(view: AppView, workspaceTab: WorkspaceTab = DEFAULT_WORKSP
 }
 
 function isAdminOnlyView(view: AppView) {
-  return ["dashboard", "providers"].includes(view);
+  return ["dashboard", "providers", "published"].includes(view);
 }
 
 const DEFAULT_PROMPT_DRAFT = `Рабочий промпт для конкретной задачи.
@@ -1160,6 +1161,7 @@ function App() {
           )}
           <NavButton href={pathForRoute("guide")} icon={<BookOpen />} label="Инструкция" active={activeView === "guide"} onClick={() => navigateTo("guide")} />
           <NavButton href={pathForRoute("settings")} icon={<Settings />} label="Настройки" active={activeView === "settings"} onClick={() => navigateTo("settings")} />
+          {isAdmin ? <NavButton href={pathForRoute("published")} icon={<CheckCircle2 />} label="Опубликовано" active={activeView === "published"} onClick={() => navigateTo("published")} /> : null}
         </nav>
       </aside>
 
@@ -1235,6 +1237,7 @@ function App() {
         }} onChanged={loadAll} />}
         {activeView === "tasks" && <TasksView api={api} sites={sites} providers={providers} tasks={tasks} content={content} onChanged={loadAll} />}
         {activeView === "taskArchive" && <TaskArchiveView api={api} tasks={archivedTasks} onChanged={loadAll} />}
+        {isAdmin && activeView === "published" && <AdminPublishedView api={api} sites={sites} onChanged={loadAll} onOpenProject={(name) => navigateTo("workspace", "overview", false, name)} />}
         {activeView === "content" && <ContentView api={api} sites={sites} content={content} onChanged={loadAll} />}
         {activeView === "publications" && <PublicationsView api={api} sites={sites} content={content} onOpenProject={(site) => {
           localStorage.setItem(`workspace_site_id:${currentUser.username}`, site.id);
@@ -1666,7 +1669,7 @@ function DashboardView({ api, dashboard, tasks, content, sites, onOpenTask, onCh
                   <SearchableSelect
                     value={item.section_id || ""}
                     onChange={(value) => selectSection(item, value)}
-                    options={[{ value: "", label: "Выберите раздел" }, ...sections.map((section) => ({ value: section.id, label: `${section.name} · ${section.path}` }))]}
+                    options={[{ value: "", label: "Выберите раздел" }, ...sections.map((section) => ({ value: section.id, label: section.name, description: section.path }))]}
                     disabled={itemBusy}
                     ariaLabel={`Раздел для ${item.topic}`}
                     searchPlaceholder="Найти раздел"
@@ -2728,7 +2731,7 @@ function ProjectTopicsPanel({ api, site, providers, sections, promptTemplates, t
             <SearchableSelect
               value={sectionId}
               onChange={setSectionId}
-              options={[{ value: "", label: "Выбрать позже" }, ...sections.map((section) => ({ value: section.id, label: `${section.name} · ${section.path}` }))]}
+              options={[{ value: "", label: "Выбрать позже" }, ...sections.map((section) => ({ value: section.id, label: section.name, description: section.path }))]}
               searchPlaceholder="Найти пункт меню"
             />
           </label>
@@ -3447,12 +3450,12 @@ function ProjectContentPanel({ api, site, content, sections, onChanged }: ViewPr
     { value: "", label: "Выберите пункт меню" },
     ...sections.filter((section) => section.sync_status !== "external_deleted").map((section) => ({
       value: section.id,
-      label: `${section.name} · ${section.path}`
+      label: section.name, description: section.path
     })),
     ...Array.from(cachedContentTargets.entries()).map(([value, target]) => ({
       value,
-      label: `${target.name} · ${target.path}`,
-      description: `Существующий ${target.menuType === "header" ? "Header" : "Footer"}`
+      label: target.name,
+      description: target.path
     }))
   ], [cachedContentTargets, sections]);
   const rowContentTargetOptions = React.useMemo(() => [
@@ -4886,6 +4889,21 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
     }
   }
 
+  async function deleteMenuBranch(menuType: "header" | "footer", item: MenuPreviewItem) {
+    if (!window.confirm(`Удалить пункт «${item.title}» и все вложенные пункты из ${menuType === "header" ? "Header" : "Footer"}? Остальные ветки и тексты страниц сохранятся.`)) return;
+    setDeletingSectionId(`${menuType}:${item.externalId}`);
+    setFormError("");
+    setMenuNestingNotice("");
+    try {
+      await api(`/sites/${site.id}/menu/${menuType}/branch`, { method: "DELETE", body: JSON.stringify({ path: item.path, external_id: item.externalId }) });
+      cancelSectionEdit();
+      setUpdatedAt(new Date().toISOString());
+      await onChanged();
+    } catch (error) {
+      setMenuNestingNotice(error instanceof Error ? error.message : "Не удалось удалить ветку меню");
+    } finally { setDeletingSectionId(null); }
+  }
+
   async function deleteSection(section: Section) {
     const requiresProjectSync = section.sync_status === "synced";
     if (requiresProjectSync && !window.confirm(`Удалить пункт меню «${section.name}» из проекта? Связанные неопубликованные тексты сохранятся без назначения пункта меню.`)) return;
@@ -5246,10 +5264,10 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
           </form> : null}
         </section>
         <div className="projectMenuStructureGrid">
-          <SiteMenuPreviewSection key={`${site.id}:header`} site={site} title="Меню Header" icon={<HeaderMenuIcon />} headerAction={<button className="button compact secondary siteMenuTransliterateButton" type="button" onClick={() => void transliterateMenuSlugs("header")} disabled={!cachedHeader.length || transliteratingMenuType !== null}>{transliteratingMenuType === "header" ? <LoaderCircle size={14} /> : <Sparkles size={14} />} {transliteratingMenuType === "header" ? "Обновляем…" : "Транслитерация"}</button>} items={cachedHeader} sections={sections.filter((section) => section.menu_type === "header" && section.sync_status !== "external_deleted")} content={content} publicationLogs={logs} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "header" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} editingTreeKey={editingTreeKey} openingEditKey={openingTreeEditKey} editName={editingSectionName} editPath={editingSectionPath} savingEdit={savingSectionEdit} editError={formError} deletingNestedPageId={deletingNestedPageId} retryingNestedPageId={retryingNestedPageId} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onEditItem={(item, section, treeKey) => void openTreeSectionEdit("header", item, section, treeKey)} onEditNameChange={setEditingSectionName} onEditPathChange={setEditingSectionPath} onSaveEdit={() => { if (editingTreeSection) void saveSectionEdit(editingTreeSection, true); }} onCancelEdit={cancelSectionEdit} onDeletePage={(item) => void deleteNestedPage(item)} onRetryPage={(item) => void retryNestedPagePublication(item)} onAddContent={(item, section) => void addContentToMenuItem("header", item, section)} onAddChild={(item, section, treeKey) => openChildForm("header", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("header")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Header</button>}>
+          <SiteMenuPreviewSection key={`${site.id}:header`} site={site} title="Меню Header" icon={<HeaderMenuIcon />} headerAction={<button className="button compact secondary siteMenuTransliterateButton" type="button" onClick={() => void transliterateMenuSlugs("header")} disabled={!cachedHeader.length || transliteratingMenuType !== null}>{transliteratingMenuType === "header" ? <LoaderCircle size={14} /> : <Sparkles size={14} />} {transliteratingMenuType === "header" ? "Обновляем…" : "Транслитерация"}</button>} items={cachedHeader} sections={sections.filter((section) => section.menu_type === "header" && section.sync_status !== "external_deleted")} content={content} publicationLogs={logs} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "header" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} editingTreeKey={editingTreeKey} openingEditKey={openingTreeEditKey} editName={editingSectionName} editPath={editingSectionPath} savingEdit={savingSectionEdit} editError={formError} deletingNestedPageId={deletingNestedPageId} retryingNestedPageId={retryingNestedPageId} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onEditItem={(item, section, treeKey) => void openTreeSectionEdit("header", item, section, treeKey)} onEditNameChange={setEditingSectionName} onEditPathChange={setEditingSectionPath} onSaveEdit={() => { if (editingTreeSection) void saveSectionEdit(editingTreeSection, true); }} onCancelEdit={cancelSectionEdit} onDeletePage={(item) => void deleteNestedPage(item)} onRetryPage={(item) => void retryNestedPagePublication(item)} onAddContent={(item, section) => void addContentToMenuItem("header", item, section)} onDeleteMenuItem={(item) => void deleteMenuBranch("header", item)} deletingMenuItem={Boolean(deletingSectionId)} onAddChild={(item, section, treeKey) => openChildForm("header", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("header")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Header</button>}>
             {inlineMenuType === "header" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "header")}>{menuFields("header")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
           </SiteMenuPreviewSection>
-          <SiteMenuPreviewSection key={`${site.id}:footer`} site={site} title="Меню Footer" icon={<FooterMenuIcon />} headerAction={<button className="button compact secondary siteMenuTransliterateButton" type="button" onClick={() => void transliterateMenuSlugs("footer")} disabled={!cachedFooter.length || transliteratingMenuType !== null}>{transliteratingMenuType === "footer" ? <LoaderCircle size={14} /> : <Sparkles size={14} />} {transliteratingMenuType === "footer" ? "Обновляем…" : "Транслитерация"}</button>} items={cachedFooter} sections={sections.filter((section) => section.menu_type === "footer" && section.sync_status !== "external_deleted")} content={content} publicationLogs={logs} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "footer" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} editingTreeKey={editingTreeKey} openingEditKey={openingTreeEditKey} editName={editingSectionName} editPath={editingSectionPath} savingEdit={savingSectionEdit} editError={formError} deletingNestedPageId={deletingNestedPageId} retryingNestedPageId={retryingNestedPageId} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onEditItem={(item, section, treeKey) => void openTreeSectionEdit("footer", item, section, treeKey)} onEditNameChange={setEditingSectionName} onEditPathChange={setEditingSectionPath} onSaveEdit={() => { if (editingTreeSection) void saveSectionEdit(editingTreeSection, true); }} onCancelEdit={cancelSectionEdit} onDeletePage={(item) => void deleteNestedPage(item)} onRetryPage={(item) => void retryNestedPagePublication(item)} onAddContent={(item, section) => void addContentToMenuItem("footer", item, section)} onAddChild={(item, section, treeKey) => openChildForm("footer", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("footer")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Footer</button>}>
+          <SiteMenuPreviewSection key={`${site.id}:footer`} site={site} title="Меню Footer" icon={<FooterMenuIcon />} headerAction={<button className="button compact secondary siteMenuTransliterateButton" type="button" onClick={() => void transliterateMenuSlugs("footer")} disabled={!cachedFooter.length || transliteratingMenuType !== null}>{transliteratingMenuType === "footer" ? <LoaderCircle size={14} /> : <Sparkles size={14} />} {transliteratingMenuType === "footer" ? "Обновляем…" : "Транслитерация"}</button>} items={cachedFooter} sections={sections.filter((section) => section.menu_type === "footer" && section.sync_status !== "external_deleted")} content={content} publicationLogs={logs} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "footer" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} editingTreeKey={editingTreeKey} openingEditKey={openingTreeEditKey} editName={editingSectionName} editPath={editingSectionPath} savingEdit={savingSectionEdit} editError={formError} deletingNestedPageId={deletingNestedPageId} retryingNestedPageId={retryingNestedPageId} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onEditItem={(item, section, treeKey) => void openTreeSectionEdit("footer", item, section, treeKey)} onEditNameChange={setEditingSectionName} onEditPathChange={setEditingSectionPath} onSaveEdit={() => { if (editingTreeSection) void saveSectionEdit(editingTreeSection, true); }} onCancelEdit={cancelSectionEdit} onDeletePage={(item) => void deleteNestedPage(item)} onRetryPage={(item) => void retryNestedPagePublication(item)} onAddContent={(item, section) => void addContentToMenuItem("footer", item, section)} onDeleteMenuItem={(item) => void deleteMenuBranch("footer", item)} deletingMenuItem={Boolean(deletingSectionId)} onAddChild={(item, section, treeKey) => openChildForm("footer", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("footer")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Footer</button>}>
             {inlineMenuType === "footer" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "footer")}>{menuFields("footer")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
           </SiteMenuPreviewSection>
         </div>
@@ -5540,12 +5558,12 @@ function TasksView({
     { value: "", label: "Выбрать позже" },
     ...sections.filter((section) => section.sync_status !== "external_deleted").map((section) => ({
       value: section.id,
-      label: `${section.name} · ${section.path}`
+      label: section.name, description: section.path
     })),
     ...Array.from(cachedTaskMenuTargets.entries()).map(([value, target]) => ({
       value,
-      label: `${target.name} · ${target.path}`,
-      description: `Существующий ${target.menuType === "header" ? "Header" : "Footer"}`
+      label: target.name,
+      description: target.path
     }))
   ], [cachedTaskMenuTargets, sections]);
   const selectedMenuIdentity = React.useMemo(() => {
@@ -7270,6 +7288,63 @@ function canPublishContentImmediately(item: ContentItem) {
   ].includes(item.status);
 }
 
+type AdminPublishedItem = {
+  id: string; site_id: string | null; site_name: string | null; geo: string | null;
+  title: string; characters: number; published_at: string | null;
+  generation_author: string | null; publication_author: string | null;
+  indexing_status: string | null; indexing_task_id: string | null;
+  indexing_requested_at: string | null; indexing_error: string | null;
+};
+
+function AdminPublishedView({ api, sites, onChanged, onOpenProject }: ViewProps & { sites: Site[]; onOpenProject: (name: string) => void }) {
+  const [items, setItems] = React.useState<AdminPublishedItem[]>([]);
+  const [total, setTotal] = React.useState(0);
+  const [offset, setOffset] = React.useState(0);
+  const [siteId, setSiteId] = React.useState("");
+  const [refresh, setRefresh] = React.useState(0);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState("");
+  const [preview, setPreview] = React.useState<ContentItem | null>(null);
+  const [previewLoading, setPreviewLoading] = React.useState("");
+  const limit = 50;
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    api<{ items: AdminPublishedItem[]; total: number }>(`/admin/published?offset=${offset}&limit=${limit}${siteId ? `&site_id=${encodeURIComponent(siteId)}` : ""}`)
+      .then((data) => { if (!cancelled) { setItems(data.items); setTotal(data.total); } })
+      .catch((reason) => { if (!cancelled) setError(reason instanceof Error ? reason.message : "Не удалось загрузить публикации"); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [api, offset, siteId, refresh]);
+  React.useEffect(() => {
+    const timer = window.setInterval(() => setRefresh((value) => value + 1), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
+  async function openPreview(id: string) {
+    setPreviewLoading(id);
+    setError("");
+    try { setPreview(await api<ContentItem>(`/content/${id}`)); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось открыть текст"); }
+    finally { setPreviewLoading(""); }
+  }
+  return <section className="viewStack"><DataPanel title={`Опубликованные тексты · ${total}`} actions={<button type="button" className="button secondary compact" disabled={loading} onClick={() => setRefresh((value) => value + 1)}><RefreshCcw size={15} /> Обновить</button>}>
+    <label className="publishedProjectFilter">Проект<select value={siteId} onChange={(event) => { setSiteId(event.target.value); setOffset(0); }}><option value="">Все проекты</option>{sites.map((site) => <option value={site.id} key={site.id}>{site.name}</option>)}</select></label>
+    {error ? <p className="formError" role="alert">{error}</p> : null}
+    {loading ? <p role="status">Загружаем публикации…</p> : null}
+    {!loading && !items.length ? <EmptyState text="Опубликованных текстов пока нет." /> : <ResponsiveTable columns={["Проект", "Тайтл страницы", "Символов", "Дата и время публикации", "Задание на индексацию", "Автор генерации", "Инициатор публикации"]} rows={items.map((item) => [
+      item.site_name ? <a className="requestLogProjectLink" href={pathForRoute("workspace", "overview", item.site_name)} onClick={(event) => { if (!event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) { event.preventDefault(); onOpenProject(item.site_name!); } }}><span title={item.geo || "Гео не указано"}>{countryFlag((item.geo || "").toUpperCase())}</span> {item.site_name}</a> : "Проект недоступен",
+      <button className="compactContentTopic publicationTopicButton" type="button" onClick={() => void openPreview(item.id)} disabled={Boolean(previewLoading)}>{previewLoading === item.id ? "Открываем…" : item.title}</button>,
+      <span title="Знаки с пробелами, без HTML-разметки и метаданных">{item.characters.toLocaleString("ru-RU")}</span>,
+      item.published_at ? <time dateTime={item.published_at}>{formatDate(item.published_at)}</time> : "Не сохранено",
+      <span className="publishedIndexingDetails"><span>{({ queued: "В очереди", submitting: "Отправляется", submitted: "Задание отправлено", failed: "Ошибка отправки" } as Record<string, string>)[item.indexing_status || ""] || (item.indexing_task_id ? "Задание отправлено" : "Нет задания")}</span>{item.indexing_task_id ? <small>ID: <b>{item.indexing_task_id}</b></small> : null}{item.indexing_requested_at ? <small>{formatDate(item.indexing_requested_at)}</small> : null}{item.indexing_error ? <small className="formError">{item.indexing_error}</small> : null}</span>,
+      item.generation_author || "Не сохранён",
+      item.publication_author || "Не сохранён",
+    ])} />}
+    <div className="formActions publishedPagination"><button className="button secondary compact" type="button" disabled={loading || offset === 0} onClick={() => setOffset(Math.max(0, offset - limit))}>Назад</button><span>{total ? `${offset + 1}–${Math.min(offset + limit, total)} из ${total}` : "0"}</span><button className="button secondary compact" type="button" disabled={loading || offset + limit >= total} onClick={() => setOffset(offset + limit)}>Далее</button></div>
+  </DataPanel>{preview ? <ContentPreviewModal api={api} item={preview} onChanged={async () => { await onChanged(); setRefresh((value) => value + 1); }} onClose={() => setPreview(null)} /> : null}</section>;
+}
+
 function ContentView({ api, sites, content, onChanged }: ViewProps & { sites: Site[]; content: ContentItem[] }) {
   const [selectedPreview, setSelectedPreview] = React.useState<ContentItem | null>(null);
   const [contentActionId, setContentActionId] = React.useState("");
@@ -8916,10 +8991,12 @@ type SiteMenuPreviewSectionProps = {
   onDeletePage?: (item: ContentItem) => void;
   onRetryPage?: (item: ContentItem) => void;
   onAddContent?: (item: MenuPreviewItem, section: Section | undefined) => void;
+  onDeleteMenuItem?: (item: MenuPreviewItem) => void;
+  deletingMenuItem?: boolean;
   onAddChild?: (item: MenuPreviewItem, section: Section | undefined, treeKey: string) => void;
 };
 
-function SiteMenuPreviewSection({ title, items, site, sections = [], content = [], publicationLogs = [], icon, headerAction, action, children, adoptingParentKey, activeParentTreeKey, pagePreviewLoadingKey, editingTreeKey, openingEditKey, editName = "", editPath = "", savingEdit = false, editError = "", deletingNestedPageId, retryingNestedPageId, onPreviewPage, onEditItem, onEditNameChange, onEditPathChange, onSaveEdit, onCancelEdit, onDeletePage, onRetryPage, onAddContent, onAddChild }: SiteMenuPreviewSectionProps) {
+function SiteMenuPreviewSection({ title, items, site, sections = [], content = [], publicationLogs = [], icon, headerAction, action, children, adoptingParentKey, activeParentTreeKey, pagePreviewLoadingKey, editingTreeKey, openingEditKey, editName = "", editPath = "", savingEdit = false, editError = "", deletingNestedPageId, retryingNestedPageId, onPreviewPage, onEditItem, onEditNameChange, onEditPathChange, onSaveEdit, onCancelEdit, onDeletePage, onRetryPage, onAddContent, onAddChild, onDeleteMenuItem, deletingMenuItem = false }: SiteMenuPreviewSectionProps) {
   const menuType = title.includes("Footer") ? "footer" : "header";
   const tree = React.useMemo(() => buildMenuTree(items, sections), [items, sections]);
   const [collapsedKeys, setCollapsedKeys] = React.useState<Set<string>>(() => collapsibleMenuKeys(tree));
@@ -9009,6 +9086,7 @@ function SiteMenuPreviewSection({ title, items, site, sections = [], content = [
               </button> : null}
               {onAddContent ? <button className="siteMenuAddContentButton" type="button" onClick={() => onAddContent(node.item, node.section)} title={`Добавить контент в «${node.item.title}»`}><FilePlus2 size={15} /> Контент</button> : null}
               {onAddChild ? <button className="siteMenuAddChildButton" type="button" onClick={() => onAddChild(node.item, node.section, node.key)} disabled={Boolean(adoptingParentKey)} title={`Добавить вложенный пункт в «${node.item.title}»`}><span className="buttonPlusIcon"><Plus size={15} /></span> {adoptingParentKey === parentKey ? "Открываем…" : "Добавить вложенный"}</button> : null}
+              {onDeleteMenuItem ? <button className="iconButton siteMenuDeleteButton" type="button" onClick={() => onDeleteMenuItem(node.item)} disabled={deletingMenuItem || savingEdit || Boolean(adoptingParentKey)} title={`Удалить «${node.item.title}»${hasChildren ? " и все вложенные пункты" : ""}`} aria-label={`Удалить пункт меню ${node.item.title}`}><Trash2 size={14} /></button> : null}
             </div>
             {activeParentTreeKey === node.key && children ? <div className="siteMenuTreeChildForm">{children}</div> : null}
             {nestedPages.length && !pagesCollapsed ? (
@@ -9215,11 +9293,17 @@ function UserGuideView() {
         </div>
       </section>
 
+      <section className="guideSection" id="guide-published">
+        <GuideSectionTitle number="04а" title="Опубликовано — для администраторов" subtitle="Общий список опубликованных текстов всех проектов." />
+        <p>Пункт «Опубликовано» расположен в боковом меню под настройками. Клик по проекту открывает его рабочую карточку, по тайтлу — предпросмотр текста. В таблице показаны символы с пробелами без HTML и метаданных, дата и время публикации, статус и ID задания на индексацию, автор генерации и инициатор публикации. Доступны фильтр по проекту и страницы по 50 записей. Данные обновляются каждые 30 секунд.</p>
+      </section>
+
       <section className="guideSection" id="guide-menu">
         <GuideSectionTitle number="05" title="Меню и вложенные страницы" subtitle="Здесь отображаются Header, Footer и страницы внутри каждого пункта." />
         <div className="guideRules">
           <div><strong>Добавить пункт</strong><span>Создаёт новую запись Header или Footer с правильным порядком.</span></div>
           <div><strong>Показать все</strong><span>Раскрывает страницы, вложенные в выбранный пункт меню.</span></div>
+          <div><strong>Урна у пункта меню</strong><span>Доступна всем пользователям. Удаляет выбранную ветку Header или Footer вместе с вложенными пунктами. Соседние ветки и тексты страниц сохраняются.</span></div>
           <div><strong>Иконка глаза</strong><span>Открывает текст страницы из актуального JSON проекта.</span></div>
           <div><strong>Полный slug</strong><span>Для вложенной страницы используется путь <code>/раздел/страница/</code>.</span></div>
         </div>
@@ -9731,7 +9815,7 @@ function SearchableSelect({
   const normalizedQuery = query.trim().toLocaleLowerCase("ru-RU");
   const visibleOptions = optionPredicate ? options.filter(optionPredicate) : options;
   const filteredOptions = normalizedQuery
-    ? visibleOptions.filter((option) => matchesProjectSearch(`${option.label} ${option.value} ${option.keywords || ""}`, normalizedQuery))
+    ? visibleOptions.filter((option) => matchesProjectSearch(`${option.label} ${option.description || ""} ${option.value} ${option.keywords || ""}`, normalizedQuery))
     : visibleOptions;
 
   const updateDropdownPosition = React.useCallback(() => {
@@ -10461,6 +10545,7 @@ function viewTitle(view: AppView, _workspaceTab: WorkspaceTab) {
     taskArchive: "Архив задач",
     content: "Контент",
     publications: "Контент и публикации",
+    published: "Опубликовано",
     providers: "API Providers",
     sites: "Сайты",
     favorites: "Избранное",

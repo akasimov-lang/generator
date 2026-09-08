@@ -7979,7 +7979,8 @@ textarea:focus {
 }
 
 .searchableSelectOptions {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 2px;
   margin-top: 5px;
   min-height: 0;
@@ -9186,3 +9187,30 @@ a {
 }
 
 .technicalPagesForm .checkboxRow > span { display: grid; gap: 4px; }
+
+.publishedProjectFilter { display: grid; gap: 6px; max-width: 400px; margin-bottom: 16px; }
+.publishedIndexingDetails { display: grid; gap: 4px; overflow-wrap: anywhere; }
+.publishedPagination { margin-top: 16px; align-items: center; }
+
+.siteMenuDeleteButton { width: 28px; height: 28px; min-width: 28px; padding: 5px; flex-shrink: 0; color: #b42318; }
+.siteMenuDeleteButton:hover:not(:disabled) { background: #fee4e2; border-color: #fda29b; }
+
+/* Menu choices keep their natural height inside the scrollable dropdown. */
+.searchableSelectDropdown:has(.menuMainChoiceButton) .searchableSelectOption {
+  align-items: flex-start;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 8px 9px;
+}
+.searchableSelectDropdown:has(.menuMainChoiceButton) .searchableSelectOptionLabel {
+  font-weight: 650;
+}
+.searchableSelectDropdown:has(.menuMainChoiceButton) .searchableSelectOptionContent small {
+  font-size: 10px;
+  line-height: 1.4;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+.searchableSelectDropdown:has(.menuMainChoiceButton) .searchableSelectOptionAside {
+  padding-top: 1px;
+}

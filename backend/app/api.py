@@ -5,11 +5,13 @@ import secrets
 from typing import Any
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app import models
+from app.published_content import article_characters
+from app.menu_deletion import MenuBranchDelete, delete_menu_branch
 from app import technical_pages
 from app.technical_pages import TechnicalPagesRequest
 from app.core.config import get_settings
@@ -1272,6 +1274,17 @@ def update_section(site_id: str, section_id: str, payload: SectionUpdate, user: 
     return section
 
 
+@router.delete("/sites/{site_id}/menu/{menu_type}/branch")
+async def delete_site_menu_branch(site_id: str, menu_type: str, payload: MenuBranchDelete,
+                                  user: AuthUser, db: Session = Depends(get_db)) -> dict:
+    site = _get_site_or_404(db, site_id)
+    try:
+        return await delete_menu_branch(db, site, menu_type, payload, _request_username(user))
+    except (ValueError, ProjectCacheError) as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @router.delete("/sites/{site_id}/sections/{section_id}")
 def delete_section(site_id: str, section_id: str, user: AuthUser, db: Session = Depends(get_db)) -> dict[str, bool]:
     site = _get_site_or_404(db, site_id)
@@ -2407,7 +2420,7 @@ def publish_content_now(content_id: str, _: AuthUser, db: Session = Depends(get_
     if not item:
         raise HTTPException(status_code=404, detail="Content item not found")
     try:
-        return approve_and_schedule_item(db, item)
+        return approve_and_schedule_item(db, item, actor_username=_request_username(_))
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -2465,7 +2478,7 @@ def reject_content(content_id: str, _: AuthUser, db: Session = Depends(get_db)) 
 @router.post("/publication-campaigns", response_model=PublicationCampaignResponse)
 def create_campaign(payload: PublicationCampaignCreate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     try:
-        return schedule_campaign(db, payload)
+        return schedule_campaign(db, payload, actor_username=_request_username(_))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -2645,6 +2658,62 @@ def list_admin_request_logs(_: AdminUser, db: Session = Depends(get_db)) -> list
             }
         )
     return result
+
+
+@router.get("/admin/published")
+def list_admin_published(
+    _: AdminUser, db: Session = Depends(get_db),
+    offset: int = Query(default=0, ge=0), limit: int = Query(default=50, ge=1, le=100),
+    site_id: str | None = None,
+) -> dict[str, Any]:
+    filters = [models.ContentItem.status == "published"]
+    if site_id:
+        filters.append(models.ContentItem.site_id == site_id)
+    total = db.scalar(select(func.count(models.ContentItem.id)).where(*filters)) or 0
+    rows = db.execute(
+        select(models.ContentItem, models.Site.name, models.Site.cache_geo,
+               models.GenerationTask.geo, models.User.username)
+        .outerjoin(models.Site, models.Site.id == models.ContentItem.site_id)
+        .outerjoin(models.GenerationTask, models.GenerationTask.id == models.ContentItem.task_id)
+        .outerjoin(models.User, models.User.id == models.GenerationTask.created_by_user_id)
+        .where(*filters)
+        .order_by(models.ContentItem.published_at.desc().nullslast(), models.ContentItem.id.desc())
+        .offset(offset).limit(limit)
+    ).all()
+    # Legacy attribution uses successful publication logs only, never guesses from the generator.
+    ids = [row[0].id for row in rows if not row[0].publication_author]
+    actors = {}
+    if ids:
+        logs = db.scalars(select(models.PublicationLog).where(
+            models.PublicationLog.content_item_id.in_(ids),
+            models.PublicationLog.response_status >= 200,
+            models.PublicationLog.response_status < 300,
+            models.PublicationLog.error_message.is_(None),
+        ).order_by(models.PublicationLog.created_at.desc(), models.PublicationLog.id.desc())).all()
+        for log in logs:
+            payload = log.request_payload or {}
+            if payload.get("action") or log.content_item_id in actors:
+                continue
+            actor = payload.get("requested_by") or {}
+            if actor.get("username"):
+                actors[log.content_item_id] = actor["username"]
+    result = []
+    for item, site_name, site_geo, task_geo, author in rows:
+        pages = (item.generated_json or {}).get("pages") or []
+        page = pages[0] if pages and isinstance(pages[0], dict) else {}
+        publication_author = item.publication_author or actors.get(item.id)
+        if publication_author == "automatic-menu-generation":
+            publication_author = author
+        result.append({
+            "id": item.id, "site_id": item.site_id, "site_name": site_name,
+            "geo": task_geo or site_geo, "title": page.get("title") or item.topic,
+            "characters": article_characters(item.generated_json or {}),
+            "published_at": item.published_at, "generation_author": author,
+            "publication_author": publication_author, "indexing_status": item.indexing_status,
+            "indexing_task_id": item.indexing_task_id, "indexing_requested_at": item.indexing_requested_at,
+            "indexing_error": item.indexing_error,
+        })
+    return {"items": result, "total": total, "offset": offset, "limit": limit}
 
 
 @router.post("/admin/request-logs/{log_id}/retry")

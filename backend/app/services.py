@@ -3721,7 +3721,7 @@ CURRENT GENERATED PAGE (source JSON; rewrite its article content):
         raise
 
 
-def schedule_campaign(db: Session, payload: PublicationCampaignCreate) -> models.PublicationCampaign:
+def schedule_campaign(db: Session, payload: PublicationCampaignCreate, actor_username: str | None = None) -> models.PublicationCampaign:
     site = db.get(models.Site, payload.site_id)
     if not site or not site.is_active:
         raise ValueError("Publication site not found or inactive")
@@ -3773,6 +3773,8 @@ def schedule_campaign(db: Session, payload: PublicationCampaignCreate) -> models
     db.flush()
     for index, item in enumerate(publication_order):
         item.publication_campaign_id = campaign.id
+        if actor_username:
+            item.publication_author = actor_username
         item.status = "scheduled"
         publication_slot = index // payload.items_per_run
         item.scheduled_at = payload.start_at + timedelta(minutes=payload.interval_minutes * publication_slot)
@@ -3858,7 +3860,7 @@ def reschedule_campaign(
     return campaign
 
 
-def approve_and_schedule_item(db: Session, item: models.ContentItem) -> models.PublicationCampaign:
+def approve_and_schedule_item(db: Session, item: models.ContentItem, actor_username: str | None = None) -> models.PublicationCampaign:
     if item.status not in {"generated", "rejected", "approved"}:
         raise ValueError(f"Content in status '{item.status}' cannot be sent to publication")
     if not item.site_id:
@@ -3881,6 +3883,7 @@ def approve_and_schedule_item(db: Session, item: models.ContentItem) -> models.P
             interval_minutes=1440,
             items_per_run=1,
         ),
+        actor_username=actor_username,
     )
 
 
@@ -4386,6 +4389,7 @@ async def sync_project_menus(
     site: models.Site,
     initiator_username: str | None = None,
     menu_types: tuple[str, ...] = ("header", "footer"),
+    menu_items: dict[str, list] | None = None,
 ) -> dict:
     invalid_menu_types = set(menu_types) - {"header", "footer"}
     if invalid_menu_types or not menu_types:
@@ -4401,7 +4405,9 @@ async def sync_project_menus(
     results: list[dict] = []
     async with httpx.AsyncClient(timeout=45.0) as client:
         for menu_type in menu_types:
-            payload = build_project_menu_payload(db, site, menu_type)
+            payload = ({"type": menu_type, "folder": site.name, "list": menu_items[menu_type]}
+                       if menu_items is not None and menu_type in menu_items
+                       else build_project_menu_payload(db, site, menu_type))
             try:
                 token = await refresh_project_server_token(client)
                 response = await client.post(
@@ -4757,6 +4763,10 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
             item.generation_error = f"Меню технической страницы: {exc}"[:500]
             db.commit()
             return
+    if initiator_username == "automatic-menu-generation":
+        item.publication_author = item.task.created_by_username if item.task else None
+    elif initiator_username:
+        item.publication_author = initiator_username
     item.status = "publishing"
     db.commit()
 
@@ -5026,6 +5036,9 @@ async def publish_campaign_bundle(db: Session, campaign_id: str, log_id: str) ->
     results: list[dict] = []
     for item in items:
         item.last_publication_status_code = None
+        actor = payload.get("requested_by") or {}
+        if actor.get("username"):
+            item.publication_author = actor["username"]
 
     try:
         site = db.get(models.Site, campaign.site_id)
