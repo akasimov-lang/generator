@@ -32,7 +32,7 @@ def setup(db, name="example.com", keys=("privacy",), language="de", menu="footer
 
 
 def article(seed="original"):
-    body = " ".join(f"{seed}{i} information about this website and its visitors" for i in range(40))
+    body = " ".join(f"{seed}{i} Informationen über diese Webseite und ihre Besucher" for i in range(40))
     return {"pages": [{"title": "Datenschutz bei Example", "slug": "/privacy-policy/", "content": {"blocks": [
         {"type": "header", "data": {"text": "Datenschutz", "level": 1}},
         *[{"type": "paragraph", "data": {"text": " ".join(body.split()[i:i + 50])}} for i in range(0, len(body.split()), 50)],
