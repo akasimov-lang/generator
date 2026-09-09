@@ -2730,7 +2730,7 @@ def build_blocks_from_ai_text(
         )
     if shortcode:
         blocks.append(shortcode_block(shortcode))
-    return blocks
+    return normalize_editor_faq_blocks(blocks)
 
 
 def looks_like_heading(line: str) -> bool:
@@ -2868,13 +2868,142 @@ def faq_block(items: list[dict]) -> dict:
         "type": "faq",
         "data": [
             {
-                **item,
                 "question": inline_markdown_to_html(str(item.get("question") or "")),
                 "answer": inline_markdown_to_html(str(item.get("answer") or "")),
             }
             for item in items
+            if isinstance(item, dict)
         ],
     }
+
+
+_FAQ_HEADINGS = {
+    "faq",
+    "frequently asked questions",
+    "häufig gestellte fragen",
+    "häufige fragen",
+    "najczęściej zadawane pytania",
+    "często zadawane pytania",
+    "часто задаваемые вопросы",
+    "вопросы и ответы",
+    "preguntas frecuentes",
+    "perguntas frequentes",
+    "questions fréquentes",
+    "questions fréquemment posées",
+    "domande frequenti",
+    "veelgestelde vragen",
+    "často kladené otázky",
+}
+_FAQ_QUESTION_MARKER = re.compile(
+    r"(?:^|\s)(?:<strong>\s*)?(?:Q|Question|Вопрос|Pytanie|Frage|Pregunta|Pergunta)\s*:\s*(?:</strong>\s*)?",
+    flags=re.IGNORECASE,
+)
+_FAQ_ANSWER_MARKER = re.compile(
+    r"(?:^|\s)(?:<strong>\s*)?(?:A|Answer|Ответ|Odpowiedź|Antwort|Respuesta|Resposta)\s*:\s*(?:</strong>\s*)?",
+    flags=re.IGNORECASE,
+)
+
+
+def _is_faq_heading(block: dict) -> bool:
+    if block.get("type") != "header" or not isinstance(block.get("data"), dict):
+        return False
+    heading = clean_text(block["data"].get("text")).casefold().strip(" .:–—-")
+    return heading in _FAQ_HEADINGS
+
+
+def _coerce_faq_items(data: object) -> list[dict[str, str]]:
+    candidates: object = data
+    if isinstance(data, dict):
+        for key in ("items", "questions", "faq", "data"):
+            if isinstance(data.get(key), list):
+                candidates = data[key]
+                break
+        else:
+            candidates = [data] if any(key in data for key in ("question", "q", "title")) else []
+    if not isinstance(candidates, list):
+        return []
+
+    items: list[dict[str, str]] = []
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        question = candidate.get("question", candidate.get("q", candidate.get("title", "")))
+        answer = candidate.get("answer", candidate.get("a", candidate.get("text", "")))
+        question_text = inline_markdown_to_html(str(question or "").strip())
+        answer_text = inline_markdown_to_html(str(answer or "").strip())
+        if question_text and answer_text:
+            items.append({"question": question_text, "answer": answer_text})
+    return items
+
+
+def _parse_inline_faq(text: str) -> tuple[str, list[dict[str, str]]]:
+    question_matches = list(_FAQ_QUESTION_MARKER.finditer(text))
+    if not question_matches:
+        return text, []
+
+    items: list[dict[str, str]] = []
+    for index, question_match in enumerate(question_matches):
+        chunk_end = question_matches[index + 1].start() if index + 1 < len(question_matches) else len(text)
+        chunk = text[question_match.end():chunk_end].strip()
+        answer_match = _FAQ_ANSWER_MARKER.search(chunk)
+        if not answer_match:
+            continue
+        question = chunk[:answer_match.start()].strip()
+        answer = chunk[answer_match.end():].strip()
+        if question and answer:
+            items.append({
+                "question": inline_markdown_to_html(question),
+                "answer": inline_markdown_to_html(answer),
+            })
+    return text[:question_matches[0].start()].strip(), items
+
+
+def normalize_editor_faq_blocks(blocks: list[dict]) -> list[dict]:
+    """Return Editor.js blocks with every FAQ represented by ``data: [{question, answer}]``."""
+    normalized: list[dict] = []
+    index = 0
+    while index < len(blocks):
+        block = copy.deepcopy(blocks[index])
+        if not isinstance(block, dict):
+            normalized.append(block)
+            index += 1
+            continue
+
+        if block.get("type") == "faq":
+            items = _coerce_faq_items(block.get("data"))
+            if items:
+                block["id"] = str(block.get("id") or make_block_id())
+                block["data"] = items
+            normalized.append(block)
+            index += 1
+            continue
+
+        normalized.append(block)
+        if not _is_faq_heading(block):
+            index += 1
+            continue
+
+        paragraph_end = index + 1
+        paragraph_texts: list[str] = []
+        while paragraph_end < len(blocks):
+            candidate = blocks[paragraph_end]
+            if not isinstance(candidate, dict) or candidate.get("type") != "paragraph":
+                break
+            data = candidate.get("data")
+            if not isinstance(data, dict):
+                break
+            paragraph_texts.append(str(data.get("text") or ""))
+            paragraph_end += 1
+
+        prefix, items = _parse_inline_faq("\n".join(paragraph_texts))
+        if not items:
+            index += 1
+            continue
+        if prefix:
+            normalized.append(paragraph_block(prefix))
+        normalized.append(faq_block(items))
+        index = paragraph_end
+    return normalized
 
 
 def inline_markdown_to_html(value: str) -> str:
@@ -2886,18 +3015,37 @@ def inline_markdown_to_html(value: str) -> str:
 
 
 def normalize_editor_inline_markup(payload: dict) -> dict:
-    """Normalize inline Markdown in generated and legacy Editor.js payloads."""
+    """Normalize inline markup and canonicalize legacy Editor.js FAQ blocks."""
     normalized = copy.deepcopy(payload)
     for page in normalized.get("pages", []):
         if not isinstance(page, dict):
             continue
         content = page.get("content")
         blocks = content.get("blocks") if isinstance(content, dict) else []
+        if isinstance(blocks, list):
+            blocks = normalize_editor_faq_blocks(blocks)
+            content["blocks"] = blocks
         for block in blocks if isinstance(blocks, list) else []:
-            if not isinstance(block, dict) or not isinstance(block.get("data"), (dict, list)):
+            if not isinstance(block, dict):
                 continue
             block_type = block.get("type")
-            data = block["data"]
+            data = block.get("data")
+            if block_type == "faq":
+                raw_items = data if isinstance(data, list) else data.get("items", []) if isinstance(data, dict) else []
+                block_id = str(block.get("id") or make_block_id())
+                canonical_data = [
+                    {
+                        "question": inline_markdown_to_html(str(item.get("question") or "")),
+                        "answer": inline_markdown_to_html(str(item.get("answer") or "")),
+                    }
+                    for item in raw_items
+                    if isinstance(item, dict)
+                ]
+                block.clear()
+                block.update({"id": block_id, "type": "faq", "data": canonical_data})
+                continue
+            if not isinstance(data, (dict, list)):
+                continue
             if block_type in {"paragraph", "header"} and isinstance(data, dict):
                 data["text"] = inline_markdown_to_html(str(data.get("text") or ""))
             elif block_type == "list" and isinstance(data, dict) and isinstance(data.get("items"), list):
@@ -2908,11 +3056,6 @@ def normalize_editor_inline_markup(payload: dict) -> dict:
                     for row in data["content"]
                     if isinstance(row, list)
                 ]
-            elif block_type == "faq" and isinstance(data, list):
-                for faq_item in data:
-                    if isinstance(faq_item, dict):
-                        for key in ("question", "answer"):
-                            faq_item[key] = inline_markdown_to_html(str(faq_item.get(key) or ""))
     return normalized
 
 

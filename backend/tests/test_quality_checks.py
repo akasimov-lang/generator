@@ -128,6 +128,90 @@ def test_markdown_bold_is_converted_to_html_in_generated_and_legacy_blocks() -> 
     }
 
 
+def test_inline_faq_paragraphs_are_converted_to_editor_faq_block() -> None:
+    payload = normalize_editor_inline_markup({
+        "pages": [{"content": {"blocks": [
+            {"id": "faq-title", "type": "header", "data": {"text": "FAQ", "level": 2}},
+            {"id": "part-one", "type": "paragraph", "data": {"text": "Q: Первый вопрос? A: Первый ответ."}},
+            {"id": "part-two", "type": "paragraph", "data": {"text": "Q: Второй вопрос?"}},
+            {"id": "part-three", "type": "paragraph", "data": {"text": "A: Второй ответ с **важной частью**."}},
+            {"id": "next-title", "type": "header", "data": {"text": "Следующий раздел", "level": 2}},
+            {"id": "next-text", "type": "paragraph", "data": {"text": "Текст раздела."}},
+        ]}}],
+    })
+
+    blocks = payload["pages"][0]["content"]["blocks"]
+    assert [block["type"] for block in blocks] == ["header", "faq", "header", "paragraph"]
+    assert isinstance(blocks[1]["id"], str) and blocks[1]["id"]
+    assert blocks[1]["data"] == [
+        {"question": "Первый вопрос?", "answer": "Первый ответ."},
+        {"question": "Второй вопрос?", "answer": "Второй ответ с <strong>важной частью</strong>."},
+    ]
+    assert blocks[2]["id"] == "next-title"
+    assert blocks[3]["data"]["text"] == "Текст раздела."
+
+
+def test_legacy_faq_object_is_normalized_to_question_answer_array() -> None:
+    payload = normalize_editor_inline_markup({
+        "pages": [{"content": {"blocks": [{
+            "type": "faq",
+            "data": {"items": [{"q": "Is it available?", "a": "Yes.", "open": True}]},
+        }]}}],
+    })
+
+    faq = payload["pages"][0]["content"]["blocks"][0]
+    assert faq["type"] == "faq"
+    assert isinstance(faq["id"], str) and faq["id"]
+    assert faq["data"] == [{"question": "Is it available?", "answer": "Yes."}]
+
+
+def test_faq_word_inside_regular_paragraph_does_not_change_block_structure() -> None:
+    source = {"pages": [{"content": {"blocks": [
+        {"id": "body", "type": "paragraph", "data": {"text": "Читайте FAQ перед обращением."}},
+    ]}}]}
+
+    assert normalize_editor_inline_markup(source) == source
+
+
+def test_generated_q_and_a_section_uses_editor_faq_contract() -> None:
+    blocks = build_blocks_from_ai_text(
+        "H2: FAQ\nQ: Can I register?\nA: Yes.\nQ: Is verification required?\nA: It may be required.\nH2: Final notes\nKeep your details current.",
+        "Test page",
+        shortcode=None,
+        include_toc=False,
+        include_faq=True,
+    )
+
+    faq = next(block for block in blocks if block["type"] == "faq")
+    assert faq["data"] == [
+        {"question": "Can I register?", "answer": "Yes."},
+        {"question": "Is verification required?", "answer": "It may be required."},
+    ]
+    assert any(block["type"] == "header" and block["data"]["text"] == "Final notes" for block in blocks)
+
+
+def test_faq_is_always_normalized_to_receiver_format() -> None:
+    payload = normalize_editor_inline_markup({
+        "pages": [{"content": {"blocks": [{
+            "type": "faq",
+            "data": {"items": [
+                {"question": "Есть ли приложение?", "answer": "Да.", "extra": "remove"},
+                {"question": "**Как войти?**", "answer": "Через __официальный сайт__."},
+            ]},
+            "legacy": True,
+        }]}}],
+    })
+
+    faq = payload["pages"][0]["content"]["blocks"][0]
+    assert set(faq) == {"id", "type", "data"}
+    assert len(faq["id"]) == 10
+    assert faq["type"] == "faq"
+    assert faq["data"] == [
+        {"question": "Есть ли приложение?", "answer": "Да."},
+        {"question": "<strong>Как войти?</strong>", "answer": "Через <strong>официальный сайт</strong>."},
+    ]
+
+
 def test_concise_h1_uses_primary_topic_part_and_preserves_title_case() -> None:
     topic = "Beste Online Casinos in Deutschland 2026: Legale Anbieter im Vergleich"
 

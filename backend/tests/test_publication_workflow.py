@@ -597,6 +597,21 @@ def test_project_page_payload_matches_receiver_dto(db: Session) -> None:
     assert payload["dateTime"] == "2026-08-20 09:17:04"
 
 
+def test_project_page_payload_sends_canonical_faq_data_array(db: Session) -> None:
+    site, item = make_content(db)
+    item.generated_json["pages"][0]["content"]["blocks"].append({
+        "type": "faq",
+        "data": {"items": [{"question": "Вопрос?", "answer": "Ответ.", "order": 1}]},
+    })
+
+    payload = build_project_page_payload(item, site, "fresh-token")
+    faq = payload["page"]["content"]["blocks"][-1]
+
+    assert set(faq) == {"id", "type", "data"}
+    assert faq["type"] == "faq"
+    assert faq["data"] == [{"question": "Вопрос?", "answer": "Ответ."}]
+
+
 def test_nested_page_slug_uses_full_parent_path_without_duplication() -> None:
     assert build_nested_page_slug("/best-casinos/", "/online-casino-bonus-terms-in/") == "/best-casinos/online-casino-bonus-terms-in/"
     assert build_nested_page_slug("/best-casinos/", "/best-casinos/online-casino-bonus-terms-in/") == "/best-casinos/online-casino-bonus-terms-in/"
