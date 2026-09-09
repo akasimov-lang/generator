@@ -92,7 +92,13 @@ def adopt_menu(db, site: models.Site) -> dict[str, models.Section]:
             external_id = external_id or f"cached-{menu_type}-{index}-{path.strip('/')}"
             row = by_external.get((menu_type, external_id.casefold())) or by_path.get((menu_type, path))
             if row is None:
-                row = models.Section(site_id=site.id, external_id=external_id, menu_type=menu_type)
+                row = models.Section(
+                    site_id=site.id,
+                    external_id=external_id,
+                    name=name,
+                    path=path,
+                    menu_type=menu_type,
+                )
                 db.add(row)
                 db.flush()
             row.name = name
