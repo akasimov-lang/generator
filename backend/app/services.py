@@ -5023,6 +5023,29 @@ def _find_project_pages(site: models.Site, slug: str) -> list[dict]:
     ]
 
 
+def _last_successful_project_slug(db: Session, item: models.ContentItem) -> str | None:
+    logs = db.scalars(
+        select(models.PublicationLog)
+        .where(
+            models.PublicationLog.content_item_id == item.id,
+            or_(
+                models.PublicationLog.endpoint_url.like("%/projects/create"),
+                models.PublicationLog.endpoint_url.like("%/projects/update"),
+            ),
+            models.PublicationLog.response_status >= 200,
+            models.PublicationLog.response_status < 300,
+        )
+        .order_by(models.PublicationLog.created_at.desc(), models.PublicationLog.id.desc())
+    ).all()
+    for log in logs:
+        payload = log.request_payload if isinstance(log.request_payload, dict) else {}
+        page = payload.get("page") if isinstance(payload.get("page"), dict) else {}
+        slug = page.get("slug") or payload.get("slug")
+        if slug:
+            return _normalized_project_slug(slug)
+    return None
+
+
 async def _remove_obsolete_project_pages(
     db: Session,
     item: models.ContentItem,
@@ -5132,7 +5155,15 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
                 item.section_source_slug or item.slug,
             )
         )
+        existing_lookup_slug = target_slug
         existing_pages = await asyncio.to_thread(_find_project_pages, site, target_slug) if is_republication else []
+        if is_republication and not existing_pages:
+            previous_slug = _last_successful_project_slug(db, item)
+            if previous_slug and previous_slug != target_slug:
+                previous_pages = await asyncio.to_thread(_find_project_pages, site, previous_slug)
+                if previous_pages:
+                    existing_lookup_slug = previous_slug
+                    existing_pages = previous_pages
         page_to_update = existing_pages[0] if existing_pages and existing_pages[0].get("id") is not None else None
         endpoint = project_server_url(site, "/projects/update" if page_to_update else "/projects/create")
         async with httpx.AsyncClient(timeout=90.0) as client:
@@ -5164,7 +5195,7 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
         response_body = response.json() if response.headers.get("content-type", "").startswith("application/json") else {"raw": response.text}
         if 200 <= response.status_code < 300 and page_to_update:
             removed_pages = await _remove_obsolete_project_pages(
-                db, item, site, existing_pages[1:], target_slug, token, initiator_username
+                db, item, site, existing_pages[1:], existing_lookup_slug, token, initiator_username
             )
             if removed_pages:
                 response_body = {**response_body, "replaced_pages": removed_pages}

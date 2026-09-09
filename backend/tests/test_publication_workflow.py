@@ -832,6 +832,86 @@ def test_republication_updates_visible_page_id_and_deletes_duplicate_slug(
     assert cleanup_log.request_payload["pageId"] == "new-page"
 
 
+def test_republication_moves_existing_page_id_when_section_changes_slug(
+    db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    site, item = make_content(db)
+    site.name = "move.example"
+    site.cache_server_ip = "bear"
+    section = models.Section(
+        site=site,
+        external_id="new-section",
+        name="New section",
+        path="/new-section/",
+        menu_type="header",
+        sync_status="synced",
+    )
+    db.add(section)
+    db.flush()
+    item.section_id = section.id
+    item.section_content_mode = "menu_page"
+    item.slug = "/new-section/"
+    item.generated_json["pages"][0]["slug"] = "/new-section/"
+    db.add(models.PublicationLog(
+        content_item_id=item.id,
+        endpoint_url="https://bear.slf-hostesting.com/projects/create",
+        request_payload={"id": 1, "page": {"id": "existing-page", "slug": "/old-section/"}},
+        response_status=201,
+        response_body={"ok": True},
+    ))
+    db.commit()
+    calls: list[dict] = []
+
+    monkeypatch.setattr(service_module, "refresh_project_server_id", lambda _db, _site: "bear")
+
+    def fake_cache(_names: list[str]) -> list[dict]:
+        return [{
+            "name": "move.example",
+            "data": {"pages": [{"id": "existing-page", "slug": "/old-section/"}]},
+        }]
+
+    monkeypatch.setattr(service_module, "fetch_project_cache", fake_cache)
+    monkeypatch.setattr(service_module, "refresh_project_server_token", lambda _client: asyncio.sleep(0, result="fresh-token"))
+    monkeypatch.setattr(
+        service_module,
+        "get_settings",
+        lambda: SimpleNamespace(alfan_url="slf-hostesting.com", project_cache_username="publisher"),
+    )
+
+    class FakeResponse:
+        status_code = 201
+        headers = {"content-type": "application/json"}
+        text = ""
+
+        @staticmethod
+        def json() -> dict:
+            return {"ok": True}
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url: str, json: dict, headers: dict | None = None):
+            calls.append({"url": url, "json": json, "headers": headers or {}})
+            return FakeResponse()
+
+    monkeypatch.setattr(service_module.httpx, "AsyncClient", FakeAsyncClient)
+
+    asyncio.run(publish_item(db, item, site, initiator_username="system-menu-content-reconcile"))
+
+    assert [call["url"].rsplit("/", 1)[-1] for call in calls] == ["update"]
+    assert calls[0]["json"]["id"] == "existing-page"
+    assert calls[0]["json"]["page"]["id"] == "existing-page"
+    assert calls[0]["json"]["page"]["slug"] == "/new-section/"
+    assert item.status == "publication_pending_confirmation"
+
+
 def test_menu_sync_sends_nested_items_when_template_has_one_level(db: Session, monkeypatch: pytest.MonkeyPatch) -> None:
     site, _ = make_content(db)
     site.cache_server_ip = "bear"
