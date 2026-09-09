@@ -1,4 +1,5 @@
-from app.services import analyze_content_quality, build_blocks_from_ai_text, concise_h1_from_topic, extract_ai_article_parts, faq_block, header_block, normalize_editor_inline_markup, paragraph_block, seo_title_needs_improvement
+from app import models
+from app.services import analyze_content_quality, build_blocks_from_ai_text, concise_h1_from_topic, detected_content_language, extract_ai_article_parts, faq_block, generated_content_uses_language, header_block, normalize_editor_inline_markup, paragraph_block, project_content_language, seo_title_needs_improvement
 
 
 def test_seo_title_requires_50_to_70_characters_and_five_words() -> None:
@@ -7,6 +8,18 @@ def test_seo_title_requires_50_to_70_characters_and_five_words() -> None:
     assert not seo_title_needs_improvement(
         "Kryptowaluty w kasynach: bezpieczne wpłaty i wypłaty"
     )
+
+
+def test_project_language_is_authoritative_and_generated_body_is_checked() -> None:
+    site = models.Site(cache_language="cz-CZ")
+    assert project_content_language(site, "en") == "cz-CZ"
+    czech = "Česká kasina nabízejí hráčům bezpečné prostředí, jasná pravidla a odpovědné hraní. " * 12
+    english = "Online casinos give players clear rules, payment choices and responsible gambling tools. " * 12
+    czech_payload = {"pages": [{"content": {"blocks": [{"type": "paragraph", "data": {"text": czech}}]}}]}
+    english_payload = {"pages": [{"content": {"blocks": [{"type": "paragraph", "data": {"text": english}}]}}]}
+    assert detected_content_language(czech_payload) == "cs"
+    assert generated_content_uses_language(czech_payload, "cz-CZ")
+    assert not generated_content_uses_language(english_payload, "cz-CZ")
 
 
 def test_quality_check_flags_metadata_and_risky_phrases() -> None:

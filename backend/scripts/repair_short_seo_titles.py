@@ -16,7 +16,7 @@ from sqlalchemy import select
 
 from app import models
 from app.db import SessionLocal
-from app.services import clean_text, generate_seo_title, publish_item, seo_title_needs_improvement
+from app.services import clean_text, generate_seo_title, project_content_language, publish_item
 
 
 REPAIR_ACTOR = "system-short-title-fix"
@@ -68,7 +68,7 @@ def candidate_ids() -> dict[str, list[str]]:
         db.close()
 
 
-async def repair_item(item_id: str, apply: bool) -> dict[str, str]:
+async def repair_item(item_id: str, apply: bool, force: bool = False) -> dict[str, str]:
     db = SessionLocal()
     try:
         item = db.get(models.ContentItem, item_id)
@@ -86,7 +86,7 @@ async def repair_item(item_id: str, apply: bool) -> dict[str, str]:
             return {"id": item_id, "status": "missing_provider"}
         pages = item.generated_json.get("pages") if isinstance(item.generated_json, dict) else []
         page = pages[0] if isinstance(pages, list) and pages and isinstance(pages[0], dict) else None
-        if not page or not published_title_needs_repair(page.get("title")):
+        if not page or (not force and not published_title_needs_repair(page.get("title"))):
             return {"id": item_id, "status": "unchanged"}
         old_title = str(page.get("title") or item.topic).strip()
         new_title = await generate_seo_title(
@@ -94,7 +94,7 @@ async def repair_item(item_id: str, apply: bool) -> dict[str, str]:
             topic=item.topic,
             current_title=old_title,
             geo=task.geo,
-            language=task.language,
+            language=project_content_language(site, task.language),
             homepage_title=site.homepage_title,
             meta_description=page.get("description"),
             article_excerpt=article_excerpt(item.generated_json),
@@ -132,8 +132,23 @@ async def repair_item(item_id: str, apply: bool) -> dict[str, str]:
         db.close()
 
 
-async def main(apply: bool) -> None:
-    ids_by_site = candidate_ids()
+def selected_candidate_ids(item_ids: list[str]) -> dict[str, list[str]]:
+    if not item_ids:
+        return candidate_ids()
+    db = SessionLocal()
+    try:
+        result: dict[str, list[str]] = defaultdict(list)
+        for item_id in item_ids:
+            item = db.get(models.ContentItem, item_id)
+            if item and item.status == "published":
+                result[item.site_id or item.task_id].append(item.id)
+        return dict(result)
+    finally:
+        db.close()
+
+
+async def main(apply: bool, item_ids: list[str]) -> None:
+    ids_by_site = selected_candidate_ids(item_ids)
     print({"candidates": sum(map(len, ids_by_site.values())), "projects": len(ids_by_site), "apply": apply})
     semaphore = asyncio.Semaphore(3)
 
@@ -141,7 +156,7 @@ async def main(apply: bool) -> None:
         async with semaphore:
             results = []
             for item_id in item_ids:
-                result = await repair_item(item_id, apply)
+                result = await repair_item(item_id, apply, force=bool(item_ids))
                 print(result)
                 results.append(result)
             return results
@@ -154,4 +169,6 @@ async def main(apply: bool) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--apply", action="store_true")
-    asyncio.run(main(parser.parse_args().apply))
+    parser.add_argument("--item-id", action="append", default=[])
+    args = parser.parse_args()
+    asyncio.run(main(args.apply, args.item_id))

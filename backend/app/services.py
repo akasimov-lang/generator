@@ -13,6 +13,7 @@ from urllib.parse import urlparse, urlunparse
 from zoneinfo import ZoneInfo
 
 import httpx
+from langdetect import DetectorFactory, LangDetectException, detect
 from slugify import slugify
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -46,6 +47,13 @@ MAX_COMPETITOR_TEXT_CHARS = 60_000
 DATAFORSEO_COUNTRY_ALIASES = {"UK": "GB"}
 DATAFORSEO_LOCATION_CACHE: dict[tuple[str, str], dict[str, int]] = {}
 logger = logging.getLogger(__name__)
+DetectorFactory.seed = 0
+
+LANGUAGE_CODE_ALIASES = {
+    "cz": "cs",
+    "cze": "cs",
+    "ua": "uk",
+}
 
 
 class DataForSEOTransientError(ValueError):
@@ -506,6 +514,38 @@ def clean_text(value: object) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def project_content_language(site: models.Site | None, fallback: str) -> str:
+    """The language stored by the project is authoritative for all generated copy."""
+    return clean_text(site.cache_language if site and site.cache_language else fallback)
+
+
+def normalized_language_code(value: str) -> str:
+    code = clean_text(value).lower().replace("_", "-").split("-", 1)[0]
+    return LANGUAGE_CODE_ALIASES.get(code, code)
+
+
+def detected_content_language(payload: dict) -> str | None:
+    chunks: list[str] = []
+    for page in payload.get("pages", []) if isinstance(payload, dict) else []:
+        if not isinstance(page, dict):
+            continue
+        for block in (page.get("content") or {}).get("blocks", []):
+            if isinstance(block, dict):
+                chunks.extend(extract_block_text(block))
+    text = clean_text(" ".join(chunks))
+    if len(re.findall(r"[^\W\d_]", text, flags=re.UNICODE)) < 400:
+        return None
+    try:
+        return normalized_language_code(detect(text))
+    except LangDetectException:
+        return None
+
+
+def generated_content_uses_language(payload: dict, language: str) -> bool:
+    detected = detected_content_language(payload)
+    return detected is None or detected == normalized_language_code(language)
+
+
 def seo_title_needs_improvement(value: object) -> bool:
     title = clean_text(value)
     words = re.findall(r"[^\W_]+", title, flags=re.UNICODE)
@@ -538,7 +578,7 @@ async def generate_seo_title(
         )
         prompt = f"""Create one informative SEO title for an existing article.
 Return exactly one plain-text line with the title and nothing else.
-Use the same natural language as the article excerpt. The stored language hint is {language}; infer the actual language from the article when they differ.
+Use the same natural language as the Topic and homepage title. Treat the stored language hint ({language}) and the article excerpt as potentially stale. When the Topic and homepage title use the same language, that language is mandatory even if the hint or excerpt differs.
 Length: 50-70 characters, with at least 5 meaningful words. Never return fewer than 50 or more than 70 characters.
 Preserve the article's search intent and central keyword, but do not merely repeat a short menu label.
 Use the homepage title only to understand the site's subject and brand. Include the brand only when it reads naturally.
@@ -3178,6 +3218,7 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
     include_casino_rating = payload.include_casino_rating and payload.generation_mode != "casino_reviews"
     prompt_template = append_casino_rating_requirement(prompt_template, include_casino_rating)
     site = db.get(models.Site, payload.site_id) if payload.site_id else None
+    content_language = project_content_language(site, payload.language)
     section = db.get(models.Section, payload.section_id) if payload.section_id else None
     section_breadcrumb: list[str] = []
     if section:
@@ -3222,12 +3263,12 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
             )
         planned_slugs.add(final_slug)
     automatic_title = (
-        f"Обзоры казино · {len(clean_topics)} брендов · {payload.language.upper()}-{payload.geo.upper()}"
+        f"Обзоры казино · {len(clean_topics)} брендов · {content_language.upper()}-{payload.geo.upper()}"
         if payload.generation_mode == "casino_reviews"
         else
-        f"{site.name} · {len(clean_topics)} тем · {payload.language.upper()}-{payload.geo.upper()}"
+        f"{site.name} · {len(clean_topics)} тем · {content_language.upper()}-{payload.geo.upper()}"
         if site
-        else f"Без проекта · {len(clean_topics)} тем · {payload.language.upper()}-{payload.geo.upper()}"
+        else f"Без проекта · {len(clean_topics)} тем · {content_language.upper()}-{payload.geo.upper()}"
     )
     task = models.GenerationTask(
         title=payload.title.strip() if payload.title and payload.title.strip() else automatic_title,
@@ -3236,7 +3277,7 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
         section_id=payload.section_id,
         ai_provider_id=payload.ai_provider_id,
         geo=payload.geo,
-        language=payload.language,
+        language=content_language,
         payload_mode=payload.payload_mode,
         topics_count=len(clean_topics),
         target_words=payload.target_words,
@@ -3258,7 +3299,7 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
         generated_json = build_stub_content(
             topic,
             payload.geo,
-            payload.language,
+            content_language,
             payload.target_words,
             site=site,
             payload_mode=payload.payload_mode,
@@ -3302,13 +3343,13 @@ def create_generation_task(db: Session, payload: GenerationTaskCreate, created_b
                 else None
             ),
             competitor_research_status="queries_ready" if payload.collect_competitors else "not_requested",
-            idempotency_key=f"{payload.geo.lower()}-{payload.language.lower()}-{slugify(topic)}-{index}-{uuid.uuid4().hex[:8]}",
+            idempotency_key=f"{payload.geo.lower()}-{content_language.lower()}-{slugify(topic)}-{index}-{uuid.uuid4().hex[:8]}",
         )
         ensure_content_slug_available(db, item, section=section)
         db.add(item)
         db.flush()
         if payload.collect_competitors:
-            ensure_competitor_queries(db, item, payload.geo, payload.language)
+            ensure_competitor_queries(db, item, payload.geo, content_language)
 
     db.commit()
     db.refresh(task)
@@ -3321,6 +3362,7 @@ def create_menu_structure_task(
     payload: MenuStructureGenerationCreate,
     created_by_user_id: str | None = None,
 ) -> models.GenerationTask:
+    content_language = project_content_language(site, payload.language)
     menu_types = set(payload.menu_types or ["header"])
     requested_ids = set(payload.section_ids)
     cached_menu = site.default_menu if isinstance(site.default_menu, dict) else {}
@@ -3460,13 +3502,13 @@ def create_menu_structure_task(
     if MENU_STRUCTURE_PROMPT_MARKER not in prompt_template:
         prompt_template = f"{prompt_template.rstrip()}\n\n{MENU_STRUCTURE_PROMPT_INSTRUCTION}\n"
     task = models.GenerationTask(
-        title=f"Структура меню · {len(eligible)} текстов · {payload.language.upper()}-{payload.geo.upper()}",
+        title=f"Структура меню · {len(eligible)} текстов · {content_language.upper()}-{payload.geo.upper()}",
         created_by_user_id=created_by_user_id,
         site_id=site.id,
         section_id=None,
         ai_provider_id=payload.ai_provider_id,
         geo=payload.geo,
-        language=payload.language,
+        language=content_language,
         payload_mode="site_default",
         topics_count=len(eligible),
         target_words=payload.target_words,
@@ -3487,7 +3529,7 @@ def create_menu_structure_task(
         generated_json = build_stub_content(
             section.name,
             payload.geo,
-            payload.language,
+            content_language,
             payload.target_words,
             site=site,
             payload_mode="site_default",
@@ -3537,17 +3579,35 @@ def create_menu_structure_task(
         db.add(item)
         db.flush()
         if payload.collect_competitors:
-            ensure_competitor_queries(db, item, payload.geo, payload.language)
+            ensure_competitor_queries(db, item, payload.geo, content_language)
     db.commit()
     db.refresh(task)
     return task
 
 
 async def _build_task_content(db: Session, item: models.ContentItem, **kwargs) -> dict:
-    if is_technical(item):
-        return await generate_checked(db, item, **kwargs)
-    kwargs.pop("technical_revision", None)
-    return await build_ai_content(**kwargs)
+    site = kwargs.get("site")
+    language = project_content_language(site, str(kwargs.get("language") or ""))
+    kwargs["language"] = language
+    technical = is_technical(item)
+    if not technical:
+        kwargs.pop("technical_revision", None)
+    original_prompt = kwargs.get("prompt_template")
+    last_detected: str | None = None
+    for attempt in range(3):
+        if attempt:
+            kwargs["prompt_template"] = (
+                f"{original_prompt or DEFAULT_CONTENT_PROMPT_TEMPLATE}\n\n"
+                f"MANDATORY LANGUAGE CORRECTION: Rewrite every public-facing field and the complete article "
+                f"in the project language {language}. The previous result used {last_detected or 'another language'} and is invalid."
+            )
+        result = await generate_checked(db, item, **kwargs) if technical else await build_ai_content(**kwargs)
+        last_detected = detected_content_language(result)
+        if generated_content_uses_language(result, language):
+            return result
+    raise ValueError(
+        f"Generated content language {last_detected or 'unknown'} does not match project language {language}"
+    )
 
 
 def _prompt_template_for_task_item(db: Session, task: models.GenerationTask, item: models.ContentItem) -> str | None:

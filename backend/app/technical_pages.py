@@ -140,7 +140,7 @@ async def preview_pages(db: Session, site: models.Site, payload: TechnicalPagesR
 
 
 def create_task(db: Session, site: models.Site, payload: TechnicalPagesRequest, user_id: str):
-    from app.services import build_stub_content, ensure_content_slug_available, find_content_slug_conflict
+    from app.services import build_stub_content, ensure_content_slug_available, find_content_slug_conflict, project_content_language
     require_provider(db, site, payload)
     # Serialize repeated clicks/requests for the same project until task creation commits.
     db.execute(select(models.Site.id).where(models.Site.id == site.id).with_for_update())
@@ -150,10 +150,11 @@ def create_task(db: Session, site: models.Site, payload: TechnicalPagesRequest, 
         raise ValueError("Выбранные страницы уже существуют. Откройте текст и нажмите «Сгенерировать заново» или добавьте замечания.")
     if any(not page.label.strip() for page in choices):
         raise ValueError("Сначала подготовьте и проверьте подписи меню в предпросмотре")
+    content_language = project_content_language(site, payload.language)
     task = models.GenerationTask(
-        title=f"Технические страницы · {payload.brand.strip() or site.name} · {len(choices)} · {payload.language.upper()}-{payload.geo.upper()}",
+        title=f"Технические страницы · {payload.brand.strip() or site.name} · {len(choices)} · {content_language.upper()}-{payload.geo.upper()}",
         site_id=site.id, created_by_user_id=user_id, ai_provider_id=payload.ai_provider_id,
-        geo=payload.geo.strip().upper(), language=payload.language.strip().lower(),
+        geo=payload.geo.strip().upper(), language=content_language,
         target_words=payload.target_words, topics_count=len(choices), generation_mode="technical_pages",
         prompt_template_name="Технические страницы", prompt_template=TECHNICAL_PROMPT,
         payload_mode="site_default", include_toc=False, include_faq=False, generate_title=True,
@@ -191,7 +192,7 @@ def create_task(db: Session, site: models.Site, payload: TechnicalPagesRequest, 
         ensure_content_slug_available(db, item, section=section)
         db.add(item)
         db.flush()
-    site.technical_page_settings = payload.model_dump()
+    site.technical_page_settings = {**payload.model_dump(), "language": content_language}
     db.commit()
     db.refresh(task)
     return task

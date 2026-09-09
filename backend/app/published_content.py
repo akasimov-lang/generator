@@ -3,7 +3,7 @@ import re
 from html import unescape
 
 
-def article_characters(payload: dict) -> int:
+def article_words(payload: dict) -> int:
     chunks = []
 
     def append(value):
@@ -41,4 +41,4 @@ def article_characters(payload: dict) -> int:
                     append(entry.get("minus"))
     text = re.sub(r"<(?:br\b[^>]*|/(?:p|div|li))>", " ", " ".join(chunks), flags=re.IGNORECASE)
     text = re.sub(r"<[^>]+>", "", text)
-    return len(" ".join(unescape(text).split()))
+    return len(re.findall(r"\b[\w'-]+\b", unescape(text), flags=re.UNICODE))

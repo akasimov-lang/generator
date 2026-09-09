@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app import models
 from app.content_trash import trash_content, restore_content
-from app.published_content import article_characters
+from app.published_content import article_words
 from app.menu_deletion import MenuBranchDelete, delete_menu_branch
 from app import technical_pages
 from app.technical_pages import TechnicalPagesRequest
@@ -2742,7 +2742,7 @@ def list_admin_published(
             "id": item.id, "site_id": item.site_id, "site_name": site_name,
             "geo": task_geo or site_geo, "title": page.get("title") or item.topic,
             "slug": item.slug, "published_url": item.published_url,
-            "characters": article_characters(item.generated_json or {}),
+            "words": article_words(item.generated_json or {}),
             "published_at": item.published_at, "generation_author": author,
             "publication_author": publication_author, "indexing_status": item.indexing_status,
             "indexing_task_id": item.indexing_task_id, "indexing_requested_at": item.indexing_requested_at,

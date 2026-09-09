@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 
 from app import models
-from app.published_content import article_characters
+from app.published_content import article_words
 from app.security import require_auth
 from test_api_serialization import make_client
 
@@ -32,7 +32,7 @@ def test_admin_published_has_metrics_authors_indexing_and_archived_task():
     assert result["total"] == 1
     row = result["items"][0]
     assert row["site_id"] == site_id and row["geo"] == "DE"
-    assert row["title"] == "Actual SEO title" and row["characters"] == len("Hello world!")
+    assert row["title"] == "Actual SEO title" and row["words"] == 2
     assert row["slug"] == "/published/" and row["published_url"] is None
     assert row["generation_author"] == "admin" and row["publication_author"] == "publisher"
     assert row["indexing_task_id"] == "index-123" and row["published_at"]
@@ -63,9 +63,9 @@ def test_legacy_author_requires_successful_publication_log():
     assert client.get("/api/admin/published").json()["items"][0]["publication_author"] == "actual-publisher"
 
 
-def test_character_count_includes_nested_lists_and_faq_without_metadata():
+def test_word_count_includes_nested_lists_and_faq_without_metadata():
     payload = {"pages": [{"title": "Ignored", "content": {"blocks": [
         {"type": "list", "data": {"style": "ordered", "items": [{"content": "One", "meta": {"id": 9}, "items": [{"content": "Two", "items": []}]}]}},
         {"type": "faq", "data": [{"question": "Why?", "answer": "A &amp; B"}]},
     ]}}]}
-    assert article_characters(payload) == len("One Two Why? A & B")
+    assert article_words(payload) == 5
