@@ -30,9 +30,9 @@ DEFAULT_EDITOR_VERSION = "2.31.0"
 GEMINI_DEFAULT_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 GEMINI_DEFAULT_MODEL = "gemini-3.5-flash"
 GEMINI_REQUEST_MAX_ATTEMPTS = 5
-SEO_TITLE_MIN_CHARS = 80
-SEO_TITLE_MAX_CHARS = 140
-SEO_TITLE_MIN_WORDS = 7
+SEO_TITLE_MIN_CHARS = 50
+SEO_TITLE_MAX_CHARS = 70
+SEO_TITLE_MIN_WORDS = 5
 MENU_TITLE_MAX_CHARS = 40
 DATAFORSEO_DEFAULT_ENDPOINT = "https://api.dataforseo.com/v3"
 DATAFORSEO_USER_DATA_PATH = "/appendix/user_data"
@@ -539,7 +539,7 @@ async def generate_seo_title(
         prompt = f"""Create one informative SEO title for an existing article.
 Return exactly one plain-text line with the title and nothing else.
 Use the same natural language as the article excerpt. The stored language hint is {language}; infer the actual language from the article when they differ.
-Length: 85-130 characters, with at least 7 meaningful words. Never return fewer than 80 characters.
+Length: 50-70 characters, with at least 5 meaningful words. Never return fewer than 50 or more than 70 characters.
 Preserve the article's search intent and central keyword, but do not merely repeat a short menu label.
 Use the homepage title only to understand the site's subject and brand. Include the brand only when it reads naturally.
 Do not invent facts, offers, legal claims, dates or a year absent from the supplied context.
@@ -1364,13 +1364,13 @@ def build_gemini_prompt(
         if is_top_level_menu_page
         else "- Title must be an original, concise SEO page title relevant to the Topic and must not repeat the Topic verbatim.\n"
         if generate_title
-        else "- Title should preserve the Topic wording, but must expand it into an informative SEO title when the Topic is shorter than 80 characters.\n"
+        else "- Title should preserve the Topic wording, but must rewrite it into an informative SEO title when it falls outside 50-70 characters.\n"
     )
     prompt += (
         "\n\nGeneration constraints:\n"
         f"- Topic: {topic}\n"
         f"{title_constraint}"
-        "- Title must contain 80-140 characters and at least 7 meaningful words. A short menu label alone is not a valid Title.\n"
+        "- Title must contain 50-70 characters and at least 5 meaningful words. Titles of only 2-3 words are always invalid.\n"
         "- H1 must be a concise, informative version of the Topic: use its primary part before a colon and avoid subtitles.\n"
         f"- Country/geo: {geo}\n"
         f"- Language: {language}\n"

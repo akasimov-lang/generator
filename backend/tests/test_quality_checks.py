@@ -1,11 +1,11 @@
 from app.services import analyze_content_quality, build_blocks_from_ai_text, concise_h1_from_topic, extract_ai_article_parts, faq_block, header_block, normalize_editor_inline_markup, paragraph_block, seo_title_needs_improvement
 
 
-def test_seo_title_requires_at_least_80_characters_and_seven_words() -> None:
+def test_seo_title_requires_50_to_70_characters_and_five_words() -> None:
     assert seo_title_needs_improvement("Kryptowaluty")
-    assert seo_title_needs_improvement("Kryptowaluty w kasynach online: bezpieczne wpłaty i wypłaty środków")
+    assert seo_title_needs_improvement("Kryptowaluty w kasynach online: szczegółowy przewodnik po bezpiecznych wpłatach i wypłatach środków")
     assert not seo_title_needs_improvement(
-        "Kryptowaluty w kasynach online: jak działają bezpieczne wpłaty, wypłaty i ochrona środków gracza"
+        "Kryptowaluty w kasynach: bezpieczne wpłaty i wypłaty"
     )
 
 

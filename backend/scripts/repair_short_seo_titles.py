@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import copy
+import re
 import sys
 import uuid
 from collections import Counter, defaultdict
@@ -19,6 +20,11 @@ from app.services import clean_text, generate_seo_title, publish_item, seo_title
 
 
 REPAIR_ACTOR = "system-short-title-fix"
+
+
+def published_title_needs_repair(value: object) -> bool:
+    words = re.findall(r"[^\W_]+", clean_text(value), flags=re.UNICODE)
+    return len(words) <= 3
 
 
 def article_excerpt(payload: dict) -> str:
@@ -55,7 +61,7 @@ def candidate_ids() -> dict[str, list[str]]:
         for item in db.scalars(select(models.ContentItem).where(models.ContentItem.status == "published")).all():
             pages = item.generated_json.get("pages") if isinstance(item.generated_json, dict) else []
             page = pages[0] if isinstance(pages, list) and pages and isinstance(pages[0], dict) else {}
-            if seo_title_needs_improvement(page.get("title")):
+            if published_title_needs_repair(page.get("title")):
                 result[item.site_id or item.task_id].append(item.id)
         return dict(result)
     finally:
@@ -80,7 +86,7 @@ async def repair_item(item_id: str, apply: bool) -> dict[str, str]:
             return {"id": item_id, "status": "missing_provider"}
         pages = item.generated_json.get("pages") if isinstance(item.generated_json, dict) else []
         page = pages[0] if isinstance(pages, list) and pages and isinstance(pages[0], dict) else None
-        if not page or not seo_title_needs_improvement(page.get("title")):
+        if not page or not published_title_needs_repair(page.get("title")):
             return {"id": item_id, "status": "unchanged"}
         old_title = str(page.get("title") or item.topic).strip()
         new_title = await generate_seo_title(
