@@ -203,7 +203,9 @@ def provider_id(db) -> str:
 def create_and_queue_tasks(db, site: models.Site, sections: dict[str, models.Section], blog: models.Section) -> list[str]:
     language = project_content_language(site, "da-DK")
     common = dict(
-        geo=site.cache_geo or "da_DK",
+        # Project cache stores the locale-shaped value da_DK, while DataForSEO
+        # expects the Google country code DK.
+        geo="DK",
         language=language,
         ai_provider_id=provider_id(db),
         include_toc=True,
