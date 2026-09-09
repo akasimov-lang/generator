@@ -213,18 +213,6 @@ def create_and_queue_tasks(db, site: models.Site, sections: dict[str, models.Sec
         auto_publish=True,
         save_as_draft=False,
     )
-    missing_ids = [sections[path].id for path in sorted(MISSING_MENU_PATHS)]
-    landing_task = create_menu_structure_task(db, site, MenuStructureGenerationCreate(
-        **common,
-        target_words=1800,
-        collect_competitors=True,
-        section_ids=missing_ids,
-        prompt_template=(
-            "Write a complete, useful Danish landing page for the exact current menu section. "
-            "Follow its breadcrumb and search intent, avoid overlap with sibling sections, and keep every claim accurate."
-        ),
-    ))
-
     article_lines = []
     for item_id in PLACEMENTS:
         item = db.get(models.ContentItem, item_id)
@@ -246,9 +234,22 @@ def create_and_queue_tasks(db, site: models.Site, sections: dict[str, models.Sec
         section_ids=[blog.id],
         prompt_template=blog_prompt,
     ))
+    # Create Blog first. Selecting Guides intentionally includes descendants;
+    # the occupied Blog slug is then skipped by the landing-page task.
+    missing_ids = [sections[path].id for path in sorted(MISSING_MENU_PATHS)]
+    landing_task = create_menu_structure_task(db, site, MenuStructureGenerationCreate(
+        **common,
+        target_words=1800,
+        collect_competitors=True,
+        section_ids=missing_ids,
+        prompt_template=(
+            "Write a complete, useful Danish landing page for the exact current menu section. "
+            "Follow its breadcrumb and search intent, avoid overlap with sibling sections, and keep every claim accurate."
+        ),
+    ))
 
     task_ids = []
-    for task in (landing_task, blog_task):
+    for task in (blog_task, landing_task):
         task.status = "generating"
         for item in task.items:
             item.status = "generation_queued"
