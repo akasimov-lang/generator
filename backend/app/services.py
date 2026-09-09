@@ -4860,12 +4860,114 @@ def build_project_page_payload(
     }
 
 
+def _has_successful_page_publication(db: Session, item: models.ContentItem) -> bool:
+    return bool(db.scalar(
+        select(func.count(models.PublicationLog.id)).where(
+            models.PublicationLog.content_item_id == item.id,
+            models.PublicationLog.endpoint_url.like("%/projects/create"),
+            models.PublicationLog.response_status >= 200,
+            models.PublicationLog.response_status < 300,
+        )
+    ))
+
+
+async def _remove_replaced_project_pages(
+    db: Session,
+    item: models.ContentItem,
+    site: models.Site,
+    request_payload: dict,
+    client: httpx.AsyncClient,
+    token: str,
+    initiator_username: str | None,
+) -> int:
+    """Keep the freshly published page and remove older pages with the same slug."""
+    requested_page = request_payload.get("page") if isinstance(request_payload.get("page"), dict) else {}
+    target_slug = _normalized_project_slug(requested_page.get("slug"))
+    target_content = requested_page.get("content") if isinstance(requested_page.get("content"), dict) else {}
+    target_blocks = target_content.get("blocks") if isinstance(target_content.get("blocks"), list) else []
+    matching_pages: list[dict] = []
+    replacement_candidates: list[dict] = []
+
+    for attempt in range(4):
+        projects = await asyncio.to_thread(fetch_project_cache, [site.name])
+        project = next((entry for entry in projects if str(entry.get("name") or "").strip() == site.name), None)
+        data = project.get("data") if isinstance(project, dict) and isinstance(project.get("data"), dict) else {}
+        pages = data.get("pages") if isinstance(data.get("pages"), list) else []
+        matching_pages = [
+            page for page in pages
+            if isinstance(page, dict) and _normalized_project_slug(page.get("slug")) == target_slug
+        ]
+        replacement_candidates = [
+            page for page in matching_pages
+            if isinstance(page.get("content"), dict)
+            and page["content"].get("blocks") == target_blocks
+        ]
+        if replacement_candidates:
+            break
+        if attempt < 3:
+            await asyncio.sleep(0.5)
+
+    if not replacement_candidates:
+        raise ProjectCacheError(f"Published replacement for '{target_slug}' was not visible in project cache")
+
+    replacement = replacement_candidates[-1]
+    replacement_id = replacement.get("id")
+    obsolete_pages = [page for page in matching_pages if page.get("id") != replacement_id]
+    if not obsolete_pages:
+        return 0
+
+    endpoint = project_server_url(site, "/projects/delete")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    deleted = 0
+    for page in obsolete_pages:
+        page_id = page.get("id")
+        if page_id is None:
+            continue
+        deletion_payload = {
+            "folder": site.name,
+            "id": page_id,
+            "pageId": page_id,
+            "slug": target_slug,
+            "path": target_slug,
+            "page": {"id": page_id, "slug": target_slug},
+            "token": token,
+            "initiator": get_settings().project_cache_username,
+            "dateTime": timestamp,
+        }
+        deletion_response = await client.post(
+            endpoint,
+            json=deletion_payload,
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+        )
+        try:
+            deletion_body = deletion_response.json()
+        except Exception:
+            deletion_body = {"raw": deletion_response.text}
+        logged_payload = {**deletion_payload, "token": "[redacted]", "action": "replacement_cleanup"}
+        if initiator_username:
+            logged_payload["requested_by"] = {"username": initiator_username}
+        successful = 200 <= deletion_response.status_code < 300
+        db.add(models.PublicationLog(
+            content_item_id=item.id,
+            endpoint_url=endpoint,
+            request_payload=logged_payload,
+            response_status=deletion_response.status_code,
+            response_body=deletion_body if isinstance(deletion_body, dict) else {"data": deletion_body},
+            error_message=None if successful else f"Replacement cleanup returned HTTP {deletion_response.status_code}",
+        ))
+        if not successful:
+            raise ProjectCacheError(f"Replacement cleanup returned HTTP {deletion_response.status_code}")
+        deleted += 1
+    return deleted
+
+
 async def publish_item(db: Session, item: models.ContentItem, site: models.Site, initiator_username: str | None = None) -> None:
     try:
         endpoint = project_server_url(site, "/projects/create")
     except ProjectCacheError:
         endpoint = site.publication_endpoint
     item.last_publication_status_code = None
+    is_republication = _has_successful_page_publication(db, item)
     try:
         section = db.get(models.Section, item.section_id) if item.section_id else None
         ensure_content_slug_available(db, item, section=section)
@@ -4926,6 +5028,12 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
         if initiator_username:
             logged_payload["requested_by"] = {"username": initiator_username}
         response_body = response.json() if response.headers.get("content-type", "").startswith("application/json") else {"raw": response.text}
+        if 200 <= response.status_code < 300 and is_republication:
+            removed_pages = await _remove_replaced_project_pages(
+                db, item, site, request_payload, client, token, initiator_username
+            )
+            if removed_pages:
+                response_body = {**response_body, "replaced_pages": removed_pages}
         log = models.PublicationLog(
             content_item_id=item.id,
             endpoint_url=endpoint,

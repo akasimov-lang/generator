@@ -752,6 +752,84 @@ def test_project_server_requests_refresh_token_and_store_status_codes(db: Sessio
     assert page_log.request_payload["token"] == "[redacted]"
 
 
+def test_republication_keeps_new_page_and_deletes_older_duplicate_slug(
+    db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    site, item = make_content(db)
+    site.name = "replace.example"
+    site.cache_server_ip = "bear"
+    db.add(models.PublicationLog(
+        content_item_id=item.id,
+        endpoint_url="https://bear.slf-hostesting.com/projects/create",
+        response_status=201,
+        response_body={"ok": True},
+    ))
+    db.commit()
+    calls: list[dict] = []
+    target_blocks = item.generated_json["pages"][0]["content"]["blocks"]
+
+    monkeypatch.setattr(service_module, "refresh_project_server_id", lambda _db, _site: "bear")
+    monkeypatch.setattr(
+        service_module,
+        "fetch_project_cache",
+        lambda _names: [{
+            "name": "replace.example",
+            "data": {"pages": [
+                {"id": "old-page", "slug": "/test/", "content": {"blocks": [{"type": "paragraph", "data": {"text": "Old"}}]}},
+                {"id": "new-page", "slug": "/test/", "content": {"blocks": target_blocks}},
+            ]},
+        }],
+    )
+    monkeypatch.setattr(service_module, "refresh_project_server_token", lambda _client: asyncio.sleep(0, result="fresh-token"))
+    monkeypatch.setattr(
+        service_module,
+        "get_settings",
+        lambda: SimpleNamespace(alfan_url="slf-hostesting.com", project_cache_username="publisher"),
+    )
+
+    class FakeResponse:
+        def __init__(self, status_code: int, body: dict):
+            self.status_code = status_code
+            self._body = body
+            self.headers = {"content-type": "application/json"}
+            self.text = ""
+
+        def json(self) -> dict:
+            return self._body
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url: str, json: dict, headers: dict | None = None):
+            calls.append({"url": url, "json": json, "headers": headers or {}})
+            return FakeResponse(200 if url.endswith("/projects/delete") else 201, {"ok": True})
+
+    monkeypatch.setattr(service_module.httpx, "AsyncClient", FakeAsyncClient)
+
+    asyncio.run(publish_item(db, item, site, initiator_username="editor"))
+
+    assert [call["url"].rsplit("/", 1)[-1] for call in calls] == ["create", "delete"]
+    assert calls[1]["json"]["pageId"] == "old-page"
+    assert calls[1]["json"]["slug"] == "/test/"
+    assert item.status == "publication_pending_confirmation"
+    logs = db.scalars(
+        select(models.PublicationLog)
+        .where(models.PublicationLog.content_item_id == item.id)
+        .order_by(models.PublicationLog.created_at.desc())
+    ).all()
+    create_log = next(log for log in logs if log.endpoint_url.endswith("/projects/create") and log.request_payload)
+    cleanup_log = next(log for log in logs if (log.request_payload or {}).get("action") == "replacement_cleanup")
+    assert create_log.response_body["replaced_pages"] == 1
+    assert cleanup_log.request_payload["pageId"] == "old-page"
+
+
 def test_menu_sync_sends_nested_items_when_template_has_one_level(db: Session, monkeypatch: pytest.MonkeyPatch) -> None:
     site, _ = make_content(db)
     site.cache_server_ip = "bear"

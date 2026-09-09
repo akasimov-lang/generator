@@ -38,23 +38,23 @@ def payload_has_faq(payload: object) -> bool:
     return False
 
 
-def repair_candidate(item: models.ContentItem) -> tuple[dict, bool, bool]:
+def repair_candidate(item: models.ContentItem, *, force: bool = False) -> tuple[dict, bool, bool]:
     normalized = normalize_editor_inline_markup(item.generated_json)
     changed = normalized != item.generated_json
     has_faq = payload_has_faq(normalized)
     already_repaired = item.idempotency_key.startswith(REPAIR_PREFIX)
     retry = already_repaired and item.status in {"publication_pending_confirmation", "publication_failed"}
-    should_publish = has_faq and (changed or not already_repaired or retry)
+    should_publish = has_faq and (force or changed or not already_repaired or retry)
     return normalized, changed, should_publish
 
 
-async def republish_item(content_item_id: str) -> dict[str, str]:
+async def republish_item(content_item_id: str, *, force: bool = False) -> dict[str, str]:
     db = SessionLocal()
     try:
         item = db.get(models.ContentItem, content_item_id)
         if not item or item.status not in {"published", "publication_pending_confirmation", "publication_failed"}:
             return {"id": content_item_id, "status": "skipped"}
-        normalized, changed, should_publish = repair_candidate(item)
+        normalized, changed, should_publish = repair_candidate(item, force=force)
         if not should_publish:
             return {"id": content_item_id, "status": "unchanged"}
         task = db.get(models.GenerationTask, item.task_id)
@@ -93,7 +93,7 @@ async def republish_item(content_item_id: str) -> dict[str, str]:
         db.close()
 
 
-def find_candidates() -> tuple[dict[str, list[str]], Counter]:
+def find_candidates(*, force: bool = False) -> tuple[dict[str, list[str]], Counter]:
     db = SessionLocal()
     counts: Counter = Counter()
     items_by_site: dict[str, list[str]] = defaultdict(list)
@@ -102,7 +102,7 @@ def find_candidates() -> tuple[dict[str, list[str]], Counter]:
             "published", "publication_pending_confirmation", "publication_failed",
         ]))).all()
         for item in items:
-            normalized, changed, should_publish = repair_candidate(item)
+            normalized, changed, should_publish = repair_candidate(item, force=force)
             if not should_publish:
                 continue
             counts["matched"] += 1
@@ -114,8 +114,8 @@ def find_candidates() -> tuple[dict[str, list[str]], Counter]:
     return items_by_site, counts
 
 
-async def main(apply: bool) -> None:
-    items_by_site, counts = find_candidates()
+async def main(apply: bool, force: bool) -> None:
+    items_by_site, counts = find_candidates(force=force)
     print(dict(counts))
     if not apply:
         print("Dry run only. Pass --apply to save and republish.")
@@ -127,7 +127,7 @@ async def main(apply: bool) -> None:
         async with semaphore:
             results: list[dict[str, str]] = []
             for item_id in item_ids:
-                result = await republish_item(item_id)
+                result = await republish_item(item_id, force=force)
                 results.append(result)
                 print(result)
             return results
@@ -140,5 +140,6 @@ async def main(apply: bool) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--apply", action="store_true", help="Save normalized JSON and republish matching pages")
+    parser.add_argument("--force", action="store_true", help="Republish already normalized FAQ pages and clean duplicate slugs")
     arguments = parser.parse_args()
-    asyncio.run(main(arguments.apply))
+    asyncio.run(main(arguments.apply, arguments.force))
