@@ -270,7 +270,7 @@ def test_gemini_content_generation_passes_competitor_brief_to_prompt(monkeypatch
 
     assert "Example Casino Page" in captured["prompt"]
     assert "Mehr Details zu KYC und Limits" in captured["prompt"]
-    assert generated["pages"][0]["title"] == "Detailed casino comparison guide for safer player choices"
+    assert generated["pages"][0]["title"] == "Beste Online Casinos in Deutschland 2026: Legale Anbieter im Vergleich"
     assert generated["pages"][0]["content"]["blocks"][0]["data"]["text"] == "Beste Online Casinos in Deutschland 2026"
 
     generated_with_separate_title = asyncio.run(
