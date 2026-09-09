@@ -7694,6 +7694,17 @@ td {
   color: var(--primary);
 }
 
+.publishedTitleCell {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.publishedTitleCell .publicationTopicButton {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .promptBadge {
   align-items: center;
   background: var(--surface-2);

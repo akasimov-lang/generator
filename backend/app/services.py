@@ -30,6 +30,10 @@ DEFAULT_EDITOR_VERSION = "2.31.0"
 GEMINI_DEFAULT_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 GEMINI_DEFAULT_MODEL = "gemini-3.5-flash"
 GEMINI_REQUEST_MAX_ATTEMPTS = 5
+SEO_TITLE_MIN_CHARS = 80
+SEO_TITLE_MAX_CHARS = 140
+SEO_TITLE_MIN_WORDS = 7
+MENU_TITLE_MAX_CHARS = 40
 DATAFORSEO_DEFAULT_ENDPOINT = "https://api.dataforseo.com/v3"
 DATAFORSEO_USER_DATA_PATH = "/appendix/user_data"
 DATAFORSEO_LOCATIONS_PATH = "/serp/google/locations"
@@ -500,6 +504,60 @@ def clean_text(value: object) -> str:
     text = html.unescape(str(value or ""))
     text = re.sub(r"<[^>]+>", " ", text)
     return re.sub(r"\s+", " ", text).strip()
+
+
+def seo_title_needs_improvement(value: object) -> bool:
+    title = clean_text(value)
+    words = re.findall(r"[^\W_]+", title, flags=re.UNICODE)
+    return not (SEO_TITLE_MIN_CHARS <= len(title) <= SEO_TITLE_MAX_CHARS and len(words) >= SEO_TITLE_MIN_WORDS)
+
+
+def _seo_title_candidate(response: dict) -> str:
+    raw = extract_gemini_text(response).replace("```", "").strip()
+    line = next((entry.strip() for entry in raw.splitlines() if entry.strip()), "")
+    line = re.sub(r"^(?:seo\s+)?title\s*:\s*", "", line, flags=re.IGNORECASE)
+    return clean_text(line).strip(" \"'`«»")
+
+
+async def generate_seo_title(
+    provider: models.AiProvider,
+    *,
+    topic: str,
+    current_title: str,
+    geo: str,
+    language: str,
+    homepage_title: str | None,
+    meta_description: str | None,
+    article_excerpt: str,
+) -> str:
+    last_candidate = ""
+    for _ in range(3):
+        retry_note = (
+            f"\nThe previous candidate was invalid: {last_candidate!r}. Produce a more informative title within the exact limits."
+            if last_candidate else ""
+        )
+        prompt = f"""Create one informative SEO title for an existing article.
+Return exactly one plain-text line with the title and nothing else.
+Use the same natural language as the article excerpt. The stored language hint is {language}; infer the actual language from the article when they differ.
+Length: 85-130 characters, with at least 7 meaningful words. Never return fewer than 80 characters.
+Preserve the article's search intent and central keyword, but do not merely repeat a short menu label.
+Use the homepage title only to understand the site's subject and brand. Include the brand only when it reads naturally.
+Do not invent facts, offers, legal claims, dates or a year absent from the supplied context.
+Do not use quotation marks, labels such as 'Title:', or a final period.
+
+GEO: {geo}
+Homepage title: {homepage_title or 'not specified'}
+Topic/menu label: {topic}
+Current title: {current_title}
+Meta description: {meta_description or 'not specified'}
+Article excerpt: {article_excerpt[:3500]}{retry_note}"""
+        response = await call_gemini(provider, prompt)
+        usage = response.get("usageMetadata", {}) if isinstance(response, dict) else {}
+        apply_provider_usage(provider, usage)
+        last_candidate = _seo_title_candidate(response)
+        if not seo_title_needs_improvement(last_candidate):
+            return last_candidate
+    raise ValueError(f"Gemini did not produce a valid SEO title after 3 attempts: {last_candidate!r}")
 
 
 def clean_multiline_text(value: object) -> str:
@@ -1201,6 +1259,17 @@ async def build_gemini_content(
         and len(breadcrumb) == 1
     )
     page_title = article_parts["title"].strip() if generate_title or top_level_menu_page else topic.strip()
+    if seo_title_needs_improvement(page_title):
+        page_title = await generate_seo_title(
+            provider,
+            topic=topic,
+            current_title=page_title,
+            geo=geo,
+            language=language,
+            homepage_title=site.homepage_title if site else None,
+            meta_description=article_parts["meta_description"],
+            article_excerpt=clean_text(article_parts["body"] or generated_text),
+        )
     special_mode = str((generation_context or {}).get("content_kind") or "") in {"casino_review", "menu_page", "technical_page"}
     page_h1 = article_parts["h1"].strip() if special_mode and article_parts["h1"].strip() else concise_h1_from_topic(topic)
     page["title"] = page_title
@@ -1295,12 +1364,13 @@ def build_gemini_prompt(
         if is_top_level_menu_page
         else "- Title must be an original, concise SEO page title relevant to the Topic and must not repeat the Topic verbatim.\n"
         if generate_title
-        else "- Title must repeat the Topic exactly, without additions, rewriting, or a year that is absent from the Topic.\n"
+        else "- Title should preserve the Topic wording, but must expand it into an informative SEO title when the Topic is shorter than 80 characters.\n"
     )
     prompt += (
         "\n\nGeneration constraints:\n"
         f"- Topic: {topic}\n"
         f"{title_constraint}"
+        "- Title must contain 80-140 characters and at least 7 meaningful words. A short menu label alone is not a valid Title.\n"
         "- H1 must be a concise, informative version of the Topic: use its primary part before a colon and avoid subtitles.\n"
         f"- Country/geo: {geo}\n"
         f"- Language: {language}\n"
@@ -1649,6 +1719,8 @@ def normalize_generated_menu_structure(
             title_key = title.casefold()
             if not title or title_key in sibling_titles:
                 continue
+            if len(title) > MENU_TITLE_MAX_CHARS:
+                raise ValueError(f"Menu label '{title}' exceeds {MENU_TITLE_MAX_CHARS} characters")
             sibling_titles.add(title_key)
             node_count += 1
             deepest_depth = max(deepest_depth, depth)
@@ -1803,7 +1875,8 @@ Structures already used or generated for other projects in the same GEO (DATA; d
 
 {mode_rules}
 
-All public titles must be written naturally in language {language}. Titles must be concise menu labels.
+All menu labels must be written naturally in language {language}, contain no more than {MENU_TITLE_MAX_CHARS} characters, and remain concise and meaningful.
+Never copy a long article SEO title into a menu label. Do not add a domain, year, slogan, explanatory clause or keyword list to a menu label.
 Every item must have a clear, independent search intent, be genuinely useful in navigation, and fit the project's core topic precisely.
 Do not create filler, vague categories, keyword permutations, shallow synonyms, or unrelated adjacent topics merely to appear unique.
 The hierarchy and topical clustering must be materially different from every same-GEO reference structure.
@@ -1833,12 +1906,16 @@ Return only valid JSON without Markdown: {{"items":[{{"title":"...","children":[
             decoded = json.loads(response_text[object_start : object_end + 1])
         except ValueError as exc:
             raise ValueError("Gemini returned invalid JSON for the menu structure") from exc
-        candidate_items = normalize_generated_menu_structure(
-            decoded.get("items") if isinstance(decoded, dict) else None,
-            levels,
-            payload.mode,
-            payload.top_level_count if payload.mode == "thematic" else None,
-        )
+        try:
+            candidate_items = normalize_generated_menu_structure(
+                decoded.get("items") if isinstance(decoded, dict) else None,
+                levels,
+                payload.mode,
+                payload.top_level_count if payload.mode == "thematic" else None,
+            )
+        except ValueError as error:
+            uniqueness_error = str(error)
+            continue
         candidate_signature = _menu_structure_signature(candidate_items, payload.mode)
         if candidate_signature in reference_signatures:
             uniqueness_error = "the complete hierarchy duplicates another project in this GEO"

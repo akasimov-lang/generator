@@ -42,6 +42,16 @@ def make_site(db: Session) -> models.Site:
     return site
 
 
+def test_generated_menu_rejects_long_article_title_as_label() -> None:
+    with pytest.raises(ValueError, match="exceeds 40 characters"):
+        normalize_generated_menu_structure(
+            [{"title": "Kryptowaluty w kasynach online: kompletny przewodnik po bezpiecznych płatnościach"}],
+            levels=1,
+            mode="thematic",
+            top_level_count=1,
+        )
+
+
 def test_generated_casino_review_structure_requires_one_geo_parent_and_ten_brands() -> None:
     raw_items = [{
         "title": "Kasyno online recenzje",

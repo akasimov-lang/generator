@@ -2741,6 +2741,7 @@ def list_admin_published(
         result.append({
             "id": item.id, "site_id": item.site_id, "site_name": site_name,
             "geo": task_geo or site_geo, "title": page.get("title") or item.topic,
+            "slug": item.slug, "published_url": item.published_url,
             "characters": article_characters(item.generated_json or {}),
             "published_at": item.published_at, "generation_author": author,
             "publication_author": publication_author, "indexing_status": item.indexing_status,

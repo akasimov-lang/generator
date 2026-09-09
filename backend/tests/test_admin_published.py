@@ -33,6 +33,7 @@ def test_admin_published_has_metrics_authors_indexing_and_archived_task():
     row = result["items"][0]
     assert row["site_id"] == site_id and row["geo"] == "DE"
     assert row["title"] == "Actual SEO title" and row["characters"] == len("Hello world!")
+    assert row["slug"] == "/published/" and row["published_url"] is None
     assert row["generation_author"] == "admin" and row["publication_author"] == "publisher"
     assert row["indexing_task_id"] == "index-123" and row["published_at"]
     assert client.get("/api/admin/published?offset=1&limit=1").json()["items"] == []

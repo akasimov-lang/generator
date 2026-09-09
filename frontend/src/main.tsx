@@ -7359,7 +7359,7 @@ function canPublishContentImmediately(item: ContentItem) {
 
 type AdminPublishedItem = {
   id: string; site_id: string | null; site_name: string | null; geo: string | null;
-  title: string; characters: number; published_at: string | null;
+  title: string; slug: string; published_url: string | null; characters: number; published_at: string | null;
   generation_author: string | null; publication_author: string | null;
   indexing_status: string | null; indexing_task_id: string | null;
   indexing_requested_at: string | null; indexing_error: string | null;
@@ -7403,7 +7403,7 @@ function AdminPublishedView({ api, sites, onChanged, onOpenProject }: ViewProps 
     {loading ? <p role="status">Загружаем публикации…</p> : null}
     {!loading && !items.length ? <EmptyState text="Опубликованных текстов пока нет." /> : <ResponsiveTable columns={["Проект", "Тайтл страницы", "Символов", "Дата и время публикации", "Задание на индексацию", "Автор генерации", "Инициатор публикации"]} rows={items.map((item) => [
       item.site_name ? <a className="requestLogProjectLink" href={pathForRoute("workspace", "overview", item.site_name)} onClick={(event) => { if (!event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) { event.preventDefault(); onOpenProject(item.site_name!); } }}><span title={item.geo || "Гео не указано"}>{countryFlag((item.geo || "").toUpperCase())}</span> {item.site_name}</a> : "Проект недоступен",
-      <button className="compactContentTopic publicationTopicButton" type="button" onClick={() => void openPreview(item.id)} disabled={Boolean(previewLoading)}>{previewLoading === item.id ? "Открываем…" : item.title}</button>,
+      <span className="publishedTitleCell"><button className="compactContentTopic publicationTopicButton" type="button" onClick={() => void openPreview(item.id)} disabled={Boolean(previewLoading)}>{previewLoading === item.id ? "Открываем…" : item.title}</button>{(() => { const site = sites.find((candidate) => candidate.id === item.site_id); return site ? <a className="publishedPageViewButton" href={projectContentSiteUrl(site, item)} target="_blank" rel="noopener noreferrer" title="Открыть эту страницу на сайте" aria-label={`Открыть страницу «${item.title}» на сайте`}><ExternalLink size={15} /></a> : null; })()}</span>,
       <span title="Знаки с пробелами, без HTML-разметки и метаданных">{item.characters.toLocaleString("ru-RU")}</span>,
       item.published_at ? <time dateTime={item.published_at}>{formatDate(item.published_at)}</time> : "Не сохранено",
       <span className="publishedIndexingDetails"><span>{({ queued: "В очереди", submitting: "Отправляется", submitted: "Задание отправлено", failed: "Ошибка отправки" } as Record<string, string>)[item.indexing_status || ""] || (item.indexing_task_id ? "Задание отправлено" : "Нет задания")}</span>{item.indexing_task_id ? <small>ID: <b>{item.indexing_task_id}</b></small> : null}{item.indexing_requested_at ? <small>{formatDate(item.indexing_requested_at)}</small> : null}{item.indexing_error ? <small className="formError">{item.indexing_error}</small> : null}</span>,
@@ -9020,7 +9020,7 @@ function nestedContentSlug(sectionPath: string, contentSlug: string): string {
   return parent === "/" ? `/${leaf}/` : `${parent}${leaf}/`;
 }
 
-function projectContentSiteUrl(site: Pick<Site, "name" | "base_url"> & Partial<Pick<Site, "cache_canon">>, item: ContentItem): string {
+function projectContentSiteUrl(site: Pick<Site, "name" | "base_url"> & Partial<Pick<Site, "cache_canon">>, item: Pick<ContentItem, "slug" | "published_url">): string {
   if (item.published_url) return item.published_url;
   const projectBaseUrl = site.base_url || `https://${site.cache_canon || site.name}`;
   try {
