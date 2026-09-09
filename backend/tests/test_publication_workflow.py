@@ -752,7 +752,7 @@ def test_project_server_requests_refresh_token_and_store_status_codes(db: Sessio
     assert page_log.request_payload["token"] == "[redacted]"
 
 
-def test_republication_keeps_new_page_and_deletes_older_duplicate_slug(
+def test_republication_updates_visible_page_id_and_deletes_duplicate_slug(
     db: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     site, item = make_content(db)
@@ -815,8 +815,10 @@ def test_republication_keeps_new_page_and_deletes_older_duplicate_slug(
 
     asyncio.run(publish_item(db, item, site, initiator_username="editor"))
 
-    assert [call["url"].rsplit("/", 1)[-1] for call in calls] == ["create", "delete"]
-    assert calls[1]["json"]["pageId"] == "old-page"
+    assert [call["url"].rsplit("/", 1)[-1] for call in calls] == ["update", "delete"]
+    assert calls[0]["json"]["id"] == "old-page"
+    assert calls[0]["json"]["page"]["id"] == "old-page"
+    assert calls[1]["json"]["pageId"] == "new-page"
     assert calls[1]["json"]["slug"] == "/test/"
     assert item.status == "publication_pending_confirmation"
     logs = db.scalars(
@@ -824,10 +826,10 @@ def test_republication_keeps_new_page_and_deletes_older_duplicate_slug(
         .where(models.PublicationLog.content_item_id == item.id)
         .order_by(models.PublicationLog.created_at.desc())
     ).all()
-    create_log = next(log for log in logs if log.endpoint_url.endswith("/projects/create") and log.request_payload)
+    create_log = next(log for log in logs if log.endpoint_url.endswith("/projects/update") and log.request_payload)
     cleanup_log = next(log for log in logs if (log.request_payload or {}).get("action") == "replacement_cleanup")
     assert create_log.response_body["replaced_pages"] == 1
-    assert cleanup_log.request_payload["pageId"] == "old-page"
+    assert cleanup_log.request_payload["pageId"] == "new-page"
 
 
 def test_menu_sync_sends_nested_items_when_template_has_one_level(db: Session, monkeypatch: pytest.MonkeyPatch) -> None:
