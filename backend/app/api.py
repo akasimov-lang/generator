@@ -535,7 +535,7 @@ def list_sites(_: AuthUser, db: Session = Depends(get_db)) -> Any:
 
 
 @router.get("/sites/cache/projects", response_model=list[SiteResponse])
-def list_cached_projects(_: AdminUser, db: Session = Depends(get_db)) -> Any:
+def list_cached_projects(_: AuthUser, db: Session = Depends(get_db)) -> Any:
     status_order = {"test": 0, "working": 1, "not_in_focus": 2, "duplicate": 3}
     sites = db.scalars(select(models.Site)).all()
     return sorted(sites, key=lambda site: (status_order.get(site.project_status, 3), not site.has_menu, site.name.lower()))
@@ -551,7 +551,7 @@ def create_site(payload: SiteCreate, _: AdminUser, db: Session = Depends(get_db)
 
 
 @router.post("/sites/cache/sync", response_model=ProjectCacheSyncResponse)
-def synchronize_project_cache(payload: ProjectCacheSyncRequest, _: AdminUser, db: Session = Depends(get_db)) -> dict[str, Any]:
+def synchronize_project_cache(payload: ProjectCacheSyncRequest, _: AuthUser, db: Session = Depends(get_db)) -> dict[str, Any]:
     try:
         names = list(dict.fromkeys(name.strip() for name in payload.names if name.strip()))
         return sync_project_cache(db, fetch_project_cache(names or None))
