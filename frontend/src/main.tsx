@@ -2268,14 +2268,16 @@ function ProjectWorkspaceView({
             </div>
           </div>
         ) : null}
-        {selectedSite && siteContent.some((item) => item.site_id === selectedSite.id && item.status === "published") ? (
-          <div className="projectMenuImplementationWarning" role="status">
-            <AlertTriangle size={20} />
-            <div>
-              <strong>Текст опубликован на сайте — требуется обновление ядра проекта</strong>
-              <span>Необходимо обратиться к веб-разработчику для обновления ядра проекта.</span>
-            </div>
-          </div>
+        {selectedSite ? (
+          <ProjectCoreUpdateNotice
+            key={`${currentUsername}:${selectedSite.id}`}
+            siteId={selectedSite.id}
+            username={currentUsername}
+            publicationStamp={siteContent
+              .filter((item) => item.site_id === selectedSite.id && item.status === "published")
+              .map((item) => `${item.published_at || item.generated_at || item.created_at || ""}:${item.id}`)
+              .sort().at(-1) || ""}
+          />
         ) : null}
         {selectedSite ? (
           <div className="projectUpdatedAt">
@@ -2476,6 +2478,30 @@ function MenuReadyMedal({ tone = "green" }: { tone?: "green" | "red" | "gold" })
       <path d="m13 31-3 18 14-8V30zM35 31l3 18-14-8V30z" fill="url(#menuReadyRibbon)" />
       <g filter="url(#menuReadyShadow)"><circle cx="24" cy="22" r="18" fill="#15713b" /><circle cx="24" cy="22" r="14" fill="url(#menuReadyFace)" stroke="#63bd82" /><path d="m16 22 5 5 11-12" fill="none" stroke="#126d38" strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" /></g>
     </svg>
+  );
+}
+
+function ProjectCoreUpdateNotice({ siteId, username, publicationStamp }: { siteId: string; username: string; publicationStamp: string }) {
+  const storageKey = `project_core_update_done:${username}:${siteId}`;
+  const [acknowledgedPublication, setAcknowledgedPublication] = React.useState(() => {
+    try { return window.localStorage.getItem(storageKey) || ""; } catch { return ""; }
+  });
+  if (!publicationStamp || acknowledgedPublication >= publicationStamp) return null;
+
+  function acknowledge() {
+    setAcknowledgedPublication(publicationStamp);
+    try { window.localStorage.setItem(storageKey, publicationStamp); } catch { /* Still dismiss for this session. */ }
+  }
+
+  return (
+    <div className="projectMenuImplementationWarning projectCoreUpdateNotice" role="status">
+      <AlertTriangle size={20} />
+      <div>
+        <strong>Текст опубликован на сайте — требуется обновление ядра проекта</strong>
+        <span>Необходимо обратиться к веб-разработчику для обновления ядра проекта.</span>
+      </div>
+      <button className="button compact" type="button" onClick={acknowledge}><CheckCircle2 size={15} /> Готово</button>
+    </div>
   );
 }
 

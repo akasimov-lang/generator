@@ -2369,6 +2369,19 @@ h2 {
   padding: 10px 12px;
 }
 
+.projectCoreUpdateNotice {
+  flex-wrap: wrap;
+}
+
+.projectCoreUpdateNotice > div {
+  flex: 1 1 240px;
+}
+
+.projectCoreUpdateNotice > button {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
 .projectMenuImplementationWarning > svg {
   flex: 0 0 auto;
 }
