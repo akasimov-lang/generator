@@ -200,20 +200,23 @@ def create_task(db: Session, site: models.Site, payload: TechnicalPagesRequest, 
 
 TECHNICAL_PROMPT = """Write a factual technical policy page for this specific website in {{LANGUAGE}}.
 This is a technical page, not a casino review, marketing article or generic SEO essay.
-Use only the supplied project facts below for claims about the operator, contacts, cookies, retention,
-licences, affiliations and editorial procedures. Never invent missing facts or legal requirements.
-If information essential to this page is missing, put it in an Editor Check section, not in public text.
+Use supplied project facts when available; explicit editor corrections take priority.
+The user authorizes inventing plausible website-specific facts when information is missing,
+including operating practices, cookies, retention, affiliations and editorial procedures.
+Keep invented details internally consistent and consistent with the supplied project data.
+Missing project facts alone are not a reason to request clarification or emit Editor Check.
+Do not invent real laws, regulatory approvals or licences issued by actual authorities.
 Do not claim compliance or present this generated draft as legally certified.
 Aim for 500–600 words of public page content, averaging 550 words.
 Respect the page's full topic. Write clear sections and practical explanations relevant to the website.
-Do not add ratings, bonuses, unrelated SEO topics, FAQ, placeholders or fictional contact details.
+Do not add ratings, bonuses, unrelated SEO topics, FAQ or placeholders.
 TITLE REQUIREMENT: use the exact homepage title below to understand the site's subject, brand and audience.
 Create a concise, distinct technical-page SEO Title that reflects this page's actual contents AND the
 homepage's subject. Identify the brand from the homepage title when unambiguous; otherwise use the
 project name. Do not copy the homepage Title or turn it into a promotional slogan. The H1 is in the content language.
 Adapt the content to the project's GEO and language; never assume every jurisdiction uses the same
-age threshold or legal requirements. If facts are absent, write only what the available information
-supports. Do not invent a contact channel, tracking technology, operator or business practice.
+age threshold or legal requirements. If project facts are absent, supply plausible details as authorized
+above. Preserve any supplied contact channel, tracking technology, operator or business practice.
 Keep menu labels separate from the SEO Title. All public text must be in the specified content language.
 Vary wording, structure, opening and explanation order across projects, while preserving factual meaning.
 Explicit factual corrections in editor remarks override older project facts.
@@ -263,13 +266,17 @@ class TechnicalSimilarityError(ValueError):
     pass
 
 
+class TechnicalEditorCheckError(ValueError):
+    pass
+
+
 def validate_and_record(db: Session, item: models.ContentItem, payload: dict, compare: bool = True) -> None:
     body = page_text(payload)
     if len(body.split()) < 100:
         raise ValueError("Техническая страница слишком короткая: проверьте ответ провайдера")
     if payload.get("generation_meta", {}).get("editor_check") or payload.get("editor_check") or any(page.get("editor_check") for page in payload.get("pages", [])):
         details = payload.get("generation_meta", {}).get("editor_check") or payload.get("editor_check") or next(page["editor_check"] for page in payload["pages"] if page.get("editor_check"))
-        raise ValueError(f"Уточните сведения о проекте: {details}")
+        raise TechnicalEditorCheckError(f"Уточните сведения о проекте: {details}")
     key = group_key(item.generation_context)
     if compare and db.bind.dialect.name == "postgresql":
         # Re-read the corpus under a transaction lock: concurrent jobs cannot both pass as unique.
@@ -299,10 +306,19 @@ async def generate_checked(db: Session, item: models.ContentItem, **kwargs) -> d
     base_prompt = str(kwargs.get("prompt_template") or "") + "\n" + technical_prompt(db, item, compare=compare)
     error = ""
     rejected_text = ""
+    editor_revision = False
     for attempt in range(3):
         kwargs["prompt_template"] = base_prompt + (
             "\nAUTOMATIC EDITOR REVISION:\n"
             f"Previous attempt rejected: {error}\n"
+            + (
+                "Perform routine editorial checks silently and omit their reports. "
+                "Missing website facts may be invented as authorized by the technical-page instructions. "
+                "Do not request verification solely because website details were not supplied. "
+                "Preserve explicit project facts and editor corrections. Keep genuinely unresolved "
+                "contradictions or claims about real regulatory approvals in Editor Check.\n"
+                if editor_revision else ""
+            ) +
             "Rewrite the rejected draft below. Change phrasing, section order and examples while preserving "
             "all supported facts, language, GEO and 500–600 word target. Do not merely swap synonyms. "
             "Return the complete replacement page in the required article format.\n"
@@ -318,9 +334,16 @@ async def generate_checked(db: Session, item: models.ContentItem, **kwargs) -> d
             return result
         except TechnicalSimilarityError as exc:
             error = str(exc)
+            editor_revision = False
             rejected_text = page_text(result)
             # Release the comparison lock before another network request.
             db.commit()
+        except TechnicalEditorCheckError as exc:
+            if attempt == 2:
+                raise
+            error = str(exc)
+            editor_revision = True
+            rejected_text = page_text(result)
     raise ValueError(f"Текст не прошёл проверку уникальности после двух автоматических доработок. {error}")
 
 

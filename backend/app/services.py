@@ -1436,6 +1436,19 @@ def build_gemini_prompt(
     variability_protocol = render_task_variability_protocol(variation_context)
     if variability_protocol and TEXT_VARIABILITY_PROTOCOL_MARKER not in prompt:
         prompt += f"\n\n{variability_protocol}\n"
+    if (generation_context or {}).get("content_kind") == "technical_page":
+        prompt += (
+            "\nTECHNICAL PAGE EDITOR CHECK CONTRACT (overrides generic editorial reporting):\n"
+            "Perform routine quality, intent, structure and variability checks silently. "
+            "Do not output their reports, passports, OK statuses or a no-issues message. "
+            "Omit Editor Check entirely when there are no unresolved factual issues. "
+            "For technical pages the user explicitly authorizes inventing plausible missing website "
+            "facts; this overrides generic instructions to use only verified project facts. "
+            "Respect supplied facts and editor corrections. Missing website information alone must "
+            "not produce Editor Check. Do not invent real laws, regulatory approvals or licences. "
+            "Use Editor Check only for unresolved contradictions or regulatory claims requiring "
+            "human verification. Keep this section outside public article text.\n"
+        )
     return prompt
 
 async def call_gemini(provider: models.AiProvider, prompt: str) -> dict:

@@ -977,12 +977,19 @@ h2 {
 
 .revisionAccordionBody textarea {
   min-height: 84px;
+  max-height: max(84px, 50vh);
   resize: vertical;
+}
+
+.revisionResizeHint {
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .revisionFormFooter {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   justify-content: space-between;
 }
@@ -6008,10 +6015,16 @@ td {
   flex-direction: column;
   height: min(920px, calc(100vh - 40px));
   max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+
+.modalDialog.contentPreviewModal > * {
+  flex-shrink: 0;
 }
 
 .modalDialog.contentPreviewModal .contentPreviewBody {
   flex: 1 1 auto;
+  min-height: 200px;
 }
 
 .contentPreviewModal .modalContentText {

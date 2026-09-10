@@ -255,3 +255,51 @@ def test_detected_brand_must_appear_in_homepage(db, monkeypatch):
         return {"candidates": [{"content": {"parts": [{"text": '{"brand":"Invented","labels":{}}'}]}}]}
     monkeypatch.setattr(services, "call_gemini", fake)
     assert asyncio.run(technical.preview_pages(db, site, payload))["brand"] == ""
+
+
+def test_technical_prompt_overrides_generic_editor_report_and_allows_missing_facts(db):
+    site, _, payload = setup(db)
+    item = technical.create_task(db, site, payload, None).items[0]
+    common = dict(topic=item.topic, geo="DE", language="de", target_words=550,
+                  site=site, prompt_template=technical.TECHNICAL_PROMPT,
+                  shortcode=None, include_toc=False, include_faq=False)
+    prompt = services.build_gemini_prompt(**common, generation_context=item.generation_context)
+    assert "authorizes inventing plausible" in prompt
+    assert "Missing website information alone must not produce Editor Check" in prompt
+    assert prompt.index("TECHNICAL PAGE EDITOR CHECK CONTRACT") > prompt.index(services.PROMPT_FORMAT_CONTRACT_MARKER)
+    assert "TECHNICAL PAGE EDITOR CHECK CONTRACT" not in services.build_gemini_prompt(**common)
+
+
+def test_routine_editor_report_is_automatically_revised(db, monkeypatch):
+    site, provider, payload = setup(db)
+    item = technical.create_task(db, site, payload, None).items[0]
+    calls = []
+    async def fake(**kwargs):
+        calls.append(kwargs["prompt_template"])
+        result = article()
+        if len(calls) == 1:
+            result["generation_meta"] = {"editor_check": "Паспорт вариативности: V04. Структура: OK"}
+        return result
+    monkeypatch.setattr(services, "build_ai_content", fake)
+    result = asyncio.run(technical.generate_checked(db, item, provider=provider))
+    assert len(calls) == 2
+    assert "checks silently" in calls[1]
+    assert "V04" in calls[1]
+    assert "editor_check" not in result.get("generation_meta", {})
+    assert item.generation_context["technical_check"]["automatic_revisions"] == 1
+    assert len(db.scalars(select(models.TechnicalPageText)).all()) == 1
+
+
+def test_unresolved_editor_check_stops_after_two_revisions(db, monkeypatch):
+    site, provider, payload = setup(db)
+    item = technical.create_task(db, site, payload, None).items[0]
+    calls = []
+    async def fake(**kwargs):
+        calls.append(kwargs)
+        return {**article(), "generation_meta": {"editor_check": "Conflicting supplied operator names"}}
+    monkeypatch.setattr(services, "build_ai_content", fake)
+    with pytest.raises(technical.TechnicalEditorCheckError, match="Conflicting supplied operator names"):
+        asyncio.run(technical.generate_checked(db, item, provider=provider))
+    assert len(calls) == 3
+    assert db.scalars(select(models.TechnicalPageText)).all() == []
+    assert "technical_check" not in item.generation_context

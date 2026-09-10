@@ -3818,7 +3818,7 @@ function ProjectContentPanel({ api, site, content: allContent, sections, onChang
               title={isPublicationLocked(item) ? "Пункт меню опубликованного или запланированного текста изменять нельзя" : undefined}
             />,
             <span className="campaignTopicWithPreview">
-              <span className="compactContentTopic" title={item.topic}><ContentTopicLabel item={item} /></span>
+              <button className="compactContentTopic publicationTopicButton" type="button" onClick={() => setPreviewItem(item)} title={`Предпросмотр: ${item.topic}`}><ContentTopicLabel item={item} /></button>
               <button className="contentPreviewIconButton" type="button" onClick={() => setPreviewItem(item)} title="Просмотреть текст и метаданные" aria-label={`Просмотреть текст: ${item.topic}`}><Eye size={14} /></button>
             </span>,
             <span className={`contentSectionPlacement contentRowMenuSelect ${item.section_id ? "hasValue" : "isEmpty"}`} onClick={(event) => event.stopPropagation()}>
@@ -3860,6 +3860,7 @@ function ProjectContentPanel({ api, site, content: allContent, sections, onChang
               </span>
             ) : "-",
             <div className="userActions projectContentActions">
+              <button className="button compact" type="button" onClick={() => setPreviewItem(item)} title="Просмотреть текст и отправить на доработку"><Eye size={15} /> Предпросмотр</button>
               <button className="button compact" type="button" onClick={() => openEditor(item)} disabled={isPublicationLocked(item)} title="Открыть и редактировать JSON payload"><Database size={15} /> JSON</button>
               {canApproveContent(item) ? <button className="button compact approve" type="button" onClick={() => approve(item)} title="Принять текст"><CheckCircle2 size={15} /> Принять</button> : null}
               <button className="button compact primary" type="button" onClick={() => void publishImmediately(item)} disabled={!canPublishContentImmediately(item) || publishingItemId === item.id} title="Сразу отправить JSON текста на сервер проекта"><Send size={15} /> {publishingItemId === item.id ? "Публикуем…" : "Опубликовать"}</button>
@@ -3906,7 +3907,20 @@ function ProjectContentPanel({ api, site, content: allContent, sections, onChang
         </Modal>
       ) : null}
       {previewItem ? (
-        <ContentPreviewModal api={api} item={previewItem} onChanged={onChanged} onClose={() => setPreviewItem(null)} />
+        <ContentPreviewModal
+          api={api}
+          item={previewItem}
+          onChanged={onChanged}
+          onClose={() => setPreviewItem(null)}
+          actions={(currentPreviewItem) => (
+            <>
+              {canApproveContent(currentPreviewItem) ? <button className="button compact approve" type="button" onClick={() => void approve(currentPreviewItem)}><CheckCircle2 size={15} /> Принять</button> : null}
+              <button className="button compact primary" type="button" onClick={() => void publishImmediately(currentPreviewItem)} disabled={!canPublishContentImmediately(currentPreviewItem) || publishingItemId === currentPreviewItem.id}><Send size={15} /> {publishingItemId === currentPreviewItem.id ? "Публикуем…" : "Опубликовать"}</button>
+              {currentPreviewItem.status === "published" ? <a className="button compact" href={contentSiteUrl(currentPreviewItem)} target="_blank" rel="noreferrer"><ExternalLink size={15} /> На сайте</a> : null}
+              {editorError ? <span className="formError" role="alert">{editorError}</span> : null}
+            </>
+          )}
+        />
       ) : null}
     </section>
   );
@@ -10410,9 +10424,10 @@ function ContentPreviewModal({ item, promptName, actions, api, onChanged, onClos
                   Замечания к доработке
                   <textarea value={remarks} onChange={(event) => setRemarks(event.target.value)} rows={4} minLength={3} maxLength={5000} placeholder="Напишите, что в тексте нужно исправить, добавить или доработать" required />
                 </label>
+                <small className="revisionResizeHint">Потяните за нижний правый угол поля, чтобы изменить его высоту.</small>
                 <div className="revisionFormFooter">
                   <label className="checkboxRow"><input type="checkbox" checked={generateTitle} onChange={(event) => setGenerateTitle(event.target.checked)} /> Перегенерировать Title</label>
-                  <button className="button compact primary" type="submit" disabled={revisionSubmitted || remarks.trim().length < 3}><Sparkles size={15} /> {revisionSubmitted ? "Запускаю доработку…" : "Доработать"}</button>
+                  <button className="button compact primary" type="submit" disabled={revisionSubmitted || remarks.trim().length < 3}><Sparkles size={15} /> {revisionSubmitted ? "Запускаю доработку…" : "Отправить на доработку"}</button>
                 </div>
               </form>
             )}
