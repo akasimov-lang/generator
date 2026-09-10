@@ -7690,14 +7690,11 @@ td {
   line-height: 1.25;
 }
 
-.overviewContentTopic {
-  align-items: flex-start;
-  display: flex;
+.overviewContentStatus {
+  align-items: center;
+  display: inline-flex;
   gap: 7px;
-}
-
-.overviewContentTopic .topicMetaCell {
-  flex: 1 1 auto;
+  white-space: nowrap;
 }
 
 .publishedPageViewButton {

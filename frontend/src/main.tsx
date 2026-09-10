@@ -2521,12 +2521,12 @@ function ProjectOverviewPanel({ overview, content, sections, logs }: { overview:
           <ResponsiveTable
             columns={["Тема", "Меню", "Статус", "Дата"]}
             rows={content.slice(0, 8).map((item) => [
-              <div className="overviewContentTopic">
-                <TopicMetaCell item={item} />
-                {item.status === "published" ? <a className="publishedPageViewButton" href={projectContentSiteUrl(overview.site, item)} target="_blank" rel="noreferrer" title={`Открыть страницу «${item.topic}» на сайте`} aria-label={`Открыть страницу «${item.topic}» на сайте`}><ExternalLink size={15} /></a> : null}
-              </div>,
+              <TopicMetaCell item={item} />,
               sectionLabel(item.section_id, sections),
-              <StatusBadge status={item.status} />,
+              <span className="overviewContentStatus">
+                <StatusBadge status={item.status} />
+                {item.status === "published" ? <a className="publishedPageViewButton" href={projectContentSiteUrl(overview.site, item)} target="_blank" rel="noopener noreferrer" title={`Открыть страницу «${item.topic}» на сайте`} aria-label={`Открыть страницу «${item.topic}» на сайте`}><ExternalLink size={15} /></a> : null}
+              </span>,
               item.published_at ? formatDate(item.published_at) : formatDate(item.updated_at)
             ])}
           />
