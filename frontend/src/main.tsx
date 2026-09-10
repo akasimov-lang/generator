@@ -2268,6 +2268,15 @@ function ProjectWorkspaceView({
             </div>
           </div>
         ) : null}
+        {selectedSite && siteContent.some((item) => item.site_id === selectedSite.id && item.status === "published") ? (
+          <div className="projectMenuImplementationWarning" role="status">
+            <AlertTriangle size={20} />
+            <div>
+              <strong>Текст опубликован на сайте — требуется обновление ядра проекта</strong>
+              <span>Необходимо обратиться к веб-разработчику для обновления ядра проекта.</span>
+            </div>
+          </div>
+        ) : null}
         {selectedSite ? (
           <div className="projectUpdatedAt">
             <CalendarClock size={20} />
@@ -10297,7 +10306,7 @@ function ContentPreviewModal({ item, promptName, actions, api, onChanged, onClos
   const [revisionError, setRevisionError] = React.useState("");
   const [revisionSubmitted, setRevisionSubmitted] = React.useState(false);
   const revisionActive = ACTIVE_GENERATION_STATUSES.includes(currentItem.status);
-  const revisionBlocked = ["scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published", "deletion_pending", "deleted"].includes(currentItem.status);
+  const revisionBlocked = ["scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "deletion_pending", "deleted"].includes(currentItem.status);
   const revisionAllowed = !revisionBlocked && Object.keys(currentItem.generated_json || {}).length > 0;
   const selectedRevision = selectedVersion ? revisions.find((revision) => revision.id === selectedVersion.revisionId) : null;
   const selectedJson = selectedRevision
@@ -10431,7 +10440,7 @@ function ContentPreviewModal({ item, promptName, actions, api, onChanged, onClos
                 </div>
               </form>
             )}
-            {currentItem.status === "generation_failed" && currentItem.generation_error ? <span className="formError">{currentItem.generation_error}</span> : null}
+            {currentItem.generation_error && !revisionActive ? <span className="formError">{currentItem.generation_error}</span> : null}
             {revisionError ? <span className="formError">{revisionError}</span> : null}
           </div>
         </section>
