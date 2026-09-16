@@ -81,12 +81,13 @@ def project_settings(site_id: str, _: AdminUser, db: Session = Depends(get_db)):
 @router.put('/projects/{site_id}')
 def save_project(site_id: str, payload: auto.ProjectConfig, _: AdminUser, db: Session = Depends(get_db)):
     site_or_404(db,site_id)
-    if payload.enabled and payload.domain_layout != 'root_main':
+    effective = auto.effective_project_config(auto.config(db), payload)
+    if effective.enabled and effective.domain_layout != 'root_main':
         base_only = auto.effective_config(auto.config(db), payload).scheme_mode == 'base_only'
-        if (payload.parent_kind == 'drop' and not payload.drop_domain
-            or payload.parent_kind == 'newreg' and not payload.newreg_domain
-            or not base_only and (payload.x_default_use_newreg and not payload.x_default_newreg_domain
-                                  or not payload.x_default_use_newreg and not payload.drop_domain)):
+        if (effective.parent_kind == 'drop' and not effective.drop_domain
+            or effective.parent_kind == 'newreg' and not effective.newreg_domain
+            or not base_only and (effective.x_default_use_newreg and not effective.x_default_newreg_domain
+                                  or not effective.x_default_use_newreg and not effective.drop_domain)):
             raise HTTPException(400,'Укажите родительский домен и настройки x-default.')
     saved = call(auto.save_config, db, payload, site_id)
     kick_due_schedule(db)

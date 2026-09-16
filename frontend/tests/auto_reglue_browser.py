@@ -39,9 +39,26 @@ with sync_playwright() as p:
  page.goto(base);page.evaluate('localStorage.setItem("admin_token","mock");sessionStorage.setItem("popup_permission_prompt_closed","true")')
  page.goto(base+'/auto-reglue')
  expect(page.get_by_role('heading',name='Автопереклей — общие настройки')).to_be_visible()
+ common=page.get_by_label('Применять общую схему доменов ко всем участникам массового автопереклея',exact=True)
+ expect(common).not_to_be_checked()
+ common.check()
+ page.get_by_label('Создавать новый поддомен новорега при каждом запуске',exact=True).check()
+ expect(page.get_by_label('Использовать существующий поддомен дропа',exact=True)).not_to_be_checked()
+ page.get_by_label('Общий формат имён поддоменов',exact=True).select_option('hyphen')
+ page.get_by_label('Добавлять casino к известным брендам',exact=True).check()
+ page.get_by_role('button',name='Сохранить общие настройки',exact=True).click()
+ expect(page.get_by_role('button',name='Сохранить общие настройки',exact=True)).to_be_disabled()
+ assert global_cfg['apply_domain_settings']
+ assert global_cfg['domain_settings']['create_subdomains'] and global_cfg['domain_settings']['parent_kind']=='newreg'
+ assert global_cfg['domain_settings']['subdomain_name_style']=='hyphen'
+ common.uncheck()
+ page.get_by_role('button',name='Сохранить общие настройки',exact=True).click()
+ expect(page.get_by_role('button',name='Сохранить общие настройки',exact=True)).to_be_disabled()
+
  guide=page.get_by_role('link',name='Инструкция по автопереклеям',exact=True)
  expect(guide).to_be_visible()
  assert guide.evaluate('(e)=>getComputedStyle(e).color') == 'rgb(255, 255, 255)'
+ page.wait_for_load_state('networkidle')
  before_guide=list(calls)
  guide.click()
  expect(page).to_have_url(base+'/auto-reglue/guide')

@@ -23,7 +23,18 @@ from app.network_state import alternate_links, domain_name, state_revision, vali
 ACTIVE = ('queued', 'running', 'waiting', 'partial')
 
 
+class DomainOptions(BaseModel):
+    domain_layout: Literal['subdomain_main', 'root_main'] = 'subdomain_main'
+    parent_kind: Literal['drop', 'newreg'] = 'drop'
+    create_subdomains: bool = False
+    subdomain_add_casino: bool = False
+    subdomain_name_style: Literal['mixed', 'joined', 'hyphen'] = 'mixed'
+    x_default_use_newreg: bool = False
+
+
 class GlobalConfig(BaseModel):
+    apply_domain_settings: bool = False
+    domain_settings: DomainOptions = Field(default_factory=DomainOptions)
     enabled: bool = False
     schedule_enabled: bool = False
     interval_days: Literal[0, 3, 4, 5, 7, 14] = 0
@@ -187,6 +198,12 @@ def select_unused_xdefault(site, state, cfg, target):
     raise ValueError(f'В сетке нет неиспользованного {label} для x-default. Проверьте типы доменов и историю использования.')
 
 
+def effective_project_config(global_cfg, cfg):
+    if cfg.scope != 'personal' and global_cfg.apply_domain_settings:
+        return cfg.model_copy(update=global_cfg.domain_settings.model_dump())
+    return cfg
+
+
 def effective_config(global_cfg, cfg):
     if cfg.scope == 'personal':
         return GlobalConfig(enabled=cfg.enabled, schedule_enabled=cfg.schedule_enabled,
@@ -205,6 +222,7 @@ def require_eligible(site, global_cfg, cfg):
 
 def build_plan(site, state, global_cfg, cfg):
     require_eligible(site, global_cfg, cfg)
+    cfg = effective_project_config(global_cfg, cfg)
     global_cfg = effective_config(global_cfg, cfg)
     geo = (site.cache_geo or '').strip().upper()
     if not re.fullmatch(r'[A-Z]{2}', geo):

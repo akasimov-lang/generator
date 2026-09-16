@@ -582,3 +582,34 @@ def test_general_keywords_names_and_exhaustion(brand, style):
     assert generated==expected
     with pytest.raises(ValueError,match='заняты'):
         next_subdomain(site,state,cfg,cfg.drop_domain)
+
+
+def test_global_domain_rules_override_mass_and_preserve_personal():
+    site,state,g,cfg=fixture()
+    site.brand='Pinco'; site.domain_types={'clubheavenjax.com':'drop'}
+    state['domains'].append('clubheavenjax.com'); site.cache_domains=list(state['domains'])
+    g.apply_domain_settings=True
+    g.domain_settings=auto.DomainOptions(create_subdomains=True,subdomain_name_style='hyphen',subdomain_add_casino=True)
+    plan=auto.build_plan(site,state,g,cfg)
+    assert plan['create_subdomain']=='pinco-az.clubheavenjax.com'
+    assert not cfg.create_subdomains
+    assert auto.effective_project_config(g,cfg).drop_domain==cfg.drop_domain
+    cfg.scope='personal'
+    assert auto.effective_project_config(g,cfg) is cfg
+    assert auto.build_plan(site,state,g,cfg)['create_subdomain'] is None
+    cfg.scope='mass';g.apply_domain_settings=False
+    assert auto.build_plan(site,state,g,cfg)['create_subdomain'] is None
+
+
+def test_global_domain_rules_saved_and_default_opt_out():
+    _,sessions=make_client()
+    with sessions() as db:
+        assert not auto.config(db).apply_domain_settings
+        value=auto.GlobalConfig(apply_domain_settings=True,domain_settings=auto.DomainOptions(parent_kind='newreg',create_subdomains=True,subdomain_name_style='joined'))
+        auto.save_config(db,value)
+        db.expire_all()
+        saved=auto.config(db)
+        assert saved.apply_domain_settings
+        assert saved.domain_settings.parent_kind=='newreg'
+        assert saved.domain_settings.create_subdomains
+        assert saved.domain_settings.subdomain_name_style=='joined'

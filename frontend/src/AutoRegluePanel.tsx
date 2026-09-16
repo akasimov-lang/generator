@@ -3,7 +3,9 @@ import React from "react";
 type Api = <T>(path: string, options?: RequestInit) => Promise<T>;
 type Rules = { schedule_enabled: boolean; interval_days: number; scheme_mode: "preserve" | "add_auxiliary" | "base_only"; auxiliary_hreflangs: string[] };
 type Config = Rules & { create_subdomains: boolean; subdomain_add_casino: boolean; subdomain_name_style: "mixed" | "joined" | "hyphen"; domain_layout: "subdomain_main" | "root_main"; scope: "mass" | "personal"; enabled: boolean; drop_domain: string; x_default_use_newreg: boolean; x_default_newreg_domain: string; parent_kind: "drop" | "newreg"; newreg_domain: string; language: string; profile_id: string; variant: "current" | "provided" | "before" | "after"; fake_main_path: string };
-type GlobalConfig = Rules & { enabled: boolean; max_projects: number };
+type DomainOptions = Pick<Config, "domain_layout" | "parent_kind" | "create_subdomains" | "subdomain_add_casino" | "subdomain_name_style" | "x_default_use_newreg">;
+const defaultDomainOptions: DomainOptions = { domain_layout: "subdomain_main", parent_kind: "drop", create_subdomains: false, subdomain_add_casino: false, subdomain_name_style: "mixed", x_default_use_newreg: false };
+type GlobalConfig = Rules & { enabled: boolean; max_projects: number; apply_domain_settings?: boolean; domain_settings?: DomainOptions };
 type Template = { id: string; project: string; brand: string; geo: string; variants: Record<string, unknown> };
 type Plan = { create_subdomain?: string | null; site_id: string; project: string; old_main: string; new_main: string; drop_domain: string; x_default_domain?: string; language_domain?: string; alternateMarkup: string; required_page_urls: string[]; added_hreflang?: string | null; pool_exhausted?: boolean; preview_token: string; requestId: string };
 type Run = { id: string; site_id: string; status: string; phase: string; message: string; plan: Plan };
@@ -44,6 +46,30 @@ function AutomationRules({ value, onChange, pool }: { value: Rules; onChange: (p
   </div>;
 }
 
+function CommonDomainSettings({ value, change }: { value: GlobalConfig; change: (patch: Partial<GlobalConfig>) => void }) {
+  const rules = value.domain_settings || defaultDomainOptions;
+  const patch = (next: Partial<DomainOptions>) => change({ domain_settings: { ...rules, ...next } });
+  const selectParent = (parent_kind: "drop" | "newreg", create_subdomains: boolean) => patch({ parent_kind, create_subdomains, ...(rules.domain_layout === "root_main" ? { x_default_use_newreg: parent_kind === "newreg" } : {}) });
+  return <section className="networkSection"><h3>Общие параметры доменов и поддоменов</h3>
+    <label className="checkboxRow"><input type="checkbox" checked={!!value.apply_domain_settings} onChange={e => change({ apply_domain_settings: e.target.checked })} /> Применять общую схему доменов ко всем участникам массового автопереклея</label>
+    <p className="muted">При выключенном чекбоксе используются настройки доменов каждого проекта. При включённом — варианты ниже; персональные проекты всегда исключены. Родительские домены, бренд, GEO, язык и путь страницы берутся из проекта.</p>
+    <fieldset disabled={!value.apply_domain_settings} className="autoReglueDomainOptions"><legend>Схема доменов</legend>
+      <label className="checkboxRow"><input type="radio" name="global-domain-layout" checked={rules.domain_layout === "subdomain_main"} onChange={() => patch({ domain_layout: "subdomain_main" })} /> Canonical = языковые альтернейты; x-default отдельно</label>
+      <label className="checkboxRow"><input type="radio" name="global-domain-layout" checked={rules.domain_layout === "root_main"} onChange={() => patch({ domain_layout: "root_main", x_default_use_newreg: rules.parent_kind === "newreg" })} /> Canonical = x-default; языковые альтернейты на поддомене</label>
+      <h4>Источник поддомена</h4>
+      <label className="checkboxRow"><input type="checkbox" checked={!rules.create_subdomains && rules.parent_kind === "drop"} onChange={() => selectParent("drop", false)} /> Использовать существующий поддомен дропа</label>
+      <label className="checkboxRow"><input type="checkbox" checked={!rules.create_subdomains && rules.parent_kind === "newreg"} onChange={() => selectParent("newreg", false)} /> Использовать существующий поддомен новорега</label>
+      <label className="checkboxRow"><input type="checkbox" checked={rules.create_subdomains && rules.parent_kind === "drop"} onChange={() => selectParent("drop", true)} /> Создавать новый поддомен дропа при каждом запуске</label>
+      <label className="checkboxRow"><input type="checkbox" checked={rules.create_subdomains && rules.parent_kind === "newreg"} onChange={() => selectParent("newreg", true)} /> Создавать новый поддомен новорега при каждом запуске</label>
+      <p className="muted">Выбирается один источник. В схеме Canonical = x-default меняется корневой домен, а поддомен используется в языковых альтернейтах.</p>
+      <label className="checkboxRow"><input type="checkbox" checked={rules.x_default_use_newreg} onChange={e => patch({ x_default_use_newreg: e.target.checked, ...(rules.domain_layout === "root_main" ? { parent_kind: e.target.checked ? "newreg" : "drop" } : {}) })} /> Использовать новорег в x-default</label>
+      <label className="checkboxRow"><input type="checkbox" disabled={!rules.create_subdomains} checked={rules.subdomain_add_casino} onChange={e => patch({ subdomain_add_casino: e.target.checked })} /> Добавлять casino к известным брендам</label>
+      <label>Формат имён<select aria-label="Общий формат имён поддоменов" disabled={!rules.create_subdomains} value={rules.subdomain_name_style} onChange={e => patch({ subdomain_name_style: e.target.value as DomainOptions["subdomain_name_style"] })}><option value="mixed">Чередовать: с дефисами и без</option><option value="joined">Без дефисов</option><option value="hyphen">С дефисами</option></select></label>
+      <p className="muted">Бренд: бренд-GEO, бренд-GEO-1…10, бренд-GEO-язык; опционально casino. Общие ключи: online-casino-GEO-язык, casino-online-GEO, casinos-top-GEO. Доступны слитные варианты. Один новый поддомен за запуск; занятые имена и AMP исключены.</p>
+    </fieldset>
+  </section>;
+}
+
 function Runs({ runs, api, refresh }: { runs: Run[]; api: Api; refresh: () => Promise<void> }) {
   const [busy, setBusy] = React.useState(""); const [error, setError] = React.useState("");
   async function control(id: string, action: string) {
@@ -76,6 +102,12 @@ function ProjectConfigEditor({ siteId, api }: { siteId: string; api: Api }) {
     <label className="checkboxRow"><input type="checkbox" checked={draft.scope === "personal"} onChange={e => change({ scope: e.target.checked ? "personal" : "mass" })} /> Персональный автопереклей — исключить проект из массовых запусков</label>
     {draft.scope === "personal" && <p className="notice">Используются только настройки этого проекта, независимо от статуса и глобальных правил массового автопереклея.</p>}
     <label className="checkboxRow"><input type="checkbox" checked={draft.enabled} onChange={e => change({ enabled: e.target.checked })} /> Участвует в автопереклеях</label>
+    {draft.scope !== "personal" && data.settings.apply_domain_settings && <div className="notice"><p>Для массового запуска схема доменов, источник поддомена и формат имени берутся из общих настроек. Переключатели доменов этого проекта ниже сохраняются, но не применяются, пока включена общая схема.</p>
+      <label>Дроп проекта для общих правил<input value={draft.drop_domain} onChange={e => change({ drop_domain: e.target.value })} /></label>
+      <label>Новорег проекта для общих правил<input value={draft.newreg_domain} onChange={e => change({ newreg_domain: e.target.value })} /></label>
+      <label>Новорег x-default для общих правил<input value={draft.x_default_newreg_domain || ""} onChange={e => change({ x_default_newreg_domain: e.target.value })} /></label>
+      <p>Заполните адреса, которые требуются выбранной общей схеме. Для корневого Main и базового x-default домены выбираются из сетки автоматически.</p>
+    </div>}
     <h3>Соотношение canonical и альтернейтов</h3>
     <label className="checkboxRow"><input type="radio" name={`domain-layout-${siteId}`} checked={draft.domain_layout === "root_main"} onChange={() => change({ domain_layout: "root_main" })} /> Canonical = x-default; языковые альтернейты на поддомене</label>
     <label className="checkboxRow"><input type="radio" name={`domain-layout-${siteId}`} checked={draft.domain_layout !== "root_main"} onChange={() => change({ domain_layout: "subdomain_main" })} /> Canonical = домен языковых альтернейтов; x-default отдельно</label>
@@ -138,6 +170,7 @@ export function AutoReglueView({ api }: { api: Api }) {
     <p>Один запуск — один следующий неиспользованный Main для каждого выбранного проекта. Участвуют только проекты со статусом «Массовые действия» и сохранёнными настройками.</p>
     <label className="checkboxRow"><input type="checkbox" checked={draft.enabled} onChange={e => { setDraft({ ...draft, enabled: e.target.checked }); setPlans([]); }} /> Разрешить запуск автопереклеев</label>
     <AutomationRules value={draft} onChange={patch => { setDraft({ ...draft, ...patch }); setPlans([]); }} pool={data.language_pool || []} />
+    <CommonDomainSettings value={draft} change={patch => { setDraft({ ...draft, ...patch }); setPlans([]); }} />
     <label className="autoReglueBatchLimit">Максимум проектов за один запуск<input type="number" min={1} max={100} value={draft.max_projects} onChange={e => { setDraft({ ...draft, max_projects: Number(e.target.value) }); setPlans([]); }} /></label>
     {draft.interval_days === 0 && <p className="muted">Однократный автоматический запуск обработает все настроенные проекты со статусом «Массовые действия», кроме проектов с персональными настройками переклея. Лимит определяет размер порции: остальные проекты будут обработаны следующими порциями, каждый один раз.</p>}
     <p className="muted">Массовые правила не применяются к проектам с персональным автопереклеем. Дроп для x-default задаётся в каждом проекте.</p>
