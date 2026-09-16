@@ -9,6 +9,7 @@ import { TechnicalPagesForm } from "./TechnicalPagesForm";
 import { workspaceRequestCache } from "./workspaceRequestCache";
 import { ProjectNetworkPanel } from "./ProjectNetworkPanel";
 import { AutoReglueGuide } from "./AutoReglueGuide";
+const UserGuideView = React.lazy(() => import("./UserGuide"));
 import { AutoReglueView, ProjectAutoReglue } from "./AutoRegluePanel";
 import {
   Activity,
@@ -698,6 +699,7 @@ const WORKSPACE_TAB_PATHS: Record<WorkspaceTab, string> = {
 
 function routeFromPath(pathname: string): AppRoute {
   const path = pathname.replace(/\/+$/, "") || "/";
+  if (path.startsWith("/guide/")) return { view: "guide", workspaceTab: DEFAULT_WORKSPACE_TAB };
   if (path === "/project-prompts") {
     return { view: "prompts", workspaceTab: DEFAULT_WORKSPACE_TAB };
   }
@@ -749,7 +751,7 @@ function pathForRoute(view: AppView, workspaceTab: WorkspaceTab = DEFAULT_WORKSP
 }
 
 function isAdminOnlyView(view: AppView) {
-  return ["dashboard", "providers", "published", "autoReglue", "autoReglueGuide"].includes(view);
+  return ["dashboard", "providers", "published", "autoReglue"].includes(view);
 }
 
 const DEFAULT_PROMPT_DRAFT = `Рабочий промпт для конкретной задачи.
@@ -1196,6 +1198,7 @@ function App() {
       return;
     }
     const projectName = activeView === "workspace" ? workspaceProjectNameFromPath(window.location.pathname) : null;
+    if (activeView === "guide" && window.location.pathname.startsWith("/guide/")) return;
     const nextPath = pathForRoute(activeView, activeView === "workspace" ? workspaceTab : DEFAULT_WORKSPACE_TAB, projectName);
     if (window.location.pathname !== nextPath) {
       window.history.replaceState(null, "", nextPath);
@@ -1261,10 +1264,10 @@ function App() {
               <NavButton href={pathForRoute("favorites")} icon={<Star className="favoriteNavIcon" fill="currentColor" />} label="Избранное" active={activeView === "favorites"} onClick={() => navigateTo("favorites")} />
             </>
           )}
-          <NavButton href={pathForRoute("guide")} icon={<BookOpen />} label="Инструкция" active={activeView === "guide"} onClick={() => navigateTo("guide")} />
           {isAdmin && <NavButton href={pathForRoute("autoReglue")} icon={<RefreshCcw />} label="Автопереклей" active={activeView === "autoReglue"} onClick={() => navigateTo("autoReglue")} />}
           <NavButton href={pathForRoute("settings")} icon={<Settings />} label="Настройки" active={activeView === "settings"} onClick={() => navigateTo("settings")} />
           {isAdmin ? <NavButton href={pathForRoute("published")} icon={<CheckCircle2 />} label="Опубликовано" active={activeView === "published"} onClick={() => navigateTo("published")} /> : null}
+          <NavButton href={pathForRoute("guide")} icon={<BookOpen />} label="Инструкции" active={activeView === "guide" || activeView === "autoReglueGuide"} onClick={() => navigateTo("guide")} />
         </nav>
       </aside>
 
@@ -1354,9 +1357,9 @@ function App() {
         {isAdmin && activeView === "providers" && <ProvidersView api={api} providers={providers} onChanged={loadAll} />}
         {activeView === "sites" && <SitesView api={api} sites={siteSnapshot} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll} />}
         {activeView === "favorites" && <SitesView api={api} sites={siteSnapshot} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} favoritesOnly readOnly={!isAdmin} onChanged={loadAll} />}
-        {activeView === "guide" && <UserGuideView />}
+        {activeView === "guide" && <React.Suspense fallback={<p>Загрузка инструкции…</p>}><UserGuideView /></React.Suspense>}
         {isAdmin && activeView === "autoReglue" && <AutoReglueView api={api} />}
-        {isAdmin && activeView === "autoReglueGuide" && <AutoReglueGuide onBack={() => navigateTo("autoReglue")} />}
+        {activeView === "autoReglueGuide" && <><a className="button secondary" href="/guide" onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("guide"); } }}>Все инструкции</a><AutoReglueGuide backLabel={isAdmin ? "Вернуться к автопереклею" : "Все инструкции"} onBack={() => navigateTo(isAdmin ? "autoReglue" : "guide")} /></>}
         {activeView === "settings" && <SettingsView api={api} currentUser={currentUser} users={users} designVersion={designVersion} onDesignVersionChange={setDesignVersion} inputStyle={inputStyle} onInputStyleChange={setInputStyle} onChanged={loadAll} />}
       </main>
       {notificationPromptVisible ? (
@@ -9566,143 +9569,6 @@ function TableFilterHeader({ label, options, selectedValues, onToggle, onSelectA
   );
 }
 
-function UserGuideView() {
-  const quickSteps = [
-    ["1", "Выберите проект", "Откройте рабочий экран, найдите домен и проверьте данные проекта."],
-    ["2", "Создайте задачу", "Укажите язык, гео, объём, промпт и при необходимости пункт меню."],
-    ["3", "Проверьте текст", "Откройте предпросмотр, назначьте раздел и нажмите «Принять»."],
-    ["4", "Опубликуйте", "Отправьте принятые тексты сразу или через публикационную кампанию."],
-  ];
-
-  return (
-    <div className="userGuidePage">
-      <section className="guideHero">
-        <div className="guideHeroCopy">
-          <span className="guideKicker"><BookOpen size={18} /> Инструкция пользователя</span>
-          <h2>От темы до опубликованной страницы</h2>
-          <p>Пошаговое руководство по выбору проекта, генерации, проверке, привязке к меню и публикации контента.</p>
-          <div className="guideHeroActions">
-            <a className="button primary" href="#guide-quick-start"><Play size={17} /> Быстрый старт</a>
-            <a className="button secondary" href="#guide-statuses"><ListChecks size={17} /> Статусы и ошибки</a>
-          </div>
-        </div>
-        <div className="guideHeroFlow" aria-label="Схема работы">
-          {quickSteps.map(([number, title]) => <div key={number}><span>{number}</span><strong>{title}</strong></div>)}
-        </div>
-      </section>
-
-      <nav className="guideContents" aria-label="Содержание инструкции">
-        <strong>Содержание</strong>
-        <a href="#guide-quick-start">Быстрый старт</a>
-        <a href="#guide-project">Проект</a>
-        <a href="#guide-generation">Генерация</a>
-        <a href="#guide-content">Контент</a>
-        <a href="#guide-menu">Меню</a>
-        <a href="#guide-statuses">Статусы</a>
-      </nav>
-
-      <section className="guideSection" id="guide-quick-start">
-        <GuideSectionTitle number="01" title="Быстрый старт" subtitle="Минимальный рабочий сценарий состоит из четырёх шагов." />
-        <div className="guideStepGrid">
-          {quickSteps.map(([number, title, text]) => <article className="guideStepCard" key={number}><span>{number}</span><h3>{title}</h3><p>{text}</p></article>)}
-        </div>
-        <div className="guideTip"><CheckCircle2 size={21} /><div><strong>Перед публикацией</strong><p>Текст должен быть принят и привязан к нужному пункту меню. Тогда система сформирует полный вложенный URL.</p></div></div>
-      </section>
-
-      <section className="guideSection" id="guide-project">
-        <GuideSectionTitle number="02" title="Выбор и обновление проекта" subtitle="Все операции выполняются в рамках выбранного домена." />
-        <div className="guideMediaLayout">
-          <figure className="guideScreenshot"><img src="/guide/project-workspace.svg" alt="Рабочий экран проекта" /><figcaption>Верхняя панель проекта и основные вкладки.</figcaption></figure>
-          <div className="guideChecklist">
-            <h3>Что находится в верхней панели</h3>
-            <ol>
-              <li><strong>Домен и MAIN</strong> — идентифицируют выбранный проект.</li>
-              <li><strong>Иконки MAIN</strong> — перейти на сайт, копировать адрес, открыть универсальную админку или проект в web-dev.</li>
-              <li><strong>Обновить проект</strong> — получает с сервера актуальные страницы и меню.</li>
-              <li><strong>Header и Footer</strong> — показывают результат проверки рендеринга меню.</li>
-            </ol>
-            <GuideNote icon={<CircleAlert size={18} />}>Красный статус меню означает ошибку проверки или отсутствие подтверждённого рендеринга, а не отсутствие пунктов в JSON.</GuideNote>
-          </div>
-        </div>
-      </section>
-
-      <section className="guideSection" id="guide-generation">
-        <GuideSectionTitle number="03" title="Создание задачи и генерация" subtitle="Gemini создаёт темы и тексты с учётом проекта, гео, языка и раздела меню." />
-        <div className="guideMediaLayout reverse">
-          <div className="guideChecklist">
-            <h3>Как создать задачу</h3>
-            <ol>
-              <li>Нажмите <strong>«Новая задача на генерацию»</strong>.</li>
-              <li>Проверьте проект, гео, язык, количество слов и версию промпта.</li>
-              <li>Выберите пункт меню, если материалы относятся к определённому разделу.</li>
-              <li>Нажмите <strong>«Сгенерировать 10 тем»</strong>, проверьте список и запустите задачу.</li>
-            </ol>
-            <GuideNote icon={<Sparkles size={18} />}>При выбранном пункте меню его тематика добавляется в скрытый промпт. Уже существующие темы проверяются на совпадения.</GuideNote>
-          </div>
-          <figure className="guideScreenshot"><img src="/guide/generation-task.svg" alt="Форма создания задачи генерации" /><figcaption>Параметры задачи и генерация десяти тем.</figcaption></figure>
-        </div>
-      </section>
-
-      <section className="guideSection" id="guide-technical-pages">
-        <GuideSectionTitle number="03а" title="Технические страницы" subtitle="Во вкладке «Генерация» нажмите «Технические страницы»." />
-        <div className="guideChecklist"><ol>
-          <li>Отметьте нужные страницы и выберите хедер или футер.</li>
-          <li>При необходимости добавьте замечания или реальные сведения о проекте.</li>
-          <li>Нажмите «Подготовить страницы»: проверьте короткие подписи меню и URL латиницей.</li>
-          <li>Запустите генерацию. Язык, гео и тематика берутся из проекта, ориентир объёма — 500–600 слов.</li>
-        </ol><p>Автопубликация принимает готовые тексты и добавляет их в меню. Отключите её для предварительного просмотра. Замечания к готовому тексту можно отправить из просмотра страницы; новая опубликованная версия сохраняет URL. Существующие страницы повторно не создаются. Тексты сравниваются между проектами одного гео и языка, а при известном бренде — только внутри этого бренда. При совпадениях выполняется не более двух автоматических доработок; если проверка снова не пройдена, публикация останавливается.</p></div>
-      </section>
-
-      <section className="guideSection" id="guide-content">
-        <GuideSectionTitle number="04" title="Проверка и публикация контента" subtitle="Принятие подтверждает готовность редакции, публикация отправляет страницу на сервер." />
-        <figure className="guideScreenshot wide"><img src="/guide/content-publication.svg" alt="Таблица контента с действиями" /><figcaption>Выбирайте отдельные строки или все материалы чекбоксом в заголовке.</figcaption></figure>
-        <div className="guideActionGrid">
-          <article><Eye size={22} /><h3>Просмотреть</h3><p>Иконка глаза открывает текст, URL, meta description и структуру заголовков.</p></article>
-          <article><SquareCheckBig size={22} /><h3>Принять</h3><p>Подтверждает готовность текста. Материал получает статус «Ожидает публикации».</p></article>
-          <article><Send size={22} /><h3>Опубликовать</h3><p>Отправляет выбранные страницы сразу, даже если они находятся в очереди кампании.</p></article>
-          <article><Trash2 size={22} /><h3>Удалённые</h3><p>Удалённые тексты хранятся в отдельной вкладке с историей версий. Можно восстановить один текст или выбранные: они вернутся в «Контент» для проверки и ручной публикации. Если URL занят, восстановление покажет ошибку.</p></article>
-        </div>
-      </section>
-
-      <section className="guideSection" id="guide-published">
-        <GuideSectionTitle number="04а" title="Опубликовано — для администраторов" subtitle="Общий список опубликованных текстов всех проектов." />
-        <p>Пункт «Опубликовано» расположен в боковом меню под настройками. Клик по проекту открывает его рабочую карточку, по тайтлу — предпросмотр текста. В таблице показаны символы с пробелами без HTML и метаданных, дата и время публикации, статус и ID задания на индексацию, автор генерации и инициатор публикации. Доступны фильтр по проекту и страницы по 50 записей. Данные обновляются каждые 30 секунд.</p>
-      </section>
-
-      <section className="guideSection" id="guide-menu">
-        <GuideSectionTitle number="05" title="Меню и вложенные страницы" subtitle="Здесь отображаются Header, Footer и страницы внутри каждого пункта." />
-        <div className="guideRules">
-          <div><strong>Добавить пункт</strong><span>Создаёт новую запись Header или Footer с правильным порядком.</span></div>
-          <div><strong>Показать все</strong><span>Раскрывает страницы, вложенные в выбранный пункт меню.</span></div>
-          <div><strong>Review</strong><span>По умолчанию выключен. Включите у страницы бренда: генерация по готовой структуре создаст обзор казино по названию этого пункта. Настройка не наследуется дочерними пунктами и не изменяет уже созданные тексты.</span></div>
-          <div><strong>Урна у пункта меню</strong><span>Доступна всем пользователям. Удаляет выбранную ветку Header или Footer вместе с вложенными пунктами. Соседние ветки и тексты страниц сохраняются.</span></div>
-          <div><strong>Иконка глаза</strong><span>Открывает текст страницы из актуального JSON проекта.</span></div>
-          <div><strong>Полный slug</strong><span>Для вложенной страницы используется путь <code>/раздел/страница/</code>.</span></div>
-        </div>
-      </section>
-
-      <section className="guideSection" id="guide-statuses">
-        <GuideSectionTitle number="06" title="Статусы и действия при ошибке" subtitle="Подписи и числа в карточках отражают актуальное состояние материалов." />
-        <div className="guideStatusGrid">
-          <article className="success"><CheckCircle2 /><div><strong>Сгенерировано / Принято</strong><p>Материал готов к проверке или подтверждён редактором.</p></div></article>
-          <article className="pending"><CalendarClock /><div><strong>Ожидает публикации</strong><p>Материал принят и включён в процесс публикации.</p></div></article>
-          <article className="progress"><Activity /><div><strong>Генерация / Публикуется</strong><p>Операция выполняется, индикатор показывает прогресс.</p></div></article>
-          <article className="error"><AlertTriangle /><div><strong>Ошибка</strong><p>В логах доступны endpoint, HTTP-код и повтор запроса.</p></div></article>
-        </div>
-        <div className="guideRecovery"><h3>Если операция не завершилась</h3><ol><li>Обновите данные и проверьте новый статус.</li><li>Откройте сообщение об ошибке или «Логи запросов».</li><li>Проверьте endpoint, код ответа и пользователя-инициатора.</li><li>Повторите запрос из лога либо перезапустите только ошибочную операцию.</li></ol></div>
-      </section>
-    </div>
-  );
-}
-
-function GuideSectionTitle({ number, title, subtitle }: { number: string; title: string; subtitle: string }) {
-  return <div className="guideSectionHeading"><span>{number}</span><div><h2>{title}</h2><p>{subtitle}</p></div></div>;
-}
-
-function GuideNote({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
-  return <div className="guideNote">{icon}<span>{children}</span></div>;
-}
-
 function SettingsView({ api, currentUser, users, inputStyle, onInputStyleChange, designVersion, onDesignVersionChange, onChanged }: ViewProps & {
   currentUser: User | null;
   users: User[];
@@ -10964,7 +10830,7 @@ function viewTitle(view: AppView, _workspaceTab: WorkspaceTab) {
     providers: "API Providers",
     sites: "Сайты",
     favorites: "Избранное",
-    guide: "Инструкция по работе",
+    guide: "Инструкции",
     autoReglue: "Автопереклей",
     autoReglueGuide: "Инструкция по автопереклеям",
     settings: "Настройки"
