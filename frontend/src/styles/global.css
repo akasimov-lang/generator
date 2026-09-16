@@ -9369,3 +9369,24 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 
 .siteBrandField { display: inline-flex; align-items: center; gap: 3px; }
 .siteBrandField input { width: 125px; min-width: 90px; padding: 3px 5px; font-size: 11px; }
+
+
+.autoReglueSettings label.autoReglueBatchLimit {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  width: fit-content;
+}
+.autoReglueBatchLimit input[type="number"] {
+  width: 72px;
+  min-width: 72px;
+  flex: 0 0 72px;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.autoReglueBatchLimit input::-webkit-inner-spin-button,
+.autoReglueBatchLimit input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
