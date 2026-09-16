@@ -5,6 +5,7 @@ import { LANGUAGE_OPTIONS, type LanguageOption } from "./languageOptions";
 import { getMenuLibrary, type MenuLibraryItem } from "./menuLibrary";
 import { matchesProjectSearch, projectSearchKeywords } from "./projectSearch";
 import { TechnicalPagesForm } from "./TechnicalPagesForm";
+import { workspaceRequestCache } from "./workspaceRequestCache";
 import { ProjectNetworkPanel } from "./ProjectNetworkPanel";
 import { AutoReglueView, ProjectAutoReglue } from "./AutoRegluePanel";
 import {
@@ -1784,7 +1785,7 @@ const FastProjectPublicationPanel = React.memo(ProjectPublicationPanel);
 const FastProjectMenuPanel = React.memo(ProjectMenuPanel);
 
 function ProjectWorkspaceView({
-  api,
+  api: sourceApi,
   sites,
   providers,
   currentUsername,
@@ -1808,6 +1809,8 @@ function ProjectWorkspaceView({
     if (name) return sites.find((site) => site.name === name)?.id || "";
     return localStorage.getItem(workspaceSiteStorageKey) || localStorage.getItem("workspace_site_id") || "";
   });
+  const requestCache = React.useMemo(() => workspaceRequestCache(sourceApi), [sourceApi, selectedSiteId]);
+  const api = requestCache.api;
   const selectedSiteIdRef = React.useRef(selectedSiteId);
   selectedSiteIdRef.current = selectedSiteId;
   const [overview, setOverview] = React.useState<SiteOverview | null>(null);
@@ -1897,13 +1900,10 @@ function ProjectWorkspaceView({
     };
     // The overview must be fast.  Article bodies, publication payloads and the
     // tools for other tabs are deliberately not requested until their tab opens.
-    const [nextOverview, nextSections] = await Promise.all([
+    const basicRequests = Promise.all([
       requestResource<SiteOverview>(`/sites/${selectedSiteId}/overview`),
       requestResource<Section[]>(`/sites/${selectedSiteId}/sections`)
     ]);
-    if (requestId !== projectLoadRequestRef.current || selectedSiteIdRef.current !== selectedSiteId) return { success: false, errorCode: "CANCELLED" };
-    if (nextOverview.value) setOverview(nextOverview.value);
-    if (nextSections.value) setSections(nextSections.value);
 
     const deferredRequests: Array<Promise<{ value: unknown; error: string; errorCode: string }>> = [];
     if (["topics", "content", "publication", "menu"].includes(activeTab)) deferredRequests.push(requestResource<ContentItem[]>(`/sites/${selectedSiteId}/content`));
@@ -1917,6 +1917,11 @@ function ProjectWorkspaceView({
       deferredRequests.push(requestResource<PromptTemplate[]>(`/sites/${selectedSiteId}/prompt-templates`));
     }
     if (activeTab === "menu") deferredRequests.push(requestResource<PublicationLog[]>(`/sites/${selectedSiteId}/publication-logs?include_payloads=true`));
+    const [nextOverview, nextSections] = await basicRequests;
+    if (requestId !== projectLoadRequestRef.current || selectedSiteIdRef.current !== selectedSiteId) return { success: false, errorCode: "CANCELLED" };
+    if (nextOverview.value) setOverview(nextOverview.value);
+    if (nextSections.value) setSections(nextSections.value);
+
     const deferred = await Promise.all(deferredRequests);
     if (requestId !== projectLoadRequestRef.current || selectedSiteIdRef.current !== selectedSiteId) return { success: false, errorCode: "CANCELLED" };
     let deferredIndex = 0;
@@ -2063,6 +2068,7 @@ function ProjectWorkspaceView({
   }, [onTabChange, selectedSite]);
 
   const refreshProject = React.useCallback(async (syncExternal = false) => {
+    requestCache.clear();
     let changesResult: ProjectChangesSyncResult | null = null;
     if (syncExternal && selectedSite) {
       await api<ProjectCacheSyncResult>("/sites/cache/sync", {
@@ -2080,7 +2086,7 @@ function ProjectWorkspaceView({
       errorCode: loaded.errorCode || (changesResult && !changesResult.success ? "TARGET" : ""),
       statusCode: changesResult?.last_status_code ?? null
     };
-  }, [api, loadProject, onChanged, selectedSite]);
+  }, [api, loadProject, onChanged, selectedSite, requestCache]);
 
   const handleProjectRefresh = React.useCallback(async () => {
     if (!selectedSite || projectRefreshStatus === "loading") return;

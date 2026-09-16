@@ -42,6 +42,34 @@ with sync_playwright() as p:
   expect(page.get_by_role('heading',name='Автопереклей проекта',exact=True)).to_have_count(1 if label == 'Переклей' else 0)
   expect(page.locator('.projectNetworkPanel')).to_have_count(1)
  assert calls==before, calls[len(before):]
+ tabs=['Обзор','Генерация','Контент и публикация','Меню','Сетка','Переклей']
+ for label in tabs:
+  page.get_by_role('link',name=label,exact=True).click()
+  page.wait_for_timeout(150)
+ page.get_by_role('link',name='Контент и публикация',exact=True).click()
+ page.wait_for_timeout(150)
+ before_sections=list(calls)
+ nav=page.get_by_role('navigation',name='Разделы публикации')
+ for label in ['Кампании','Контент','Процесс','Очередь','Ошибки','Удалённые']:
+  nav.get_by_role('button').filter(has_text=label).click()
+  page.wait_for_timeout(100)
+ assert calls==before_sections, calls[len(before_sections):]
+ warmed=list(calls)
+ for label in tabs:
+  page.get_by_role('link',name=label,exact=True).click()
+  page.wait_for_timeout(150)
+ assert calls==warmed, calls[len(warmed):]
+ assert not [c for c in calls if c[0]!='GET'], calls
+ assert calls.count(('GET','/sites/preview/overview')) == 1, calls
+ assert calls.count(('GET','/sites/preview/sections')) == 1, calls
+ assert calls.count(('GET','/sites/preview/content')) == 1, calls
+ assert calls.count(('GET','/sites/preview/network')) == 1, calls
+ page.get_by_role('link',name='Сетка',exact=True).click()
+ page.get_by_role('button',name='Обновить данные',exact=True).click()
+ page.wait_for_timeout(150)
+ assert calls.count(('GET','/sites/preview/network')) == 2, calls
+ print('All workspace tabs: first-load calls', [c for c in warmed if c not in before], '; repeat navigation: zero requests')
+
  page.get_by_role('button',name='Запустить точную desktop-проверку меню проекта betonredczech.com',exact=True).click()
  page.wait_for_timeout(300)
  assert [c for c in calls if c[0]=='POST']==[('POST','/sites/preview/menu-capabilities/check')]

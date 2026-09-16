@@ -1,0 +1,33 @@
+import assert from "node:assert/strict";
+import { workspaceRequestCache } from "../src/workspaceRequestCache.ts";
+let calls = 0;
+const cache = workspaceRequestCache(async () => ++calls);
+const path = "/sites/a/content";
+assert.deepEqual(await Promise.all([cache.api(path), cache.api(path)]), [1, 1]);
+assert.equal(await cache.api(path), 1);
+assert.equal(await cache.api(path, { cache: "no-store" }), 2);
+await cache.api("/sites/a/content/create", { method: "POST" });
+assert.equal(await cache.api(path), 4);
+await cache.api("/sites/a/menu-capabilities");
+await cache.api("/sites/a/menu-capabilities");
+assert.equal(calls, 6);
+cache.clear();
+assert.equal(await cache.api(path), 7);
+
+let attempts = 0;
+const failures = workspaceRequestCache(async () => { if (++attempts === 1) throw Error("offline"); return "ok"; });
+await assert.rejects(failures.api(path));
+assert.equal(await failures.api(path), "ok");
+const expired = workspaceRequestCache(async () => ++calls, 0);
+assert.notEqual(await expired.api(path), await expired.api(path));
+
+let finishOld;
+let lateCalls = 0;
+const late = workspaceRequestCache(() => ++lateCalls === 1 ? new Promise(resolve => { finishOld = resolve; }) : Promise.resolve("fresh"));
+const old = late.api(path);
+late.clear();
+assert.equal(await late.api(path), "fresh");
+finishOld("old");
+await old;
+assert.equal(await late.api(path), "fresh");
+console.log("PASS: deduplication, expiry, explicit refresh, mutation invalidation, errors, live-check bypass, stale response isolation");
