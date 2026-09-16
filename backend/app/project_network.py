@@ -193,7 +193,7 @@ def read_network(db, site):
         state = observe(db, site, remote.project())
         for operation in db.scalars(select(models.NetworkOperation).where(
             models.NetworkOperation.site_id == site.id,
-            models.NetworkOperation.action == "delete_domain",
+            models.NetworkOperation.action.in_(["delete_domain", "create_subdomains"]),
             models.NetworkOperation.status.in_(["pending", "unknown"]),
         )):
             job_id = operation.request_payload.get("job_id")
@@ -207,7 +207,7 @@ def read_network(db, site):
                 failures = [item for item in job.get("domains", []) if item.get("status") == "error"]
                 if job["state"] == "failed" or failures:
                     operation.status = "failed"
-                    operation.message = str(job.get("error") or (failures[0].get("logs") if failures else None) or "Задача удаления завершилась ошибкой.")[:2000]
+                    operation.message = str(job.get("error") or (failures[0].get("logs") if failures else None) or "Задача Webdev завершилась ошибкой.")[:2000]
         db.commit()
         return result(db, site, state)
 

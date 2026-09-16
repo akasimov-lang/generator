@@ -44,11 +44,15 @@ def test_exhaustion_does_not_recycle_or_wrap():
     with pytest.raises(ValueError,match='нет неиспользованного'):auto.build_plan(site,state,g,cfg)
 
 
-def setup_run(monkeypatch, unknown_action=None):
+def setup_run(monkeypatch, unknown_action=None, create=False):
     client,sessions=make_client()
     _,state,g,cfg=fixture()
     with sessions() as db:
         site=db.scalar(select(models.Site));site.name='clubheavenjax.com';site.project_status='mass_actions';site.cache_geo='AZ';site.main_domain_history=['old.clubheavenjax.com','used.clubheavenjax.com'];db.commit()
+        if create:
+            cfg.create_subdomains=True; cfg.subdomain_name_style='joined'
+            site.brand='Pinco'; site.domain_types={'clubheavenjax.com':'drop'}
+            state['domains'].append('clubheavenjax.com'); site.cache_domains=list(state['domains']); db.commit()
         auto.save_config(db,g);auto.save_config(db,cfg,site.id)
         plan=auto.build_plan(site,state,g,cfg)
         run=models.AutoReglueRun(id=str(uuid4()),site_id=site.id,initiator='admin',plan=plan,status='queued',phase='prepared');db.add(run);db.commit();run_id=run.id
@@ -56,7 +60,8 @@ def setup_run(monkeypatch, unknown_action=None):
     def read(db,site):return dict(state,revision=state_revision(state))
     def change(db,site,payload,username,**kwargs):
         calls.append(payload.action)
-        if payload.action=='reserve':state['reserve']=payload.domain
+        if payload.action=='create_subdomains': pass
+        elif payload.action=='reserve':state['reserve']=payload.domain
         elif payload.action=='reglue':state['canon']=payload.domain
         else:state['alternateMarkup']=payload.alternate_markup
         op=models.NetworkOperation(id=str(payload.request_id),site_id=site.id,action=payload.action,status='unknown' if payload.action==unknown_action else 'confirmed',initiator=username,request_payload={},message='test')
@@ -479,3 +484,80 @@ def test_amp_excluded_from_root_child_and_unused_xdefault():
     state['amp_domains']=['amp.test','amp.clean.test']
     assert auto.select_root_and_subdomain(site,state,cfg)==('clean.test','child.clean.test')
     assert auto.select_unused_xdefault(site,state,cfg,'next.clubheavenjax.com')=='clean.test'
+
+
+def test_create_wait_resume_https_and_no_duplicate_creation(monkeypatch):
+    sessions,run_id,calls,state=setup_run(monkeypatch,'create_subdomains',create=True)
+    def unavailable(urls): raise ValueError('not ready')
+    monkeypatch.setattr(auto,'verify_pages',unavailable)
+    with sessions() as db:
+        run=db.get(models.AutoReglueRun,run_id)
+        target=run.plan['create_subdomain']
+        assert target=='pincoaz.clubheavenjax.com'
+        auto.execute(db,run_id); auto.execute(db,run_id)
+        assert calls==['create_subdomains']
+        assert run.status=='waiting'
+        receipt=str(uuid5(UUID(run_id),'create_subdomains'))
+        db.get(models.NetworkOperation,receipt).status='confirmed'
+        state['domains'].append(target); db.commit()
+        auto.execute(db,run_id)
+        assert run.phase=='subdomain_ready' and run.status=='waiting'
+        assert calls==['create_subdomains']
+        monkeypatch.setattr(auto,'verify_pages',lambda urls:None)
+        auto.execute(db,run_id); auto.execute(db,run_id)
+        assert run.status=='completed'
+        assert calls==['create_subdomains','reserve','reglue','alternates']
+        assert state['canon']==target
+
+
+def test_subdomain_names_collisions_casino_and_exhaustion():
+    from app.subdomain_naming import next_subdomain
+    site,state,g,cfg=fixture()
+    cfg.create_subdomains=True; cfg.subdomain_name_style='joined'
+    site.brand='Pinco'; site.domain_types={'clubheavenjax.com':'drop'}
+    state['domains'].append('clubheavenjax.com'); site.cache_domains=list(state['domains'])
+    assert next_subdomain(site,state,cfg,cfg.drop_domain)=='pincoaz.clubheavenjax.com'
+    state['domains'].append('pincoaz.clubheavenjax.com')
+    site.main_domain_history.append('pincoaz1.clubheavenjax.com')
+    assert next_subdomain(site,state,cfg,cfg.drop_domain)=='pincoaz2.clubheavenjax.com'
+    state['domains'] += ['pincoaz'+str(i)+'.clubheavenjax.com' for i in range(1,11)]
+    assert next_subdomain(site,state,cfg,cfg.drop_domain)=='pincoazaz.clubheavenjax.com'
+    state['domains'].append('pincoazaz.clubheavenjax.com')
+    with pytest.raises(ValueError,match='заняты'):next_subdomain(site,state,cfg,cfg.drop_domain)
+    cfg.subdomain_add_casino=True
+    assert next_subdomain(site,state,cfg,cfg.drop_domain)=='pincocasinoaz.clubheavenjax.com'
+    cfg.parent_kind='newreg'
+    with pytest.raises(ValueError,match='Тип родителя'):next_subdomain(site,state,cfg,cfg.drop_domain)
+    site.domain_types[cfg.drop_domain]='newreg'
+    assert next_subdomain(site,state,cfg,cfg.drop_domain)=='pincocasinoaz.clubheavenjax.com'
+    state['amp_domains']=[cfg.drop_domain]
+    with pytest.raises(ValueError,match='AMP'):next_subdomain(site,state,cfg,cfg.drop_domain)
+
+
+def test_mixed_naming_is_stable_and_varies_after_each_creation():
+    from app.subdomain_naming import next_subdomain
+    site,state,g,cfg=fixture()
+    site.brand='Pinco'; site.domain_types={'clubheavenjax.com':'drop'}
+    state['domains'].append('clubheavenjax.com'); site.cache_domains=list(state['domains'])
+    cfg.create_subdomains=True; cfg.subdomain_add_casino=True
+    generated=[]
+    for _ in range(48):
+        name=next_subdomain(site,state,cfg,cfg.drop_domain)
+        assert name==next_subdomain(site,state,cfg,cfg.drop_domain)
+        generated.append(name); state['domains'].append(name)
+    assert len(set(generated))==48
+    assert any('-' in name.split('.')[0] for name in generated)
+    assert any('-' not in name.split('.')[0] for name in generated)
+    assert any('casino' in name for name in generated)
+    with pytest.raises(ValueError,match='заняты'):next_subdomain(site,state,cfg,cfg.drop_domain)
+
+
+def test_root_main_creation_uses_new_child_for_languages_only():
+    site,state,g,cfg=fixture()
+    site.brand='Pinco'; site.domain_types={'newroot.test':'drop'}
+    state['domains'].append('newroot.test'); site.cache_domains=list(state['domains'])
+    cfg.domain_layout='root_main'; cfg.create_subdomains=True; cfg.subdomain_name_style='hyphen'
+    plan=auto.build_plan(site,state,g,cfg)
+    assert plan['new_main']==plan['x_default_domain']=='newroot.test'
+    assert plan['language_domain']==plan['create_subdomain']=='pinco-az.newroot.test'
+    assert 'https://pinco-az.newroot.test/events/' in plan['alternateMarkup']

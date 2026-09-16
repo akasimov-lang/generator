@@ -119,6 +119,19 @@ with sync_playwright() as p:
  page.get_by_role('button',name='Сохранить настройки',exact=True).click()
  expect(page.get_by_role('button',name='Сохранить настройки',exact=True)).to_be_disabled()
  assert cfg['domain_layout']=='subdomain_main'
+ drop=page.get_by_label('Переклей на поддомен дропа (создание нового поддомена)',exact=True)
+ newreg=page.get_by_label('Переклей на поддомен новорега (создание нового поддомена)',exact=True)
+ expect(drop).not_to_be_checked(); expect(newreg).not_to_be_checked()
+ drop.check(); expect(newreg).not_to_be_checked()
+ expect(page.get_by_label('Формат имени поддомена',exact=True)).to_have_value('mixed')
+ newreg.check(); expect(drop).not_to_be_checked()
+ page.get_by_label('Формат имени поддомена',exact=True).select_option('hyphen')
+ page.get_by_label('Добавлять варианты со словом casino:',exact=False).check()
+ page.get_by_role('button',name='Сохранить настройки',exact=True).click()
+ expect(page.get_by_role('button',name='Сохранить настройки',exact=True)).to_be_disabled()
+ assert cfg['create_subdomains'] and cfg['parent_kind']=='newreg'
+ assert cfg['subdomain_name_style']=='hyphen' and cfg['subdomain_add_casino']
+
  page.set_viewport_size({'width':390,'height':844})
  assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
  assert not errors,errors

@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
 from app import models, project_network
+from app.subdomain_naming import next_subdomain
 from app.domain_classification import classify_domains
 from app.alternate_templates import template_catalog
 from app.alternate_language_pool import default_language_pool
@@ -56,6 +57,9 @@ class ProjectConfig(BaseModel):
     x_default_use_newreg: bool = False
     x_default_newreg_domain: str = Field(default='', max_length=253)
     parent_kind: Literal['drop', 'newreg'] = 'drop'
+    create_subdomains: bool = False
+    subdomain_add_casino: bool = False
+    subdomain_name_style: Literal["mixed", "joined", "hyphen"] = "mixed"
     newreg_domain: str = Field(default='', max_length=253)
     language: str = Field(default='', max_length=15)
     profile_id: str = Field(default='', max_length=300)
@@ -123,6 +127,8 @@ def select_next_domain(site, state, cfg):
     parent = (cfg.drop_domain if cfg.parent_kind == 'drop' else cfg.newreg_domain).removeprefix('www.')
     if not parent:
         raise ValueError('Укажите родительский домен выбранного варианта.')
+    if cfg.create_subdomains:
+        return next_subdomain(site, state, cfg, parent)
     domains = [domain for domain in state['domains'] if domain not in state.get('amp_domains', [])]
     start = domains.index(state['canon']) + 1 if state['canon'] in domains else 0
     used = {domain_name(x) for x in [*(site.main_domain_history or []), state['canon'], state.get('prev')]}
@@ -146,6 +152,8 @@ def select_root_and_subdomain(site, state, cfg):
         bare_root = root.removeprefix('www.')
         if any(bare_root.endswith('.' + parent.removeprefix('www.')) for parent in domains if parent.removeprefix('www.') != bare_root):
             continue
+        if cfg.create_subdomains:
+            return root, next_subdomain(site, state, cfg, root)
         child = next((d for d in domains if d.endswith('.' + bare_root) and d != root and d != 'www.' + bare_root and d not in used_children), None)
         if child is None:
             raise ValueError(f'У следующего корневого домена {root} нет неиспользованного поддомена в сетке. Сначала создайте его.')
@@ -257,7 +265,7 @@ def build_plan(site, state, global_cfg, cfg):
     links['x-default'] = {'hreflang': 'x-default', 'href': f'https://{x_default}/'}
     markup = '\n'.join(f'<link rel="alternate" hreflang="{escape(x["hreflang"], quote=True)}" href="{escape(x["href"], quote=True)}" />' for x in links.values())
     validate_markup(markup)
-    plan = {'site_id': site.id, 'project': site.name, 'geo': geo, 'old_main': state['canon'], 'new_main': target,
+    plan = {'create_subdomain': language_host if cfg.create_subdomains else None, 'site_id': site.id, 'project': site.name, 'geo': geo, 'old_main': state['canon'], 'new_main': target,
             'drop_domain': cfg.drop_domain, 'domain_layout': cfg.domain_layout, 'language_domain': language_host, 'x_default_domain': x_default, 'x_default_use_newreg': cfg.x_default_use_newreg, 'parent_kind': cfg.parent_kind, 'scope': cfg.scope, 'scheme_mode': global_cfg.scheme_mode, 'alternateMarkup': markup,
             'required_page_urls': list(dict.fromkeys(x['href'] for x in links.values() if '{{reqPath}}' not in x['href'] and urlsplit(x['href']).path not in {'', '/'})),
             'added_hreflang': added_hreflang, 'pool_exhausted': global_cfg.scheme_mode == 'add_auxiliary' and added_hreflang is None,
@@ -328,7 +336,31 @@ def execute(db, run_id):
             if run.phase == 'prepared':
                 current = build_plan(site, state, config(db), config(db, site.id))
                 if current['preview_token'] != plan['preview_token']: raise ValueError('Состояние изменилось до начала запуска. Нужен новый предпросмотр.')
-                verify_pages(plan['required_page_urls'])
+                if not plan.get('create_subdomain'):
+                    verify_pages(plan['required_page_urls'])
+            if plan.get('create_subdomain') and run.phase in {'prepared', 'create_subdomains', 'subdomain_ready'}:
+                target = plan['create_subdomain']
+                receipt = str(uuid5(UUID(run.id), 'create_subdomains'))
+                existing = db.get(models.NetworkOperation, receipt)
+                if not existing:
+                    if state['canon'] != plan['old_main']:
+                        raise ValueError('Canonical изменился до создания поддомена. Подготовьте новый план.')
+                    if target in state['domains']:
+                        raise ValueError('Поддомен появился после подготовки плана. Подготовьте новый план.')
+                    run.phase = 'create_subdomains'; run.status = 'running'; db.commit()
+                    payload = project_network.NetworkChange(request_id=UUID(receipt), action='create_subdomains', revision=state['revision'], domains=[target])
+                    project_network.change_network(db, site, payload, run.initiator, auto_run_id=run.id)
+                    existing = db.get(models.NetworkOperation, receipt)
+                db.refresh(existing)
+                if existing.status == 'failed':
+                    raise ValueError(existing.message or 'Создание поддомена завершилось ошибкой.')
+                if existing.status != 'confirmed':
+                    run.status = 'waiting'; run.message = 'Поддомен создаётся. Ждём подтверждения Webdev без повторной отправки.'; db.commit(); return
+                run.phase = 'subdomain_ready'; db.commit()
+                try:
+                    verify_pages(list(dict.fromkeys(['https://' + target + '/', *plan['required_page_urls']])))
+                except (httpx.HTTPError, ValueError):
+                    run.status = 'waiting'; run.message = 'Поддомен добавлен. Ждём HTTPS и доступности страниц схемы; Main ещё не меняем.'; db.commit(); return
             run.status = 'running'; db.commit()
             for action in ['reserve', 'reglue', 'alternates']:
                 db.refresh(run)
