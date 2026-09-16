@@ -90,7 +90,13 @@ class SiteCreate(BaseModel):
     showcase_payload: dict[str, Any] | None = None
 
 
+class SiteBrandUpdate(BaseModel):
+    brand: str = Field(max_length=160)
+
+
 class SiteResponse(BaseModel):
+    brand: str = "Общие ключи"
+    brand_source: str = "generic"
     model_config = ConfigDict(from_attributes=True)
 
     id: str

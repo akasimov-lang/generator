@@ -1035,6 +1035,8 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
         site.cache_geo = geo
         site.cache_server_ip = server_ip
         site.homepage_title = homepage_title
+        from app.site_brands import update_detected_brand
+        update_detected_brand(site)
         site.internal_pages_count = internal_pages_count
         site.domains_count = domains_count
         site.cache_domains = domains

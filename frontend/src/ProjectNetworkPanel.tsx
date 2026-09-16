@@ -1,7 +1,9 @@
 import React from "react";
 
 type NetworkOperation = { id: string; action: "reserve" | "reglue" | "alternates" | "create_subdomains"; status: string; message: string | null; domain: string | null; initiator: string; created_at: string };
+type DomainClassification = { is_subdomain: boolean; parent_domain: string | null; parent_type: "drop" | "newreg" | null; unused_as_main: boolean };
 type Network = {
+  domain_classification?: Record<string, DomainClassification>;
   domain_types?: Record<string, "drop" | "newreg">;
   canon: string; reserve: string; domains: string[]; revision: string;
   main_history: string[]; x_default_history: string[]; alternate_history: string[];
@@ -116,11 +118,11 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
     if (!data || busyRef.current) return;
     busyRef.current = true; setBusy("domain-type"); setError("");
     try {
-      const saved = await api<{ domain_types: Record<string, "drop" | "newreg"> }>(`/sites/${site.id}/network/domain-type`, {
+      const saved = await api<{ domain_types: Record<string, "drop" | "newreg">; domain_classification?: Record<string, DomainClassification> }>(`/sites/${site.id}/network/domain-type`, {
         method: "PATCH", body: JSON.stringify({ domain, domain_type: domainType }),
       });
       if (!mounted.current) return;
-      const next = { ...dataRef.current!, domain_types: saved.domain_types };
+      const next = { ...dataRef.current!, domain_types: saved.domain_types, domain_classification: saved.domain_classification };
       dataRef.current = next; setData(next);
     } catch (err) { if (mounted.current) setError(errorText(err)); }
     finally { busyRef.current = false; if (mounted.current) setBusy(""); }
@@ -150,8 +152,15 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
         {uncertain && <div className="notice" role="status">Проверяем результат отправленной операции. Новые изменения станут доступны после подтверждения. Запрос на изменение повторно не отправляется.</div>}
         {mode === "network" && <>
           <p>Отметки истории сохраняются после смены домена. x-default означает, что домен был указан в альтернейте с hreflang="x-default".</p>
-          <div className="networkTableWrap" tabIndex={0} role="region" aria-label="Домены сетки"><table className="networkTable"><thead><tr><th scope="col">Домен</th><th scope="col">Тип домена</th><th scope="col">Статус</th><th scope="col">Был Main</th><th scope="col">Был в альтернейтах</th><th scope="col">x-default</th></tr></thead>
-            <tbody>{known.map((domain) => <tr key={domain}><td data-label="Домен">{domain}</td><td data-label="Тип домена"><select className="networkDomainType" aria-label={`Тип домена ${domain}`} value={data.domain_types?.[domain] || ""} disabled={Boolean(busy)} onChange={(event) => void saveDomainType(domain, event.target.value)}><option value="" disabled>Не указан</option><option value="drop">Дроп</option><option value="newreg">Новорег</option></select></td><td data-label="Статус">{domain === data.canon ? "Main" : domain === data.reserve ? "Резерв" : data.domains.includes(domain) ? "В сетке" : "В истории"}</td>
+          <p className="muted">Поддомены определяются по родительским доменам в сетке. Тип наследуется от родителя и сохраняется через его настройку в нашей БД. «Не был Main» — отдельный признак; тип домена не меняется после переклея.</p>
+          <div className="networkTableWrap" tabIndex={0} role="region" aria-label="Домены сетки"><table className="networkTable"><thead><tr><th scope="col">Домен</th><th scope="col">Тип домена</th><th scope="col">Поддомен</th><th scope="col">Статус</th><th scope="col">Был Main</th><th scope="col">Был в альтернейтах</th><th scope="col">x-default</th></tr></thead>
+            <tbody>{known.map((domain) => <tr key={domain}><td data-label="Домен">{domain}</td><td data-label="Тип домена">{data.domain_classification?.[domain]?.is_subdomain ? <span title="Тип задаётся у родительского домена">{data.domain_classification[domain].parent_type === "drop" ? "Дроп (родитель)" : data.domain_classification[domain].parent_type === "newreg" ? "Новорег (родитель)" : "Не указан у родителя"}</span> : <select className="networkDomainType" aria-label={`Тип домена ${domain}`} value={data.domain_types?.[domain] || ""} disabled={Boolean(busy)} onChange={(event) => void saveDomainType(domain, event.target.value)}><option value="" disabled>Не указан</option><option value="drop">Дроп</option><option value="newreg">Новорег</option></select>}</td><td data-label="Поддомен">
+                <span className="networkSubdomain"><input type="checkbox" className="networkHistoryCheck" disabled checked={!!data.domain_classification?.[domain]?.is_subdomain} aria-label={domain + ": поддомен"} />
+                {data.domain_classification?.[domain]?.is_subdomain && <span title={"Родитель: " + data.domain_classification[domain].parent_domain}>
+                  {data.domain_classification[domain].parent_type === "drop" ? "Поддомен дропа" : data.domain_classification[domain].parent_type === "newreg" ? "Поддомен новорега" : "Тип родителя не указан"}
+                  {data.domain_classification[domain].unused_as_main && <small>Не был Main</small>}
+                </span>}</span>
+              </td><td data-label="Статус">{domain === data.canon ? "Main" : domain === data.reserve ? "Резерв" : data.domains.includes(domain) ? "В сетке" : "В истории"}</td>
               {[data.main_history, data.alternate_history, data.x_default_history].map((history, i) => <td key={i} data-label={["Был Main", "Был в альтернейтах", "x-default"][i]}><input type="checkbox" className="networkHistoryCheck" disabled checked={history.includes(domain)} aria-label={`${domain}: ${["был Main", "был в альтернейтах", "x-default"][i]}`} /></td>)}</tr>)}</tbody>
           </table></div>
           <div className="networkSection">

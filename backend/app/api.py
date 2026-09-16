@@ -78,6 +78,7 @@ from app.schemas import (
     SitePublicationCampaignCreate,
     SiteResponse,
     SiteStatusUpdate,
+    SiteBrandUpdate,
     TaskDetailsResponse,
     TokenResponse,
     TopicSuggestionsRequest,
@@ -574,6 +575,16 @@ def refresh_site_cache(site_id: str, _: AuthUser, db: Session = Depends(get_db))
         return sync_project_cache(db, projects)
     except ProjectCacheError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@router.patch("/sites/{site_id}/brand", response_model=SiteResponse)
+def update_site_brand(site_id: str, payload: SiteBrandUpdate, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    site = _get_site_or_404(db, site_id)
+    site.brand = payload.brand.strip() or "Общие ключи"
+    site.brand_source = "manual"
+    db.commit()
+    db.refresh(site)
+    return site
 
 
 @router.patch("/sites/{site_id}/status", response_model=SiteResponse)

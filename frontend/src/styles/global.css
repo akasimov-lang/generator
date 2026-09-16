@@ -9363,3 +9363,9 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .autoReglueGuideContents a { color: var(--brand-text, #3d50d6); }
 .autoReglueGuideVariants { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 @media (max-width: 700px) { .autoReglueGuideVariants { grid-template-columns: 1fr; } }
+
+.networkSubdomain { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.networkSubdomain small { display: block; font-size: 10px; color: var(--text-muted, #52657f); }
+
+.siteBrandField { display: inline-flex; align-items: center; gap: 3px; }
+.siteBrandField input { width: 125px; min-width: 90px; padding: 3px 5px; font-size: 11px; }

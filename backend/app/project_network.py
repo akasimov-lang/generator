@@ -11,6 +11,7 @@ import httpx
 from pydantic import BaseModel, Field
 from sqlalchemy import select, text
 
+from app.domain_classification import classify_domains
 from app import models
 from app.core.config import get_settings
 from app.network_state import alternate_links, domain_name, observe_network, state_revision, validate_markup
@@ -141,7 +142,7 @@ def result(db, site, state):
     operations = db.scalars(select(models.NetworkOperation).where(models.NetworkOperation.site_id == site.id)
                            .order_by(models.NetworkOperation.created_at.desc()).limit(20)).all()
     return {
-        **state, "domain_types": site.domain_types or {}, "revision": state_revision(state), "main_history": site.main_domain_history or [],
+        **state, "domain_classification": classify_domains(state["domains"], site.domain_types or {}, site.main_domain_history or [], state["canon"]), "domain_types": site.domain_types or {}, "revision": state_revision(state), "main_history": site.main_domain_history or [],
         "x_default_history": site.x_default_history or [],
         "alternate_history": site.alternate_domain_history or [],
         "alternates": alternate_links(state["alternateMarkup"]),
@@ -319,4 +320,4 @@ def update_domain_type(db, site, payload):
         raise ValueError("Домен отсутствует в сохранённой сетке и истории проекта.")
     site.domain_types = {**(site.domain_types or {}), domain: payload.domain_type}
     db.commit()
-    return {"domain_types": site.domain_types}
+    return {"domain_types": site.domain_types, "domain_classification": classify_domains(site.cache_domains or [], site.domain_types, site.main_domain_history or [], site.cache_canon or "")}

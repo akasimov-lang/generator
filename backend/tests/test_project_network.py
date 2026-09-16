@@ -241,3 +241,25 @@ def test_domain_types_persist_across_network_refresh_without_remote_write(env):
         network.update_domain_type(db, site, network.DomainTypeUpdate(domain="other.test", domain_type="drop"))
     with pytest.raises(ValueError):
         network.DomainTypeUpdate(domain="main.test", domain_type="unknown")
+
+
+def test_subdomain_classification_tracks_parent_type_and_main_history(env):
+    db, site, remote = env
+    remote.data['settings']['domains'] += ['unused.main.test', 'old.main.test', 'deep.unused.main.test', 'unused.reserve.test', 'www.main.test', 'unrelated.co.uk']
+    site.main_domain_history = ['old.main.test']
+    db.commit()
+    network.read_network(db, site)
+    network.update_domain_type(db, site, network.DomainTypeUpdate(domain='main.test', domain_type='drop'))
+    network.update_domain_type(db, site, network.DomainTypeUpdate(domain='reserve.test', domain_type='newreg'))
+    result = network.read_network(db, site)['domain_classification']
+    assert result['unused.main.test'] == dict(is_subdomain=True, parent_domain='main.test', parent_type='drop', unused_as_main=True)
+    assert result['old.main.test']['unused_as_main'] is False
+    assert result['deep.unused.main.test']['parent_domain'] == 'main.test'
+    assert result['unused.reserve.test']['parent_type'] == 'newreg'
+    assert result['www.main.test']['is_subdomain'] is False
+    assert result['unrelated.co.uk']['is_subdomain'] is False
+    changed = network.update_domain_type(db, site, network.DomainTypeUpdate(domain='main.test', domain_type='newreg'))
+    assert changed['domain_classification']['unused.main.test']['parent_type'] == 'newreg'
+    db.expire_all()
+    assert network.read_network(db, site)['domain_classification']['unused.main.test']['parent_type'] == 'newreg'
+    assert not remote.calls

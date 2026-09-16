@@ -60,6 +60,8 @@ class Site(Base, TimestampMixin):
     __tablename__ = "sites"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    brand: Mapped[str] = mapped_column(String(160), default="Общие ключи", server_default="Общие ключи")
+    brand_source: Mapped[str] = mapped_column(String(20), default="generic", server_default="generic")
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     base_url: Mapped[str] = mapped_column(Text, nullable=False)
     publication_endpoint: Mapped[str] = mapped_column(Text, nullable=False)

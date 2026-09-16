@@ -233,6 +233,8 @@ type CompetitorResearch = {
 type Site = {
   id: string;
   name: string;
+  brand?: string;
+  brand_source?: string;
   base_url: string;
   publication_endpoint: string;
   payload_mode: "simple_page" | "full_site";
@@ -8185,11 +8187,12 @@ function ProvidersView({ api, providers, onChanged }: ViewProps & { providers: A
   );
 }
 
-type SiteTableColumn = "rowNumber" | "select" | "name" | "title" | "canon" | "language" | "status" | "internalPages" | "menuType" | "menuCount" | "domainsCount" | "xDefault";
+type SiteTableColumn = "brand" | "rowNumber" | "select" | "name" | "title" | "canon" | "language" | "status" | "internalPages" | "menuType" | "menuCount" | "domainsCount" | "xDefault";
 type SiteSummaryFilter = "projects" | "working" | "menu" | "test" | "duplicate" | "all";
 
-const DEFAULT_SITE_COLUMN_ORDER: SiteTableColumn[] = ["rowNumber", "select", "name", "title", "canon", "language", "status", "internalPages", "menuType", "menuCount", "domainsCount", "xDefault"];
+const DEFAULT_SITE_COLUMN_ORDER: SiteTableColumn[] = ["rowNumber", "select", "name", "brand", "title", "canon", "language", "status", "internalPages", "menuType", "menuCount", "domainsCount", "xDefault"];
 const SITE_COLUMN_LABELS: Record<SiteTableColumn, string> = {
+  brand: "Бренд",
   rowNumber: "№",
   select: "",
   name: "Name",
@@ -8204,6 +8207,7 @@ const SITE_COLUMN_LABELS: Record<SiteTableColumn, string> = {
   domainsCount: "Доменов в сетке"
 };
 const SITE_COLUMN_SORT_KEYS: Record<SiteTableColumn, string | null> = {
+  brand: "brand",
   rowNumber: null,
   select: null,
   name: "name",
@@ -8310,6 +8314,23 @@ function LocaleCode({ value }: { value: string | null }) {
   return <span className="siteLocaleCode">{flag ? <span aria-hidden="true">{flag}</span> : null}<b>{value.replace(/_/g, "-")}</b></span>;
 }
 
+function SiteBrandField({ name, value, save }: { name: string; value: string; save: (brand: string) => Promise<void> }) {
+  const [draft, setDraft] = React.useState(value);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  async function submit() {
+    if (busy || draft.trim() === value) return;
+    setBusy(true); setError("");
+    try { await save(draft); }
+    catch { setError("Не сохранено"); }
+    finally { setBusy(false); }
+  }
+  return <span className="siteBrandField"><input aria-label={`Бренд ${name}`} value={draft} maxLength={160} disabled={busy} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter") void submit(); if (e.key === "Escape") setDraft(value); }} />
+    {draft.trim() !== value && <button type="button" className="button secondary compact" disabled={busy} onClick={() => void submit()} aria-label={`Сохранить бренд ${name}`}>{busy ? "…" : "✓"}</button>}
+    {error && <small role="alert">{error}</small>}
+  </span>;
+}
+
 function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnly = false, onChanged }: ViewProps & { sites: Site[]; currentUsername: string; favoritesOnly?: boolean; readOnly?: boolean }) {
   const preferencesKey = `sites-table-preferences:${currentUsername}`;
   const storedPreferences = React.useMemo(() => {
@@ -8377,7 +8398,10 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
     return Array.isArray(stored) && stored.every((value) => allMenuTypeFilters.includes(value)) ? stored : allMenuTypeFilters;
   });
   const [columnOrder, setColumnOrder] = React.useState<SiteTableColumn[]>(() => {
-    const stored = storedPreferences.columnOrder;
+    const previous = storedPreferences.columnOrder;
+    const stored = Array.isArray(previous) && !previous.includes("brand")
+      ? previous.flatMap(column => column === "name" ? [column, "brand" as SiteTableColumn] : [column])
+      : previous;
     return Array.isArray(stored) && stored.every((column) => DEFAULT_SITE_COLUMN_ORDER.includes(column))
       ? [...new Set([...stored, ...DEFAULT_SITE_COLUMN_ORDER])]
       : DEFAULT_SITE_COLUMN_ORDER;
@@ -8453,6 +8477,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
       key: `site:${site.id}`,
       id: site.id,
       name: site.name,
+      brand: site.brand || "Общие ключи",
       baseUrl: site.base_url,
       isFavorite: favoriteSiteIds.includes(site.id),
       canon: site.cache_canon || site.base_url.replace(/^https?:\/\//, "").replace(/\/$/, ""),
@@ -8487,6 +8512,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
         || left.name.localeCompare(right.name);
     }
     const values: Record<string, [string | number, string | number]> = {
+      brand: [left.brand, right.brand],
       name: [left.name, right.name],
       title: [left.homepageTitle || "", right.homepageTitle || ""],
       canon: [left.canon, right.canon],
@@ -8523,7 +8549,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
     && statusFilters.includes(row.projectStatus)
     && menuTypeFilters.includes(row.menuTypeKey)
     && (!geoFilter || (row.geo || "").trim().toLowerCase() === geoFilter)
-    && (!normalizedBrandFilter || [row.name, row.homepageTitle || "", row.canon, ...row.domains].some((value) => matchesProjectSearch(value, normalizedBrandFilter)))
+    && (!normalizedBrandFilter || matchesProjectSearch(row.brand, normalizedBrandFilter))
     && (!normalizedQuery || [row.name, row.homepageTitle || "", row.canon, row.externalProjectId || "", row.projectStatus, ...row.domains].some((value) => matchesProjectSearch(value, normalizedQuery)))
   ));
   const totalPages = rowsPerPage === "all" ? 1 : Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
@@ -8608,6 +8634,18 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
       return [...current, column];
     });
     if (siteSort?.key === SITE_COLUMN_SORT_KEYS[column]) setSiteSort(null);
+  }
+
+  async function updateProjectBrand(siteId: string, brand: string) {
+    setSyncError("");
+    try {
+      await api<Site>(`/sites/${siteId}/brand`, { method: "PATCH", body: JSON.stringify({ brand }) });
+      await loadManagedSites();
+      onChanged();
+    } catch (error) {
+      setSyncError(error instanceof Error ? error.message : "Не удалось сохранить бренд");
+      throw error;
+    }
   }
 
   async function updateProjectStatus(siteId: string, projectStatus: Site["project_status"]) {
@@ -8816,6 +8854,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
           }}
           rows={visibleRows.map((row, rowIndex) => {
             const cells: Record<SiteTableColumn, React.ReactNode> = {
+              brand: <SiteBrandField key={row.id + row.brand} name={row.name} value={row.brand} save={(brand) => updateProjectBrand(row.id, brand)} />,
               rowNumber: formatNumber(pageStart + rowIndex + 1),
               select: <input type="checkbox" checked={selectedNames.has(row.name)} disabled={!row.externalProjectId} onChange={() => toggleSelectedProject(row.name)} aria-label={`Выбрать проект ${row.name}`} />,
               name: (

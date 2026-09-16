@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
 from app import models, project_network
+from app.domain_classification import classify_domains
 from app.alternate_templates import template_catalog
 from app.alternate_language_pool import default_language_pool
 from app.project_cache import ProjectCacheError
@@ -257,6 +258,8 @@ def build_plan(site, state, global_cfg, cfg):
             'required_page_urls': list(dict.fromkeys(x['href'] for x in links.values() if '{{reqPath}}' not in x['href'] and urlsplit(x['href']).path not in {'', '/'})),
             'added_hreflang': added_hreflang, 'pool_exhausted': global_cfg.scheme_mode == 'add_auxiliary' and added_hreflang is None,
             'revision': state.get('revision') or state_revision(state), 'config_hash': digest([global_cfg.model_dump(), cfg.model_dump()])}
+    classification = classify_domains(state['domains'], getattr(site, 'domain_types', None) or {}, site.main_domain_history or [], state['canon'])
+    plan['domain_classification'] = {domain: classification.get(domain) for domain in {target, language_host, x_default}}
     plan['preview_token'] = digest(plan)
     return plan
 

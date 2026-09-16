@@ -2,12 +2,14 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { ProjectNetworkPanel } from "../src/ProjectNetworkPanel";
 window.calls=[];
-window.fixture={canon:'main.test',reserve:'reserve.test',domains:['main.test','reserve.test','next.test'],revision:'revision-1',main_history:['main.test','old.test','next.test'],x_default_history:['old.test'],alternate_history:['old.test'],alternateMarkup:'<link rel="alternate" hreflang="x-default" href="https://old.test/" />',enableAlternates:true,has_head:true,alternates:[],operations:[]};
+window.fixture={canon:'main.test',reserve:'reserve.test',domains:['main.test','reserve.test','next.test','unused.reserve.test'],revision:'revision-1',main_history:['main.test','old.test','next.test'],x_default_history:['old.test'],alternate_history:['old.test'],alternateMarkup:'<link rel="alternate" hreflang="x-default" href="https://old.test/" />',enableAlternates:true,has_head:true,alternates:[],operations:[]};
+window.fixture.domain_classification={'unused.reserve.test':{is_subdomain:true,parent_domain:'reserve.test',parent_type:null,unused_as_main:true}};
 async function api(path,options={}) {
  const payload=options.body?JSON.parse(options.body):null; window.calls.push({path,payload});
  if(path.endsWith('/domain-type')) {
   window.fixture.domain_types={...window.fixture.domain_types,[payload.domain]:payload.domain_type};
-  return {domain_types:window.fixture.domain_types};
+  for (const info of Object.values(window.fixture.domain_classification)) info.parent_type=window.fixture.domain_types[info.parent_domain] || null;
+  return {domain_types:window.fixture.domain_types,domain_classification:window.fixture.domain_classification};
  }
  if(path.endsWith('/check-domain'))return {domain:payload.domain,reachable:true,reason:''};
  if(payload) {
