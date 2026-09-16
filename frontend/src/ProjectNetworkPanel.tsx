@@ -246,11 +246,10 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
           </div>
         </div>}
         {(mode !== "network" || networkView === "main") && <div className="networkSection"><h3>Фейковые внутренние страницы</h3>
-          <p>Копии главной страницы из настроек проекта. Динамические страницы: <b>{data.fake_main_enabled ? "включены" : "выключены"}</b>.</p>
+          <p>Динамические страницы: <b>{data.fake_main_enabled ? "включены" : "выключены"}</b>.</p>
           {!!data.fake_main_paths?.length ? <ul>{data.fake_main_paths.map(path => <li key={path}><a href={`https://${data.canon}${path}`} target="_blank" rel="noreferrer">{path}</a>{path === data.fake_main_current ? " — текущая" : ""}</li>)}</ul> : <p className="muted">В кеше нет фейковых внутренних страниц.</p>}
           <label>Путь фейковой главной<input aria-label="Путь фейковой главной" value={fakeMainInput} onChange={e => setFakeMainInput(e.target.value)} disabled={disabled} placeholder="test1 или /events/" /></label>
           <button type="button" className="button secondary" disabled={disabled || !fakeMainInput.trim() || !!data.fake_main_paths?.includes("/" + fakeMainInput.trim().replace(/^\/+|\/+$/g, "") + "/")} onClick={() => void mutate("create_fake_main")}>{busy === "create_fake_main" ? "Создаём…" : "Создать фейковую главную"}</button>
-          <p className="muted">Добавляет путь и включает динамические копии главной. Существующие пути и выбранная текущая страница сохраняются. Обычная страница с таким адресом не перезаписывается.</p>
         </div>}
         {!!data.operations.length && <div className="networkSection"><h3>История операций</h3><ul className="networkOperations">{data.operations.map((operation) => <li key={operation.id}>
           <strong>{actionLabels[operation.action]}{operation.domain ? `: ${operation.domain}` : ""}</strong> — {statusLabels[operation.status] || operation.status}
