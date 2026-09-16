@@ -561,3 +561,24 @@ def test_root_main_creation_uses_new_child_for_languages_only():
     assert plan['new_main']==plan['x_default_domain']=='newroot.test'
     assert plan['language_domain']==plan['create_subdomain']=='pinco-az.newroot.test'
     assert 'https://pinco-az.newroot.test/events/' in plan['alternateMarkup']
+
+
+@pytest.mark.parametrize('brand', ['Общие ключи', '', None])
+@pytest.mark.parametrize('style', ['joined', 'hyphen', 'mixed'])
+def test_general_keywords_names_and_exhaustion(brand, style):
+    from app.subdomain_naming import next_subdomain
+    site,state,g,cfg=fixture()
+    site.brand=brand; site.cache_language='ru'; site.domain_types={'clubheavenjax.com':'drop'}
+    state['domains'].append('clubheavenjax.com'); site.cache_domains=list(state['domains'])
+    cfg.create_subdomains=True; cfg.subdomain_name_style=style; cfg.subdomain_add_casino=True
+    dashed={'online-casino-az-ru', 'casino-online-az', 'casinos-top-az'}
+    joined={x.replace('-','') for x in dashed}
+    expected=dashed if style=='hyphen' else joined if style=='joined' else dashed|joined
+    generated=set()
+    for _ in expected:
+        name=next_subdomain(site,state,cfg,cfg.drop_domain)
+        assert name==next_subdomain(site,state,cfg,cfg.drop_domain)
+        generated.add(name.split('.')[0]); state['domains'].append(name)
+    assert generated==expected
+    with pytest.raises(ValueError,match='заняты'):
+        next_subdomain(site,state,cfg,cfg.drop_domain)

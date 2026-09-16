@@ -21,12 +21,11 @@ def next_subdomain(site, state, cfg, parent):
     if kind != cfg.parent_kind:
         raise ValueError('Тип родителя не соответствует выбранному варианту создания поддомена.')
     brand = getattr(site, 'brand', '') or ''
-    if not brand or brand == GENERAL:
-        raise ValueError('Для создания поддомена укажите бренд проекта в списке сайтов.')
+    generic = not brand.strip() or brand.strip() == GENERAL
     brand = re.sub(r'[^a-z0-9]', '', brand.lower())
     geo = (site.cache_geo or '').lower()
     language = (getattr(site, 'cache_language', None) or cfg.language).lower().replace('_', '-').split('-')[0]
-    if not brand or not re.fullmatch('[a-z]{2}', geo) or not re.fullmatch('[a-z]{2,3}', language):
+    if (not generic and not brand) or not re.fullmatch('[a-z]{2}', geo) or not re.fullmatch('[a-z]{2,3}', language):
         raise ValueError('Для имени поддомена нужны бренд латиницей, GEO и язык проекта.')
     brands = [brand]
     if cfg.subdomain_add_casino and 'casino' not in brand:
@@ -35,7 +34,13 @@ def next_subdomain(site, state, cfg, parent):
         *(getattr(site, 'cache_domains', None) or []), *(getattr(site, 'main_domain_history', None) or []),
         *(getattr(site, 'alternate_domain_history', None) or []), *types]}
     candidates = []
-    for prefix in brands:
+    if generic:
+        templates = [f'online-casino-{geo}-{language}', f'casino-online-{geo}', f'casinos-top-{geo}']
+        if cfg.subdomain_name_style in {'hyphen', 'mixed'}:
+            candidates.extend(templates)
+        if cfg.subdomain_name_style in {'joined', 'mixed'}:
+            candidates.extend(label.replace('-', '') for label in templates)
+    for prefix in ([] if generic else brands):
         base = prefix + geo
         if cfg.subdomain_name_style in {'joined', 'mixed'}:
             candidates.extend([base, *(base + str(i) for i in range(1, 11)), base + language])

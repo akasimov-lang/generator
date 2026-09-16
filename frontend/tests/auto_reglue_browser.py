@@ -126,7 +126,7 @@ with sync_playwright() as p:
  expect(page.get_by_label('Формат имени поддомена',exact=True)).to_have_value('mixed')
  newreg.check(); expect(drop).not_to_be_checked()
  page.get_by_label('Формат имени поддомена',exact=True).select_option('hyphen')
- page.get_by_label('Добавлять варианты со словом casino:',exact=False).check()
+ page.get_by_label('Добавлять варианты со словом casino для известных брендов:',exact=False).check()
  page.get_by_role('button',name='Сохранить настройки',exact=True).click()
  expect(page.get_by_role('button',name='Сохранить настройки',exact=True)).to_be_disabled()
  assert cfg['create_subdomains'] and cfg['parent_kind']=='newreg'
