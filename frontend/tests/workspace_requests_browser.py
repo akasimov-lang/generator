@@ -45,7 +45,8 @@ with sync_playwright() as p:
  page.goto(base+'/project-network/betonredczech.com/')
  expect(page.locator('.networkTable')).to_be_visible()
  assert not delayed_archive, 'Workspace must not request the archive'
- assert not any(path in ['/sites','/sites/cache/projects','/tasks','/content','/dashboard','/users'] for _,path in calls), calls
+ assert not any(path in ['/sites/cache/projects','/tasks','/content','/dashboard','/users'] for _,path in calls), calls
+ assert calls.count(('GET','/sites')) == 1
  expect(page.get_by_text('Меню реализовано',exact=True)).to_have_count(2)
  page.wait_for_timeout(200)
  assert not [c for c in calls if c[0]!='GET'],calls

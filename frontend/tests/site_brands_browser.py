@@ -29,9 +29,8 @@ with sync_playwright() as p:
     page.evaluate('localStorage.setItem("sites-table-preferences:user",JSON.stringify({geoFilter:"AZ_AZ",statusFilters:["test","working","not_in_focus","duplicate"]}))')
     page.goto(base+'/sites')
     expect(page.get_by_role('button',name='Обновить проекты',exact=True)).to_be_visible()
-    assert '/sites' not in reads and '/sites/cache/projects' not in reads
-    page.get_by_role('button',name='Обновить проекты',exact=True).click()
     expect(page.get_by_label('Бренд project.test',exact=True)).to_be_visible()
+    assert reads.count('/sites') == 1 and '/sites/cache/projects' not in reads
     page.evaluate('document.documentElement.dataset.designVersion = "2.0"')
     legend=page.locator('.siteMedalLegend')
     expect(legend).to_be_visible()

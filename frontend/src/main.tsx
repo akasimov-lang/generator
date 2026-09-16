@@ -941,6 +941,7 @@ function App() {
   const snapshotTimeRef = React.useRef<string | null>(null);
   const refreshFlight = React.useRef<{ key: string; promise: Promise<void> } | null>(null);
   const selectedProjectRef = React.useRef("");
+  const initialSitesFlight = React.useRef<Promise<void> | null>(null);
   const mergeSites = React.useCallback((updates: Site[], replace = false) => {
     const byId = new Map(updates.map(site => [site.id, site]));
     setSites(current => replace ? updates : [...current.filter(site => !byId.has(site.id)), ...updates]);
@@ -1042,6 +1043,14 @@ function App() {
     const key = `${view}:${name || savedId}`;
     if (refreshFlight.current?.key === key) return refreshFlight.current.promise;
     const promise = (async () => {
+      if (["sites", "workspace", "favorites"].includes(view) && !snapshotTimeRef.current) {
+        if (!initialSitesFlight.current) {
+          initialSitesFlight.current = api<Site[]>("/sites")
+            .then(result => { if (userRef.current?.id === user.id) mergeSites(result, true); })
+            .finally(() => { initialSitesFlight.current = null; });
+        }
+        await initialSitesFlight.current;
+      }
       if (view === "workspace") {
         if (name || savedId) {
           const site = await api<Site>(`/sites/lookup?${name ? "name=" + encodeURIComponent(name) : "site_id=" + encodeURIComponent(savedId)}`);
@@ -2275,21 +2284,12 @@ function ProjectWorkspaceView({
             <SearchableSelect
               value={selectedSiteId}
               onChange={selectWorkspaceSite}
-              options={sites.map((site) => {
-                const headerCount = Array.isArray(site.default_menu.header) ? site.default_menu.header.length : 0;
-                const footerCount = Array.isArray(site.default_menu.footer) ? site.default_menu.footer.length : 0;
-                const menuCount = headerCount + footerCount;
-                const searchOption = projectSearchOption(site);
-                return {
-                  ...searchOption,
-                  keywords: `${searchOption.keywords || ""} ${site.is_test_project ? "тестовый проект" : ""}`,
-                  description: menuCount
-                    ? `Пунктов меню: ${menuCount} · Header: ${headerCount} · Footer: ${footerCount}`
-                    : "Пункты меню отсутствуют",
-                  badge: site.is_test_project ? "Тестовый проект" : undefined,
-                  tone: site.is_test_project ? "test" as const : site.has_menu ? "menu" as const : undefined
-                };
-              })}
+              options={sites.map((site) => ({
+                ...projectSearchOption(site),
+                leading: undefined,
+                indicator: undefined
+              }))}
+              compact
               showSelectedIndicator={false}
               searchPlaceholder="Найти проект"
               optionPredicate={(option) => !favoritesOnly || favoriteSiteIds.includes(option.value)}
@@ -8851,7 +8851,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
         <div className="siteCacheUpdatedAt">
           <CalendarClock size={17} />
           <span>Последнее обновление</span>
-          <strong>{snapshotUpdatedAt ? formatDate(snapshotUpdatedAt) : "Нажмите «Обновить проекты» на странице «Сайты»"}</strong>
+          <strong>{snapshotUpdatedAt ? formatDate(snapshotUpdatedAt) : "Список ещё не загружен из базы"}</strong>
         </div>
         {syncMessage ? <div className="siteCacheResult">{syncMessage}</div> : null}
         {syncError ? <div className="formError siteCacheError">{syncError}</div> : null}
