@@ -20,6 +20,7 @@ with sync_playwright() as p:
   task={'site_id':'preview','project':site['name'],'enabled':True,'scope':'personal','interval_days':cfg.get('interval_days',0),'status':'scheduled','url':'/auto-reglue?project_id=preview#auto-task-preview'} if cfg.get('schedule_enabled') and cfg.get('enabled') else None
   data=[]
   if path=='/auth/me':data={'id':'admin','username':'admin','is_admin':True,'is_active':True}
+  elif path=='/sites/lookup':data=site
   elif path in ['/sites','/sites/cache/projects']:data=[site]
   elif path=='/dashboard':data={}
   elif '/favorite-sites' in path:data={'site_ids':['preview']}

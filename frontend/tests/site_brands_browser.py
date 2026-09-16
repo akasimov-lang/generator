@@ -8,11 +8,12 @@ variants[0]['project_status']='mass_actions'
 with sync_playwright() as p:
     browser=p.chromium.launch(executable_path=os.environ.get('CHROME'), headless=True)
     page=browser.new_page(viewport={'width':1600,'height':1000})
-    errors=[]; writes=[]
+    errors=[]; writes=[]; reads=[]
     page.on('pageerror',lambda e:errors.append(str(e)))
     def route(r):
         path=r.request.url.split('/api')[-1].split('?')[0]
         data=[]
+        if r.request.method == 'GET': reads.append(path)
         if path=='/auth/me':data={'id':'user','username':'user','is_admin':False,'is_active':True}
         elif path in ['/sites','/sites/cache/projects']:data=[site,*variants]
         elif path=='/dashboard':data={}
@@ -27,6 +28,10 @@ with sync_playwright() as p:
     page.evaluate('localStorage.setItem("admin_token","mock");sessionStorage.setItem("popup_permission_prompt_closed","true")')
     page.evaluate('localStorage.setItem("sites-table-preferences:user",JSON.stringify({geoFilter:"AZ_AZ",statusFilters:["test","working","not_in_focus","duplicate"]}))')
     page.goto(base+'/sites')
+    expect(page.get_by_role('button',name='Обновить проекты',exact=True)).to_be_visible()
+    assert '/sites' not in reads and '/sites/cache/projects' not in reads
+    page.get_by_role('button',name='Обновить проекты',exact=True).click()
+    expect(page.get_by_label('Бренд project.test',exact=True)).to_be_visible()
     page.evaluate('document.documentElement.dataset.designVersion = "2.0"')
     legend=page.locator('.siteMedalLegend')
     expect(legend).to_be_visible()
@@ -78,6 +83,8 @@ with sync_playwright() as p:
     page.get_by_label('Фильтр сайтов по бренду').fill('Mostbet')
     expect(field).to_have_count(0)
     assert writes==[{'brand':'My Brand'}]
+    assert reads.count("/sites") == 1, reads
+    assert "/sites/cache/projects" not in reads
     assert not errors,errors
     browser.close()
 print('PASS: shared brand visible/editable to regular user; persisted edit and actual brand filter; no automatic writes; GEO aliases grouped and saved selection normalized.')

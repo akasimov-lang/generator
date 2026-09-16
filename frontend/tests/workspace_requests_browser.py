@@ -19,6 +19,7 @@ with sync_playwright() as p:
    delayed_archive.append(r);return
   data=[]
   if path=='/auth/me':data={'id':'admin','username':'admin','is_admin':True,'is_active':True}
+  elif path=='/sites/lookup':data=site
   elif path in ['/sites','/sites/cache/projects']:data=[site]
   elif path=='/dashboard':data={}
   elif '/favorite-sites' in path:data={'site_ids':['preview']}
@@ -43,8 +44,8 @@ with sync_playwright() as p:
  page.evaluate('localStorage.setItem("admin_token","mock");sessionStorage.setItem("popup_permission_prompt_closed","true")')
  page.goto(base+'/project-network/betonredczech.com/')
  expect(page.locator('.networkTable')).to_be_visible()
- assert delayed_archive, 'Archive request should be running in background'
- delayed_archive[0].fulfill(status=200,content_type='application/json',body='[]')
+ assert not delayed_archive, 'Workspace must not request the archive'
+ assert not any(path in ['/sites','/sites/cache/projects','/tasks','/content','/dashboard','/users'] for _,path in calls), calls
  expect(page.get_by_text('Меню реализовано',exact=True)).to_have_count(2)
  page.wait_for_timeout(200)
  assert not [c for c in calls if c[0]!='GET'],calls

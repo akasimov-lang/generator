@@ -14,7 +14,7 @@ from app.worker import celery_app, generate_content_item_job, generate_task_cont
 
 def test_generation_jobs_return_to_queue_when_worker_is_lost() -> None:
     assert celery_app.conf.worker_prefetch_multiplier == 1
-    assert celery_app.conf.worker_concurrency == 4
+    assert celery_app.conf.worker_concurrency == 2
     for job in (generate_content_item_job, generate_task_content_job, revise_content_item_job, run_content_item_pipeline_job, run_task_pipeline_job):
         assert job.acks_late is True
         assert job.reject_on_worker_lost is True

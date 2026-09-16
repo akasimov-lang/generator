@@ -274,12 +274,17 @@ def test_regular_user_can_publish_content(monkeypatch: pytest.MonkeyPatch) -> No
         assert initiator_username == "Vitalina"
         item.status = "published"
 
-    monkeypatch.setattr(api_module, "publish_item", fake_publish_item)
+    monkeypatch.setattr("app.services.publish_item", fake_publish_item)
 
     response = client.post(f"/api/content/{item_id}/publish-immediately")
 
     assert response.status_code == 200
-    assert response.json()["status"] == "published"
+    assert response.json()["status"] == "publishing"
+    from app.background_jobs import run_job
+    with TestingSession() as db:
+        job = db.query(models.BackgroundJob).one()
+        assert run_job(db, job.id)["status"] == "completed"
+        assert db.get(models.ContentItem, item_id).status == "published"
 
 
 def test_regular_user_can_delete_generated_content() -> None:

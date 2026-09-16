@@ -34,6 +34,6 @@ def test_delete_duplicate_sites_removes_only_unlinked_local_projects() -> None:
 
         result = delete_duplicate_sites(None, db)  # type: ignore[arg-type]
 
-        assert result == {"deleted_count": 1, "skipped_count": 1}
+        assert result == {"deleted_count": 1, "skipped_count": 1, "deleted_ids": [removable.id]}
         assert db.scalar(select(models.Site).where(models.Site.id == removable.id)) is None
         assert db.scalar(select(models.Site).where(models.Site.id == linked.id)) is not None

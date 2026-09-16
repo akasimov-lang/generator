@@ -1064,7 +1064,7 @@ def test_manual_publication_bypasses_queue_and_records_actual_time(db: Session, 
         queued_site: models.Site,
         initiator_username: str | None = None,
     ) -> None:
-        assert queued_item.status == "scheduled"
+        assert queued_item.status == "approved"
         assert queued_item.scheduled_at == planned_at
         assert queued_site.id == site.id
         assert initiator_username == "admin"
@@ -1073,9 +1073,14 @@ def test_manual_publication_bypasses_queue_and_records_actual_time(db: Session, 
         queued_item.published_url = "https://example.test/guides/test/"
         session.commit()
 
-    monkeypatch.setattr(api_module, "publish_item", fake_publish_item)
+    monkeypatch.setattr("app.services.publish_item", fake_publish_item)
 
-    result = asyncio.run(api_module.publish_content_immediately(item.id, {"username": "admin"}, db))
+    result = api_module.publish_content_immediately(item.id, {"username": "admin"}, db)
+    assert result.status == "publishing"
+    from app.background_jobs import run_job
+    job = db.query(models.BackgroundJob).one()
+    assert run_job(db, job.id)["status"] == "completed"
+    db.refresh(result)
 
     assert result.status == "published"
     assert result.scheduled_at is None

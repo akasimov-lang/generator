@@ -543,6 +543,16 @@ def list_sites(_: AuthUser, db: Session = Depends(get_db)) -> Any:
     return sites
 
 
+@router.get("/sites/lookup", response_model=SiteResponse)
+def lookup_site(_: AuthUser, name: str = "", site_id: str = "", db: Session = Depends(get_db)) -> Any:
+    site = db.scalar(select(models.Site).where(models.Site.name == name)) if name else db.get(models.Site, site_id)
+    if not site:
+        raise HTTPException(status_code=404, detail="Project not found")
+    from app.project_notices import refresh_and_commit_notices
+    refresh_and_commit_notices(db, [site])
+    return site
+
+
 @router.get("/sites/cache/projects", response_model=list[SiteResponse])
 def list_cached_projects(_: AuthUser, db: Session = Depends(get_db)) -> Any:
     status_order = {"test": 0, "working": 1, "mass_actions": 2, "not_in_focus": 3, "duplicate": 4}
@@ -575,6 +585,22 @@ def create_site(payload: SiteCreate, _: AdminUser, db: Session = Depends(get_db)
     db.commit()
     db.refresh(site)
     return site
+
+
+@router.post("/sites/cache/sync-jobs")
+def start_cache_sync(payload: ProjectCacheSyncRequest, _: AuthUser, db: Session = Depends(get_db)) -> dict:
+    job = models.BackgroundJob(kind="cache_sync", payload={"names": list(dict.fromkeys(name.strip() for name in payload.names if name.strip()))})
+    db.add(job)
+    db.commit()
+    return {"id": job.id, "status": job.status}
+
+
+@router.get("/background-jobs/{job_id}")
+def background_job_status(job_id: str, _: AuthUser, db: Session = Depends(get_db)) -> dict:
+    job = db.get(models.BackgroundJob, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"id": job.id, "kind": job.kind, "status": job.status, "result": job.result, "error": job.error}
 
 
 @router.post("/sites/cache/sync", response_model=ProjectCacheSyncResponse)
@@ -660,8 +686,9 @@ def change_site_network(site_id: str, payload: project_network.NetworkChange, us
 
 
 @router.delete("/sites/cache/duplicates", response_model=DuplicateSitesDeleteResponse)
-def delete_duplicate_sites(_: AdminUser, db: Session = Depends(get_db)) -> dict[str, int]:
+def delete_duplicate_sites(_: AdminUser, db: Session = Depends(get_db)) -> dict:
     duplicate_sites = db.scalars(select(models.Site).where(models.Site.project_status == "duplicate")).all()
+    deleted_ids = []
     deleted_count = 0
     skipped_count = 0
     for site in duplicate_sites:
@@ -672,10 +699,11 @@ def delete_duplicate_sites(_: AdminUser, db: Session = Depends(get_db)) -> dict[
         if has_related_data:
             skipped_count += 1
             continue
+        deleted_ids.append(site.id)
         db.delete(site)
         deleted_count += 1
     db.commit()
-    return {"deleted_count": deleted_count, "skipped_count": skipped_count}
+    return {"deleted_count": deleted_count, "skipped_count": skipped_count, "deleted_ids": deleted_ids}
 
 
 @router.get("/sites/{site_id}/overview", response_model=SiteOverviewResponse)
@@ -2098,10 +2126,10 @@ def start_task_pipeline(task_id: str, _: AuthUser, db: Session = Depends(get_db)
     return task
 
 
-@router.get("/content", response_model=list[ContentItemResponse])
+@router.get("/content", response_model=list[ContentItemSummaryResponse])
 def list_content(_: AuthUser, db: Session = Depends(get_db)) -> Any:
     return db.scalars(
-        select(models.ContentItem)
+        select(models.ContentItem).options(load_only(*(getattr(models.ContentItem, field) for field in ContentItemSummaryResponse.model_fields), raiseload=True))
         .join(models.GenerationTask, models.GenerationTask.id == models.ContentItem.task_id)
         .where(models.GenerationTask.archived_at.is_(None))
         .order_by(models.ContentItem.created_at.desc())
@@ -2556,39 +2584,19 @@ def publish_content_now(content_id: str, _: AuthUser, db: Session = Depends(get_
 
 
 @router.post("/content/{content_id}/publish-immediately", response_model=ContentItemResponse)
-async def publish_content_immediately(content_id: str, user: AuthUser, db: Session = Depends(get_db)) -> Any:
-    item = db.get(models.ContentItem, content_id)
+def publish_content_immediately(content_id: str, user: AuthUser, db: Session = Depends(get_db)) -> Any:
+    from app.background_jobs import enqueue_publication
+    item = db.scalar(select(models.ContentItem).where(models.ContentItem.id == content_id).with_for_update())
     if not item:
         raise HTTPException(status_code=404, detail="Content item not found")
-    if not item.site_id:
-        raise HTTPException(status_code=400, detail="Select a project before publication")
-    if not item.section_id:
-        raise HTTPException(status_code=400, detail="Select a menu item before publication")
-    site = _get_site_or_404(db, item.site_id)
-    campaign_id = item.publication_campaign_id
+    if not item.site_id or not item.section_id:
+        raise HTTPException(status_code=400, detail="Select a project and menu item before publication")
     try:
-        if item.status == "publication_failed":
-            try:
-                sync_project_cache(db, fetch_project_cache([site.name]))
-                db.refresh(item)
-                if item.status == "published":
-                    return item
-            except ProjectCacheError:
-                db.rollback()
-                item = db.get(models.ContentItem, content_id)
-                site = _get_site_or_404(db, item.site_id)
-        validate_content_for_publication(item)
-        await publish_item(db, item, site, initiator_username=_request_username(user))
-        if item.status == "published":
-            item.scheduled_at = None
-            db.commit()
-            refresh_campaign_status(db, campaign_id)
-            db.commit()
-        db.refresh(item)
+        enqueue_publication(db, item, _request_username(user))
         return item
-    except ValueError as exc:
+    except ValueError as error:
         db.rollback()
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @router.post("/content/{content_id}/reject", response_model=ContentItemResponse)

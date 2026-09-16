@@ -209,6 +209,7 @@ class SiteStatusUpdate(BaseModel):
 
 
 class DuplicateSitesDeleteResponse(BaseModel):
+    deleted_ids: list[str] = Field(default_factory=list)
     deleted_count: int
     skipped_count: int
 

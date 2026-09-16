@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     app_env: str = "development"
+    app_skip_db_init: bool = False
+    db_pool_size: int = 5
+    db_max_overflow: int = 5
     app_public_url: str = "https://ai-seo-content-panel.site"
     secret_key: str = Field(default="change-this-secret-before-production")
     admin_username: str = "admin"

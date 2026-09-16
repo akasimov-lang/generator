@@ -24,7 +24,8 @@ app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
 
 @app.on_event("startup")
 def on_startup() -> None:
-    init_db()
+    if not settings.app_skip_db_init:
+        init_db()
 
 
 app.include_router(router, prefix="/api")

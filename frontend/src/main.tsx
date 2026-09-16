@@ -1,3 +1,4 @@
+import { readProjectSnapshot, writeProjectSnapshot } from "./projectSnapshot";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { createPortal } from "react-dom";
@@ -350,6 +351,7 @@ type ProjectChangesSyncResult = {
 type DuplicateSitesDeleteResult = {
   deleted_count: number;
   skipped_count: number;
+  deleted_ids: string[];
 };
 
 type Section = {
@@ -929,6 +931,30 @@ function App() {
   const [archivedTasks, setArchivedTasks] = React.useState<Task[]>([]);
   const [content, setContent] = React.useState<ContentItem[]>([]);
   const [sites, setSites] = React.useState<Site[]>([]);
+  const [siteSnapshot, setSiteSnapshot] = React.useState<Site[]>([]);
+  const [sitesUpdatedAt, setSitesUpdatedAt] = React.useState<string | null>(null);
+  const userRef = React.useRef<User | null>(null);
+  const providersLoadedRef = React.useRef(false);
+  const viewRef = React.useRef(activeView);
+  viewRef.current = activeView;
+  const snapshotRef = React.useRef<Site[]>([]);
+  const snapshotTimeRef = React.useRef<string | null>(null);
+  const refreshFlight = React.useRef<{ key: string; promise: Promise<void> } | null>(null);
+  const selectedProjectRef = React.useRef("");
+  const mergeSites = React.useCallback((updates: Site[], replace = false) => {
+    const byId = new Map(updates.map(site => [site.id, site]));
+    setSites(current => replace ? updates : [...current.filter(site => !byId.has(site.id)), ...updates]);
+    const next = replace ? updates : snapshotRef.current.map(site => byId.get(site.id) || site);
+    snapshotRef.current = next;
+    setSiteSnapshot(next);
+    if (replace) {
+      snapshotTimeRef.current = new Date().toISOString();
+      setSitesUpdatedAt(snapshotTimeRef.current);
+    }
+    const user = userRef.current;
+    if (user) void writeProjectSnapshot("shared-projects-v1", { projects: next, updatedAt: snapshotTimeRef.current })
+      .catch(() => setMessage("Не удалось сохранить список локально. Текущие данные доступны до перезагрузки."));
+  }, []);
   const [providers, setProviders] = React.useState<AiProvider[]>([]);
   const [currentUser, setCurrentUser] = React.useState<User | null>(null);
   const [users, setUsers] = React.useState<User[]>([]);
@@ -948,6 +974,7 @@ function App() {
     if (window.location.pathname !== nextPath) {
       const method = replace ? "replaceState" : "pushState";
       window.history[method](null, "", nextPath);
+      setRouteVersion(version => version + 1);
     }
   }, [workspaceTab]);
 
@@ -1007,24 +1034,42 @@ function App() {
   );
 
   const loadAll = React.useCallback(async () => {
-    if (!token) return;
-    const nextUser = await api<User>("/auth/me");
-    const essential = Promise.all([api<Site[]>("/sites"), api<AiProvider[]>("/ai-providers")]);
-    // Unrelated archive/dashboard requests must not block entry to the workspace.
-    const background = Promise.all([
-      api<Task[]>("/tasks").then(setTasks),
-      api<Task[]>("/tasks-archive").then(setArchivedTasks),
-      api<ContentItem[]>("/content").then(setContent),
-      nextUser.is_admin ? api<Dashboard>("/dashboard").then(setDashboard) : Promise.resolve(setDashboard(null)),
-      nextUser.is_admin ? api<User[]>("/users").then(setUsers) : Promise.resolve(setUsers([])),
-    ]).then(() => null, error => error);
-    const [nextSites, nextProviders] = await essential;
-    setSites(nextSites);
-    setProviders(nextProviders);
-    setCurrentUser(nextUser);
-    const backgroundError = await background;
-    if (backgroundError) throw backgroundError;
-  }, [api, token]);
+    const user = userRef.current;
+    if (!token || !user) return;
+    const view = viewRef.current;
+    const name = workspaceProjectNameFromPath(window.location.pathname);
+    const savedId = localStorage.getItem(`workspace_site_id:${user.username}`) || "";
+    const key = `${view}:${name || savedId}`;
+    if (refreshFlight.current?.key === key) return refreshFlight.current.promise;
+    const promise = (async () => {
+      if (view === "workspace") {
+        if (name || savedId) {
+          const site = await api<Site>(`/sites/lookup?${name ? "name=" + encodeURIComponent(name) : "site_id=" + encodeURIComponent(savedId)}`);
+          if (viewRef.current === view && workspaceProjectNameFromPath(window.location.pathname) === name) {
+            mergeSites([site]);
+            selectedProjectRef.current = site.name;
+          }
+        }
+      } else if (view === "tasks") {
+        await Promise.all([api<Task[]>("/tasks").then(setTasks), api<ContentItem[]>("/content").then(setContent)]);
+      } else if (view === "taskArchive") {
+        setArchivedTasks(await api<Task[]>("/tasks-archive"));
+      } else if (view === "content" || view === "publications") {
+        setContent(await api<ContentItem[]>("/content"));
+      } else if (view === "dashboard" && user.is_admin) {
+        setDashboard(await api<Dashboard>("/dashboard"));
+      } else if (view === "settings" && user.is_admin) {
+        setUsers(await api<User[]>("/users"));
+      }
+      if (["providers", "tasks", "prompts"].includes(view)) {
+        setProviders(await api<AiProvider[]>("/ai-providers"));
+      }
+    })();
+    refreshFlight.current = { key, promise };
+    try { await promise; } finally {
+      if (refreshFlight.current?.promise === promise) refreshFlight.current = null;
+    }
+  }, [api, token, mergeSites]);
 
   async function requestPopupPermission() {
     if (!window.isSecureContext) {
@@ -1058,11 +1103,40 @@ function App() {
   }
 
   React.useEffect(() => {
-    loadAll().catch((error: unknown) => {
-      if ((error as ApiRequestError)?.statusCode === 401) return;
-      setMessage(error instanceof Error ? error.message : "Не удалось загрузить данные");
-    });
-  }, [loadAll]);
+    if (!token) return;
+    let cancelled = false;
+    setCurrentUser(null);
+    setSites([]);
+    setSiteSnapshot([]);
+    void (async () => {
+      const user = await api<User>("/auth/me");
+      const saved = await readProjectSnapshot<Site>("shared-projects-v1").catch(() => ({ projects: [], updatedAt: null }));
+      if (cancelled) return;
+      userRef.current = user;
+      snapshotRef.current = saved.projects;
+      snapshotTimeRef.current = saved.updatedAt;
+      setSiteSnapshot(saved.projects);
+      setSites(saved.projects);
+      setSitesUpdatedAt(saved.updatedAt);
+      selectedProjectRef.current = "";
+      providersLoadedRef.current = false;
+      setCurrentUser(user);
+    })().catch(error => { if (!cancelled) setMessage(error instanceof Error ? error.message : "Не удалось загрузить данные"); });
+    return () => { cancelled = true; userRef.current = null; };
+  }, [api, token]);
+
+  const workspaceRouteName = workspaceProjectNameFromPath(window.location.pathname);
+  React.useEffect(() => {
+    if (!currentUser) return;
+    void loadAll().catch(error => setMessage(error instanceof Error ? error.message : "Не удалось загрузить данные"));
+  }, [currentUser?.id, activeView, workspaceRouteName, loadAll]);
+
+  React.useEffect(() => {
+    if (currentUser && activeView === "workspace" && workspaceTab === "topics" && !providersLoadedRef.current) {
+      providersLoadedRef.current = true;
+      api<AiProvider[]>("/ai-providers").then(setProviders).catch(error => { providersLoadedRef.current = false; setMessage(String(error)); });
+    }
+  }, [api, currentUser?.id, activeView, workspaceTab]);
 
   React.useEffect(() => {
     if (!currentUser?.is_admin) {
@@ -1269,8 +1343,8 @@ function App() {
           navigateTo("workspace", "content", false, site.name);
         }} onChanged={loadAll} />}
         {isAdmin && activeView === "providers" && <ProvidersView api={api} providers={providers} onChanged={loadAll} />}
-        {activeView === "sites" && <SitesView api={api} sites={sites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll} />}
-        {activeView === "favorites" && <SitesView api={api} sites={sites} currentUsername={currentUser.username} favoritesOnly readOnly={!isAdmin} onChanged={loadAll} />}
+        {activeView === "sites" && <SitesView api={api} sites={siteSnapshot} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll} />}
+        {activeView === "favorites" && <SitesView api={api} sites={siteSnapshot} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} favoritesOnly readOnly={!isAdmin} onChanged={loadAll} />}
         {activeView === "guide" && <UserGuideView />}
         {isAdmin && activeView === "autoReglue" && <AutoReglueView api={api} />}
         {isAdmin && activeView === "autoReglueGuide" && <AutoReglueGuide onBack={() => navigateTo("autoReglue")} />}
@@ -1965,10 +2039,6 @@ function ProjectWorkspaceView({
       setSelectedSiteId("");
       return;
     }
-    if (selectedSiteId && !sites.some((site) => site.id === selectedSiteId)) {
-      localStorage.removeItem(workspaceSiteStorageKey);
-      setSelectedSiteId("");
-    }
   }, [routeProjectName, selectedSiteId, sites, workspaceSiteStorageKey]);
 
   React.useEffect(() => {
@@ -2034,6 +2104,31 @@ function ProjectWorkspaceView({
     window.sessionStorage.setItem(`workspace_add_content_mode:${selectedSite.id}`, "menu_page");
     onTabChange("topics", selectedSite.name);
   }, [onTabChange, selectedSite]);
+
+  const activityFlight = React.useRef(false);
+  const activitySnapshot = React.useRef("");
+  const pollProject = React.useCallback(async () => {
+    if (!selectedSiteId || activityFlight.current || document.hidden) return;
+    activityFlight.current = true;
+    const siteId = selectedSiteId;
+    try {
+      const [nextContent, nextCampaigns] = await Promise.all([
+        api<ContentItem[]>(`/sites/${siteId}/content`, { cache: "no-store" }),
+        api<PublicationCampaign[]>(`/sites/${siteId}/publication-campaigns`, { cache: "no-store" })
+      ]);
+      if (selectedSiteIdRef.current !== siteId) return;
+      setSiteContent(nextContent);
+      setCampaigns(nextCampaigns);
+      const stamp = JSON.stringify([siteId, nextContent.map(item => [item.id, item.status, item.indexing_status]), nextCampaigns.map(item => [item.id, item.status])]);
+      if (stamp !== activitySnapshot.current) {
+        activitySnapshot.current = stamp;
+        const nextLogs = await api<PublicationLog[]>(`/sites/${siteId}/publication-logs`, { cache: "no-store" });
+        if (selectedSiteIdRef.current === siteId) { setLogs(nextLogs); await onChanged(); }
+      }
+    } catch (error) {
+      if (selectedSiteIdRef.current === siteId) setWorkspaceError(error instanceof Error ? error.message : "Не удалось обновить прогресс");
+    } finally { activityFlight.current = false; }
+  }, [api, onChanged, selectedSiteId]);
 
   const refreshProject = React.useCallback(async (syncExternal = false) => {
     requestCache.clear();
@@ -2134,7 +2229,7 @@ function ProjectWorkspaceView({
   }
 
   if (!sites.length) {
-    return <EmptyState text="Сначала добавьте сайт в админском разделе Сайты." />;
+    return <EmptyState text={routeProjectName ? "Загружаем проект…" : "Откройте «Сайты» и нажмите «Обновить проекты», чтобы выбрать проект."} />;
   }
 
   const accordionContextValue = {
@@ -2421,13 +2516,13 @@ function ProjectWorkspaceView({
           </WorkspaceTabPane>
           <WorkspaceTabPane active={activeTab === "content" || activeTab === "publication"} storagePrefix={`${currentUsername}:${selectedSite.id}:content`}>
             {publicationWorkflowSection === "campaigns" ? <>
-              <FastProjectPublicationPanel key={`${selectedSite.id}:publication-launch`} mode="launch" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} promptTemplates={promptTemplates} onChanged={refreshProject} />
-              <FastProjectPublicationPanel key={`${selectedSite.id}:publication-campaigns`} mode="campaigns" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} promptTemplates={promptTemplates} onChanged={refreshProject} />
+              <FastProjectPublicationPanel key={`${selectedSite.id}:publication-launch`} mode="launch" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} promptTemplates={promptTemplates} onPoll={pollProject} onChanged={refreshProject} />
+              <FastProjectPublicationPanel key={`${selectedSite.id}:publication-campaigns`} mode="campaigns" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} promptTemplates={promptTemplates} onPoll={pollProject} onChanged={refreshProject} />
             </> : null}
             {publicationWorkflowSection === "deleted" ? <DeletedContentPanel api={api} content={siteContent} onChanged={refreshProject} /> : null}
-            {publicationWorkflowSection === "content" ? <FastProjectContentPanel key={`${selectedSite.id}:content`} api={api} site={selectedSite} content={siteContent} sections={sections} onChanged={refreshProject} /> : null}
+            {publicationWorkflowSection === "content" ? <FastProjectContentPanel key={`${selectedSite.id}:content`} api={api} site={selectedSite} content={siteContent} sections={sections} onPoll={pollProject} onChanged={refreshProject} /> : null}
             {publicationWorkflowSection !== "content" && publicationWorkflowSection !== "campaigns" && publicationWorkflowSection !== "deleted" ? (
-              <FastProjectPublicationPanel key={`${selectedSite.id}:publication-workflow`} mode="workflow" workflowSection={publicationWorkflowSection} api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} promptTemplates={promptTemplates} onChanged={refreshProject} />
+              <FastProjectPublicationPanel key={`${selectedSite.id}:publication-workflow`} mode="workflow" workflowSection={publicationWorkflowSection} api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} promptTemplates={promptTemplates} onPoll={pollProject} onChanged={refreshProject} />
             ) : null}
           </WorkspaceTabPane>
           <WorkspaceTabPane active={activeTab === "menu"} storagePrefix={`${currentUsername}:${selectedSite.id}:menu`}>
@@ -3500,7 +3595,7 @@ function ProjectPromptsPanel({ api, site, promptTemplates, basePrompt, isAdmin, 
   );
 }
 
-function ProjectContentPanel({ api, site, content: allContent, sections, onChanged }: ViewProps & { site: Site; content: ContentItem[]; sections: Section[] }) {
+function ProjectContentPanel({ api, site, content: allContent, sections, onChanged, onPoll }: ViewProps & { site: Site; content: ContentItem[]; sections: Section[] }) {
   const content = React.useMemo(() => allContent.filter((item) => !["deleted", "deletion_pending"].includes(item.status)), [allContent]);
   const [selectedItem, setSelectedItem] = React.useState<ContentItem | null>(null);
   const [previewItem, setPreviewItem] = React.useState<ContentItem | null>(null);
@@ -3609,14 +3704,20 @@ function ProjectContentPanel({ api, site, content: allContent, sections, onChang
   React.useEffect(() => {
     const awaitingLiveUpdate = content.some((item) =>
       ACTIVE_GENERATION_STATUSES.includes(item.status)
+      || item.status === "publishing"
       || item.status === "publication_pending_confirmation"
       || item.indexing_status === "queued"
       || item.indexing_status === "submitting"
     );
     if (!awaitingLiveUpdate) return;
-    const timer = window.setInterval(() => void onChanged(), 1500);
+    let running = false;
+    const timer = window.setInterval(async () => {
+      if (running || document.hidden) return;
+      running = true;
+      try { await (onPoll || onChanged)(); } finally { running = false; }
+    }, 1500);
     return () => window.clearInterval(timer);
-  }, [content, onChanged]);
+  }, [content, onChanged, onPoll]);
 
   function toggleSelected(id: string) {
     setSelectedIds((current) => current.includes(id) ? current.filter((itemId) => itemId !== id) : [...current, id]);
@@ -4057,7 +4158,7 @@ function DeletedContentPanel({ api, content, onChanged }: ViewProps & { content:
       item.status === "deleted" ? "Удалён" : "Ожидает подтверждения удаления",
       <button type="button" className="button secondary compact" disabled={busy || item.status !== "deleted"} onClick={() => void restore([item.id])}><RefreshCcw size={14} /> Восстановить</button>,
     ])} />
-    {preview ? <ContentPreviewModal item={preview} onClose={() => setPreview(null)} /> : null}
+    {preview ? <ContentPreviewModal api={api} item={preview} onClose={() => setPreview(null)} /> : null}
   </DataPanel>;
 }
 
@@ -4098,7 +4199,7 @@ function PublicationWorkflowNav({ content, campaigns, activeSection, onSectionCh
   );
 }
 
-function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs, promptTemplates, mode, workflowSection = "process", onChanged }: ViewProps & { site: Site; content: ContentItem[]; sections: Section[]; campaigns: PublicationCampaign[]; logs: PublicationLog[]; promptTemplates: PromptTemplate[]; mode: "launch" | "campaigns" | "workflow"; workflowSection?: PublicationWorkflowSection }) {
+function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs, promptTemplates, mode, workflowSection = "process", onChanged, onPoll }: ViewProps & { site: Site; content: ContentItem[]; sections: Section[]; campaigns: PublicationCampaign[]; logs: PublicationLog[]; promptTemplates: PromptTemplate[]; mode: "launch" | "campaigns" | "workflow"; workflowSection?: PublicationWorkflowSection }) {
   const [launchExpanded, setLaunchExpanded] = usePersistentWorkspacePanelState("publication-launch", false);
   const [name, setName] = React.useState("Daily publication");
   const [itemsPerDay, setItemsPerDay] = React.useState(1);
@@ -4301,14 +4402,19 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
   }
 
   React.useEffect(() => {
-    const inProgress = campaigns.some((campaign) => campaign.status === "publishing_all");
+    const inProgress = campaigns.some((campaign) => campaign.status === "publishing_all") || content.some(item => ["publishing", "publication_pending_confirmation"].includes(item.status));
     if (!inProgress) {
       if (publishingAllCampaignId) setPublishingAllCampaignId("");
       return;
     }
-    const timer = window.setInterval(() => void onChanged(), 4000);
+    let running = false;
+    const timer = window.setInterval(async () => {
+      if (running || document.hidden) return;
+      running = true;
+      try { await (onPoll || onChanged)(); } finally { running = false; }
+    }, 4000);
     return () => window.clearInterval(timer);
-  }, [campaigns, onChanged, publishingAllCampaignId]);
+  }, [campaigns, content, onChanged, onPoll, publishingAllCampaignId]);
 
   function togglePublicationSection(sectionId: string) {
     setSelectedPublicationSectionIds((current) => current.includes(sectionId)
@@ -8323,7 +8429,7 @@ function SiteBrandField({ name, value, save }: { name: string; value: string; sa
   </span>;
 }
 
-function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnly = false, onChanged }: ViewProps & { sites: Site[]; currentUsername: string; favoritesOnly?: boolean; readOnly?: boolean }) {
+function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsername, favoritesOnly = false, readOnly = false, onChanged }: ViewProps & { sites: Site[]; snapshotUpdatedAt: string | null; onSitesChanged: (sites: Site[], replace?: boolean) => void; currentUsername: string; favoritesOnly?: boolean; readOnly?: boolean }) {
   const preferencesKey = `sites-table-preferences:${currentUsername}`;
   const storedPreferences = React.useMemo(() => {
     try {
@@ -8415,27 +8521,60 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
       .catch((error: unknown) => setSyncError(error instanceof Error ? error.message : "Не удалось загрузить избранное"));
   }, [api]);
 
-  const loadManagedSites = React.useCallback(async () => {
-    if (readOnly) {
-      setManagedSites(sites);
-      return;
-    }
-    setManagedSites(await api<Site[]>("/sites/cache/projects"));
-  }, [api, readOnly, sites]);
+  React.useEffect(() => { setManagedSites(sites); }, [sites]);
 
+  async function loadManagedSites() {
+    if (favoritesOnly || routeFromPath(window.location.pathname).view !== "sites") return;
+    setSyncing(true); setSyncError("");
+    try {
+      const result = await api<Site[]>("/sites");
+      setManagedSites(result);
+      onSitesChanged(result, true);
+    } catch (error) {
+      setSyncError(error instanceof Error ? error.message : "Не удалось загрузить проекты");
+    } finally { setSyncing(false); }
+  }
+
+  function applySiteUpdates(updates: Site[]) {
+    const byId = new Map(updates.map(site => [site.id, site]));
+    setManagedSites(current => current.map(site => byId.get(site.id) || site));
+    onSitesChanged(updates);
+  }
+
+  const cacheViewMounted = React.useRef(true);
   React.useEffect(() => {
-    loadManagedSites().catch((error: unknown) => setSyncError(error instanceof Error ? error.message : "Не удалось загрузить проекты"));
-  }, [loadManagedSites]);
+    cacheViewMounted.current = true;
+    const saved = localStorage.getItem("pagepilot-cache-sync-job");
+    if (saved && !favoritesOnly) {
+      try { const job = JSON.parse(saved); void syncCache(job.names || [], job.id); } catch { /* Invalid local pointer; no remote action. */ }
+    }
+    return () => { cacheViewMounted.current = false; };
+  }, []);
 
-  async function syncCache(names: string[] = []) {
+  async function syncCache(names: string[] = [], resumeId?: string) {
     setSyncing(true);
     setSyncError("");
     setSyncMessage("");
     try {
-      const result = await api<ProjectCacheSyncResult>("/sites/cache/sync", {
+      const queued = resumeId ? { id: resumeId } : await api<{ id: string }>("/sites/cache/sync-jobs", {
         method: "POST",
         body: JSON.stringify({ names })
       });
+      localStorage.setItem("pagepilot-cache-sync-job", JSON.stringify({ id: queued.id, names }));
+      setSyncMessage("Синхронизация выполняется в фоне. Можно продолжать работу.");
+      let job: { status: string; result: ProjectCacheSyncResult; error?: string };
+      do {
+        await new Promise(resolve => window.setTimeout(resolve, 2000));
+        if (!cacheViewMounted.current) return;
+        while (document.hidden) {
+          await new Promise(resolve => window.setTimeout(resolve, 2000));
+          if (!cacheViewMounted.current) return;
+        }
+        job = await api(`/background-jobs/${queued.id}`);
+      } while (["queued", "running"].includes(job.status));
+      localStorage.removeItem("pagepilot-cache-sync-job");
+      if (job.status !== "completed") throw new Error(job.error || "Синхронизация не завершена");
+      const result = job.result;
       setCacheResult((current) => {
         if (!names.length || !current) return result;
         const updatedById = new Map(result.projects.map((project) => [project.external_project_id, project]));
@@ -8446,8 +8585,12 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
         ? `Обновлено выбранных проектов: ${result.updated_count + result.created_count}.`
         : `Данные получены: ${formatNumber(result.cache_count)} сайтов. Рабочих проектов: ${result.matched_count}; добавлено: ${result.created_count}; обновлено: ${result.updated_count}.`);
       if (names.length) setSelectedProjectNames([]);
-      onChanged();
-      await loadManagedSites();
+      if (names.length) {
+        const updated = await Promise.all(names.map(name => api<Site>(`/sites/lookup?name=${encodeURIComponent(name)}`)));
+        applySiteUpdates(updated);
+      } else {
+        await loadManagedSites();
+      }
     } catch (error) {
       setSyncError(error instanceof Error ? error.message : "Не удалось получить данные проектов");
     } finally {
@@ -8634,9 +8777,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
   async function updateProjectBrand(siteId: string, brand: string) {
     setSyncError("");
     try {
-      await api<Site>(`/sites/${siteId}/brand`, { method: "PATCH", body: JSON.stringify({ brand }) });
-      await loadManagedSites();
-      onChanged();
+      applySiteUpdates([await api<Site>(`/sites/${siteId}/brand`, { method: "PATCH", body: JSON.stringify({ brand }) })]);
     } catch (error) {
       setSyncError(error instanceof Error ? error.message : "Не удалось сохранить бренд");
       throw error;
@@ -8646,12 +8787,11 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
   async function updateProjectStatus(siteId: string, projectStatus: Site["project_status"]) {
     setSyncError("");
     try {
-      await api<Site>(`/sites/${siteId}/status`, {
+      const updated = await api<Site>(`/sites/${siteId}/status`, {
         method: "PATCH",
         body: JSON.stringify({ project_status: projectStatus })
       });
-      await loadManagedSites();
-      onChanged();
+      applySiteUpdates([updated]);
     } catch (error) {
       setSyncError(error instanceof Error ? error.message : "Не удалось изменить статус проекта");
     }
@@ -8667,8 +8807,10 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
       const result = await api<DuplicateSitesDeleteResult>("/sites/cache/duplicates", { method: "DELETE" });
       setSelectedProjectNames([]);
       setSyncMessage(`Удалено дубликатов: ${result.deleted_count}.${result.skipped_count ? ` Пропущено связанных проектов: ${result.skipped_count}.` : ""}`);
-      await loadManagedSites();
-      onChanged();
+      const deleted = new Set(result.deleted_ids);
+      const remaining = managedSites.filter(site => !deleted.has(site.id));
+      setManagedSites(remaining);
+      onSitesChanged(remaining, true);
     } catch (error) {
       setSyncError(error instanceof Error ? error.message : "Не удалось удалить дубликаты");
     } finally {
@@ -8688,11 +8830,14 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
             <button className={summaryFilter === "duplicate" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("duplicate")} aria-pressed={summaryFilter === "duplicate"}><span>Дубликаты</span><strong>{formatNumber(duplicateCount)}</strong></button>
             <button className={summaryFilter === "all" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("all")} aria-pressed={summaryFilter === "all"}><span>Всего сайтов</span><strong>{formatNumber(managedSites.length)}</strong></button>
           </div>
-          {!readOnly ? (
+          {!favoritesOnly && <button className="button primary siteCacheSyncButton" type="button" onClick={() => void loadManagedSites()} disabled={syncing}>
+            <RefreshCcw size={18} className={syncing ? "spin" : ""} />{syncing ? "Обновляем…" : "Обновить проекты"}
+          </button>}
+          {!readOnly && !favoritesOnly ? (
             <>
-              <button className="button primary siteCacheSyncButton" type="button" onClick={() => syncCache()} disabled={syncing}>
+              <button className="button secondary siteCacheSyncButton" type="button" onClick={() => syncCache()} disabled={syncing}>
                 <RefreshCcw size={18} className={syncing ? "spin" : ""} />
-                {syncing ? "Обновляем данные" : "Обновить данные"}
+                {syncing ? "Синхронизируем…" : "Синхронизировать кеш Webdev"}
               </button>
               <button className="button secondary siteCacheSyncButton" type="button" onClick={() => syncCache(selectedProjectNames)} disabled={syncing || !selectedProjectNames.length}>
                 <RefreshCcw size={18} /> Обновить выбранные ({selectedProjectNames.length})
@@ -8706,7 +8851,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
         <div className="siteCacheUpdatedAt">
           <CalendarClock size={17} />
           <span>Последнее обновление</span>
-          <strong>{latestCacheSync ? formatDate(latestCacheSync) : "Данные еще не обновлялись"}</strong>
+          <strong>{snapshotUpdatedAt ? formatDate(snapshotUpdatedAt) : "Нажмите «Обновить проекты» на странице «Сайты»"}</strong>
         </div>
         {syncMessage ? <div className="siteCacheResult">{syncMessage}</div> : null}
         {syncError ? <div className="formError siteCacheError">{syncError}</div> : null}
@@ -9985,6 +10130,7 @@ function UsersAdminPanel({ api, currentUser, users, onChanged }: ViewProps & { c
 type ViewProps = {
   api: <T>(path: string, options?: RequestInit) => Promise<T>;
   onChanged: () => void;
+  onPoll?: () => Promise<void>;
 };
 
 function NavButton({ href, icon, label, active, onClick }: { href: string; icon: React.ReactNode; label: string; active: boolean; onClick: () => void }) {
@@ -10907,7 +11053,7 @@ function languageLabel(code: string, languages: LanguageOption[] = LANGUAGE_OPTI
 }
 
 function contentItemTitle(item: ContentItem) {
-  const pages = item.generated_json.pages;
+  const pages = item.generated_json?.pages;
   if (Array.isArray(pages) && pages[0] && typeof pages[0] === "object" && "title" in pages[0]) {
     return String((pages[0] as { title?: unknown }).title || item.topic);
   }
@@ -10915,7 +11061,7 @@ function contentItemTitle(item: ContentItem) {
 }
 
 function contentItemDescription(item: ContentItem) {
-  const pages = item.generated_json.pages;
+  const pages = item.generated_json?.pages;
   if (Array.isArray(pages) && pages[0] && typeof pages[0] === "object" && "description" in pages[0]) {
     return previewPlainText((pages[0] as { description?: unknown }).description);
   }

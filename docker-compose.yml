@@ -40,7 +40,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    environment:
+      APP_SKIP_DB_INIT: "true"
+    cpu_shares: 2048
+    mem_limit: 1536m
+    command: sh -c "python -c 'from app.db import init_db; init_db()' && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"
 
   celery_worker:
     image: generator-backend
@@ -54,7 +58,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=4
+    environment:
+      DB_POOL_SIZE: "2"
+      DB_MAX_OVERFLOW: "1"
+    cpus: 1.5
+    cpu_shares: 256
+    mem_limit: 2g
+    stop_grace_period: 120s
+    command: celery -A app.worker.celery_app worker --loglevel=info --hostname=generation@%h --queues=generation,celery --concurrency=2
 
   menu_check_worker:
     image: generator-backend
@@ -68,7 +79,109 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: celery -A app.worker.celery_app worker --loglevel=info --queues=menu_checks --concurrency=1
+    environment:
+      DB_POOL_SIZE: "2"
+      DB_MAX_OVERFLOW: "1"
+    cpus: 0.75
+    cpu_shares: 256
+    mem_limit: 1536m
+    stop_grace_period: 120s
+    command: celery -A app.worker.celery_app worker --loglevel=info --hostname=menu@%h --queues=menu_checks --concurrency=1
+
+  publication_worker:
+    image: generator-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DB_POOL_SIZE: "2"
+      DB_MAX_OVERFLOW: "1"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    cpus: 0.75
+    cpu_shares: 256
+    mem_limit: 768m
+    stop_grace_period: 120s
+    command: celery -A app.worker.celery_app worker --loglevel=info --hostname=publication@%h --queues=publication --concurrency=1
+
+  automation_worker:
+    image: generator-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DB_POOL_SIZE: "2"
+      DB_MAX_OVERFLOW: "1"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    cpus: 0.75
+    cpu_shares: 256
+    mem_limit: 768m
+    stop_grace_period: 120s
+    command: celery -A app.worker.celery_app worker --loglevel=info --hostname=automation@%h --queues=automation --concurrency=1
+
+  confirmation_worker:
+    image: generator-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DB_POOL_SIZE: "2"
+      DB_MAX_OVERFLOW: "1"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    cpus: 0.5
+    cpu_shares: 256
+    mem_limit: 512m
+    stop_grace_period: 120s
+    command: celery -A app.worker.celery_app worker --loglevel=info --hostname=confirmation@%h --queues=confirmation --concurrency=1
+
+  cache_worker:
+    image: generator-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DB_POOL_SIZE: "2"
+      DB_MAX_OVERFLOW: "1"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    cpus: 0.5
+    cpu_shares: 256
+    mem_limit: 768m
+    stop_grace_period: 120s
+    command: celery -A app.worker.celery_app worker --loglevel=info --hostname=cache_sync@%h --queues=cache_sync --concurrency=1
+
+  maintenance_worker:
+    image: generator-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DB_POOL_SIZE: "2"
+      DB_MAX_OVERFLOW: "1"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    cpus: 0.25
+    cpu_shares: 256
+    mem_limit: 384m
+    stop_grace_period: 120s
+    command: celery -A app.worker.celery_app worker --loglevel=info --hostname=maintenance@%h --queues=maintenance --concurrency=1
 
   celery_beat:
     image: generator-backend

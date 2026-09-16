@@ -1,0 +1,11 @@
+[Unit]
+Description=Hourly enforcement of 10-day Docker build cache retention
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+AccuracySec=1min
+Unit=pagepilot-build-cache-cleanup.service
+
+[Install]
+WantedBy=timers.target

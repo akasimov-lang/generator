@@ -17,9 +17,28 @@ celery_app = Celery("generator", broker=settings.celery_broker_url, backend=sett
 celery_app.conf.update(
     timezone="UTC",
     worker_prefetch_multiplier=1,
-    worker_concurrency=4,
+    worker_concurrency=2,
+    broker_connection_retry_on_startup=True,
+    task_routes={
+        "app.worker.generate_task_content": {"queue": "generation"},
+        "app.worker.run_task_pipeline": {"queue": "generation"},
+        "app.worker.run_content_item_pipeline": {"queue": "generation"},
+        "app.worker.generate_content_item": {"queue": "generation"},
+        "app.worker.revise_content_item": {"queue": "generation"},
+        "app.worker.collect_competitor_research": {"queue": "generation"},
+        "app.worker.publish_due_items": {"queue": "publication"},
+        "app.worker.publish_campaign_bundle": {"queue": "publication"},
+        "app.worker.reconcile_pending_publications": {"queue": "confirmation"},
+        "app.worker.submit_pending_content_indexing": {"queue": "confirmation"},
+        "app.worker.network_indexing": {"queue": "confirmation"},
+        "app.worker.auto_reglue": {"queue": "automation"},
+        "app.worker.schedule_auto_reglue": {"queue": "automation"},
+        "app.worker.dispatch_background_jobs": {"queue": "maintenance"},
+        "app.worker.check_site_menu_visibility": {"queue": "menu_checks"},
+    },
 )
 celery_app.conf.beat_schedule = {
+    "dispatch-background-jobs": {"task": "app.worker.dispatch_background_jobs", "schedule": 5.0},
     "post-reglue-indexing": {"task": "app.worker.network_indexing", "schedule": 30.0},
     "scheduled-auto-reglue": {"task": "app.worker.schedule_auto_reglue", "schedule": 60.0},
     "publish-due-items-every-minute": {
@@ -262,10 +281,8 @@ def run_content_item_pipeline_job(self, content_item_id: str, collect_competitor
             site = db.get(models.Site, item.site_id or task.site_id) if (item.site_id or task.site_id) else None
             if not site:
                 raise ValueError("Automatic publication requires a project")
-            validate_content_for_publication(item)
-            item.status = "approved"
-            db.commit()
-            asyncio.run(publish_item(db, item, site, initiator_username="automatic-menu-generation"))
+            from app.background_jobs import enqueue_publication
+            enqueue_publication(db, item, "automatic-menu-generation")
         _refresh_parallel_task_status(db, task_id)
         return {"status": "complete", "content_item_id": content_item_id}
     except Exception as error:
@@ -422,3 +439,18 @@ def network_indexing_job():
     from app.network_indexing import process_network_indexing
     with SessionLocal() as db:
         return process_network_indexing(db)
+
+
+@celery_app.task(name="app.worker.dispatch_background_jobs")
+def dispatch_background_jobs_job():
+    from app.background_jobs import dispatch_pending
+    with SessionLocal() as db:
+        return dispatch_pending(db, lambda job_id, queue: background_operation_job.apply_async(
+            args=[job_id], queue=queue, task_id=job_id))
+
+
+@celery_app.task(name="app.worker.background_operation", acks_late=True, reject_on_worker_lost=True)
+def background_operation_job(job_id):
+    from app.background_jobs import run_job
+    with SessionLocal() as db:
+        return run_job(db, job_id)
