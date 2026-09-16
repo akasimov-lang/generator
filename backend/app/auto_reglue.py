@@ -118,6 +118,11 @@ class ProjectConfig(BaseModel):
         return value
 
 
+def saved_project_rules(value):
+    # Personal scheduling controls participation; retain rules when it is disabled.
+    return value.model_copy(update={'scope': 'personal' if value.schedule_enabled else 'mass'})
+
+
 def config(db, site_id=None):
     row = db.get(models.AutoReglueConfig, site_id or 'global')
     return (ProjectConfig if site_id else GlobalConfig).model_validate(row.value if row else {})
@@ -232,7 +237,7 @@ def effective_config(global_cfg, cfg):
 def require_eligible(site, global_cfg, cfg):
     if cfg.scope != 'personal' and site.project_status != 'mass_actions':
         raise ValueError('Проект не имеет статуса «Массовые действия».')
-    if not effective_config(global_cfg, cfg).enabled or not cfg.enabled:
+    if not effective_config(global_cfg, cfg).enabled:
         raise ValueError('Автопереклей выключен в настройках.')
 
 
@@ -468,7 +473,7 @@ def utc(value):
 
 def schedule_eligible(site, global_cfg, cfg):
     rules = effective_config(global_cfg, cfg)
-    return bool(cfg.enabled and rules.enabled and rules.schedule_enabled
+    return bool(rules.enabled and rules.schedule_enabled
                 and (cfg.scope == 'personal' or site.project_status == 'mass_actions'))
 
 
@@ -489,7 +494,11 @@ def legacy_due(db, site, cfg, rules):
 
 def sync_schedules(db, now, immediate=None):
     global_cfg = config(db)
-    sites = db.scalars(select(models.Site).join(models.AutoReglueConfig, models.AutoReglueConfig.key == models.Site.id)).all()
+    sites = db.scalars(select(models.Site)
+        .outerjoin(models.AutoReglueConfig, models.AutoReglueConfig.key == models.Site.id)
+        .outerjoin(models.AutoReglueSchedule, models.AutoReglueSchedule.site_id == models.Site.id)
+        .where((models.Site.project_status == 'mass_actions') | models.AutoReglueConfig.key.is_not(None)
+               | models.AutoReglueSchedule.site_id.is_not(None))).all()
     for site in sites:
         cfg = config(db, site.id)
         rules = effective_config(global_cfg, cfg)

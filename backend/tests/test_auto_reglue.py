@@ -712,3 +712,88 @@ def test_fake_path_skips_normalized_content_and_current_and_validates_metadata()
     site.cache_geo = ''
     with pytest.raises(ValueError, match='GEO'):
         next_fake_path(site, state, cfg)
+
+
+@pytest.mark.parametrize('rules', [dict(create_fake_main=True), dict(interval_days=7), dict(scheme_mode='base_only'), dict(profile_id='custom')])
+def test_saved_own_rules_auto_exclude_even_disabled(monkeypatch, rules):
+    from app import auto_reglue_api
+    monkeypatch.setattr(auto_reglue_api, "kick_due_schedule", lambda db: None)
+    from app.auto_reglue_api import router
+    client, sessions = make_client()
+    client.app.include_router(router, prefix='/api')
+    with sessions() as db:
+        site = db.scalar(select(models.Site)); site.project_status = 'mass_actions'; db.commit(); site_id = site.id
+    payload = auto.ProjectConfig(drop_domain='drop.test', language='az', schedule_enabled=True, **rules).model_dump()
+    result = client.put(f'/api/auto-reglue/projects/{site_id}', json=payload)
+    assert result.status_code == 200, result.text
+    assert result.json()['scope'] == 'personal'
+    assert not result.json()['enabled'] and result.json()['schedule_enabled']
+    assert client.get('/api/auto-reglue').json()['projects'] == []
+    denied = client.post('/api/auto-reglue/start', json={'items':[{'site_id':site_id, 'request_id':str(uuid4()), 'preview_token':'a'*64}]})
+    assert 'персональные' in denied.json()['results'][0]['error']
+    with sessions() as db:
+        auto.save_config(db, auto.GlobalConfig(enabled=True, schedule_enabled=True))
+        site = db.get(models.Site, site_id)
+        assert auto.next_scheduled_at(db, site) is None
+    # Clearing rules and explicitly returning to mass is required.
+    reset = auto.ProjectConfig(drop_domain='drop.test', language='az').model_dump()
+    assert client.put(f'/api/auto-reglue/projects/{site_id}', json=reset).json()['scope'] == 'mass'
+    assert len(client.get('/api/auto-reglue').json()['projects']) == 1
+
+
+def test_project_addresses_and_language_do_not_create_personal_rules():
+    cfg = auto.ProjectConfig(enabled=True, drop_domain='drop.test', newreg_domain='new.test', x_default_newreg_domain='default.test', language='az')
+    assert auto.saved_project_rules(cfg).scope == 'mass'
+    cfg.scope = 'personal'
+    assert auto.saved_project_rules(cfg).scope == 'mass'
+    cfg.schedule_enabled = True
+    assert auto.saved_project_rules(cfg).scope == 'personal'
+
+
+@pytest.mark.parametrize('status,listed', [('mass_actions', True), ('working', False)])
+def test_disabling_personal_schedule_returns_to_mass_and_keeps_rules(monkeypatch, status, listed):
+    from app import auto_reglue_api
+    monkeypatch.setattr(auto_reglue_api, 'kick_due_schedule', lambda db: None)
+    client, sessions = make_client(); client.app.include_router(auto_reglue_api.router, prefix='/api')
+    with sessions() as db:
+        site = db.scalar(select(models.Site)); site.project_status = status; db.commit(); site_id = site.id
+        auto.save_config(db, auto.GlobalConfig(enabled=True, schedule_enabled=True, interval_days=3))
+    payload = auto.ProjectConfig(enabled=True, schedule_enabled=True, interval_days=14, drop_domain='drop.test', language='az', create_fake_main=True).model_dump()
+    saved = client.put(f'/api/auto-reglue/projects/{site_id}', json=payload)
+    assert saved.status_code == 200, saved.text
+    assert saved.json()['scope'] == 'personal'
+    assert client.get('/api/auto-reglue').json()['projects'] == []
+    payload = saved.json(); payload['schedule_enabled'] = False
+    saved = client.put(f'/api/auto-reglue/projects/{site_id}', json=payload)
+    assert saved.status_code == 200, saved.text
+    assert saved.json()['scope'] == 'mass'
+    assert saved.json()['interval_days'] == 14 and saved.json()['create_fake_main']
+    assert bool(client.get('/api/auto-reglue').json()['projects']) == listed
+    with sessions() as db:
+        cfg = auto.config(db, site_id); site = db.get(models.Site, site_id)
+        assert auto.schedule_eligible(site, auto.config(db), cfg) == listed
+        assert auto.effective_config(auto.config(db), cfg).interval_days == 3
+    payload = saved.json(); payload['schedule_enabled'] = True
+    assert client.put(f'/api/auto-reglue/projects/{site_id}', json=payload).json()['scope'] == 'personal'
+    assert client.get('/api/auto-reglue').json()['projects'] == []
+
+
+def test_mass_status_is_permission_without_project_enabled_or_saved_config():
+    _, sessions = make_client()
+    with sessions() as db:
+        site = db.scalar(select(models.Site)); site.project_status = 'mass_actions'; db.commit()
+        g = auto.GlobalConfig(enabled=True, schedule_enabled=True)
+        auto.save_config(db, g)
+        cfg = auto.config(db, site.id)
+        assert not cfg.enabled
+        auto.require_eligible(site, g, cfg)
+        assert auto.schedule_eligible(site, g, cfg)
+        assert auto.next_scheduled_at(db, site) is not None
+        site.project_status = 'working'
+        db.flush()
+        from datetime import datetime, timezone
+        auto.sync_schedules(db, datetime.now(timezone.utc))
+        assert not db.get(models.AutoReglueSchedule, site.id).enabled
+        assert not auto.schedule_eligible(site, g, cfg)
+        with pytest.raises(ValueError, match='Массовые действия'):
+            auto.require_eligible(site, g, cfg)

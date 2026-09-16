@@ -81,6 +81,7 @@ def project_settings(site_id: str, _: AdminUser, db: Session = Depends(get_db)):
 @router.put('/projects/{site_id}')
 def save_project(site_id: str, payload: auto.ProjectConfig, _: AdminUser, db: Session = Depends(get_db)):
     site_or_404(db,site_id)
+    payload = auto.saved_project_rules(payload)
     effective = auto.effective_project_config(auto.config(db), payload)
     if effective.enabled and effective.domain_layout != 'root_main':
         base_only = auto.effective_config(auto.config(db), payload).scheme_mode == 'base_only'
