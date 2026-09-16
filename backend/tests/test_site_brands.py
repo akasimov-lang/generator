@@ -14,6 +14,9 @@ def test_detection_requires_clear_cached_identity():
     assert detect('Mostbet vs 1win — comparison') == GENERAL
     assert detect('Best Online Casino Australia') == GENERAL
     assert detect(None) == GENERAL
+    for generic in ['Meilleur', 'Nye', 'Crypto', 'No deposit', 'Plinko', 'Aviator']:
+        assert detect(generic + ' Casino', generic.replace(' ', '-') + '-casino.test') == GENERAL
+    assert detect('VOX Casino') == detect('Vox Casino') == 'Vox'
     assert detect('ExampleBrand Casino 2026', 'examplebrand-casino.test') == 'ExampleBrand'
     assert detect('ExampleBrand Casino 2026') == GENERAL
     assert detect('Online Casino Canada', 'online-casino.test') == GENERAL

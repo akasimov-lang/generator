@@ -35,7 +35,7 @@ BRANDS = {
     "Bizzo": ["bizzo"], "Woo Casino": ["woo casino"], "7Bit": ["7bit"],
     "BitStarz": ["bitstarz"], "Wild Tokyo": ["wild tokyo"], "Cashed": ["cashed casino"],
     "Lemon Casino": ["lemon casino"], "Vegas Hero": ["vegas hero"],
-    "Spin Casino": ["spin casino"], "Spin Samurai": ["spin samurai"],
+    "Vox": ["vox casino"], "Spin Casino": ["spin casino"], "Spin Samurai": ["spin samurai"],
 }
 
 def normalized(value):
@@ -60,7 +60,10 @@ def detect_brand(site):
                    "official", "legal", "trusted", "safe", "danmark", "danish", "german",
                    "germany", "canada", "canadian", "australia", "australian", "india",
                    "indian", "uk", "usa", "czech", "polish", "swiss", "french", "finnish",
-                   "swedish", "irish", "norsk", "norske", "beste", "mejores", "лучшие"}
+                   "swedish", "irish", "norsk", "norske", "beste", "mejores", "лучшие",
+                   "meilleur", "meilleurs", "meilleures", "nye", "nyt", "nouveau",
+                   "nouveaux", "migliori", "bedste", "bästa", "najlepsze", "nejlepší",
+                   "crypto", "bitcoin", "no", "deposit", "deposits", "plinko", "aviator"}
         key = re.sub(r"[^\w]", "", candidate.casefold())
         from urllib.parse import urlsplit
         hosts = [urlsplit("https://" + (v or "").removeprefix("https://").removeprefix("http://")).hostname or ""
