@@ -9,12 +9,12 @@ from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID, uuid5, NAMESPACE_URL
 
 import httpx
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import select
 
 from app import models, project_network
 from app.subdomain_naming import next_subdomain
-from app.fake_main import normalize_fake_path
+from app.fake_main import normalize_fake_path, next_fake_path
 from app.domain_classification import classify_domains
 from app.alternate_templates import template_catalog
 from app.alternate_language_pool import default_language_pool
@@ -29,9 +29,16 @@ class DomainOptions(BaseModel):
     parent_kind: Literal['drop', 'newreg'] = 'drop'
     create_subdomains: bool = False
     create_fake_main: bool = False
+    use_current_fake_main: bool = False
     subdomain_add_casino: bool = False
     subdomain_name_style: Literal['mixed', 'joined', 'hyphen'] = 'mixed'
     x_default_use_newreg: bool = False
+
+    @model_validator(mode='after')
+    def fake_mode(self):
+        if self.create_fake_main and self.use_current_fake_main:
+            raise ValueError('Выберите один режим фейковой страницы: новая или текущая.')
+        return self
 
 
 class GlobalConfig(BaseModel):
@@ -72,6 +79,7 @@ class ProjectConfig(BaseModel):
     parent_kind: Literal['drop', 'newreg'] = 'drop'
     create_subdomains: bool = False
     create_fake_main: bool = False
+    use_current_fake_main: bool = False
     subdomain_add_casino: bool = False
     subdomain_name_style: Literal["mixed", "joined", "hyphen"] = "mixed"
     newreg_domain: str = Field(default='', max_length=253)
@@ -79,6 +87,12 @@ class ProjectConfig(BaseModel):
     profile_id: str = Field(default='', max_length=300)
     variant: Literal['provided', 'before', 'after', 'current'] = 'current'
     fake_main_path: str = Field(default='', max_length=250)
+
+    @model_validator(mode='after')
+    def fake_mode(self):
+        if self.create_fake_main and self.use_current_fake_main:
+            raise ValueError('Выберите один режим фейковой страницы: новая или текущая.')
+        return self
 
     @field_validator('drop_domain', 'newreg_domain', 'x_default_newreg_domain')
     @classmethod
@@ -261,21 +275,26 @@ def build_plan(site, state, global_cfg, cfg):
         if cfg.variant not in profile['variants']:
             raise ValueError('Эта версия схемы не заполнена; выберите существующую.')
         source = profile['variants'][cfg.variant]['links']
+    fake_enabled = cfg.create_fake_main or cfg.use_current_fake_main
     links = {}
     for link in [*source, *alternate_links(state['alternateMarkup'])]:
         key = link['hreflang'].lower()
         if key != 'x-default' and key not in links:
             # Canon and all language variants move together; paths are retained.
             url = urlsplit(link['href'].replace('{{settings.canon}}', target).replace('{{reqPath}}', '/__auto_request_path__'))
-            links[key] = {'hreflang': link['hreflang'], 'href': urlunsplit(('https', language_host, url.path or '/', url.query, url.fragment)).replace('/__auto_request_path__', '{{reqPath}}')}
+            links[key] = {'hreflang': link['hreflang'], 'href': urlunsplit(('https', language_host, (url.path or '/') if fake_enabled else '/', url.query if fake_enabled else '', url.fragment if fake_enabled else '')).replace('/__auto_request_path__', '{{reqPath}}')}
     links[language] = {'hreflang': language, 'href': f'https://{language_host}/'}
     regional = f'{language}-{geo}'
-    regional_link = links.get(regional.lower())
-    regional_path = cfg.fake_main_path or (urlsplit(regional_link['href']).path if regional_link else '')
-    if not regional_path or regional_path == '/':
-        raise ValueError('Укажите путь внутренней копии главной для альтернейта язык-GEO, например /events/.')
+    regional_path = '/'
     if cfg.create_fake_main:
-        regional_path = normalize_fake_path(regional_path)
+        regional_path = next_fake_path(state, cfg.fake_main_path or '/page/')
+    elif cfg.use_current_fake_main:
+        current = state.get('fake_main_current')
+        if not current or not state.get('fake_main_enabled'):
+            raise ValueError('У проекта нет включённой текущей фейковой страницы. Выберите создание новой или режим без фейковых страниц.')
+        regional_path = normalize_fake_path(current)
+        if regional_path not in state.get('fake_main_paths', []):
+            raise ValueError('Текущий фейковый путь отсутствует в списке страниц проекта.')
     links[regional.lower()] = {'hreflang': regional, 'href': f'https://{language_host}{regional_path}'}
     if global_cfg.scheme_mode == 'base_only':
         links = {language: links[language], regional.lower(): links[regional.lower()]}

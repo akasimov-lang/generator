@@ -42,12 +42,20 @@ with sync_playwright() as p:
  common=page.get_by_label('Применять общую схему доменов ко всем участникам массового автопереклея',exact=True)
  expect(common).not_to_be_checked()
  common.check()
+ none=page.get_by_label('Без фейковых страниц — только URL домена или поддомена',exact=True)
+ fresh=page.get_by_label('Создавать новый фейковый внутряк при каждом автопереклее',exact=True)
+ current=page.get_by_label('Использовать текущий фейковый внутряк при всех автопереклеях',exact=True)
+ expect(none).to_be_checked()
+ fresh.check();expect(current).not_to_be_checked();expect(none).not_to_be_checked()
+ current.check();expect(fresh).not_to_be_checked()
+
  page.get_by_label('Создавать новый поддомен новорега при каждом запуске',exact=True).check()
  expect(page.get_by_label('Использовать существующий поддомен дропа',exact=True)).not_to_be_checked()
  page.get_by_label('Общий формат имён поддоменов',exact=True).select_option('hyphen')
  page.get_by_label('Добавлять casino к известным брендам',exact=True).check()
  page.get_by_role('button',name='Сохранить общие настройки',exact=True).click()
  expect(page.get_by_role('button',name='Сохранить общие настройки',exact=True)).to_be_disabled()
+ assert global_cfg['domain_settings']['use_current_fake_main'] and not global_cfg['domain_settings']['create_fake_main']
  assert global_cfg['apply_domain_settings']
  assert global_cfg['domain_settings']['create_subdomains'] and global_cfg['domain_settings']['parent_kind']=='newreg'
  assert global_cfg['domain_settings']['subdomain_name_style']=='hyphen'

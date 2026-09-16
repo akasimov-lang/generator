@@ -287,3 +287,14 @@ NetworkChange action=create_fake_main, fake_main_path; UUID receipt и revision,
 ProjectConfig/DomainOptions.create_fake_main defaultfalse. В автоплане сохраняется
 create_fake_main_path из пути альтернейта язык-GEO. Этап до subdomain/reserve,
 UUID5 receipt, ожидание подтверждения без повторного POST, затем HTTP200 страниц.
+
+
+Режимы фейковых страниц (уточнение): create_fake_main и use_current_fake_main
+в ProjectConfig/DomainOptions взаимоисключающие. Оба false (default) — все языковые
+URL только корневые, язык и язык-GEO совпадают; путь из прежней схемы игнорируется.
+create_fake_main=true — один НОВЫЙ путь за запуск: основа fake_main_path или /page/,
+затем -1, -2 и далее; исключаются fakeMain/currentFakeMain и data.pages[].slug.
+Путь фиксируется в плане; повтор доставки не выбирает следующий. current=true —
+нормализованный currentFakeMain из кеша, только при enableDynamicRoutes=true и
+наличии пути в fakeMain. Новых страниц не создаёт. Существующий переключатель
+create_fake_main сохранён для совместимости; новый режим не включает расписания.

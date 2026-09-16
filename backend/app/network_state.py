@@ -95,8 +95,11 @@ def project_network_state(project: dict) -> dict:
             amp_domains.append(domain)
     amp = domain_name(settings.get("amp"))
     prev_amp = domain_name(settings.get("prevAmp"))
+    data = project.get("data") if isinstance(project.get("data"), dict) else {}
+    content_pages = data.get("pages") if isinstance(data.get("pages"), list) else []
     alternate = settings.get("alternate") if isinstance(settings.get("alternate"), dict) else {}
     return {
+        "content_page_paths": ["/" + str(page.get("slug") or "").strip("/") + "/" for page in content_pages if isinstance(page, dict)],
         "fake_main_settings": alternate,
         "fake_main_paths": fake_paths(alternate),
         "fake_main_current": alternate.get("currentFakeMain") or "",
@@ -119,6 +122,8 @@ def observe_network(site, project: dict) -> dict:
     if not any(key in settings for key in ("amp", "prevAmp", "ampDomains", "ampList")):
         for key in ("amp", "prev_amp", "amp_domains"):
             state[key] = (site.network_state or {}).get(key, state[key])
+    if "data" not in project:
+        state["content_page_paths"] = (site.network_state or {}).get("content_page_paths", [])
     if "alternate" not in settings:
         for key in ("fake_main_settings", "fake_main_paths", "fake_main_current", "fake_main_enabled"):
             state[key] = (site.network_state or {}).get(key, state[key])

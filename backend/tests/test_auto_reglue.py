@@ -11,8 +11,8 @@ from test_api_serialization import make_client
 
 def fixture():
     site = SimpleNamespace(id='site', name='clubheavenjax.com', project_status='mass_actions', cache_geo='AZ', main_domain_history=['old.clubheavenjax.com','used.clubheavenjax.com'])
-    state = dict(canon='old.clubheavenjax.com', prev='', reserve='', domains=['first.clubheavenjax.com','old.clubheavenjax.com','used.clubheavenjax.com','next.clubheavenjax.com','last.clubheavenjax.com'], has_head=True, enableAlternates=True, alternateMarkup='<link rel="alternate" hreflang="tr" href="https://old.clubheavenjax.com/extra/" />')
-    cfg=auto.ProjectConfig(enabled=True,drop_domain='clubheavenjax.com',language='az',fake_main_path='/events/',profile_id='pinup:az:clubheavenjax.com',variant='after')
+    state = dict(fake_main_current='/events/',fake_main_paths=['/events/'],fake_main_enabled=True,canon='old.clubheavenjax.com', prev='', reserve='', domains=['first.clubheavenjax.com','old.clubheavenjax.com','used.clubheavenjax.com','next.clubheavenjax.com','last.clubheavenjax.com'], has_head=True, enableAlternates=True, alternateMarkup='<link rel="alternate" hreflang="tr" href="https://old.clubheavenjax.com/extra/" />')
+    cfg=auto.ProjectConfig(use_current_fake_main=True,enabled=True,drop_domain='clubheavenjax.com',language='az',fake_main_path='/events/',profile_id='pinup:az:clubheavenjax.com',variant='after')
     return site,state,auto.GlobalConfig(enabled=True,scheme_mode='add_auxiliary',auxiliary_hreflangs=['fr-FR']),cfg
 
 
@@ -53,7 +53,7 @@ def setup_run(monkeypatch, unknown_action=None, create=False, fake=False):
             cfg.create_subdomains=True; cfg.subdomain_name_style='joined'
             site.brand='Pinco'; site.domain_types={'clubheavenjax.com':'drop'}
             state['domains'].append('clubheavenjax.com'); site.cache_domains=list(state['domains']); db.commit()
-        cfg.create_fake_main=fake
+        cfg.create_fake_main=fake;cfg.use_current_fake_main=not fake
         auto.save_config(db,g);auto.save_config(db,cfg,site.id)
         plan=auto.build_plan(site,state,g,cfg)
         run=models.AutoReglueRun(id=str(uuid4()),site_id=site.id,initiator='admin',plan=plan,status='queued',phase='prepared');db.add(run);db.commit();run_id=run.id
@@ -644,3 +644,42 @@ def test_fake_page_then_subdomain_then_reglue(monkeypatch):
         auto.execute(db,run_id)
         assert calls==['create_fake_main','create_subdomains','reserve','reglue','alternates']
         assert run.status=='completed'
+
+
+@pytest.mark.parametrize('scheme', ['preserve','add_auxiliary','base_only'])
+def test_fake_disabled_uses_only_root_urls_even_with_old_template_paths(scheme):
+    from app.network_state import alternate_links
+    site,state,g,cfg=fixture()
+    cfg.use_current_fake_main=False;cfg.create_fake_main=False;cfg.fake_main_path=''
+    g.scheme_mode=scheme
+    site.domain_types={'unused.test':'drop'};state['domains'].append('unused.test')
+    plan=auto.build_plan(site,state,g,cfg)
+    links=alternate_links(plan['alternateMarkup'])
+    assert plan['create_fake_main_path'] is None
+    assert plan['required_page_urls']==[]
+    assert next(x['href'] for x in links if x['hreflang']=='az')==next(x['href'] for x in links if x['hreflang']=='az-AZ')
+    assert all(x['href']=='https://'+x['domain']+'/' for x in links)
+
+
+def test_new_fake_chooses_unused_path_each_iteration_and_current_stays_fixed():
+    site,state,g,cfg=fixture()
+    cfg.use_current_fake_main=False;cfg.create_fake_main=True
+    state['content_page_paths']=['/events-1/']
+    first=auto.build_plan(site,state,g,cfg)
+    assert first['create_fake_main_path']=='/events-2/'
+    state['fake_main_paths'].append('/events-2/')
+    second=auto.build_plan(site,state,g,cfg)
+    assert second['create_fake_main_path']=='/events-3/'
+    cfg.create_fake_main=False;cfg.use_current_fake_main=True;cfg.fake_main_path='/ignored/'
+    current=auto.build_plan(site,state,g,cfg)
+    assert current['create_fake_main_path'] is None
+    assert 'https://next.clubheavenjax.com/events/' in current['alternateMarkup']
+    state['fake_main_enabled']=False
+    with pytest.raises(ValueError,match='текущей фейковой'):
+        auto.build_plan(site,state,g,cfg)
+
+
+def test_fake_modes_mutually_exclusive():
+    for cls in (auto.ProjectConfig,auto.DomainOptions):
+        with pytest.raises(ValueError,match='один режим'):
+            cls(create_fake_main=True,use_current_fake_main=True)

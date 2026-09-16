@@ -2,9 +2,9 @@ import React from "react";
 
 type Api = <T>(path: string, options?: RequestInit) => Promise<T>;
 type Rules = { schedule_enabled: boolean; interval_days: number; scheme_mode: "preserve" | "add_auxiliary" | "base_only"; auxiliary_hreflangs: string[] };
-type Config = Rules & { create_subdomains: boolean; create_fake_main: boolean; subdomain_add_casino: boolean; subdomain_name_style: "mixed" | "joined" | "hyphen"; domain_layout: "subdomain_main" | "root_main"; scope: "mass" | "personal"; enabled: boolean; drop_domain: string; x_default_use_newreg: boolean; x_default_newreg_domain: string; parent_kind: "drop" | "newreg"; newreg_domain: string; language: string; profile_id: string; variant: "current" | "provided" | "before" | "after"; fake_main_path: string };
-type DomainOptions = Pick<Config, "domain_layout" | "parent_kind" | "create_subdomains" | "create_fake_main" | "subdomain_add_casino" | "subdomain_name_style" | "x_default_use_newreg">;
-const defaultDomainOptions: DomainOptions = { domain_layout: "subdomain_main", parent_kind: "drop", create_subdomains: false, create_fake_main: false, subdomain_add_casino: false, subdomain_name_style: "mixed", x_default_use_newreg: false };
+type Config = Rules & { create_subdomains: boolean; create_fake_main: boolean; use_current_fake_main: boolean; subdomain_add_casino: boolean; subdomain_name_style: "mixed" | "joined" | "hyphen"; domain_layout: "subdomain_main" | "root_main"; scope: "mass" | "personal"; enabled: boolean; drop_domain: string; x_default_use_newreg: boolean; x_default_newreg_domain: string; parent_kind: "drop" | "newreg"; newreg_domain: string; language: string; profile_id: string; variant: "current" | "provided" | "before" | "after"; fake_main_path: string };
+type DomainOptions = Pick<Config, "domain_layout" | "parent_kind" | "create_subdomains" | "create_fake_main" | "use_current_fake_main" | "subdomain_add_casino" | "subdomain_name_style" | "x_default_use_newreg">;
+const defaultDomainOptions: DomainOptions = { domain_layout: "subdomain_main", parent_kind: "drop", create_subdomains: false, create_fake_main: false, use_current_fake_main: false, subdomain_add_casino: false, subdomain_name_style: "mixed", x_default_use_newreg: false };
 type GlobalConfig = Rules & { enabled: boolean; max_projects: number; apply_domain_settings?: boolean; domain_settings?: DomainOptions };
 type Template = { id: string; project: string; brand: string; geo: string; variants: Record<string, unknown> };
 type Plan = { create_fake_main_path?: string | null; create_subdomain?: string | null; site_id: string; project: string; old_main: string; new_main: string; drop_domain: string; x_default_domain?: string; language_domain?: string; alternateMarkup: string; required_page_urls: string[]; added_hreflang?: string | null; pool_exhausted?: boolean; preview_token: string; requestId: string };
@@ -18,9 +18,18 @@ const body = (method: string, value: unknown): RequestInit => ({ method, body: J
 
 function PlanPreview({ plan }: { plan: Plan }) {
   return <div className="autoRegluePlan"><strong>{plan.project}</strong><p>{plan.old_main} → <b>{plan.new_main}</b></p><p>x-default: <b>{plan.x_default_domain || plan.drop_domain}</b></p>
-    {plan.create_fake_main_path && <p>Создать фейковую главную для схемы: <b>{plan.create_fake_main_path}</b>. Существующая страница будет использована повторно.</p>}
+    {plan.create_fake_main_path && <p>Создать фейковую главную для схемы: <b>{plan.create_fake_main_path}</b>. Для этого запуска выбран новый свободный путь.</p>}
     {plan.create_subdomain && <p>Будет создан один поддомен: <b>{plan.create_subdomain}</b>. Смена Main начнётся после готовности HTTPS и страниц схемы.</p>}
     {plan.language_domain && <p>Домен языковых альтернейтов: <b>{plan.language_domain}</b></p>}{plan.added_hreflang && <p>Новый фейковый альтернейт: <b>{plan.added_hreflang}</b></p>}{plan.pool_exhausted && <p>Список языков исчерпан: схема сохраняется.</p>}<pre>{plan.alternateMarkup}</pre>{plan.required_page_urls.length > 0 && <p className="muted">Перед сменой Main будут проверены страницы: {plan.required_page_urls.join(", ")}. {plan.create_fake_main_path ? "Копия главной для языка-GEO будет создана автоматически; остальные страницы схемы должны существовать." : "Содержимое этих страниц нужно подготовить в проекте заранее."}</p>}</div>;
+}
+
+function FakeMainOptions({ value, change }: { value: { create_fake_main?: boolean; use_current_fake_main?: boolean }; change: (patch: { create_fake_main: boolean; use_current_fake_main: boolean }) => void }) {
+  return <div className="networkSection"><h4>Фейковые внутренние страницы в альтернейтах</h4>
+    <label className="checkboxRow"><input type="checkbox" checked={!value.create_fake_main && !value.use_current_fake_main} onChange={() => change({ create_fake_main: false, use_current_fake_main: false })} /> Без фейковых страниц — только URL домена или поддомена</label>
+    <label className="checkboxRow"><input type="checkbox" checked={!!value.create_fake_main} onChange={e => change({ create_fake_main: e.target.checked, use_current_fake_main: false })} /> Создавать новый фейковый внутряк при каждом автопереклее</label>
+    <label className="checkboxRow"><input type="checkbox" checked={!!value.use_current_fake_main} onChange={e => change({ create_fake_main: false, use_current_fake_main: e.target.checked })} /> Использовать текущий фейковый внутряк при всех автопереклеях</label>
+    <p className="muted">Выберите один режим. Без фейковых страниц язык и язык-GEO ведут на одинаковый корневой URL. Новая страница: свободный путь на основе настройки проекта, например /page/, /page-1/, /page-2/. Текущая: используем currentFakeMain из кеша проекта без создания новой страницы.</p>
+  </div>;
 }
 
 function AutomationRules({ value, onChange, pool }: { value: Rules; onChange: (patch: Partial<Rules>) => void; pool: string[] }) {
@@ -35,11 +44,11 @@ function AutomationRules({ value, onChange, pool }: { value: Rules; onChange: (p
     {value.scheme_mode === "base_only" && <div className="autoRegluePlan">
       <p>При переклее сохраняются ровно три ссылки. Остальные языковые альтернейты удаляются из разметки.</p>
       <ul><li><b>Язык проекта</b>, без GEO (например az) — главная страница языкового домена или поддомена.</li>
-        <li><b>Язык-GEO</b> (например az-AZ) — внутренняя страница; путь берётся из настроек или схемы проекта.</li>
+        <li><b>Язык-GEO</b> (например az-AZ) — тот же корневой URL. Фейковая страница добавляется только отдельной настройкой.</li>
         <li><b>x-default</b> — корневой дроп. При canonical на языковом домене выбирается неиспользованный дроп сетки; при canonical = x-default используется новый корневой Main. Новорег разрешается отдельным чекбоксом «Использовать новорег в x-default» внутри проекта.</li></ul>
-      <p>Пример для языка az, GEO AZ и пути /events/:</p>
-      <pre>{'<link rel="alternate" hreflang="az" href="https://pinup-casino-az.clubheavenjax.com/" />\n<link rel="alternate" hreflang="az-AZ" href="https://pinup-casino-az.clubheavenjax.com/events/" />\n<link rel="alternate" hreflang="x-default" href="https://clubheavenjax.com/" />'}</pre>
-      <p className="muted">Адреса в примере иллюстративные. Для запуска подставляются язык, GEO, выбранные домены и путь конкретного проекта.</p>
+      <p>Базовый пример для языка az и GEO AZ без фейковой страницы:</p>
+      <pre>{'<link rel="alternate" hreflang="az" href="https://pinup-casino-az.clubheavenjax.com/" />\n<link rel="alternate" hreflang="az-AZ" href="https://pinup-casino-az.clubheavenjax.com/" />\n<link rel="alternate" hreflang="x-default" href="https://clubheavenjax.com/" />'}</pre>
+      <p className="muted">Адреса в примере иллюстративные. Для запуска подставляются язык, GEO и выбранные домены проекта. Путь зависит только от отдельного режима фейковых страниц.</p>
     </div>}
     {value.scheme_mode !== "base_only" && <><label>Языки для новых фейковых альтернейтов<textarea rows={3} value={languages} onChange={e => { setLanguages(e.target.value); onChange({ auxiliary_hreflangs: e.target.value.split(/[\s,;]+/).filter(Boolean) }); }} /></label>
     <button type="button" className="button secondary compact" onClick={() => { setLanguages(pool.join(", ")); onChange({ auxiliary_hreflangs: pool }); }}>Заполнить языками ЕС и СНГ</button>
@@ -57,8 +66,7 @@ function CommonDomainSettings({ value, change }: { value: GlobalConfig; change: 
     <fieldset disabled={!value.apply_domain_settings} className="autoReglueDomainOptions"><legend>Схема доменов</legend>
       <label className="checkboxRow"><input type="radio" name="global-domain-layout" checked={rules.domain_layout === "subdomain_main"} onChange={() => patch({ domain_layout: "subdomain_main" })} /> Canonical = языковые альтернейты; x-default отдельно</label>
       <label className="checkboxRow"><input type="radio" name="global-domain-layout" checked={rules.domain_layout === "root_main"} onChange={() => patch({ domain_layout: "root_main", x_default_use_newreg: rules.parent_kind === "newreg" })} /> Canonical = x-default; языковые альтернейты на поддомене</label>
-      <label className="checkboxRow"><input type="checkbox" checked={!!rules.create_fake_main} onChange={e => patch({ create_fake_main: e.target.checked })} /> Создавать фейковый внутряк для схемы альтернейтов</label>
-      <p className="muted">Путь берётся из настроек или схемы каждого проекта. Существующая фейковая страница используется повторно; обычные страницы не перезаписываются.</p>
+      <FakeMainOptions value={rules} change={patch} />
       <h4>Источник поддомена</h4>
       <label className="checkboxRow"><input type="checkbox" checked={!rules.create_subdomains && rules.parent_kind === "drop"} onChange={() => selectParent("drop", false)} /> Использовать существующий поддомен дропа</label>
       <label className="checkboxRow"><input type="checkbox" checked={!rules.create_subdomains && rules.parent_kind === "newreg"} onChange={() => selectParent("newreg", false)} /> Использовать существующий поддомен новорега</label>
@@ -138,8 +146,9 @@ function ProjectConfigEditor({ siteId, api }: { siteId: string; api: Api }) {
       {draft.domain_layout !== "root_main" && draft.parent_kind === "newreg" && <label>Родительский новорег<input value={draft.newreg_domain} placeholder="new-domain.com" onChange={e => change({ newreg_domain: e.target.value })} /></label>}
       <label>Схема альтернейтов<select value={draft.profile_id} onChange={e => { const t = data.templates.find(x => x.id === e.target.value); change({ profile_id: e.target.value, variant: (t ? Object.keys(t.variants).includes("after") ? "after" : Object.keys(t.variants)[0] : "current") as Config["variant"] }); }}><option value="">Текущая схема проекта</option>{data.templates.map(t => <option key={t.id} value={t.id}>{t.brand} · {t.geo} · {t.project}</option>)}</select></label>
       {template && <label>Версия схемы<select value={draft.variant} onChange={e => change({ variant: e.target.value as Config["variant"] })}>{Object.keys(template.variants).map(v => <option key={v} value={v}>{v === "after" ? "Схема стала" : v === "before" ? "Схема была" : "Предоставленная схема"}</option>)}</select></label>}
-      <label className="checkboxRow"><input type="checkbox" checked={!!draft.create_fake_main} onChange={e => change({ create_fake_main: e.target.checked })} /> Создавать фейковый внутряк для схемы альтернейтов</label>
-      <label>Путь копии главной для языка и GEO<input value={draft.fake_main_path} placeholder="/events/" onChange={e => change({ fake_main_path: e.target.value })} /></label>
+      <FakeMainOptions value={draft} change={change} />
+      <label>Основа пути новой фейковой страницы<input value={draft.fake_main_path} placeholder="/page/" onChange={e => change({ fake_main_path: e.target.value })} /></label>
+      <p className="muted">Необязательно. По умолчанию /page/. Если путь занят, добавляется следующий свободный номер. В режиме «текущий» и без фейковых страниц это поле не используется.</p>
     </div>
     {draft.scope === "personal" && <AutomationRules key="personal-rules" value={draft} onChange={change} pool={data.language_pool || []} />}
     {data.next_run_at && <p>Следующий запуск: <b>{new Date(data.next_run_at).toLocaleString("ru-RU")}</b></p>}

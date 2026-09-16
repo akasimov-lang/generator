@@ -42,3 +42,15 @@ def create_fake_settings(project, value):
     if not current:
         alternate['currentFakeMain'] = path
     return alternate
+
+
+def next_fake_path(state, base):
+    base = normalize_fake_path(base)
+    occupied = set(state.get('fake_main_paths', [])) | set(state.get('content_page_paths', []))
+    if state.get('fake_main_current'):
+        occupied.add(normalize_fake_path(state['fake_main_current']))
+    for index in range(10000):
+        candidate = base if index == 0 else base.rstrip('/') + '-' + str(index) + '/'
+        if candidate not in occupied:
+            return normalize_fake_path(candidate)
+    raise ValueError('Свободные имена фейковых страниц закончились. Измените основу пути.')
