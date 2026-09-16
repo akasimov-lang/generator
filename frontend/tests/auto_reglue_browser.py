@@ -68,6 +68,7 @@ with sync_playwright() as p:
  expect(guide).to_be_visible()
  assert guide.evaluate('(e)=>getComputedStyle(e).color') == 'rgb(255, 255, 255)'
  page.wait_for_load_state('networkidle')
+ page.wait_for_timeout(200)  # Finish the post-save overview reload before measuring navigation.
  before_guide=list(calls)
  guide.click()
  expect(page).to_have_url(base+'/auto-reglue/guide')

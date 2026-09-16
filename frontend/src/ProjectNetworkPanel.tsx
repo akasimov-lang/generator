@@ -62,7 +62,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
     if (busyRef.current) return;
     busyRef.current = true; setBusy("refresh"); setError("");
     try {
-      const next = await api<Network>(`/sites/${site.id}/network`, force ? { cache: "no-store" } : undefined);
+      const next = await api<Network>(`/sites/${site.id}/network${force ? "?refresh=true" : ""}`, force ? { cache: "no-store" } : undefined);
       const previous = dataRef.current;
       accept(next);
       if (mounted.current && previous && (previous.revision !== next.revision || JSON.stringify(previous.operations) !== JSON.stringify(next.operations))) onChanged();

@@ -108,3 +108,27 @@ def test_history_endpoint_reads_only_database(monkeypatch):
     response = client.get(f'/api/sites/{site_id}/network/operations')
     assert response.status_code == 200
     assert response.json()[0]['action'] == 'indexing'
+
+
+def test_network_navigation_uses_saved_snapshot_and_refresh_is_explicit(monkeypatch):
+    from test_api_serialization import make_client
+    from app.network_state import project_network_state
+    client, sessions = make_client()
+    with sessions() as db:
+        site = db.scalar(select(models.Site)); site_id = site.id
+        site.network_state = project_network_state({'settings': {'canon':'saved.test','domains':['saved.test']}, 'head':{'alternateMarkup':'','enableAlternates':False}})
+        db.commit()
+    calls = []
+    def remote(db, site):
+        calls.append(site.id)
+        return {'canon':'fresh.test','domains':['fresh.test']}
+    monkeypatch.setattr(network, 'read_network', remote)
+    result = client.get(f'/api/sites/{site_id}/network')
+    assert result.status_code == 200 and result.json()['canon'] == 'saved.test'
+    assert calls == []
+    assert client.get(f'/api/sites/{site_id}/network?refresh=true').json()['canon'] == 'fresh.test'
+    assert calls == [site_id]
+    with sessions() as db:
+        db.get(models.Site, site_id).network_state = {}; db.commit()
+    assert client.get(f'/api/sites/{site_id}/network').json()['canon'] == 'fresh.test'
+    assert calls == [site_id, site_id]

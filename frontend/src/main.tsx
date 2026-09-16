@@ -1007,25 +1007,21 @@ function App() {
   const loadAll = React.useCallback(async () => {
     if (!token) return;
     const nextUser = await api<User>("/auth/me");
-    const [nextSites, nextProviders] = await Promise.all([
-      api<Site[]>("/sites"),
-      api<AiProvider[]>("/ai-providers")
-    ]);
-    const [nextTasks, nextArchivedTasks, nextContent] = await Promise.all([
-      api<Task[]>("/tasks"),
-      api<Task[]>("/tasks-archive"),
-      api<ContentItem[]>("/content")
-    ]);
-    const nextDashboard = nextUser.is_admin ? await api<Dashboard>("/dashboard") : null;
-    const nextUsers = nextUser.is_admin ? await api<User[]>("/users") : [];
-    setCurrentUser(nextUser);
-    setDashboard(nextDashboard);
-    setTasks(nextTasks);
-    setArchivedTasks(nextArchivedTasks);
-    setContent(nextContent);
+    const essential = Promise.all([api<Site[]>("/sites"), api<AiProvider[]>("/ai-providers")]);
+    // Unrelated archive/dashboard requests must not block entry to the workspace.
+    const background = Promise.all([
+      api<Task[]>("/tasks").then(setTasks),
+      api<Task[]>("/tasks-archive").then(setArchivedTasks),
+      api<ContentItem[]>("/content").then(setContent),
+      nextUser.is_admin ? api<Dashboard>("/dashboard").then(setDashboard) : Promise.resolve(setDashboard(null)),
+      nextUser.is_admin ? api<User[]>("/users").then(setUsers) : Promise.resolve(setUsers([])),
+    ]).then(() => null, error => error);
+    const [nextSites, nextProviders] = await essential;
     setSites(nextSites);
     setProviders(nextProviders);
-    setUsers(nextUsers);
+    setCurrentUser(nextUser);
+    const backgroundError = await background;
+    if (backgroundError) throw backgroundError;
   }, [api, token]);
 
   async function requestPopupPermission() {
@@ -1819,7 +1815,7 @@ function ProjectWorkspaceView({
     if (name) return sites.find((site) => site.name === name)?.id || "";
     return localStorage.getItem(workspaceSiteStorageKey) || localStorage.getItem("workspace_site_id") || "";
   });
-  const requestCache = React.useMemo(() => workspaceRequestCache(sourceApi), [sourceApi, selectedSiteId]);
+  const requestCache = React.useMemo(() => workspaceRequestCache(sourceApi), [sourceApi]);
   const api = requestCache.api;
   const selectedSiteIdRef = React.useRef(selectedSiteId);
   selectedSiteIdRef.current = selectedSiteId;
@@ -1897,76 +1893,36 @@ function ProjectWorkspaceView({
     projectLoadRequestRef.current = requestId;
     setWorkspaceError("");
     if (activeTab === "network" || activeTab === "redirects" || activeTab === "autoReglue") return { success: true, errorCode: "" };
-    const requestResource = async <T,>(path: string): Promise<{ value: T | null; error: string; errorCode: string }> => {
+    const current = () => requestId === projectLoadRequestRef.current && selectedSiteIdRef.current === selectedSiteId;
+    const read = async <T,>(path: string, publish: (value: T) => void) => {
       try {
-        return { value: await api<T>(path), error: "", errorCode: "" };
+        const value = await api<T>(path);
+        if (current()) publish(value);
+        return { error: "", errorCode: "" };
       } catch (error) {
-        return {
-          value: null,
-          error: error instanceof Error ? error.message : "Не удалось загрузить данные",
-          errorCode: requestErrorCode(error)
-        };
+        return { error: error instanceof Error ? error.message : "Не удалось загрузить данные", errorCode: requestErrorCode(error) };
       }
     };
-    // The overview must be fast.  Article bodies, publication payloads and the
-    // tools for other tabs are deliberately not requested until their tab opens.
-    const basicRequests = Promise.all([
-      requestResource<SiteOverview>(`/sites/${selectedSiteId}/overview`),
-      requestResource<Section[]>(`/sites/${selectedSiteId}/sections`)
-    ]);
-
-    const deferredRequests: Array<Promise<{ value: unknown; error: string; errorCode: string }>> = [];
-    if (["topics", "content", "publication", "menu"].includes(activeTab)) deferredRequests.push(requestResource<ContentItem[]>(`/sites/${selectedSiteId}/content`));
+    // Publish independent responses immediately: slow logs must not hold up content.
+    const requests: Array<Promise<{ error: string; errorCode: string }>> = [];
+    if (activeTab === "overview") requests.push(read<SiteOverview>(`/sites/${selectedSiteId}/overview`, setOverview));
+    requests.push(read<Section[]>(`/sites/${selectedSiteId}/sections`, setSections));
+    if (["topics", "content", "publication", "menu"].includes(activeTab)) requests.push(read<ContentItem[]>(`/sites/${selectedSiteId}/content`, setSiteContent));
     if (activeTab === "topics") {
-      deferredRequests.push(requestResource<Task[]>(`/sites/${selectedSiteId}/tasks`));
-      deferredRequests.push(requestResource<PromptTemplate[]>(`/sites/${selectedSiteId}/prompt-templates`));
+      requests.push(read<Task[]>(`/sites/${selectedSiteId}/tasks`, setSiteTasks));
+      requests.push(read<PromptTemplate[]>(`/sites/${selectedSiteId}/prompt-templates`, setPromptTemplates));
     }
     if (activeTab === "content" || activeTab === "publication") {
-      deferredRequests.push(requestResource<PublicationCampaign[]>(`/sites/${selectedSiteId}/publication-campaigns`));
-      deferredRequests.push(requestResource<PublicationLog[]>(`/sites/${selectedSiteId}/publication-logs`));
-      deferredRequests.push(requestResource<PromptTemplate[]>(`/sites/${selectedSiteId}/prompt-templates`));
+      requests.push(read<PublicationCampaign[]>(`/sites/${selectedSiteId}/publication-campaigns`, setCampaigns));
+      requests.push(read<PublicationLog[]>(`/sites/${selectedSiteId}/publication-logs`, setLogs));
+      requests.push(read<PromptTemplate[]>(`/sites/${selectedSiteId}/prompt-templates`, setPromptTemplates));
     }
-    if (activeTab === "menu") deferredRequests.push(requestResource<PublicationLog[]>(`/sites/${selectedSiteId}/publication-logs?include_payloads=true`));
-    const [nextOverview, nextSections] = await basicRequests;
-    if (requestId !== projectLoadRequestRef.current || selectedSiteIdRef.current !== selectedSiteId) return { success: false, errorCode: "CANCELLED" };
-    if (nextOverview.value) setOverview(nextOverview.value);
-    if (nextSections.value) setSections(nextSections.value);
-
-    const deferred = await Promise.all(deferredRequests);
-    if (requestId !== projectLoadRequestRef.current || selectedSiteIdRef.current !== selectedSiteId) return { success: false, errorCode: "CANCELLED" };
-    let deferredIndex = 0;
-    if (["topics", "content", "publication", "menu"].includes(activeTab)) {
-      const result = deferred[deferredIndex++] as { value: ContentItem[] | null; error: string; errorCode: string };
-      if (result.value) setSiteContent(result.value);
-    }
-    if (activeTab === "topics") {
-      const tasks = deferred[deferredIndex++] as { value: Task[] | null };
-      const prompts = deferred[deferredIndex++] as { value: PromptTemplate[] | null };
-      if (tasks.value) setSiteTasks(tasks.value);
-      if (prompts.value) setPromptTemplates(prompts.value);
-    }
-    if (activeTab === "content" || activeTab === "publication") {
-      const campaigns = deferred[deferredIndex++] as { value: PublicationCampaign[] | null };
-      const logs = deferred[deferredIndex++] as { value: PublicationLog[] | null };
-      const prompts = deferred[deferredIndex++] as { value: PromptTemplate[] | null };
-      if (campaigns.value) setCampaigns(campaigns.value);
-      if (logs.value) setLogs(logs.value);
-      if (prompts.value) setPromptTemplates(prompts.value);
-    }
-    if (activeTab === "menu") {
-      const logs = deferred[deferredIndex++] as { value: PublicationLog[] | null };
-      if (logs.value) setLogs(logs.value);
-    }
-    const dataErrors = [nextOverview, nextSections, ...deferred]
-      .map((result) => result.error)
-      .filter(Boolean);
-    setWorkspaceError(dataErrors.length ? "Не удалось загрузить часть данных проекта. Повторите попытку через несколько секунд." : "");
-    const failedResource = [nextOverview, nextSections, ...deferred]
-      .find((result) => Boolean(result.error));
-    return {
-      success: !failedResource,
-      errorCode: failedResource?.errorCode || ""
-    };
+    if (activeTab === "menu") requests.push(read<PublicationLog[]>(`/sites/${selectedSiteId}/publication-logs?include_payloads=true`, setLogs));
+    const results = await Promise.all(requests);
+    if (!current()) return { success: false, errorCode: "CANCELLED" };
+    const failed = results.find(result => result.error);
+    setWorkspaceError(failed ? "Не удалось загрузить часть данных проекта. Повторите попытку через несколько секунд." : "");
+    return { success: !failed, errorCode: failed?.errorCode || "" };
   }, [activeTab, api, selectedSiteId]);
 
   React.useEffect(() => {

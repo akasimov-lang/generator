@@ -98,10 +98,10 @@ function Runs({ runs, api, refresh }: { runs: Run[]; api: Api; refresh: () => Pr
 function ProjectConfigEditor({ siteId, api, onTask }: { siteId: string; api: Api; onTask: (task: ScheduleTask | null) => void }) {
   const [data, setData] = React.useState<ProjectData | null>(null); const [draft, setDraft] = React.useState<Config | null>(null);
   const [plan, setPlan] = React.useState<Plan | null>(null); const [busy, setBusy] = React.useState(false); const [error, setError] = React.useState("");
-  const load = React.useCallback(async () => { const next = await api<ProjectData>(`/auto-reglue/projects/${siteId}`); setData(next); setDraft(old => old || next.config); onTask(next.task || null); }, [api, siteId, onTask]);
+  const load = React.useCallback(async (force = false) => { const next = await api<ProjectData>(`/auto-reglue/projects/${siteId}`, force ? { cache: "no-store" } : undefined); setData(next); setDraft(old => old || next.config); onTask(next.task || null); }, [api, siteId, onTask]);
   React.useEffect(() => { void load().catch(e => setError(errorText(e))); }, [load]);
   const pending = data?.runs.some(r => active.includes(r.status));
-  React.useEffect(() => { if (!pending) return; const timer = setInterval(() => void load().catch(e => setError(errorText(e))), 5000); return () => clearInterval(timer); }, [load, pending]);
+  React.useEffect(() => { if (!pending) return; const timer = setInterval(() => void load(true).catch(e => setError(errorText(e))), 5000); return () => clearInterval(timer); }, [load, pending]);
   async function perform(fn: () => Promise<void>) { setBusy(true); setError(""); try { await fn(); } catch (e) { setError(errorText(e)); } finally { setBusy(false); } }
   if (!draft || !data) return <p>{error || "Загружаем настройки…"}</p>;
   const dirty = JSON.stringify(draft) !== JSON.stringify(data.config);

@@ -106,8 +106,18 @@ def test_project_content_and_overview_exclude_archived_task_items() -> None:
         db.commit()
         site_id = site.id
 
-    content_response = client.get(f"/api/sites/{site_id}/content")
-    overview_response = client.get(f"/api/sites/{site_id}/overview")
+    from sqlalchemy import event
+    statements = []
+    engine = TestingSession.kw['bind']
+    def capture(connection, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+    event.listen(engine, 'before_cursor_execute', capture)
+    try:
+        content_response = client.get(f"/api/sites/{site_id}/content")
+        overview_response = client.get(f"/api/sites/{site_id}/overview")
+    finally:
+        event.remove(engine, 'before_cursor_execute', capture)
+    assert not any('content_items.generated_json' in sql for sql in statements)
 
     assert content_response.status_code == 200
     assert [item["topic"] for item in content_response.json()] == ["Current topic"]

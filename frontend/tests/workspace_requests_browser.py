@@ -8,11 +8,15 @@ network=dict(canon=site['cache_canon'],reserve='bet-onred-czechia.com',domains=[
 with sync_playwright() as p:
  b=p.chromium.launch(executable_path=os.environ.get('CHROME'),headless=True)
  page=b.new_page(viewport={'width':1920,'height':1080})
- errors=[]; calls=[]
+ errors=[]; calls=[]; delayed_archive=[]; delayed_sections=[]
  page.on('pageerror',lambda e:errors.append(str(e)))
  def route(r):
   path=r.request.url.split('/api')[-1].split('?')[0]
   calls.append((r.request.method,path))
+  if path.endswith('/sections') and not delayed_sections:
+   delayed_sections.append(r);return
+  if path=='/tasks-archive' and not delayed_archive:
+   delayed_archive.append(r);return
   data=[]
   if path=='/auth/me':data={'id':'admin','username':'admin','is_admin':True,'is_active':True}
   elif path in ['/sites','/sites/cache/projects']:data=[site]
@@ -20,6 +24,7 @@ with sync_playwright() as p:
   elif '/favorite-sites' in path:data={'site_ids':['preview']}
   elif '/menu-capabilities' in path:data=caps
   elif path.endswith('/network'):data=network
+  elif path=='/auto-reglue/projects/preview':data={'config':{'enabled':False,'scope':'mass','schedule_enabled':False,'interval_days':0,'scheme_mode':'preserve','auxiliary_hreflangs':[],'drop_domain':'','newreg_domain':'','language':'','profile_id':'','variant':'current','fake_main_path':''},'settings':{'enabled':False},'eligible':False,'geo':'CZ','templates':[],'runs':[]}
   elif path.endswith('/overview'):data={'site':site,'stats':{},'recent_content':[]}
   r.fulfill(status=200,content_type='application/json',body=json.dumps(data))
  page.route('**/api/**',route)
@@ -28,6 +33,8 @@ with sync_playwright() as p:
  page.evaluate('localStorage.setItem("admin_token","mock");sessionStorage.setItem("popup_permission_prompt_closed","true")')
  page.goto(base+'/project-network/betonredczech.com/')
  expect(page.locator('.networkTable')).to_be_visible()
+ assert delayed_archive, 'Archive request should be running in background'
+ delayed_archive[0].fulfill(status=200,content_type='application/json',body='[]')
  expect(page.get_by_text('Меню реализовано',exact=True)).to_have_count(2)
  page.wait_for_timeout(200)
  assert not [c for c in calls if c[0]!='GET'],calls
@@ -39,10 +46,14 @@ with sync_playwright() as p:
   page.get_by_role('link',name=label,exact=True).click()
   page.wait_for_timeout(100)
   expect(page.get_by_text('Меню реализовано',exact=True)).to_have_count(2)
-  expect(page.get_by_role('heading',name='Автопереклей проекта',exact=True)).to_have_count(1 if label == 'Переклей' else 0)
+  expect(page.get_by_role('heading',name='Автопереклей проекта',exact=True)).to_have_count(0)
   expect(page.locator('.projectNetworkPanel')).to_have_count(1)
  assert calls==before, calls[len(before):]
- tabs=['Обзор','Генерация','Контент и публикация','Меню','Сетка','Переклей']
+ page.get_by_role('link',name='Обзор',exact=True).click()
+ expect(page.get_by_text('Generated',exact=True)).to_be_visible()
+ assert delayed_sections, 'Overview must render while sections are still pending'
+ delayed_sections[0].fulfill(status=200,content_type='application/json',body='[]')
+ tabs=['Обзор','Генерация','Контент и публикация','Меню','Сетка','Переклей','Автопереклей проекта']
  for label in tabs:
   page.get_by_role('link',name=label,exact=True).click()
   page.wait_for_timeout(150)

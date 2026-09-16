@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import delete, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from app import models
 from app.content_trash import trash_content, restore_content
@@ -609,8 +609,12 @@ def _network_call(callback, *args):
 
 
 @router.get("/sites/{site_id}/network")
-def get_site_network(site_id: str, _: AuthUser, db: Session = Depends(get_db)):
-    return _network_call(project_network.read_network, db, _get_site_or_404(db, site_id))
+def get_site_network(site_id: str, _: AuthUser, db: Session = Depends(get_db), refresh: bool = False):
+    site = _get_site_or_404(db, site_id)
+    state = site.network_state or {}
+    if not refresh and state.get("has_head") and isinstance(state.get("domains"), list):
+        return project_network.result(db, site, state)
+    return _network_call(project_network.read_network, db, site)
 
 
 @router.get("/sites/{site_id}/network/operations")
@@ -664,7 +668,7 @@ def get_site_overview(site_id: str, _: AuthUser, db: Session = Depends(get_db)) 
     ).all()
     status_counts = {status: count for status, count in status_rows}
     next_item = db.scalars(
-        select(models.ContentItem)
+        select(models.ContentItem).options(load_only(models.ContentItem.scheduled_at, raiseload=True))
         .join(models.GenerationTask, models.GenerationTask.id == models.ContentItem.task_id)
         .where(models.ContentItem.site_id == site_id)
         .where(models.GenerationTask.archived_at.is_(None))
@@ -673,7 +677,7 @@ def get_site_overview(site_id: str, _: AuthUser, db: Session = Depends(get_db)) 
         .limit(1)
     ).first()
     recent_content = db.scalars(
-        select(models.ContentItem)
+        select(models.ContentItem).options(load_only(*(getattr(models.ContentItem, field) for field in ContentItemSummaryResponse.model_fields), raiseload=True))
         .join(models.GenerationTask, models.GenerationTask.id == models.ContentItem.task_id)
         .where(models.ContentItem.site_id == site_id)
         .where(models.GenerationTask.archived_at.is_(None))
@@ -1779,7 +1783,7 @@ def create_site_menu_structure_task(
 def list_site_content(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     _get_site_or_404(db, site_id)
     return db.scalars(
-        select(models.ContentItem)
+        select(models.ContentItem).options(load_only(*(getattr(models.ContentItem, field) for field in ContentItemSummaryResponse.model_fields), raiseload=True))
         .join(models.GenerationTask, models.GenerationTask.id == models.ContentItem.task_id)
         .where(models.ContentItem.site_id == site_id)
         .where(models.GenerationTask.archived_at.is_(None))
@@ -1798,7 +1802,7 @@ def list_site_logs(site_id: str, _: AuthUser, db: Session = Depends(get_db), inc
         .where(models.GenerationTask.archived_at.is_(None))
     )
     logs = db.scalars(
-        select(models.PublicationLog)
+        select(models.PublicationLog).options(*([] if include_payloads else [load_only(*(getattr(models.PublicationLog, field) for field in PublicationLogSummaryResponse.model_fields), raiseload=True)]))
         .where(models.PublicationLog.content_item_id.in_(content_ids))
         .order_by(models.PublicationLog.created_at.desc())
         .limit(200)
