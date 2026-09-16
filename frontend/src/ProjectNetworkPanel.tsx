@@ -204,9 +204,10 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
             <button type="button" className="button secondary" disabled={disabled || !reserveValid || reserve !== data.reserve} onClick={() => void checkReserve()}>{busy === "check" ? "Проверяем…" : "Проверить домен"}</button>
           </div>
           {check && <p role="status">{check.reachable ? "Домен доступен" : `Домен недоступен: ${check.reason || "нет ответа"}`}</p>}
+          <p className="muted">Ручной переклей на сохранённый резерв. Проверка домена необязательна; автопереклей и его расписание не запускаются.</p>
           {reserveValid && <p>Смена canonical: <strong>{data.canon}</strong> → <strong>{reserve}</strong></p>}
           {dirty && <p>В альтернейтах есть несохранённые изменения. Сохраните их перед запуском переклея.</p>}
-          <button type="button" className="button" disabled={disabled || dirty || !reserveValid || reserve !== data.reserve || check?.domain !== reserve || !check.reachable} onClick={() => void mutate("reglue")}>{busy === "reglue" ? "Запускаем переклей…" : "Переклеить на резервный домен"}</button>
+          <button type="button" className="button" disabled={disabled || dirty || !reserveValid || reserve !== data.reserve} onClick={() => void mutate("reglue")}>{busy === "reglue" ? "Запускаем переклей…" : "Переклеить на резервный домен"}</button>
         </div>}
         {draft && (mode !== "network" || networkView === "main") && <div className="networkSection">
           <h3>Альтернейты</h3>

@@ -328,9 +328,10 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
             else:
                 if state["reserve"] != domain:
                     raise NetworkConflict("Сначала сохраните выбранный резервный домен.")
-                _, check = remote.request("POST", "/projects/check-domain", {"domain": domain})
-                if not isinstance(check, dict) or check.get("reachable") is not True:
-                    raise ValueError("Резервный домен не подтвердил доступность. Проверьте домен перед переклеем.")
+                if auto_run_id is not None:
+                    _, check = remote.request("POST", "/projects/check-domain", {"domain": domain})
+                    if not isinstance(check, dict) or check.get("reachable") is not True:
+                        raise ValueError("Резервный домен не подтвердил доступность. Проверьте домен перед переклеем.")
                 path = "/projects/update-reglue"
                 request.update(trigger="webdev:settings", initiator=username)
         else:

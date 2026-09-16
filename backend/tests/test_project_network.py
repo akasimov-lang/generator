@@ -89,7 +89,7 @@ def test_reserve_then_reglue_exact_contract(env):
     assert remote.calls[-1] == ("POST", "/projects/update-value", {"folder": "project.test", "reserve": "next.test", "reserveOption": "next.test"})
     assert saved["operations"][0]["status"] == "confirmed"
     after = change(env, "reglue", saved["revision"], domain="next.test")
-    assert remote.calls[-2] == ("POST", "/projects/check-domain", {"domain": "next.test"})
+    assert not any(path.endswith("check-domain") for _, path, _ in remote.calls)
     assert remote.calls[-1] == ("POST", "/projects/update-reglue", {"folder": "project.test", "reserve": "next.test", "trigger": "webdev:settings", "initiator": "anton"})
     assert after["canon"] == "next.test"
     assert "main.test" in after["main_history"]
@@ -128,8 +128,9 @@ def test_invalid_reserve_blocked(env, domain):
 def test_unreachable_reserve_blocks_reglue(env):
     before = network.read_network(env[0], env[1])
     env[2].reachable = False
+    payload = network.NetworkChange(request_id=uuid4(), action="reglue", revision=before["revision"], domain="reserve.test")
     with pytest.raises(ValueError, match="доступность"):
-        change(env, "reglue", before["revision"], domain="reserve.test")
+        network.change_network(env[0], env[1], payload, "scheduler", auto_run_id=str(uuid4()))
     assert len(env[2].calls) == 1
     assert env[2].calls[0][1].endswith("check-domain")
 
@@ -141,9 +142,9 @@ def test_timeout_persists_receipt_and_prevents_duplicate(env):
     payload = network.NetworkChange(request_id=uuid4(), action="reglue", revision=before["revision"], domain="reserve.test")
     after = network.change_network(db, site, payload, "anton")
     assert after["operations"][0]["status"] == "unknown"
-    assert len(remote.calls) == 2
+    assert len(remote.calls) == 1
     network.change_network(db, site, payload, "anton")
-    assert len(remote.calls) == 2
+    assert len(remote.calls) == 1
     with pytest.raises(network.NetworkConflict, match="не подтверждена"):
         change(env, "reglue", after["revision"], domain="reserve.test")
     remote.data["settings"]["canon"] = "reserve.test"
@@ -362,3 +363,14 @@ def test_fake_main_rejects_existing_content_and_unsafe_paths(env):
     for path in ['/', '../test1', 'https://example.com/a', 'test?x=1', 'api/test']:
         with pytest.raises(ValueError):change(env,'create_fake_main',state['revision'],fake_main_path=path)
     assert not remote.calls
+
+
+def test_manual_reglue_does_not_require_check_or_create_auto_run(env):
+    from sqlalchemy import select
+    db, site, remote = env
+    before = network.read_network(db, site)
+    remote.reachable = False
+    result = change(env, 'reglue', before['revision'], domain='reserve.test')
+    assert result['canon'] == 'reserve.test'
+    assert not any(path.endswith('check-domain') for _, path, _ in remote.calls)
+    assert not db.scalars(select(models.AutoReglueRun)).all()
