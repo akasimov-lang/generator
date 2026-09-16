@@ -43,7 +43,7 @@ with sync_playwright() as p:
  assert not [c for c in calls if c[1].endswith(('/overview','/sections'))],calls
  before=list(calls)
  for label in ['Переклей','Сетка'] * 6:
-  page.get_by_role('link',name=label,exact=True).click()
+  page.locator('.workspaceTabs').get_by_role('link',name=label,exact=True).click()
   page.wait_for_timeout(100)
   expect(page.get_by_text('Меню реализовано',exact=True)).to_have_count(2)
   expect(page.get_by_role('heading',name='Автопереклей проекта',exact=True)).to_have_count(0)
@@ -53,9 +53,9 @@ with sync_playwright() as p:
  expect(page.get_by_text('Generated',exact=True)).to_be_visible()
  assert delayed_sections, 'Overview must render while sections are still pending'
  delayed_sections[0].fulfill(status=200,content_type='application/json',body='[]')
- tabs=['Обзор','Генерация','Контент и публикация','Меню','Сетка','Переклей','Автопереклей проекта']
+ tabs=['Обзор','Генерация','Контент и публикация','Меню','Сетка','Переклей','Автопереклей']
  for label in tabs:
-  page.get_by_role('link',name=label,exact=True).click()
+  page.locator('.workspaceTabs').get_by_role('link',name=label,exact=True).click()
   page.wait_for_timeout(150)
  page.get_by_role('link',name='Контент и публикация',exact=True).click()
  page.wait_for_timeout(150)
@@ -67,7 +67,7 @@ with sync_playwright() as p:
  assert calls==before_sections, calls[len(before_sections):]
  warmed=list(calls)
  for label in tabs:
-  page.get_by_role('link',name=label,exact=True).click()
+  page.locator('.workspaceTabs').get_by_role('link',name=label,exact=True).click()
   page.wait_for_timeout(150)
  assert calls==warmed, calls[len(warmed):]
  assert not [c for c in calls if c[0]!='GET'], calls

@@ -2542,6 +2542,13 @@ h2 {
   text-decoration: none;
 }
 
+.tabButton.tabButtonIconOnly {
+  width: 36px;
+  padding: 0;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
 .tabButtonIcon {
   align-items: center;
   display: inline-flex;

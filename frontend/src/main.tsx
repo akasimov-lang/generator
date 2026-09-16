@@ -2317,15 +2317,23 @@ function ProjectWorkspaceView({
           </div>
         ) : null}
         <div className="workspaceTabs">
-          <TabButton href={pathForRoute("workspace", "network", selectedSite?.name)} icon={<Database size={16} />} label="Сетка" active={activeTab === "network"} onClick={() => onTabChange("network", selectedSite?.name)} />
-          <TabButton href={pathForRoute("workspace", "redirects", selectedSite?.name)} icon={<CornerDownRight size={16} />} label="Переклей" active={activeTab === "redirects"} onClick={() => onTabChange("redirects", selectedSite?.name)} />
           <TabButton
             href={pathForRoute("workspace", "overview", selectedSite?.name)}
-            icon={<span className="tabButtonIcon overview" aria-hidden="true"><Search size={15} /></span>}
+            icon={<Search size={18} aria-hidden="true" />}
+            iconOnly
             label="Обзор"
             active={activeTab === "overview"}
             onClick={() => onTabChange("overview", selectedSite?.name)}
           />
+          <TabButton href={pathForRoute("workspace", "network", selectedSite?.name)} icon={<Database size={16} />} label="Сетка" active={activeTab === "network"} onClick={() => onTabChange("network", selectedSite?.name)} />
+          <TabButton href={pathForRoute("workspace", "redirects", selectedSite?.name)} icon={<CornerDownRight size={16} />} label="Переклей" active={activeTab === "redirects"} onClick={() => onTabChange("redirects", selectedSite?.name)} />
+          {canManageAutomation && selectedSite && <a
+            className={`workspaceMenuGeneratorShortcut workspaceAutoReglueShortcut ${activeTab === "autoReglue" ? "isActive" : ""}`}
+            href={pathForRoute("workspace", "autoReglue", selectedSite.name)}
+            aria-current={activeTab === "autoReglue" ? "page" : undefined}
+            onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onTabChange("autoReglue", selectedSite.name); }}
+          ><Star size={15} /> Автопереклей</a>}
+
           <TabButton
             href={pathForRoute("workspace", "topics", selectedSite?.name)}
             icon={<span className="tabButtonIcon ai" aria-hidden="true"><Brain size={17} /></span>}
@@ -2361,12 +2369,7 @@ function ProjectWorkspaceView({
           >
             <Sparkles size={15} /> Сгенерировать структуру меню
           </button>
-          {canManageAutomation && selectedSite && <a
-            className={`workspaceMenuGeneratorShortcut workspaceAutoReglueShortcut ${activeTab === "autoReglue" ? "isActive" : ""}`}
-            href={pathForRoute("workspace", "autoReglue", selectedSite.name)}
-            aria-current={activeTab === "autoReglue" ? "page" : undefined}
-            onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onTabChange("autoReglue", selectedSite.name); }}
-          ><Star size={15} /> Автопереклей проекта</a>}
+
         </div>
         {workspaceError ? <div className="notice">{workspaceError}</div> : null}
       </DataPanel>
@@ -9976,10 +9979,12 @@ function NavButton({ href, icon, label, active, onClick }: { href: string; icon:
   );
 }
 
-function TabButton({ href, icon, label, active, attention = false, onClick }: { href: string; icon?: React.ReactNode; label: string; active: boolean; attention?: boolean; onClick: () => void }) {
+function TabButton({ href, icon, label, active, attention = false, iconOnly = false, onClick }: { href: string; icon?: React.ReactNode; label: string; active: boolean; attention?: boolean; iconOnly?: boolean; onClick: () => void }) {
   return (
     <a
-      className={`tabButton ${active ? "active" : ""} ${attention ? "attention" : ""}`}
+      className={`tabButton ${active ? "active" : ""} ${attention ? "attention" : ""} ${iconOnly ? "tabButtonIconOnly" : ""}`}
+      aria-label={iconOnly ? label : undefined}
+      title={iconOnly ? label : undefined}
       href={href}
       onClick={(event) => {
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -9988,7 +9993,7 @@ function TabButton({ href, icon, label, active, attention = false, onClick }: { 
       }}
     >
       {icon}
-      {label}
+      {iconOnly ? null : label}
     </a>
   );
 }

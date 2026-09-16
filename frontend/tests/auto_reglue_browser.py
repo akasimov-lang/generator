@@ -94,13 +94,13 @@ with sync_playwright() as p:
  assert global_cfg['interval_days']==4 and global_cfg['schedule_enabled']
  assert global_cfg['scheme_mode']=='add_auxiliary'
  page.goto(base+'/project-redirects/betonredczech.com/')
- expect(page.get_by_role('link',name='Автопереклей проекта',exact=True)).to_be_visible()
+ expect(page.locator('.workspaceTabs').get_by_role('link',name='Автопереклей',exact=True)).to_be_visible()
  expect(page.get_by_role('heading',name='Автопереклей проекта',exact=True)).to_have_count(0)
  expect(page.get_by_role('link',name='Инструкция по автопереклеям',exact=True)).to_have_count(0)
  assert not [c for c in calls if c[1]=='/auto-reglue/projects/preview']
- page.get_by_role('link',name='Автопереклей проекта',exact=True).click()
+ page.locator('.workspaceTabs').get_by_role('link',name='Автопереклей',exact=True).click()
  expect(page).to_have_url(base+'/project-auto-reglue/betonredczech.com/')
- expect(page.get_by_role('link',name='Автопереклей проекта',exact=True)).to_have_attribute('aria-current','page')
+ expect(page.locator('.workspaceTabs').get_by_role('link',name='Автопереклей',exact=True)).to_have_attribute('aria-current','page')
  page.get_by_label('Дроп для x-default',exact=True).fill('drop.test')
  page.get_by_label('Язык проекта (если не задан в кэше)',exact=True).fill('az')
  page.get_by_role('button',name='Сохранить настройки',exact=True).click()
@@ -118,9 +118,9 @@ with sync_playwright() as p:
  page.wait_for_timeout(150)
  assert len([c for c in calls if c[1]=='/auto-reglue/start'])==2
  page.goto(base+'/project-redirects/betonredczech.com/')
- page.get_by_role('link',name='Автопереклей проекта',exact=True).click()
+ page.locator('.workspaceTabs').get_by_role('link',name='Автопереклей',exact=True).click()
  expect(page).to_have_url(base+'/project-auto-reglue/betonredczech.com/')
- expect(page.get_by_role('link',name='Автопереклей проекта',exact=True)).to_have_attribute('aria-current','page')
+ expect(page.locator('.workspaceTabs').get_by_role('link',name='Автопереклей',exact=True)).to_have_attribute('aria-current','page')
  page.get_by_label('Использовать новорег в x-default',exact=True).check()
  expect(page.get_by_label('Персональный автопереклей — исключить проект из массовых запусков')).not_to_be_checked()
  page.get_by_label('Включить расписание автопереклеев').check()
