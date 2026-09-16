@@ -144,7 +144,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
         {uncertain && <div className="notice" role="status">Проверяем результат отправленной операции. Новые изменения станут доступны после подтверждения. Запрос на изменение повторно не отправляется.</div>}
         {mode === "network" && <>
           <p>Отметки истории сохраняются после смены домена. x-default означает, что домен был указан в альтернейте с hreflang="x-default".</p>
-          <div className="networkTableWrap"><table className="networkTable"><thead><tr><th scope="col">Домен</th><th scope="col">Статус</th><th scope="col">Был Main</th><th scope="col">Был в альтернейтах</th><th scope="col">x-default</th></tr></thead>
+          <div className="networkTableWrap" tabIndex={0} role="region" aria-label="Домены сетки"><table className="networkTable"><thead><tr><th scope="col">Домен</th><th scope="col">Статус</th><th scope="col">Был Main</th><th scope="col">Был в альтернейтах</th><th scope="col">x-default</th></tr></thead>
             <tbody>{known.map((domain) => <tr key={domain}><td data-label="Домен">{domain}</td><td data-label="Статус">{domain === data.canon ? "Main" : domain === data.reserve ? "Резерв" : data.domains.includes(domain) ? "В сетке" : "В истории"}</td>
               {[data.main_history, data.alternate_history, data.x_default_history].map((history, i) => <td key={i} data-label={["Был Main", "Был в альтернейтах", "x-default"][i]}><input type="checkbox" className="networkHistoryCheck" disabled checked={history.includes(domain)} aria-label={`${domain}: ${["был Main", "был в альтернейтах", "x-default"][i]}`} /></td>)}</tr>)}</tbody>
           </table></div>

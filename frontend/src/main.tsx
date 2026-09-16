@@ -60,6 +60,8 @@ import {
   X
 } from "lucide-react";
 import "./styles/global.css";
+import "./styles/branding.css";
+import { DesignProvider, useDesign, type DesignVersion } from "./DesignProvider";
 
 type Stats = {
   total_tasks: number;
@@ -249,7 +251,7 @@ type Site = {
   alternate_domain_history: string[];
   cache_server_ip: string | null;
   cache_server_host: string | null;
-  project_status: "test" | "working" | "not_in_focus" | "duplicate";
+  project_status: "test" | "working" | "mass_actions" | "not_in_focus" | "duplicate";
   is_test_project: boolean;
   has_menu: boolean;
   cache_synced_at: string | null;
@@ -904,6 +906,7 @@ function projectGeoCode(site?: Site): string {
 }
 
 function App() {
+  const { designVersion, setDesignVersion } = useDesign();
   const initialRoute = React.useMemo(() => routeFromPath(window.location.pathname), []);
   const [token, setToken] = React.useState(() => localStorage.getItem("admin_token") || "");
   const [theme, setTheme] = React.useState<ThemeMode>(() => (localStorage.getItem("theme_mode") === "dark" ? "dark" : "light"));
@@ -1140,8 +1143,8 @@ function App() {
         <div className="brand">
           <div className="brandMark logoMark"><BrandLogo /></div>
           <div>
-            <strong>Content Admin</strong>
-            <span>AI publishing control</span>
+            <BrandName />
+            <BrandTagline />
           </div>
         </div>
         <nav className="nav">
@@ -1258,7 +1261,7 @@ function App() {
         {activeView === "sites" && <SitesView api={api} sites={sites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll} />}
         {activeView === "favorites" && <SitesView api={api} sites={sites} currentUsername={currentUser.username} favoritesOnly readOnly={!isAdmin} onChanged={loadAll} />}
         {activeView === "guide" && <UserGuideView />}
-        {activeView === "settings" && <SettingsView api={api} currentUser={currentUser} users={users} inputStyle={inputStyle} onInputStyleChange={setInputStyle} onChanged={loadAll} />}
+        {activeView === "settings" && <SettingsView api={api} currentUser={currentUser} users={users} designVersion={designVersion} onDesignVersionChange={setDesignVersion} inputStyle={inputStyle} onInputStyleChange={setInputStyle} onChanged={loadAll} />}
       </main>
       {notificationPromptVisible ? (
         <div className="permissionOverlay" role="dialog" aria-modal="true" aria-labelledby="popup-permission-title">
@@ -1303,7 +1306,7 @@ function AuthDashboardBackdrop() {
       <aside className="authPreviewSidebar">
         <div className="authPreviewBrand">
           <div className="brandMark logoMark"><BrandLogo /></div>
-          <div><strong>Content Admin</strong><span>AI publishing control</span></div>
+          <div><BrandName /><BrandTagline /></div>
         </div>
         <div className="authPreviewNav">
           {navigation.map((item) => (
@@ -1345,7 +1348,7 @@ function AuthDashboardBackdrop() {
   );
 }
 
-function BrandLogo() {
+function LegacyBrandLogo() {
   return (
     <svg className="brandLogo" viewBox="0 0 128 128" role="img" aria-label="AI Content panel">
       <defs>
@@ -1371,6 +1374,27 @@ function BrandLogo() {
       </g>
     </svg>
   );
+}
+
+function BrandLogo() {
+  const { designVersion } = useDesign();
+  if (designVersion === "1.0") return <LegacyBrandLogo />;
+  return <img className="brandLogo" src="/pagepilot-mark.svg" alt="PagePilot" width="64" height="64" />;
+}
+
+function BrandName() {
+  const { designVersion } = useDesign();
+  return designVersion === "1.0" ? <strong>Content Admin</strong> : <strong className="brandWordmark">Page<span>Pilot</span></strong>;
+}
+
+function BrandTagline() {
+  const { designVersion } = useDesign();
+  return <span>{designVersion === "1.0" ? "AI publishing control" : "Управление контентом"}</span>;
+}
+
+function LoginBrandName() {
+  const { designVersion } = useDesign();
+  return <h1>{designVersion === "1.0" ? "AI Content panel" : <span className="brandWordmark">Page<span>Pilot</span></span>}<small>Версия {designVersion}</small></h1>;
 }
 
 function AuthScreen({ children }: { children: React.ReactNode }) {
@@ -1418,7 +1442,7 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
       <form className="loginPanel" onSubmit={submit} aria-busy={submitting}>
         <div className="loginBrandRow">
           <div className="brandMark large logoMark loginBrandLogo"><BrandLogo /></div>
-          <h1>AI Content panel</h1>
+          <LoginBrandName />
         </div>
         <p>Вход в панель генерации и публикации контента.</p>
         <label>
@@ -1799,6 +1823,7 @@ function ProjectWorkspaceView({
   const [projectRefreshResponseCode, setProjectRefreshResponseCode] = React.useState("");
   const [publicationWorkflowSection, setPublicationWorkflowSection] = React.useState<PublicationWorkspaceSection>("campaigns");
   const projectLoadRequestRef = React.useRef(0);
+  const loadedWorkspaceTabRef = React.useRef("");
   const automaticTemplateChecksRef = React.useRef(new Set<string>());
   const selectedSite = sites.find((site) => site.id === selectedSiteId) || null;
   const routeProjectName = workspaceProjectNameFromPath(window.location.pathname);
@@ -1866,52 +1891,68 @@ function ProjectWorkspaceView({
         };
       }
     };
-    const [nextOverview, nextTasks, nextContent, nextSections, nextPrompts, nextLogs, nextCampaigns, nextMenuCapabilities] = await Promise.all([
+    // The overview must be fast.  Article bodies, publication payloads and the
+    // tools for other tabs are deliberately not requested until their tab opens.
+    const [nextOverview, nextSections, nextMenuCapabilities] = await Promise.all([
       requestResource<SiteOverview>(`/sites/${selectedSiteId}/overview`),
-      requestResource<Task[]>(`/sites/${selectedSiteId}/tasks`),
-      requestResource<ContentItem[]>(`/sites/${selectedSiteId}/content`),
       requestResource<Section[]>(`/sites/${selectedSiteId}/sections`),
-      requestResource<PromptTemplate[]>(`/sites/${selectedSiteId}/prompt-templates`),
-      requestResource<PublicationLog[]>(`/sites/${selectedSiteId}/publication-logs`),
-      requestResource<PublicationCampaign[]>(`/sites/${selectedSiteId}/publication-campaigns`),
       requestResource<MenuCapabilities>(`/sites/${selectedSiteId}/menu-capabilities${refreshCapabilities ? "?refresh=true" : ""}`)
     ]);
     if (requestId !== projectLoadRequestRef.current || selectedSiteIdRef.current !== selectedSiteId) return { success: false, errorCode: "CANCELLED" };
     if (nextOverview.value) setOverview(nextOverview.value);
-    if (nextTasks.value) setSiteTasks(nextTasks.value);
-    if (nextContent.value) setSiteContent(nextContent.value);
     if (nextSections.value) setSections(nextSections.value);
-    if (nextPrompts.value) setPromptTemplates(nextPrompts.value);
-    if (nextLogs.value) setLogs(nextLogs.value);
-    if (nextCampaigns.value) setCampaigns(nextCampaigns.value);
     setMenuCapabilities(nextMenuCapabilities.value);
     setMenuCapabilitiesError(nextMenuCapabilities.error);
     setMenuCapabilitiesLoading(false);
-    const dataErrors = [nextOverview, nextTasks, nextContent, nextSections, nextPrompts, nextLogs, nextCampaigns]
+
+    const deferredRequests: Array<Promise<{ value: unknown; error: string; errorCode: string }>> = [];
+    if (["topics", "content", "publication", "menu"].includes(activeTab)) deferredRequests.push(requestResource<ContentItem[]>(`/sites/${selectedSiteId}/content`));
+    if (activeTab === "topics") {
+      deferredRequests.push(requestResource<Task[]>(`/sites/${selectedSiteId}/tasks`));
+      deferredRequests.push(requestResource<PromptTemplate[]>(`/sites/${selectedSiteId}/prompt-templates`));
+    }
+    if (activeTab === "content" || activeTab === "publication") {
+      deferredRequests.push(requestResource<PublicationCampaign[]>(`/sites/${selectedSiteId}/publication-campaigns`));
+      deferredRequests.push(requestResource<PublicationLog[]>(`/sites/${selectedSiteId}/publication-logs`));
+      deferredRequests.push(requestResource<PromptTemplate[]>(`/sites/${selectedSiteId}/prompt-templates`));
+    }
+    if (activeTab === "menu") deferredRequests.push(requestResource<PublicationLog[]>(`/sites/${selectedSiteId}/publication-logs?include_payloads=true`));
+    const deferred = await Promise.all(deferredRequests);
+    if (requestId !== projectLoadRequestRef.current || selectedSiteIdRef.current !== selectedSiteId) return { success: false, errorCode: "CANCELLED" };
+    let deferredIndex = 0;
+    if (["topics", "content", "publication", "menu"].includes(activeTab)) {
+      const result = deferred[deferredIndex++] as { value: ContentItem[] | null; error: string; errorCode: string };
+      if (result.value) setSiteContent(result.value);
+    }
+    if (activeTab === "topics") {
+      const tasks = deferred[deferredIndex++] as { value: Task[] | null };
+      const prompts = deferred[deferredIndex++] as { value: PromptTemplate[] | null };
+      if (tasks.value) setSiteTasks(tasks.value);
+      if (prompts.value) setPromptTemplates(prompts.value);
+    }
+    if (activeTab === "content" || activeTab === "publication") {
+      const campaigns = deferred[deferredIndex++] as { value: PublicationCampaign[] | null };
+      const logs = deferred[deferredIndex++] as { value: PublicationLog[] | null };
+      const prompts = deferred[deferredIndex++] as { value: PromptTemplate[] | null };
+      if (campaigns.value) setCampaigns(campaigns.value);
+      if (logs.value) setLogs(logs.value);
+      if (prompts.value) setPromptTemplates(prompts.value);
+    }
+    if (activeTab === "menu") {
+      const logs = deferred[deferredIndex++] as { value: PublicationLog[] | null };
+      if (logs.value) setLogs(logs.value);
+    }
+    const dataErrors = [nextOverview, nextSections, nextMenuCapabilities, ...deferred]
       .map((result) => result.error)
       .filter(Boolean);
     setWorkspaceError(dataErrors.length ? "Не удалось загрузить часть данных проекта. Повторите попытку через несколько секунд." : "");
-    const failedResource = [nextOverview, nextTasks, nextContent, nextSections, nextPrompts, nextLogs, nextCampaigns, nextMenuCapabilities]
+    const failedResource = [nextOverview, nextSections, nextMenuCapabilities, ...deferred]
       .find((result) => Boolean(result.error));
     return {
       success: !failedResource,
       errorCode: failedResource?.errorCode || ""
     };
-  }, [api, selectedSiteId]);
-
-  const openProject = React.useCallback(async () => {
-    if (!selectedSiteId) return;
-    let cacheError = "";
-    try {
-      await api<ProjectCacheSyncResult>(`/sites/${selectedSiteId}/cache/refresh`, { method: "POST" });
-      if (selectedSiteIdRef.current !== selectedSiteId) return;
-      await onChanged();
-    } catch (error) {
-      cacheError = error instanceof Error ? `Не удалось получить свежий кеш проекта: ${error.message}` : "Не удалось получить свежий кеш проекта";
-    }
-    await loadProject();
-    if (cacheError) setWorkspaceError(cacheError);
-  }, [api, loadProject, onChanged, selectedSiteId]);
+  }, [activeTab, api, selectedSiteId]);
 
   React.useEffect(() => {
     api<{ site_ids: string[] }>("/me/favorite-sites")
@@ -2002,9 +2043,17 @@ function ProjectWorkspaceView({
       setProjectRefreshStatus("idle");
       setProjectRefreshResponseCode("");
       setWorkspaceError("");
-      void openProject();
+      loadedWorkspaceTabRef.current = "";
     }
-  }, [openProject, selectedSiteId, workspaceSiteStorageKey]);
+  }, [selectedSiteId, workspaceSiteStorageKey]);
+
+  React.useEffect(() => {
+    if (!selectedSiteId) return;
+    const key = `${selectedSiteId}:${activeTab}`;
+    if (loadedWorkspaceTabRef.current === key) return;
+    loadedWorkspaceTabRef.current = key;
+    void loadProject();
+  }, [activeTab, loadProject, selectedSiteId]);
 
   const openContentForMenuSection = React.useCallback((section: Section) => {
     if (!selectedSite) return;
@@ -2245,7 +2294,7 @@ function ProjectWorkspaceView({
                     </span>
                   </span>
                   <span className="projectTitleCard"><small>Title</small><b title={selectedSite.homepage_title || "Title не указан"}>{selectedSite.homepage_title || "—"}</b></span>
-                  <button type="button" className="projectMetricCard" onClick={() => onTabChange("network", selectedSite.name)} aria-label="Открыть сетку проекта"><small>Доменов в сетке</small><b>{formatNumber(selectedSite.domains_count)}</b></button>
+                  <button type="button" className={`projectMetricCard ${activeTab === "network" ? "isActive" : ""}`} aria-pressed={activeTab === "network"} onClick={() => onTabChange("network", selectedSite.name)} aria-label="Открыть сетку проекта"><small>Доменов в сетке</small><b>{formatNumber(selectedSite.domains_count)}</b></button>
                   <span className="projectMetricCard"><small>Страниц</small><b>{formatNumber(selectedSite.internal_pages_count)}</b></span>
                   <MenuCapabilityCard label="Header" templateRendered={menuCapabilities?.header_menu_template_rendered} rendered={menuCapabilities?.header_menu_rendered} nested={menuCapabilities?.header_menu_nested} nestedRequired={headerNestingRequired} icon="header" loading={menuCapabilitiesLoading || templateCapabilitiesLoading || menuCheckPending} error={menuCapabilitiesError} onRetry={refreshTemplateMenuCapabilities} />
                   <MenuCapabilityCard label="Footer" templateRendered={menuCapabilities?.footer_menu_template_rendered} rendered={menuCapabilities?.footer_menu_rendered} nested={menuCapabilities?.footer_menu_nested} icon="footer" loading={menuCapabilitiesLoading || templateCapabilitiesLoading || menuCheckPending} error={menuCapabilitiesError} onRetry={refreshTemplateMenuCapabilities} />
@@ -2515,6 +2564,7 @@ function ProjectCoreUpdateNotice({ siteId, username, publicationStamp }: { siteI
 }
 
 function ProjectOverviewPanel({ overview, content, sections, logs }: { overview: SiteOverview; content: ContentItem[]; sections: Section[]; logs: PublicationLog[] }) {
+  const recentContent = overview.recent_content.length ? overview.recent_content : content;
   return (
     <section className="viewStack">
       <div className="kpiGrid projectKpis">
@@ -2529,7 +2579,7 @@ function ProjectOverviewPanel({ overview, content, sections, logs }: { overview:
         <DataPanel title="Последний контент">
           <ResponsiveTable
             columns={["Тема", "Меню", "Статус", "Дата"]}
-            rows={content.slice(0, 8).map((item) => [
+            rows={recentContent.slice(0, 8).map((item) => [
               <TopicMetaCell item={item} />,
               sectionLabel(item.section_id, sections),
               <span className="overviewContentStatus">
@@ -3698,12 +3748,17 @@ function ProjectContentPanel({ api, site, content: allContent, sections, onChang
     }
   }
 
-  function openEditor(item: ContentItem) {
-    setSelectedItem(item);
-    setJsonDraft(JSON.stringify(item.generated_json, null, 2));
-    setSectionId(item.section_id || "");
-    setSectionContentMode(item.section_content_mode || "nested");
+  async function openEditor(item: ContentItem) {
     setEditorError("");
+    try {
+      const fullItem = await api<ContentItem>(`/content/${item.id}`);
+      setSelectedItem(fullItem);
+      setJsonDraft(JSON.stringify(fullItem.generated_json, null, 2));
+      setSectionId(fullItem.section_id || "");
+      setSectionContentMode(fullItem.section_content_mode || "nested");
+    } catch (error) {
+      setEditorError(error instanceof Error ? error.message : "Не удалось загрузить JSON текста.");
+    }
   }
 
   async function saveContent(event: React.FormEvent) {
@@ -3905,7 +3960,7 @@ function ProjectContentPanel({ api, site, content: allContent, sections, onChang
             ) : "-",
             <div className="userActions projectContentActions">
               <button className="button compact" type="button" onClick={() => setPreviewItem(item)} title="Просмотреть текст и отправить на доработку"><Eye size={15} /> Предпросмотр</button>
-              <button className="button compact" type="button" onClick={() => openEditor(item)} disabled={isPublicationLocked(item)} title="Открыть и редактировать JSON payload"><Database size={15} /> JSON</button>
+              <button className="button compact" type="button" onClick={() => void openEditor(item)} disabled={isPublicationLocked(item)} title="Открыть и редактировать JSON payload"><Database size={15} /> JSON</button>
               {canApproveContent(item) ? <button className="button compact approve" type="button" onClick={() => approve(item)} title="Принять текст"><CheckCircle2 size={15} /> Принять</button> : null}
               <button className="button compact primary" type="button" onClick={() => void publishImmediately(item)} disabled={!canPublishContentImmediately(item) || publishingItemId === item.id} title="Сразу отправить JSON текста на сервер проекта"><Send size={15} /> {publishingItemId === item.id ? "Публикуем…" : "Опубликовать"}</button>
               <button className="button compact danger" type="button" onClick={() => void deleteItem(item)} disabled={(isPublicationLocked(item) && item.status !== "published") || deletingItemId === item.id || publishingItemId === item.id} title={isPublicationLocked(item) && item.status !== "published" ? "Дождитесь завершения публикации или обновления проекта" : item.status === "published" ? "Удалить опубликованный текст с проекта" : "Удалить текст"}><Trash2 size={15} /> {deletingItemId === item.id ? "Удаляем…" : "Удалить"}</button>
@@ -8290,6 +8345,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
   const statusFilterOptions: Array<{ value: Site["project_status"]; label: string }> = [
     { value: "test", label: "Тестовый" },
     { value: "working", label: "Рабочий" },
+    { value: "mass_actions", label: "Массовые действия" },
     { value: "not_in_focus", label: "Не в фокусе" },
     { value: "duplicate", label: "Дубликат" }
   ];
@@ -8375,8 +8431,9 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
   const statusPriority = (status: Site["project_status"]) => {
     if (status === "test") return 0;
     if (status === "working") return 1;
-    if (status === "not_in_focus") return 2;
-    return 3;
+    if (status === "mass_actions") return 2;
+    if (status === "not_in_focus") return 3;
+    return 4;
   };
   const domainRows = managedSites.map((site) => {
     const headerMenuCount = Array.isArray(site.default_menu.header) ? site.default_menu.header.length : 0;
@@ -8809,12 +8866,13 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
               language: <LocaleCode value={row.language} />,
               status: readOnly ? (
                 <span className={`siteStatusReadonly ${row.projectStatus}`}>
-                  {{ test: "Тестовый", working: "Рабочий", not_in_focus: "Не в фокусе", duplicate: "Дубликат" }[row.projectStatus]}
+                  {{ test: "Тестовый", working: "Рабочий", mass_actions: "Массовые действия", not_in_focus: "Не в фокусе", duplicate: "Дубликат" }[row.projectStatus]}
                 </span>
               ) : (
                 <select className={`siteStatusSelect ${row.projectStatus}`} value={row.projectStatus} onChange={(event) => updateProjectStatus(row.id, event.target.value as Site["project_status"])}>
                   <option value="test">Тестовый</option>
                   <option value="working">Рабочий</option>
+                  <option value="mass_actions">Массовые действия</option>
                   <option value="not_in_focus">Не в фокусе</option>
                   <option value="duplicate">Дубликат</option>
                 </select>
@@ -8838,7 +8896,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
             return visibleColumnOrder.map((column) => cells[column]);
           })}
           rowClassNames={visibleRows.map((row) => {
-            const statusClass = row.projectStatus === "duplicate" ? "duplicate" : row.isTest ? "test" : row.isWorking ? "working" : "unfocused";
+            const statusClass = row.projectStatus === "mass_actions" ? "massActions" : row.projectStatus === "duplicate" ? "duplicate" : row.isTest ? "test" : row.isWorking ? "working" : "unfocused";
             return `siteDomainRow ${statusClass} ${row.hasMenu ? "hasMenu" : ""} ${row.isFavorite ? "favorite" : ""}`.trim();
           })}
           wrapperClassName="siteDomainsTable"
@@ -9466,9 +9524,11 @@ function GuideNote({ icon, children }: { icon: React.ReactNode; children: React.
   return <div className="guideNote">{icon}<span>{children}</span></div>;
 }
 
-function SettingsView({ api, currentUser, users, inputStyle, onInputStyleChange, onChanged }: ViewProps & {
+function SettingsView({ api, currentUser, users, inputStyle, onInputStyleChange, designVersion, onDesignVersionChange, onChanged }: ViewProps & {
   currentUser: User | null;
   users: User[];
+  designVersion: DesignVersion;
+  onDesignVersionChange: (version: DesignVersion) => void;
   inputStyle: InputStyle;
   onInputStyleChange: (style: InputStyle) => void;
 }) {
@@ -9489,6 +9549,19 @@ function SettingsView({ api, currentUser, users, inputStyle, onInputStyleChange,
 
       {currentUser?.is_admin ? (
         <>
+          <DataPanel title="Дизайн интерфейса">
+            <div className="designVersionChoices" role="radiogroup" aria-label="Версия дизайна">
+              {(["1.0", "2.0"] as const).map((version) => (
+                <label className="designVersionChoice" key={version}>
+                  <input type="radio" name="design-version" value={version} checked={designVersion === version} onChange={() => onDesignVersionChange(version)} />
+                  <span><strong>{version === "1.0" ? "1.0 — Классический" : "2.0 — PagePilot"}</strong>
+                    <small>{version === "1.0" ? "Прежний логотип, зелёные акценты и привычное оформление." : "Самолёт, синие акценты и обновлённое оформление интерфейса."}</small>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <p className="muted">Применяется сразу и сохраняется в этом браузере, включая экран входа. Данные и функции проекта одинаковы в обеих версиях.</p>
+          </DataPanel>
           <UsersAdminPanel api={api} currentUser={currentUser} users={users} onChanged={onChanged} />
           <AdminMenuVisibilityQueuePanel api={api} />
           <AdminRequestLogsPanel api={api} />
@@ -10364,6 +10437,21 @@ function ContentPreviewModal({ item, promptName, actions, api, onChanged, onClos
     setSelectedVersion(null);
   }, [item]);
 
+  // Project lists intentionally contain metadata only. Fetch the article body
+  // when, and only when, the user opens its preview.
+  React.useEffect(() => {
+    if (!api || Object.keys(item.generated_json || {}).length) return;
+    let cancelled = false;
+    api<ContentItem>(`/content/${item.id}`)
+      .then((fullItem) => {
+        if (!cancelled) setCurrentItem(fullItem);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setRevisionError(error instanceof Error ? error.message : "Не удалось загрузить текст.");
+      });
+    return () => { cancelled = true; };
+  }, [api, item]);
+
   React.useEffect(() => {
     if (!api) return;
     let cancelled = false;
@@ -10872,4 +10960,4 @@ function slugFromText(value: string) {
     .replace(/^-+|-+$/g, "") || "menu-item";
 }
 
-ReactDOM.createRoot(document.getElementById("root")!).render(<App />);
+ReactDOM.createRoot(document.getElementById("root")!).render(<DesignProvider><App /></DesignProvider>);

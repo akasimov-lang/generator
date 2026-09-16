@@ -26,6 +26,7 @@ from app.schemas import (
     CompetitorQueriesUpdate,
     CompetitorResearchResponse,
     ContentItemResponse,
+    ContentItemSummaryResponse,
     ContentRevisionRequest,
     ContentRevisionResponse,
     ContentUpdate,
@@ -55,6 +56,7 @@ from app.schemas import (
     PublicationCampaignUpdate,
     PublicationContentResponse,
     PublicationLogResponse,
+    PublicationLogSummaryResponse,
     PromptTemplateCreate,
     PromptGeneratedContentResponse,
     PromptTemplateResponse,
@@ -538,7 +540,7 @@ def list_sites(_: AuthUser, db: Session = Depends(get_db)) -> Any:
 
 @router.get("/sites/cache/projects", response_model=list[SiteResponse])
 def list_cached_projects(_: AuthUser, db: Session = Depends(get_db)) -> Any:
-    status_order = {"test": 0, "working": 1, "not_in_focus": 2, "duplicate": 3}
+    status_order = {"test": 0, "working": 1, "mass_actions": 2, "not_in_focus": 3, "duplicate": 4}
     sites = db.scalars(select(models.Site)).all()
     return sorted(sites, key=lambda site: (status_order.get(site.project_status, 3), not site.has_menu, site.name.lower()))
 
@@ -1748,7 +1750,7 @@ def create_site_menu_structure_task(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
-@router.get("/sites/{site_id}/content", response_model=list[ContentItemResponse])
+@router.get("/sites/{site_id}/content", response_model=list[ContentItemSummaryResponse])
 def list_site_content(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     _get_site_or_404(db, site_id)
     return db.scalars(
@@ -1761,8 +1763,8 @@ def list_site_content(site_id: str, _: AuthUser, db: Session = Depends(get_db)) 
     ).all()
 
 
-@router.get("/sites/{site_id}/publication-logs", response_model=list[PublicationLogResponse])
-def list_site_logs(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+@router.get("/sites/{site_id}/publication-logs", response_model=list[PublicationLogResponse | PublicationLogSummaryResponse])
+def list_site_logs(site_id: str, _: AuthUser, db: Session = Depends(get_db), include_payloads: bool = False) -> Any:
     _get_site_or_404(db, site_id)
     content_ids = (
         select(models.ContentItem.id)
@@ -1770,12 +1772,26 @@ def list_site_logs(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> 
         .where(models.ContentItem.site_id == site_id)
         .where(models.GenerationTask.archived_at.is_(None))
     )
-    return db.scalars(
+    logs = db.scalars(
         select(models.PublicationLog)
         .where(models.PublicationLog.content_item_id.in_(content_ids))
         .order_by(models.PublicationLog.created_at.desc())
         .limit(200)
     ).all()
+    if include_payloads:
+        return logs
+    return [
+        {
+            "id": log.id,
+            "content_item_id": log.content_item_id,
+            "endpoint_url": log.endpoint_url,
+            "response_status": log.response_status,
+            "error_message": log.error_message,
+            "created_at": log.created_at,
+            "updated_at": log.updated_at,
+        }
+        for log in logs
+    ]
 
 
 @router.post("/sites/{site_id}/publication-campaigns", response_model=PublicationCampaignResponse)

@@ -1,0 +1,108 @@
+/* PagePilot 2.0. Version 1.0 remains in global.css unchanged. */
+
+:root[data-design-version="2.0"] {
+  --brand: #3157d8;
+  --brand-hover: #2546b8;
+  --brand-text: #3157d8;
+  --brand-soft: #edf1ff;
+  --brand-mint: #32d1c6;
+  --sidebar-bg: #172033;
+  --brand-bg: var(--brand);
+  --focus-ring: rgba(49, 87, 216, 0.16);
+  --field-focus-border: var(--brand-text);
+  --field-focus-shadow: 0 0 0 4px var(--focus-ring), 0 7px 16px rgba(49, 87, 216, 0.1);
+}
+
+:root[data-design-version="2.0"][data-theme="dark"] {
+  --brand: #4167e5;
+  --brand-hover: #3157d8;
+  --brand-text: #a9bcff;
+  --brand-soft: #202e50;
+  --brand-bg: var(--brand);
+  --focus-ring: rgba(130, 159, 255, 0.24);
+  --field-focus-shadow: 0 0 0 4px var(--focus-ring), 0 8px 18px rgba(0, 0, 0, 0.32);
+}
+
+:root[data-design-version="2.0"] .adminViewModeButton.active {
+  border-color: var(--brand-text);
+  background: var(--brand-soft);
+  color: var(--brand-text);
+}
+
+:root[data-design-version="2.0"] .button.primary {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #fff;
+}
+
+:root[data-design-version="2.0"] .button.primary:hover {
+  border-color: var(--brand-hover);
+  background: var(--brand-hover);
+}
+
+:root[data-design-version="2.0"] .tabButton.active .tabButtonIcon.ai,
+:root[data-design-version="2.0"] .tabButton.active .tabButtonIcon.menu,
+:root[data-design-version="2.0"] .tabButton.active .tabButtonIcon.document,
+:root[data-design-version="2.0"] .tabButton.active .tabButtonIcon.overview {
+  background: linear-gradient(135deg, #4167e5, #3157d8);
+  box-shadow: 0 3px 8px rgba(49, 87, 216, 0.18);
+}
+
+:root[data-design-version="2.0"] .tabButton.active,
+:root[data-design-version="2.0"] .tabButton:hover {
+  border-color: var(--brand-text);
+  background: var(--brand-soft);
+  color: var(--brand-text);
+}
+
+:root[data-design-version="2.0"] .brandWordmark {
+  letter-spacing: -0.035em;
+  font-weight: 750;
+}
+
+:root[data-design-version="2.0"] .brand .brandWordmark > span,
+:root[data-design-version="2.0"] .authPreviewBrand .brandWordmark > span,
+:root[data-design-version="2.0"] .brandWordmark > span {
+  display: inline;
+  margin: 0;
+  font-size: inherit;
+  color: var(--brand-text);
+}
+
+:root[data-design-version="2.0"] .brand .brandWordmark > span,
+:root[data-design-version="2.0"] .authPreviewBrand .brandWordmark > span {
+  color: #a9bcff;
+}
+
+:root[data-design-version="2.0"] .navButton.active,
+:root[data-design-version="2.0"] .authPreviewNavItem.active {
+  background: rgba(79, 124, 255, 0.18);
+  box-shadow: inset 3px 0 var(--brand-mint);
+}
+
+:root[data-design-version="2.0"] .loginLoadingBar span {
+  background: var(--brand);
+}
+
+
+.loginBrandRow h1 small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.designVersionChoices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.designVersionChoice { display: flex; align-items: flex-start; gap: 12px; padding: 18px; border: 1px solid var(--border); border-radius: 12px; cursor: pointer; background: var(--surface); }
+.designVersionChoice:has(input:checked) { border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue-soft); }
+.designVersionChoice input { width: 18px; min-width: 18px; height: 18px; margin: 3px 0 0; accent-color: var(--blue); }
+.designVersionChoice strong, .designVersionChoice small { display: block; }
+.designVersionChoice small { color: var(--muted); margin-top: 6px; line-height: 1.5; }
+@media (max-width: 600px) { .designVersionChoices { grid-template-columns: 1fr; } }
+
+/* Keep both versions usable on narrow admin screens. */
+@media (max-width: 600px) {
+  .topbarActions { flex-wrap: wrap; }
+  .settingsList div { flex-direction: column; gap: 6px; }
+  .settingsList span { text-align: left; overflow-wrap: anywhere; }
+}

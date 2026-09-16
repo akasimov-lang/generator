@@ -197,7 +197,7 @@ class ProjectCacheSyncRequest(BaseModel):
 
 
 class SiteStatusUpdate(BaseModel):
-    project_status: Literal["test", "working", "not_in_focus", "duplicate"]
+    project_status: Literal["test", "working", "mass_actions", "not_in_focus", "duplicate"]
 
 
 class DuplicateSitesDeleteResponse(BaseModel):
@@ -526,6 +526,44 @@ class ContentItemResponse(BaseModel):
     updated_at: datetime
 
 
+class ContentItemSummaryResponse(BaseModel):
+    """Fields required to render content lists without shipping article bodies."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    task_id: str
+    site_id: str | None
+    publication_campaign_id: str | None
+    section_id: str | None
+    section_content_mode: Literal["nested", "menu_page"] = "nested"
+    topic: str
+    slug: str
+    status: str
+    word_count: int
+    include_casino_rating: bool
+    generation_prompt_name: str | None
+    generated_at: datetime | None
+    generation_progress: int = 0
+    generation_error: str | None = None
+    competitor_research_status: str
+    competitor_research_progress: int = 0
+    competitor_research_error: str | None = None
+    scheduled_at: datetime | None
+    published_at: datetime | None
+    published_url: str | None
+    last_publication_status_code: int | None
+    indexing_status: str | None
+    indexing_task_id: str | None
+    indexing_requested_at: datetime | None
+    indexing_error: str | None
+    deletion_requested_at: datetime | None
+    deletion_confirmed_at: datetime | None
+    deletion_error: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
 class PublishedContentBulkDeleteRequest(BaseModel):
     content_item_ids: list[str] = Field(min_length=1, max_length=200)
 
@@ -559,7 +597,7 @@ class SiteOverviewStatsResponse(BaseModel):
 class SiteOverviewResponse(BaseModel):
     site: SiteOverviewSiteResponse
     stats: SiteOverviewStatsResponse
-    recent_content: list[ContentItemResponse]
+    recent_content: list[ContentItemSummaryResponse]
 
 
 class TaskDetailsResponse(BaseModel):
@@ -748,6 +786,20 @@ class PublicationLogResponse(BaseModel):
     request_payload: dict[str, Any] | None
     response_status: int | None
     response_body: dict[str, Any] | None
+    error_message: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class PublicationLogSummaryResponse(BaseModel):
+    """Small list representation; payloads are fetched only for menu diagnostics."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    content_item_id: str | None
+    endpoint_url: str
+    response_status: int | None
     error_message: str | None
     created_at: datetime
     updated_at: datetime

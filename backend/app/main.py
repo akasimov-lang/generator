@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api import router
 from app.core.config import get_settings
@@ -8,7 +9,7 @@ from app.db import init_db
 
 settings = get_settings()
 
-app = FastAPI(title="Content Generator Admin API", version="0.1.0")
+app = FastAPI(title="PagePilot API", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -17,6 +18,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
 
 
 @app.on_event("startup")
@@ -25,4 +27,3 @@ def on_startup() -> None:
 
 
 app.include_router(router, prefix="/api")
-

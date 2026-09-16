@@ -33,6 +33,9 @@ with sync_playwright() as p:
  editor.fill('<link rel="alternate" hreflang="x-default" href="https://draft.test/" />')
  page.get_by_role('button',name='Test network',exact=True).click()
  page.wait_for_timeout(500)
+ assert page.locator('.networkTable').evaluate('(e)=>e.getBoundingClientRect().width < e.parentElement.clientWidth')
+ assert page.locator('.networkTable tbody tr').first.evaluate('(e)=>e.getBoundingClientRect().height <= 36')
+ page.screenshot(path=str(artifacts / 'compact-table.png'),full_page=True)
  expect(page.locator('th').filter(has_text='Был Main')).to_be_visible()
  page.get_by_role('button',name='Test reglue',exact=True).click()
  expect(page.get_by_label('Альтернейты',exact=True)).to_have_value('<link rel="alternate" hreflang="x-default" href="https://draft.test/" />')
@@ -44,6 +47,9 @@ with sync_playwright() as p:
  page.screenshot(path=str(artifacts / 'desktop.png'),full_page=True)
  page.set_viewport_size({'width':390,'height':844})
  page.get_by_role('button',name='Test network',exact=True).click()
+ expect(page.locator('.networkTable')).to_be_visible()
+ assert page.locator('.networkTable').evaluate('(e)=>getComputedStyle(e).display') == 'table'
+ assert page.locator('.networkTableWrap').evaluate('(e)=>e.scrollWidth > e.clientWidth')
  page.screenshot(path=str(artifacts / 'mobile.png'),full_page=True)
  assert not errors, errors
  print('PASS: reserve → check → alternates → reglue; unsaved markup blocks launch; drafts survive tabs; stale markup conflict; history table; no browser errors.')

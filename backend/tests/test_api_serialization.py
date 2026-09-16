@@ -111,9 +111,47 @@ def test_project_content_and_overview_exclude_archived_task_items() -> None:
 
     assert content_response.status_code == 200
     assert [item["topic"] for item in content_response.json()] == ["Current topic"]
+    assert "generated_json" not in content_response.json()[0]
     assert overview_response.status_code == 200
     assert overview_response.json()["stats"]["generated"] == 1
     assert [item["topic"] for item in overview_response.json()["recent_content"]] == ["Current topic"]
+    assert "generated_json" not in overview_response.json()["recent_content"][0]
+
+
+def test_project_log_list_omits_payloads_unless_requested() -> None:
+    client, TestingSession = make_client()
+    with TestingSession() as db:
+        site = db.query(models.Site).one()
+        task = models.GenerationTask(title="Active", site_id=site.id, geo="CA", language="en", topics_count=1)
+        item = models.ContentItem(
+            task=task,
+            site_id=site.id,
+            topic="Current topic",
+            slug="/current-topic/",
+            generated_json={"pages": [{"content": "large article body"}]},
+            status="published",
+            idempotency_key="log-content-item",
+        )
+        db.add_all([task, item])
+        db.flush()
+        db.add(models.PublicationLog(
+            content_item_id=item.id,
+            endpoint_url="https://example.test/api/pages",
+            request_payload={"content": "large article body"},
+            response_status=200,
+            response_body={"message": "published"},
+        ))
+        db.commit()
+        site_id = site.id
+
+    compact_response = client.get(f"/api/sites/{site_id}/publication-logs")
+    detailed_response = client.get(f"/api/sites/{site_id}/publication-logs?include_payloads=true")
+
+    assert compact_response.status_code == 200
+    assert "request_payload" not in compact_response.json()[0]
+    assert "response_body" not in compact_response.json()[0]
+    assert detailed_response.status_code == 200
+    assert detailed_response.json()[0]["request_payload"] == {"content": "large article body"}
 
 
 def test_approve_rejects_invalid_payload() -> None:
