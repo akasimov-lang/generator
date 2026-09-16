@@ -9445,3 +9445,11 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 
 .workspaceAutoReglueShortcut { text-decoration: none; }
 .workspaceAutoReglueShortcut.isActive { background: var(--surface-muted); border-color: var(--primary); box-shadow: inset 0 -2px 0 var(--primary); }
+
+.siteGeoFilter .searchableSelectControl {
+  min-height: 36px;
+  padding: 6px 9px;
+  font-size: 11px;
+}
+
+.networkReglueButton { justify-self: start; width: auto; max-width: 100%; }

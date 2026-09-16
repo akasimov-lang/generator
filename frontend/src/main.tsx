@@ -8747,13 +8747,20 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
         <div className="siteCacheSearch">
           <Search size={18} />
           <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Поиск по домену" />
-          <label className="siteCacheFilter">
+          <div className="siteCacheFilter siteGeoFilter">
             <span>GEO</span>
-            <select value={geoFilter} onChange={(event) => setGeoFilter(event.target.value)} aria-label="Фильтр сайтов по GEO">
-              <option value="">Все GEO</option>
-              {geoOptions.map((geo) => <option value={geo} key={geo}>{localeFlag(geo) || "🌐"} {geo.toUpperCase()}</option>)}
-            </select>
-          </label>
+            <SearchableSelect
+              value={geoFilter}
+              onChange={setGeoFilter}
+              ariaLabel="Фильтр сайтов по GEO"
+              searchPlaceholder="Введите GEO"
+              searchMode="prefix"
+              options={[
+                { value: "", label: "Все GEO" },
+                ...geoOptions.map(geo => ({ value: geo, label: geo.toUpperCase(), leading: <span>{localeFlag(geo) || "🌐"}</span> }))
+              ]}
+            />
+          </div>
           <label className="siteCacheFilter siteBrandFilter">
             <span>Бренд</span>
             <input value={brandFilter} onChange={(event) => setBrandFilter(event.target.value)} placeholder="Название бренда" aria-label="Фильтр сайтов по бренду" />
@@ -10043,6 +10050,7 @@ function SearchableSelect({
   disabled = false,
   ariaLabel,
   showSelectedIndicator = true,
+  searchMode = "contains",
   optionPredicate,
   dropdownToolbar,
   renderOptionAction
@@ -10054,6 +10062,7 @@ function SearchableSelect({
   disabled?: boolean;
   ariaLabel?: string;
   showSelectedIndicator?: boolean;
+  searchMode?: "contains" | "prefix";
   optionPredicate?: (option: SearchableSelectOption) => boolean;
   dropdownToolbar?: React.ReactNode;
   renderOptionAction?: (option: SearchableSelectOption, closeDropdown: () => void) => React.ReactNode;
@@ -10070,7 +10079,7 @@ function SearchableSelect({
   const normalizedQuery = query.trim().toLocaleLowerCase("ru-RU");
   const visibleOptions = optionPredicate ? options.filter(optionPredicate) : options;
   const filteredOptions = normalizedQuery
-    ? visibleOptions.filter((option) => matchesProjectSearch(`${option.label} ${option.description || ""} ${option.value} ${option.keywords || ""}`, normalizedQuery))
+    ? visibleOptions.filter((option) => searchMode === "prefix" ? option.label.toLocaleLowerCase("ru-RU").startsWith(normalizedQuery) : matchesProjectSearch(`${option.label} ${option.description || ""} ${option.value} ${option.keywords || ""}`, normalizedQuery))
     : visibleOptions;
 
   const updateDropdownPosition = React.useCallback(() => {
@@ -10151,6 +10160,10 @@ function SearchableSelect({
           if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
             event.preventDefault();
             showOptions();
+          } else if (searchMode === "prefix" && event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+            event.preventDefault();
+            showOptions();
+            setQuery(event.key);
           }
         }}
       >
@@ -10168,7 +10181,7 @@ function SearchableSelect({
             <input
               ref={searchRef}
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => { setQuery(event.target.value); setActiveIndex(0); }}
               onKeyDown={(event) => {
                 if (event.key === "ArrowDown") {
                   event.preventDefault();
@@ -10176,9 +10189,9 @@ function SearchableSelect({
                 } else if (event.key === "ArrowUp") {
                   event.preventDefault();
                   setActiveIndex((current) => Math.max(current - 1, 0));
-                } else if (event.key === "Enter" && filteredOptions[activeIndex]) {
+                } else if (event.key === "Enter" && filteredOptions.length) {
                   event.preventDefault();
-                  chooseOption(filteredOptions[activeIndex]);
+                  chooseOption(filteredOptions[Math.min(activeIndex, filteredOptions.length - 1)]);
                 } else if (event.key === "Escape") {
                   event.preventDefault();
                   setOpen(false);
