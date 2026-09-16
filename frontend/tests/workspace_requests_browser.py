@@ -35,10 +35,12 @@ with sync_playwright() as p:
  assert calls.count(('GET','/sites/preview/network'))==1,calls
  assert not [c for c in calls if c[1].endswith(('/overview','/sections'))],calls
  before=list(calls)
- for label in ['Переклей','Сетка','Переклей','Сетка']:
+ for label in ['Переклей','Сетка'] * 6:
   page.get_by_role('link',name=label,exact=True).click()
   page.wait_for_timeout(100)
   expect(page.get_by_text('Меню реализовано',exact=True)).to_have_count(2)
+  expect(page.get_by_role('heading',name='Автопереклей проекта',exact=True)).to_have_count(1 if label == 'Переклей' else 0)
+  expect(page.locator('.projectNetworkPanel')).to_have_count(1)
  assert calls==before, calls[len(before):]
  page.get_by_role('button',name='Запустить точную desktop-проверку меню проекта betonredczech.com',exact=True).click()
  page.wait_for_timeout(300)

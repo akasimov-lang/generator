@@ -2417,8 +2417,8 @@ function ProjectWorkspaceView({
           <WorkspaceTabPane active={activeTab === "overview"} storagePrefix={`${currentUsername}:${selectedSite.id}:overview`}>
             {overview ? <FastProjectOverviewPanel key={selectedSite.id} overview={overview} content={siteContent} sections={sections} logs={logs} /> : null}
           </WorkspaceTabPane>
-          {canManageAutomation && activeTab === "redirects" && <ProjectAutoReglue key={selectedSite.id} siteId={selectedSite.id} api={api} />}
-          {activeTab === "network" || activeTab === "redirects" ? <ProjectNetworkPanel key={selectedSite.id} site={selectedSite} mode={activeTab} api={api} username={currentUsername} onChanged={refreshProject} /> : null}
+          {canManageAutomation && activeTab === "redirects" && <ProjectAutoReglue key={`auto-reglue:${selectedSite.id}`} siteId={selectedSite.id} api={api} />}
+          {activeTab === "network" || activeTab === "redirects" ? <ProjectNetworkPanel key={`network:${selectedSite.id}`} site={selectedSite} mode={activeTab} api={api} username={currentUsername} onChanged={refreshProject} /> : null}
           <WorkspaceTabPane active={activeTab === "topics"} storagePrefix={`${currentUsername}:${selectedSite.id}:topics`}>
             <FastTasksView
               key={selectedSite.id}
