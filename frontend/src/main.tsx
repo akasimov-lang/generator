@@ -8332,8 +8332,7 @@ function SiteBrandField({ name, value, save }: { name: string; value: string; sa
     catch { setError("Не сохранено"); }
     finally { setBusy(false); }
   }
-  return <span className="siteBrandField"><input aria-label={`Бренд ${name}`} value={draft} maxLength={160} disabled={busy} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter") void submit(); if (e.key === "Escape") setDraft(value); }} />
-    {draft.trim() !== value && <button type="button" className="button secondary compact" disabled={busy} onClick={() => void submit()} aria-label={`Сохранить бренд ${name}`}>{busy ? "…" : "✓"}</button>}
+  return <span className="siteBrandField"><input aria-label={`Бренд ${name}`} title={draft + " · Enter / Return — сохранить, Esc — отменить"} value={draft} maxLength={160} disabled={busy} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter") void submit(); if (e.key === "Escape") setDraft(value); }} />
     {error && <small role="alert">{error}</small>}
   </span>;
 }

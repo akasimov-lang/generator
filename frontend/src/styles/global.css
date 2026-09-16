@@ -9367,8 +9367,9 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .networkSubdomain { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .networkSubdomain small { display: block; font-size: 10px; color: var(--text-muted, #52657f); }
 
-.siteBrandField { display: inline-flex; align-items: center; gap: 3px; }
-.siteBrandField input { width: 125px; min-width: 90px; padding: 3px 5px; font-size: 11px; }
+.siteDomainsTable .column-brand { width: 108px; }
+.siteBrandField { display: flex; align-items: center; gap: 3px; width: 100%; max-width: 96px; min-width: 0; }
+.siteBrandField input { flex: 1 1 0; width: 0; min-width: 0; max-width: 100%; box-sizing: border-box; padding: 3px 5px; font-size: 11px; text-overflow: ellipsis; }
 
 
 .autoReglueSettings label.autoReglueBatchLimit {

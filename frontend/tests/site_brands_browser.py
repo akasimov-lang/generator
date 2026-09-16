@@ -40,7 +40,8 @@ with sync_playwright() as p:
     expect(field).to_have_value('Mostbet')
     assert not writes
     field.fill('My Brand')
-    page.get_by_role('button',name='Сохранить бренд project.test',exact=True).click()
+    assert not writes
+    field.press('Enter')
     expect(field).to_have_value('My Brand')
     expect(page.get_by_role('button',name='Сохранить бренд project.test',exact=True)).to_have_count(0)
     page.get_by_label('Фильтр сайтов по бренду').fill('My Brand')
