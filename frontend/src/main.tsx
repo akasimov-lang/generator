@@ -2319,7 +2319,9 @@ function ProjectWorkspaceView({
             </b>
           </div>
         ) : null}
-        <div className="workspaceTabs">
+        {workspaceError ? <div className="notice">{workspaceError}</div> : null}
+      </DataPanel>
+        <nav className="workspaceTabs" aria-label="Вкладки проекта">
           <TabButton
             href={pathForRoute("workspace", "overview", selectedSite?.name)}
             icon={<Search size={18} aria-hidden="true" />}
@@ -2373,9 +2375,8 @@ function ProjectWorkspaceView({
             <Sparkles size={15} /> Сгенерировать структуру меню
           </button>
 
-        </div>
-        {workspaceError ? <div className="notice">{workspaceError}</div> : null}
-      </DataPanel>
+        </nav>
+
 
       {selectedSite && (activeTab === "content" || activeTab === "publication") ? (
         <PublicationWorkflowNav

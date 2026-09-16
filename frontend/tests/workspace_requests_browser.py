@@ -127,6 +127,19 @@ with sync_playwright() as p:
  page.reload()
  expect(menu_notice).to_have_count(0)
  expect(core_notice).to_have_count(0)
+ # Long project content: the tab bar must remain at the viewport top.
+ page.locator('.networkTable').evaluate('(el) => el.style.minHeight = "1800px"')
+ page.evaluate('window.scrollTo(0, 900)')
+ page.wait_for_timeout(100)
+ tabs_bar=page.get_by_role('navigation',name='Вкладки проекта',exact=True)
+ assert abs(tabs_bar.bounding_box()['y']) < 2, tabs_bar.bounding_box()
+ page.set_viewport_size({'width':390,'height':844})
+ tabs_bar.evaluate('(el) => window.scrollTo(0, window.scrollY + el.getBoundingClientRect().top + 300)')
+ page.wait_for_timeout(100)
+ assert abs(tabs_bar.bounding_box()['y']) < 2, tabs_bar.bounding_box()
+ assert tabs_bar.bounding_box()['height'] < 80
+ tabs_bar.get_by_role('link',name='Автопереклей',exact=True).click()
+ expect(page).to_have_url(base+'/project-auto-reglue/betonredczech.com/')
  assert not errors,errors
  print('PASS: saved legacy results; no automatic checks; one initial network read; zero extra requests across network/reglue tabs; manual check only; reload persists; unchecked stays unchecked.')
  b.close()
