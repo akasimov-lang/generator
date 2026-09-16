@@ -216,8 +216,7 @@
 
 :root[data-design-version="2.0"] .buttonRefreshIcon svg,
 :root[data-design-version="2.0"] .buttonPlusIcon svg,
-:root[data-design-version="2.0"] .workspaceFavoriteButton.active svg,
-:root[data-design-version="2.0"] .menuReadyMedal {
+:root[data-design-version="2.0"] .workspaceFavoriteButton.active svg {
   filter: none;
 }
 
