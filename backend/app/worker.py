@@ -20,6 +20,7 @@ celery_app.conf.update(
     worker_concurrency=4,
 )
 celery_app.conf.beat_schedule = {
+    "scheduled-auto-reglue": {"task": "app.worker.schedule_auto_reglue", "schedule": 60.0},
     "publish-due-items-every-minute": {
         "task": "app.worker.publish_due_items",
         "schedule": 60.0,
@@ -405,3 +406,9 @@ def auto_reglue_job(run_id: str, confirmation_attempt: int = 0) -> None:
         run = db.get(models.AutoReglueRun, run_id)
         if run is not None and run.status == "waiting" and confirmation_attempt < 30:
             auto_reglue_job.apply_async(args=[run_id, confirmation_attempt + 1], countdown=10)
+
+@celery_app.task(name="app.worker.schedule_auto_reglue")
+def schedule_auto_reglue_job():
+    from app.auto_reglue import schedule_tick
+    with SessionLocal() as db:
+        return schedule_tick(db, lambda run_id: auto_reglue_job.delay(run_id))

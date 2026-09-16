@@ -40,15 +40,21 @@ with sync_playwright() as p:
  page.goto(base+'/auto-reglue')
  expect(page.get_by_role('heading',name='Автопереклей — общие настройки')).to_be_visible()
  page.get_by_label('Разрешить запуск автопереклеев').check()
- page.get_by_label('Дополнительные языки для всех проектов').fill('en, tr')
+ page.get_by_label('Языки для новых фейковых альтернейтов').fill('en, tr')
+ page.get_by_label('Включить расписание автопереклеев').check()
+ page.get_by_label('Периодичность автопереклея').select_option('4')
+ page.get_by_label('Добавлять новый фейковый альтернейт при каждом переклее').check()
+ expect(page.get_by_label('Сохранять схему: обновлять адреса и дроп в x-default')).not_to_be_checked()
  page.get_by_role('button',name='Сохранить общие настройки').click()
  expect(page.get_by_role('button',name='Сохранить общие настройки')).to_be_disabled()
+ assert global_cfg['interval_days']==4 and global_cfg['schedule_enabled']
+ assert global_cfg['scheme_mode']=='add_auxiliary'
  page.goto(base+'/project-redirects/betonredczech.com/')
  expect(page.get_by_role('button',name='Настроить автопереклей')).to_be_visible()
  assert not [c for c in calls if c[1]=='/auto-reglue/projects/preview']
  page.get_by_role('button',name='Настроить автопереклей').click()
  page.get_by_label('Дроп для x-default',exact=True).fill('drop.test')
- page.get_by_label('Язык проекта',exact=True).fill('az')
+ page.get_by_label('Язык проекта (если не задан в кэше)',exact=True).fill('az')
  page.get_by_label('Участвует в автопереклеях').check()
  page.get_by_role('button',name='Сохранить настройки',exact=True).click()
  expect(page.get_by_role('button',name='Сохранить настройки',exact=True)).to_be_disabled()
@@ -64,6 +70,23 @@ with sync_playwright() as p:
  page.get_by_role('button',name='Запустить группу (1)').click()
  page.wait_for_timeout(150)
  assert len([c for c in calls if c[1]=='/auto-reglue/start'])==2
+ page.goto(base+'/project-redirects/betonredczech.com/')
+ page.get_by_role('button',name='Настроить автопереклей').click()
+ page.get_by_label('Персональный автопереклей — исключить проект из массовых запусков').check()
+ page.get_by_label('Включить расписание автопереклеев').check()
+ page.get_by_label('Периодичность автопереклея').select_option('14')
+ page.get_by_label('Сохранять схему: обновлять адреса и дроп в x-default').check()
+ page.get_by_label('Использовать новорег в x-default',exact=True).check()
+ page.get_by_label('Новорег для x-default',exact=True).fill('newreg.test')
+ page.get_by_role('button',name='Сохранить настройки',exact=True).click()
+ expect(page.get_by_role('button',name='Сохранить настройки',exact=True)).to_be_disabled()
+ assert cfg['scope']=='personal' and cfg['interval_days']==14
+ assert cfg['x_default_use_newreg'] and cfg['x_default_newreg_domain']=='newreg.test'
+ page.get_by_label('Canonical и x-default на одном корневом домене, альтернейты на поддомене').check()
+ expect(page.get_by_label('Новорег для x-default',exact=True)).to_have_count(0)
+ page.get_by_role('button',name='Сохранить настройки',exact=True).click()
+ expect(page.get_by_role('button',name='Сохранить настройки',exact=True)).to_be_disabled()
+ assert cfg['domain_layout']=='root_main'
  page.set_viewport_size({'width':390,'height':844})
  assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
  assert not errors,errors

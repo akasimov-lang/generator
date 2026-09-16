@@ -1,5 +1,6 @@
 """Admin-only configuration and explicit preview/start API."""
 from uuid import UUID
+from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -41,8 +42,8 @@ def overview(_: AdminUser, db: Session = Depends(get_db)):
     sites = db.scalars(select(models.Site).where(models.Site.project_status == 'mass_actions').order_by(models.Site.name)).all()
     runs = db.scalars(select(models.AutoReglueRun).order_by(models.AutoReglueRun.created_at.desc()).limit(100)).all()
     return {'settings': auto.config(db).model_dump(),
-            'projects': [{'id':s.id,'name':s.name,'geo':s.cache_geo,'config':auto.config(db,s.id).model_dump()} for s in sites],
-            'templates': template_catalog(), 'runs': [auto.serialize(r) for r in runs]}
+            'projects': [{'id':s.id,'name':s.name,'geo':s.cache_geo,'next_run_at':auto.next_scheduled_at(db,s),'config':auto.config(db,s.id).model_dump()} for s in sites if auto.config(db,s.id).scope != 'personal'],
+            'language_pool': auto.default_language_pool(), 'templates': template_catalog(), 'runs': [auto.serialize(r) for r in runs]}
 
 
 @router.put('/settings')
@@ -55,15 +56,15 @@ def project_settings(site_id: str, _: AdminUser, db: Session = Depends(get_db)):
     site = site_or_404(db, site_id)
     runs = db.scalars(select(models.AutoReglueRun).where(models.AutoReglueRun.site_id==site.id).order_by(models.AutoReglueRun.created_at.desc()).limit(20)).all()
     return {'config':auto.config(db,site.id).model_dump(), 'settings':auto.config(db).model_dump(),
-            'eligible':site.project_status=='mass_actions', 'geo':site.cache_geo,
-            'templates':[p for p in template_catalog() if auto.domain_name(p['project'])==auto.domain_name(site.name)],
+            'eligible':site.project_status=='mass_actions' or auto.config(db,site.id).scope=='personal', 'geo':site.cache_geo, 'next_run_at':auto.next_scheduled_at(db,site),
+            'language_pool':auto.default_language_pool(), 'templates':[p for p in template_catalog() if auto.domain_name(p['project'])==auto.domain_name(site.name)],
             'runs':[auto.serialize(r) for r in runs]}
 
 
 @router.put('/projects/{site_id}')
 def save_project(site_id: str, payload: auto.ProjectConfig, _: AdminUser, db: Session = Depends(get_db)):
     site_or_404(db,site_id)
-    if payload.enabled and (not payload.drop_domain or not payload.language or payload.parent_kind=='newreg' and not payload.newreg_domain):
+    if payload.enabled and payload.domain_layout != 'root_main' and ((not payload.drop_domain and (not payload.x_default_use_newreg or payload.parent_kind=='drop')) or (payload.x_default_use_newreg and not payload.x_default_newreg_domain) or payload.parent_kind=='newreg' and not payload.newreg_domain):
         raise HTTPException(400,'Для включения укажите дроп, язык и родительский домен.')
     return auto.save_config(db,payload,site_id)
 
@@ -80,16 +81,18 @@ class StartItem(BaseModel):
 
 
 class BatchStart(BaseModel):
+    scope: Literal["mass", "project"] = "mass"
     items: list[StartItem] = Field(min_length=1,max_length=100)
 
 
 @router.post('/start')
 def start(payload: BatchStart, user: AdminUser, db: Session = Depends(get_db)):
-    if len(payload.items)>auto.config(db).max_projects: raise HTTPException(400,'Превышен лимит проектов одного запуска.')
+    if payload.scope == 'project' and len(payload.items) != 1: raise HTTPException(400,'Персональный запуск содержит один проект.')
+    if payload.scope == 'mass' and len(payload.items)>auto.config(db).max_projects: raise HTTPException(400,'Превышен лимит проектов одного запуска.')
     results=[]
     for item in payload.items:
         try:
-            run, fresh = call(auto.prepare_run,db,site_or_404(db,item.site_id),item.request_id,item.preview_token,user['username'])
+            run, fresh = call(auto.prepare_run,db,site_or_404(db,item.site_id),item.request_id,item.preview_token,user['username'],payload.scope)
             if fresh: dispatch(db,run)
             results.append({'site_id':item.site_id,'run':auto.serialize(run)})
         except HTTPException as error:

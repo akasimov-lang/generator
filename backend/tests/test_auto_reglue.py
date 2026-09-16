@@ -12,8 +12,8 @@ from test_api_serialization import make_client
 def fixture():
     site = SimpleNamespace(id='site', name='clubheavenjax.com', project_status='mass_actions', cache_geo='AZ', main_domain_history=['old.clubheavenjax.com','used.clubheavenjax.com'])
     state = dict(canon='old.clubheavenjax.com', prev='', reserve='', domains=['first.clubheavenjax.com','old.clubheavenjax.com','used.clubheavenjax.com','next.clubheavenjax.com','last.clubheavenjax.com'], has_head=True, enableAlternates=True, alternateMarkup='<link rel="alternate" hreflang="tr" href="https://old.clubheavenjax.com/extra/" />')
-    cfg=auto.ProjectConfig(enabled=True,drop_domain='clubheavenjax.com',language='az',profile_id='pinup:az:clubheavenjax.com',variant='after')
-    return site,state,auto.GlobalConfig(enabled=True,auxiliary_hreflangs=['fr-AZ']),cfg
+    cfg=auto.ProjectConfig(enabled=True,drop_domain='clubheavenjax.com',language='az',fake_main_path='/events/',profile_id='pinup:az:clubheavenjax.com',variant='after')
+    return site,state,auto.GlobalConfig(enabled=True,scheme_mode='add_auxiliary',auxiliary_hreflangs=['fr-FR']),cfg
 
 
 def test_next_unused_subdomain_and_fixed_drop_with_preserved_extras():
@@ -22,7 +22,7 @@ def test_next_unused_subdomain_and_fixed_drop_with_preserved_extras():
     assert plan['new_main']=='next.clubheavenjax.com'
     assert 'https://next.clubheavenjax.com/events/' in plan['alternateMarkup']
     assert 'hreflang="tr" href="https://next.clubheavenjax.com/extra/"' in plan['alternateMarkup']
-    assert 'hreflang="fr-AZ"' in plan['alternateMarkup']
+    assert 'hreflang="fr-FR"' in plan['alternateMarkup']
     assert 'hreflang="x-default" href="https://clubheavenjax.com/"' in plan['alternateMarkup']
     assert 'rel="canonical"' not in plan['alternateMarkup']
 
@@ -126,10 +126,11 @@ from test_project_network import env
 
 
 def test_real_receipts_confirm_entire_automatic_sequence(env,monkeypatch):
+    monkeypatch.setattr(auto, 'verify_pages', lambda urls: None)
     db,site,remote=env
     site.project_status='mass_actions';site.cache_geo='AZ';db.commit()
     remote.data['settings']['domains']=['main.test','next.project.test']
-    cfg=auto.ProjectConfig(enabled=True,drop_domain='project.test',language='az')
+    cfg=auto.ProjectConfig(enabled=True,drop_domain='project.test',language='az',fake_main_path='/events/')
     auto.save_config(db,auto.GlobalConfig(enabled=True));auto.save_config(db,cfg,site.id)
     plan=auto.preview(db,site)
     run,fresh=auto.prepare_run(db,site,uuid4(),plan['preview_token'],'admin')
@@ -148,3 +149,175 @@ def test_real_receipts_confirm_entire_automatic_sequence(env,monkeypatch):
     assert 'hreflang="x-default" href="https://project.test/"' in remote.data['head']['alternateMarkup']
     assert 'next.project.test' in site.main_domain_history
     assert remote.data['settings']['alternate']['fakeMain']==['/cz/']
+
+
+def test_scheme_modes_add_one_then_preserve_when_exhausted():
+    from app.network_state import alternate_links
+    site, state, g, cfg = fixture()
+    cfg.profile_id = ''
+    g.auxiliary_hreflangs = ['az-AZ', 'tr', 'de-DE', 'fr-FR']
+    plan = auto.build_plan(site, state, g, cfg)
+    assert plan['added_hreflang'] == 'de-DE'
+    assert 'fr-FR' not in plan['alternateMarkup']
+    state['alternateMarkup'] = plan['alternateMarkup']
+    plan = auto.build_plan(site, state, g, cfg)
+    assert plan['added_hreflang'] == 'fr-FR'
+    state['alternateMarkup'] = plan['alternateMarkup']
+    exhausted = auto.build_plan(site, state, g, cfg)
+    assert exhausted['pool_exhausted']
+    g.scheme_mode = 'preserve'
+    g.auxiliary_hreflangs.append('es-ES')
+    preserved = auto.build_plan(site, state, g, cfg)
+    assert 'es-ES' not in preserved['alternateMarkup']
+    assert [x['hreflang'] for x in alternate_links(preserved['alternateMarkup'])] == [x['hreflang'] for x in alternate_links(state['alternateMarkup'])]
+
+
+def test_personal_overrides_mass_status_and_global_rules():
+    site, state, g, cfg = fixture()
+    cfg.scope = 'personal'; cfg.scheme_mode = 'preserve'
+    site.project_status = 'working'; g.enabled = False
+    plan = auto.build_plan(site, state, g, cfg)
+    assert plan['scope'] == 'personal' and plan['scheme_mode'] == 'preserve'
+    assert 'fr-FR' not in plan['alternateMarkup']
+
+
+def test_schedule_due_time_personal_priority_and_mass_exclusion(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    _, sessions = make_client()
+    with sessions() as db:
+        site = db.scalar(select(models.Site))
+        g = auto.GlobalConfig(enabled=True, schedule_enabled=True, interval_days=3)
+        cfg = auto.ProjectConfig(enabled=True, drop_domain='drop.test', language='az',fake_main_path='/events/')
+        auto.save_config(db, g); auto.save_config(db, cfg, site.id)
+        site.project_status = 'mass_actions'; db.commit()
+        anchor = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        for key in ('global', site.id):
+            row = db.get(models.AutoReglueConfig, key)
+            row.value = {**row.value, '_schedule_since': anchor.isoformat()}
+        db.commit()
+        assert auto.next_scheduled_at(db, site) == anchor + timedelta(days=3)
+        assert auto.schedule_tick(db, lambda _: pytest.fail('not due'), anchor + timedelta(days=2)) == []
+        cfg.scope = 'personal'; cfg.interval_days = 14; cfg.schedule_enabled = True
+        auto.save_config(db, cfg, site.id)
+        row = db.get(models.AutoReglueConfig, site.id)
+        row.value = {**row.value, '_schedule_since': anchor.isoformat()}; db.commit()
+        g.enabled = False; auto.save_config(db, g)
+        site.project_status = 'working'; db.commit()
+        assert auto.next_scheduled_at(db, site) == anchor + timedelta(days=14)
+        with pytest.raises(ValueError, match='персональные'):
+            auto.prepare_run(db, site, uuid4(), 'irrelevant', 'admin', 'mass')
+        cfg.schedule_enabled = False; auto.save_config(db, cfg, site.id)
+        assert auto.next_scheduled_at(db, site) is None
+
+
+def test_schedule_queues_once_blocks_overlap_and_records_preflight_error(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    _, sessions = make_client()
+    _, state, g, cfg = fixture()
+    g.schedule_enabled = True; g.interval_days = 3
+    monkeypatch.setattr(auto.project_network, 'read_network', lambda db, site: dict(state, revision=state_revision(state)))
+    with sessions() as db:
+        site = db.scalar(select(models.Site))
+        site.name = 'clubheavenjax.com'; site.cache_geo = 'AZ'; site.project_status = 'mass_actions'
+        db.commit()
+        auto.save_config(db, g); auto.save_config(db, cfg, site.id)
+        anchor = datetime.now(timezone.utc) - timedelta(days=4)
+        for key in ('global', site.id):
+            row = db.get(models.AutoReglueConfig, key)
+            row.value = {**row.value, '_schedule_since': anchor.isoformat()}
+        db.commit()
+        queued = []
+        ids = auto.schedule_tick(db, queued.append)
+        assert ids == queued and len(ids) == 1
+        run = db.get(models.AutoReglueRun, ids[0])
+        assert run.plan['scheduled'] and run.status == 'queued'
+        run.status = 'running'; db.commit()
+        assert auto.schedule_tick(db, queued.append) == []
+        run.status = 'completed'; run.updated_at = datetime.now(timezone.utc); db.commit()
+        assert auto.next_scheduled_at(db, site) > datetime.now(timezone.utc) + timedelta(days=2)
+        run.updated_at = anchor + timedelta(hours=1); db.commit()
+        def fail(*_): raise ValueError('no candidate')
+        monkeypatch.setattr(auto, 'preview', fail)
+        failed_ids = auto.schedule_tick(db, queued.append)
+        assert len(failed_ids) == 1 and len(queued) == 1
+        assert db.get(models.AutoReglueRun, failed_ids[0]).status == 'failed'
+
+
+def test_supported_intervals_and_language_pool():
+    from app.alternate_language_pool import COUNTRY_LANGUAGES, default_language_pool
+    assert len(COUNTRY_LANGUAGES) == 38
+    assert len(default_language_pool()) == len(set(default_language_pool()))
+    assert 'cs-CZ' in default_language_pool() and 'kk-KZ' in default_language_pool()
+    for days in [3,4,5,7,14]:
+        assert auto.GlobalConfig(interval_days=days).interval_days == days
+    with pytest.raises(ValueError):
+        auto.GlobalConfig(interval_days=6)
+
+
+def test_base_scheme_uses_project_language_geo_and_explicit_xdefault_newreg():
+    from app.network_state import alternate_links
+    site, state, g, cfg = fixture()
+    site.cache_language = 'az-AZ'
+    cfg.language = 'en'; cfg.profile_id = ''; g.scheme_mode = 'preserve'
+    state['alternateMarkup'] = ''
+    links = alternate_links(auto.build_plan(site, state, g, cfg)['alternateMarkup'])
+    assert [(x['hreflang'], x['href']) for x in links] == [
+        ('az', 'https://next.clubheavenjax.com/'),
+        ('az-AZ', 'https://next.clubheavenjax.com/events/'),
+        ('x-default', 'https://clubheavenjax.com/'),
+    ]
+    cfg.x_default_use_newreg = True
+    with pytest.raises(ValueError, match='новорег'):
+        auto.build_plan(site, state, g, cfg)
+    cfg.x_default_newreg_domain = 'newreg.test'
+    plan = auto.build_plan(site, state, g, cfg)
+    assert plan['x_default_domain'] == 'newreg.test'
+    assert 'hreflang="x-default" href="https://newreg.test/"' in plan['alternateMarkup']
+    cfg.x_default_use_newreg = False
+    site.domain_types = {'clubheavenjax.com': 'newreg'}
+    with pytest.raises(ValueError, match='отмечен как новорег'):
+        auto.build_plan(site, state, g, cfg)
+
+
+def test_personal_project_not_listed_or_accepted_in_mass_api():
+    from app.auto_reglue_api import router
+    client, sessions = make_client()
+    client.app.include_router(router, prefix='/api')
+    with sessions() as db:
+        site = db.scalar(select(models.Site))
+        site.project_status = 'mass_actions'; db.commit()
+        site_id = site.id
+        auto.save_config(db, auto.ProjectConfig(scope='personal', enabled=True, drop_domain='drop.test', language='az'), site.id)
+    assert client.get('/api/auto-reglue').json()['projects'] == []
+    result = client.post('/api/auto-reglue/start', json={'items':[{'site_id':site_id, 'request_id':str(uuid4()), 'preview_token':'a'*64}]})
+    assert 'персональные' in result.json()['results'][0]['error']
+
+
+def test_root_canonical_and_xdefault_rotate_together_with_child_languages():
+    from app.network_state import alternate_links
+    site, state, g, cfg = fixture()
+    cfg.domain_layout = 'root_main'; cfg.profile_id = ''; g.scheme_mode = 'preserve'
+    site.domain_types = {'old.test':'drop', 'used.test':'drop', 'next.test':'drop', 'newreg.test':'newreg'}
+    site.main_domain_history = ['old.test','used.test']
+    site.alternate_domain_history = ['used.next.test']
+    state.update(canon='old.test', prev='', domains=['old.test','used.test','next.test','used.next.test','az.next.test','newreg.test','az.newreg.test'])
+    plan = auto.build_plan(site, state, g, cfg)
+    assert plan['new_main'] == plan['x_default_domain'] == 'next.test'
+    assert plan['language_domain'] == 'az.next.test'
+    links = {x['hreflang']: x['href'] for x in alternate_links(plan['alternateMarkup'])}
+    assert links['az'] == 'https://az.next.test/'
+    assert links['az-AZ'] == 'https://az.next.test/events/'
+    assert links['x-default'] == 'https://next.test/'
+    cfg.x_default_use_newreg = True
+    plan = auto.build_plan(site, state, g, cfg)
+    assert plan['new_main'] == plan['x_default_domain'] == 'newreg.test'
+    assert plan['language_domain'] == 'az.newreg.test'
+
+
+def test_missing_child_blocks_root_change_before_any_write():
+    site, state, g, cfg = fixture()
+    cfg.domain_layout = 'root_main'
+    site.domain_types = {'next.test':'drop'}
+    state.update(canon='old.test', domains=['old.test','next.test'])
+    with pytest.raises(ValueError, match='нет неиспользованного поддомена'):
+        auto.build_plan(site, state, g, cfg)
