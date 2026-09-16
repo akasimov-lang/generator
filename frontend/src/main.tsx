@@ -2286,7 +2286,6 @@ function ProjectWorkspaceView({
               onChange={selectWorkspaceSite}
               options={sites.map((site) => ({
                 ...projectSearchOption(site),
-                leading: undefined,
                 indicator: undefined
               }))}
               compact
