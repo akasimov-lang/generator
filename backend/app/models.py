@@ -81,6 +81,10 @@ class Site(Base, TimestampMixin):
     internal_pages_count: Mapped[int] = mapped_column(Integer, default=0)
     domains_count: Mapped[int] = mapped_column(Integer, default=0)
     cache_domains: Mapped[list] = mapped_column(JSON, default=list)
+    main_domain_history: Mapped[list] = mapped_column(JSON, default=list)
+    x_default_history: Mapped[list] = mapped_column(JSON, default=list)
+    alternate_domain_history: Mapped[list] = mapped_column(JSON, default=list)
+    network_state: Mapped[dict] = mapped_column(JSON, default=dict)
     cache_server_ip: Mapped[str | None] = mapped_column(String(120), nullable=True)
     project_status: Mapped[str] = mapped_column(String(32), default="working", index=True)
     is_test_project: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -309,6 +313,19 @@ class PublicationCampaign(Base, TimestampMixin):
     items_per_run: Mapped[int] = mapped_column(Integer, default=1)
     start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class NetworkOperation(Base, TimestampMixin):
+    __tablename__ = "network_operations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), index=True)
+    action: Mapped[str] = mapped_column(String(32))
+    status: Mapped[str] = mapped_column(String(24), default="pending")
+    initiator: Mapped[str] = mapped_column(String(80))
+    request_payload: Mapped[dict] = mapped_column(JSON)
+    response_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class PublicationLog(Base, TimestampMixin):

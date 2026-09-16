@@ -1,0 +1,162 @@
+# Webdev: сетка, переклей и альтернейты
+
+Проверено 2026-09-16 по JavaScript панели Webdev 3.0
+(`index-CBEftfyt.js`) и чтению проекта `betonredczech.com`.
+Источник: https://webdev-alfasearch.ru/projects/betonredczech.com/
+
+## Авторизация и чтение
+
+- `POST https://o59s9a012jd.com/auth/login`: `{username, pass}` → `{token}`.
+- Последующие запросы используют `Authorization: Bearer <token>`.
+- `POST /projects/cache`: `{fields:{settings:true,head:true,data:false},names:[projectName]}`.
+- Сервер проекта берётся из ответа: `serverIp`/`serverId`;
+  короткое имя дополняется `.slf-hostesting.com`.
+- `GET https://<server>/projects/one/<projectName>` возвращает объект
+  проекта с `settings`, `head` и другими полями.
+- Пароли и токены не сохраняются в документации и логах.
+
+## Переклей: контракт из клиентского кода (запуск не выполнялся)
+
+1. Выбрать резерв из `settings.domains`, исключив текущий `settings.canon`.
+   Панель предлагает все домены сетки, а не только бывшие Main.
+2. Сохранить выбор: `POST /projects/update-value`:
+   `{folder: projectName, reserve: domain, reserveOption: domain}`.
+   Клиент добавляет `reserveOption` при сериализации поля `reserve`.
+3. Проверить доступность: `POST /projects/check-domain`, `{domain}`.
+   Клиент читает `reachable` и `reason` из ответа. Недоступность выводится как
+   предупреждение; пока проверка идёт, кнопка запуска заблокирована.
+4. Запустить: `POST /projects/update-reglue`:
+   `{trigger:"webdev:settings", folder:projectName, initiator:username, reserve:domain}`.
+   Клиент допускает JSON-объект или строку с JSON, показывает `message` и проверяет
+   `errors.length`, в том числе при успешном HTTP-статусе. Затем перечитывает проект.
+5. Отдельная операция `POST /projects/update-domain`, `{folder:projectName}`,
+   заменяет старый домен в доменных редиректах. Она не является запуском переклея.
+6. Кнопка актуализации сетки: `POST /projects/settings-update`, `{ip:server, folder:projectName}`.
+
+Ответы изменяющих запросов выше пока не проверены на живой записи: переклей,
+резерв и редиректы в исследуемом проекте не менялись.
+
+## Альтернейты: два разных набора настроек
+
+### Разметка ссылок и x-default
+
+Панель «Альтернейты» редактирует `head.enableAlternates` и `head.alternateMarkup`.
+Переключатель сохраняется сразу, текст разметки — при потере фокуса.
+
+`PATCH https://<server>/projects/update-head`
+
+```json
+{
+  "folder": "betonredczech.com",
+  "alternateMarkup": "<link rel=\"alternate\" hreflang=\"x-default\" href=\"https://www.mapovani.cz/\" />\n<link rel=\"alternate\" hreflang=\"cz\" href=\"https://bet-on-red-cz.com/\" />\n<link rel=\"alternate\" hreflang=\"cz-CZ\" href=\"https://bet-on-red-cz.com/\" />"
+}
+```
+
+Это фактически выполненный запрос на `dolphin.slf-hostesting.com`: по прямой
+просьбе пользователя исправлен только `.comm` → `.com` в ссылке `cz-CZ`.
+Ответ — полный обновлённый объект `head`. Повторный GET подтвердил точное
+совпадение разметки, неизменность остальных полей `head` и всего `settings`.
+HTTP-код отдельно не записывался; curl подтвердил успешное выполнение запроса.
+
+Включение: тот же PATCH с `{folder, enableAlternates:true}`.
+Нужно отправлять только изменяемые поля, сохраняя остальные настройки.
+
+### Копии главной и дополнительные настройки
+
+`settings.alternate` сохраняется отдельно:
+`POST /projects/update-value`, `{folder, alternate: <полный актуальный объект>}`.
+Клиент объединяет изменённые поля с текущим объектом и отправляет с задержкой 1 с.
+
+- `fakeMain`: список путей копий главной (например, `["/cz/"]`), не домены.
+- `currentFakeMain`: выбранная копия (`"/cz/"`).
+- `enableDynamicRoutes`: включение этих страниц.
+- `redirectFakeMainsToCurrent`: отдельный переключатель редиректов копий.
+- `alternateDomain`: домен из сетки для соответствующей схемы.
+- `hrefLangs`, `alternateLang`, `alternateReserveDomain`,
+  `useMainDomainInAlternateScheme`: сохраняются при редактировании объекта.
+
+Не выводить историю Main из `fakeMain`. Не смешивать `settings.alternate`
+с HTML-разметкой `head.alternateMarkup`. Историю x-default можно фиксировать
+по хосту ссылки `rel="alternate" hreflang="x-default"` в разметке.
+
+## Создание поддомена — проверено на реальной задаче
+
+2026-09-16 через форму «Создание/удаление доменов» добавлен
+`test1.bet-on-red-cz.com` в проект `betonredczech.com`.
+После ввода и Enter домен попадает в preview; запись выполняется только кнопкой
+«Создать конфиги». Поддомен определяется по родительскому домену сетки;
+для него `wwwPrimary=false`.
+
+Фактически отправленный запрос:
+
+```http
+POST https://o59s9a012jd.com/site-config/create
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+```json
+{
+  "server": "dolphin.slf-hostesting.com",
+  "project": "betonredczech.com",
+  "username": "anton",
+  "port": "1141",
+  "domains": [
+    {
+      "id": "1789547850608-0.6239334109349224",
+      "domain": "test1.bet-on-red-cz.com",
+      "wwwPrimary": false
+    }
+  ]
+}
+```
+
+Ответ HTTP 201: `{"jobId":"1504","skipped":[]}`.
+`id` — идентификатор строки в форме, генерируется заново для новой строки;
+`port` берётся из актуальных settings проекта, нельзя фиксировать его глобально.
+`skipped` содержит домены, уже существующие в сетке, и требует отдельной обработки.
+
+Статус задачи приходит через SSE:
+`GET https://o59s9a012jd.com/site-config/1504/stream?token=<token>`.
+Токен в URL потока нельзя записывать в журналы.
+
+Наблюдавшиеся этапы: авторизация → базовый конфиг → сертификат → обновление
+конфига → актуализация сетки → задача создания поддомена CDN/DMS → задача
+мониторинга DMS → перезагрузка Nginx.
+Дополнительный запрос добавления в сетку из браузера не отправлялся: это этап
+серверной задачи создания.
+
+Терминальное событие: `state="completed"`, `progress=100`,
+`result.successCount=1`, `result.errorCount=0`, `error=null`.
+Внутренний `domains[].status` в этом событии остался `pending`: нельзя принимать
+его за единственный признак завершения. Панель при `completed` отображает
+успех для доменов без статуса `error`.
+
+Проверено отдельным GET проекта: домен присутствует в settings.domains,
+в сетке 17 доменов, canon/reserve/alternateMarkup сохранились.
+`HEAD https://test1.bet-on-red-cz.com/` вернул HTTP 200 с корректным HTTPS.
+
+## Реализация в панели генератора
+
+- Две вкладки: «Сетка» и «Переклей». Поле для пользователя называется «Альтернейты».
+- `GET /api/sites/{site_id}/network` читает актуальное состояние Webdev и сохраняет
+  наблюдавшиеся Main (включая известный prev), домены альтернейтов и x-default.
+- `POST /api/sites/{site_id}/network/check-domain` проверяет выбранный резерв.
+- `POST /api/sites/{site_id}/network/operations`: `action` = `reserve`, `reglue`
+  или `alternates`, UUID `request_id` и `revision` актуального снимка.
+- Резерв сохраняется отдельно; перед переклеем сервер повторно проверяет его
+  принадлежность сетке, отличие от Main, сохранение и доступность.
+- Альтернейты сохраняются PATCH update-head. `settings.alternate`, включая
+  fakeMain/currentFakeMain, этой операцией не меняется. Для будущих шаблонов
+  остаётся то же поле разметки; шаблоны пока не добавлены.
+- Конкурентные изменения обнаруживаются по revision. PostgreSQL advisory lock
+  исключает одновременные операции через нашу панель. Внешний API не предоставляет
+  условную запись, поэтому полностью исключить изменение в другой панели между
+  проверкой и записью нельзя.
+- Квитанция операции записывается до отправки. Таймаут не вызывает повторную
+  отправку. Статусы pending/unknown блокируют новые записи до подтверждения
+  ожидаемых значений чтением проекта. Отдельная задача отложенного обновления
+  не требуется: открытая вкладка перечитывает состояние каждые 10 секунд.
+- Успешный HTTP-код не равен подтверждению: учитываются errors/success/error
+  в ответе и фактические настройки после записи. Журнал не содержит токенов.
+- Миграции 0042/0043 добавляют историю и журнал операций; старые поля не удаляются.

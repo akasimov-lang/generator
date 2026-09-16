@@ -17,6 +17,32 @@ def make_session() -> Session:
     return Session(engine)
 
 
+def test_main_history_survives_canon_changes_and_removed_domains() -> None:
+    with make_session() as db:
+        project = {"id": "history-project", "name": "history.test", "settings": {"canon": "first.test", "domains": ["first.test", "second.test"]}}
+        sync_project_cache(db, [project])
+        site = db.scalar(select(models.Site).where(models.Site.external_project_id == "history-project"))
+        assert site.main_domain_history == ["first.test"]
+        project["settings"] = {"canon": "SECOND.test", "domains": ["second.test"]}
+        sync_project_cache(db, [project])
+        sync_project_cache(db, [project])
+        assert site.main_domain_history == ["first.test", "second.test"]
+        assert site.cache_domains == ["second.test"]
+        assert site.cache_canon == "second.test"
+        project["settings"]["canon"] = "first.test"
+        sync_project_cache(db, [project])
+        assert site.main_domain_history == ["first.test", "second.test"]
+
+
+def test_main_history_preserves_existing_canon_on_first_sync() -> None:
+    with make_session() as db:
+        site = models.Site(name="legacy.test", base_url="https://old.test", publication_endpoint="https://old.test/api/content", cache_canon="old.test", external_project_id="legacy-history")
+        db.add(site)
+        db.commit()
+        sync_project_cache(db, [{"id": "legacy-history", "name": "legacy.test", "settings": {"canon": "new.test"}}])
+        assert site.main_domain_history == ["old.test", "new.test"]
+
+
 def test_find_project_page_normalizes_relative_and_absolute_slugs() -> None:
     project = {
         "data": {

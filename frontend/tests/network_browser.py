@@ -1,0 +1,51 @@
+import os
+import tempfile
+from pathlib import Path
+artifacts = Path(tempfile.mkdtemp(prefix="network-ui-"))
+from playwright.sync_api import sync_playwright, expect
+with sync_playwright() as p:
+ browser=p.chromium.launch(executable_path=os.environ.get('CHROME'),headless=True)
+ page=browser.new_page(viewport={'width':1280,'height':1000})
+ errors=[];page.on('pageerror',lambda err:(errors.append(str(err)),print('BROWSER_ERROR',str(err),flush=True)))
+ page.on('console',lambda msg:print('CONSOLE',msg.type,msg.text,flush=True) if msg.type=='error' else None)
+ page.goto(os.environ.get('VITE_TEST_URL', 'http://127.0.0.1:5174') + '/tests/network.html')
+ editor=page.get_by_label('Альтернейты',exact=True)
+ try: expect(editor).to_be_visible(timeout=10000)
+ except Exception:
+  print('BODY',page.locator('body').inner_text()[:5000],flush=True)
+  print('FIXTURE',page.evaluate('({fixture:window.fixture,calls:window.calls,html:document.getElementById("root")?.innerHTML})'),flush=True)
+  page.screenshot(path=str(artifacts / 'failure.png'),full_page=True)
+  raise
+ launch=page.get_by_role('button',name='Переклеить на резервный домен',exact=True)
+ expect(launch).to_be_disabled()
+ page.get_by_label('Домен для переклея',exact=True).select_option('next.test')
+ page.get_by_role('button',name='Сохранить резерв',exact=True).click()
+ page.get_by_role('button',name='Проверить домен',exact=True).click()
+ expect(launch).to_be_enabled()
+ editor.fill('<link rel="alternate" hreflang="x-default" href="https://next.test/" />')
+ expect(launch).to_be_disabled()
+ page.get_by_role('button',name='Сохранить альтернейты',exact=True).click()
+ page.get_by_role('button',name='Проверить домен',exact=True).click()
+ expect(launch).to_be_enabled();launch.click()
+ expect(page.get_by_text('Переклей: подтверждено.',exact=True)).to_be_visible()
+ actions=page.evaluate('window.calls.filter(c=>c.path.endsWith("/operations")).map(c=>c.payload.action)')
+ assert actions==['reserve','alternates','reglue'],actions
+ editor.fill('<link rel="alternate" hreflang="x-default" href="https://draft.test/" />')
+ page.get_by_role('button',name='Test network',exact=True).click()
+ page.wait_for_timeout(500)
+ expect(page.locator('th').filter(has_text='Был Main')).to_be_visible()
+ page.get_by_role('button',name='Test reglue',exact=True).click()
+ expect(page.get_by_label('Альтернейты',exact=True)).to_have_value('<link rel="alternate" hreflang="x-default" href="https://draft.test/" />')
+ page.evaluate('window.fixture.alternateMarkup=""')
+ page.get_by_role('button',name='Обновить данные',exact=True).click()
+ expect(page.get_by_role('button',name='Сохранить альтернейты',exact=True)).to_be_disabled()
+ page.get_by_role('button',name='Загрузить актуальную разметку',exact=True).click()
+ expect(page.get_by_label('Альтернейты',exact=True)).to_have_value('')
+ page.screenshot(path=str(artifacts / 'desktop.png'),full_page=True)
+ page.set_viewport_size({'width':390,'height':844})
+ page.get_by_role('button',name='Test network',exact=True).click()
+ page.screenshot(path=str(artifacts / 'mobile.png'),full_page=True)
+ assert not errors, errors
+ print('PASS: reserve → check → alternates → reglue; unsaved markup blocks launch; drafts survive tabs; stale markup conflict; history table; no browser errors.')
+ print('Screenshots:', artifacts)
+ browser.close()

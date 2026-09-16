@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 import json
 import secrets
+import httpx
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -14,6 +15,7 @@ from app.content_trash import trash_content, restore_content
 from app.published_content import article_words
 from app.menu_deletion import MenuBranchDelete, delete_menu_branch
 from app import technical_pages
+from app import project_network
 from app.technical_pages import TechnicalPagesRequest
 from app.core.config import get_settings
 from app.db import get_db
@@ -580,6 +582,32 @@ def update_site_status(site_id: str, payload: SiteStatusUpdate, _: AdminUser, db
     db.commit()
     db.refresh(site)
     return site
+
+
+def _network_call(callback, *args):
+    try:
+        return callback(*args)
+    except project_network.NetworkConflict as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except (ProjectCacheError, httpx.HTTPError) as error:
+        raise HTTPException(status_code=502, detail="Не удалось получить ответ Webdev. Обновите данные сетки перед повторной операцией.") from error
+
+
+@router.get("/sites/{site_id}/network")
+def get_site_network(site_id: str, _: AuthUser, db: Session = Depends(get_db)):
+    return _network_call(project_network.read_network, db, _get_site_or_404(db, site_id))
+
+
+@router.post("/sites/{site_id}/network/check-domain")
+def check_network_domain(site_id: str, payload: project_network.DomainCheck, _: AuthUser, db: Session = Depends(get_db)):
+    return _network_call(project_network.check_domain, db, _get_site_or_404(db, site_id), payload)
+
+
+@router.post("/sites/{site_id}/network/operations")
+def change_site_network(site_id: str, payload: project_network.NetworkChange, user: AuthUser, db: Session = Depends(get_db)):
+    return _network_call(project_network.change_network, db, _get_site_or_404(db, site_id), payload, _request_username(user) or "user")
 
 
 @router.delete("/sites/cache/duplicates", response_model=DuplicateSitesDeleteResponse)

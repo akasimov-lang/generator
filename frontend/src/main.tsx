@@ -5,6 +5,7 @@ import { LANGUAGE_OPTIONS, type LanguageOption } from "./languageOptions";
 import { getMenuLibrary, type MenuLibraryItem } from "./menuLibrary";
 import { matchesProjectSearch, projectSearchKeywords } from "./projectSearch";
 import { TechnicalPagesForm } from "./TechnicalPagesForm";
+import { ProjectNetworkPanel } from "./ProjectNetworkPanel";
 import {
   Activity,
   AlertTriangle,
@@ -243,6 +244,9 @@ type Site = {
   internal_pages_count: number;
   domains_count: number;
   cache_domains: string[];
+  main_domain_history: string[];
+  x_default_history: string[];
+  alternate_domain_history: string[];
   cache_server_ip: string | null;
   cache_server_host: string | null;
   project_status: "test" | "working" | "not_in_focus" | "duplicate";
@@ -528,7 +532,7 @@ type PublicationCampaignQueue = {
 type ThemeMode = "light" | "dark";
 type InputStyle = "balanced" | "classic" | "soft" | "inset" | "underline" | "emerald" | "graphite" | "rounded" | "contrast" | "glass";
 type AppView = "published" | "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "favorites" | "guide" | "settings";
-type WorkspaceTab = "overview" | "topics" | "content" | "publication" | "menu";
+type WorkspaceTab = "overview" | "topics" | "content" | "publication" | "menu" | "network" | "redirects";
 
 type WorkspaceAccordionContextValue = {
   storagePrefix: string;
@@ -673,7 +677,9 @@ const WORKSPACE_TAB_PATHS: Record<WorkspaceTab, string> = {
   topics: "/project-generation",
   content: "/project-content",
   publication: "/project-publication",
-  menu: "/project-menu"
+  menu: "/project-menu",
+  network: "/project-network",
+  redirects: "/project-redirects"
 };
 
 function routeFromPath(pathname: string): AppRoute {
@@ -2239,7 +2245,7 @@ function ProjectWorkspaceView({
                     </span>
                   </span>
                   <span className="projectTitleCard"><small>Title</small><b title={selectedSite.homepage_title || "Title не указан"}>{selectedSite.homepage_title || "—"}</b></span>
-                  <span className="projectMetricCard"><small>Доменов в сетке</small><b>{formatNumber(selectedSite.domains_count)}</b></span>
+                  <button type="button" className="projectMetricCard" onClick={() => onTabChange("network", selectedSite.name)} aria-label="Открыть сетку проекта"><small>Доменов в сетке</small><b>{formatNumber(selectedSite.domains_count)}</b></button>
                   <span className="projectMetricCard"><small>Страниц</small><b>{formatNumber(selectedSite.internal_pages_count)}</b></span>
                   <MenuCapabilityCard label="Header" templateRendered={menuCapabilities?.header_menu_template_rendered} rendered={menuCapabilities?.header_menu_rendered} nested={menuCapabilities?.header_menu_nested} nestedRequired={headerNestingRequired} icon="header" loading={menuCapabilitiesLoading || templateCapabilitiesLoading || menuCheckPending} error={menuCapabilitiesError} onRetry={refreshTemplateMenuCapabilities} />
                   <MenuCapabilityCard label="Footer" templateRendered={menuCapabilities?.footer_menu_template_rendered} rendered={menuCapabilities?.footer_menu_rendered} nested={menuCapabilities?.footer_menu_nested} icon="footer" loading={menuCapabilitiesLoading || templateCapabilitiesLoading || menuCheckPending} error={menuCapabilitiesError} onRetry={refreshTemplateMenuCapabilities} />
@@ -2290,6 +2296,8 @@ function ProjectWorkspaceView({
           </div>
         ) : null}
         <div className="workspaceTabs">
+          <TabButton href={pathForRoute("workspace", "network", selectedSite?.name)} icon={<Database size={16} />} label="Сетка" active={activeTab === "network"} onClick={() => onTabChange("network", selectedSite?.name)} />
+          <TabButton href={pathForRoute("workspace", "redirects", selectedSite?.name)} icon={<CornerDownRight size={16} />} label="Переклей" active={activeTab === "redirects"} onClick={() => onTabChange("redirects", selectedSite?.name)} />
           <TabButton
             href={pathForRoute("workspace", "overview", selectedSite?.name)}
             icon={<span className="tabButtonIcon overview" aria-hidden="true"><Search size={15} /></span>}
@@ -2360,6 +2368,7 @@ function ProjectWorkspaceView({
           <WorkspaceTabPane active={activeTab === "overview"} storagePrefix={`${currentUsername}:${selectedSite.id}:overview`}>
             {overview ? <FastProjectOverviewPanel key={selectedSite.id} overview={overview} content={siteContent} sections={sections} logs={logs} /> : null}
           </WorkspaceTabPane>
+          {activeTab === "network" || activeTab === "redirects" ? <ProjectNetworkPanel key={`${selectedSite.id}:${activeTab}`} site={selectedSite} mode={activeTab} api={api} username={currentUsername} onChanged={refreshProject} /> : null}
           <WorkspaceTabPane active={activeTab === "topics"} storagePrefix={`${currentUsername}:${selectedSite.id}:topics`}>
             <FastTasksView
               key={selectedSite.id}
@@ -8110,10 +8119,10 @@ function ProvidersView({ api, providers, onChanged }: ViewProps & { providers: A
   );
 }
 
-type SiteTableColumn = "rowNumber" | "select" | "name" | "title" | "canon" | "language" | "status" | "internalPages" | "menuType" | "menuCount" | "domainsCount";
+type SiteTableColumn = "rowNumber" | "select" | "name" | "title" | "canon" | "language" | "status" | "internalPages" | "menuType" | "menuCount" | "domainsCount" | "xDefault";
 type SiteSummaryFilter = "projects" | "working" | "menu" | "test" | "duplicate" | "all";
 
-const DEFAULT_SITE_COLUMN_ORDER: SiteTableColumn[] = ["rowNumber", "select", "name", "title", "canon", "language", "status", "internalPages", "menuType", "menuCount", "domainsCount"];
+const DEFAULT_SITE_COLUMN_ORDER: SiteTableColumn[] = ["rowNumber", "select", "name", "title", "canon", "language", "status", "internalPages", "menuType", "menuCount", "domainsCount", "xDefault"];
 const SITE_COLUMN_LABELS: Record<SiteTableColumn, string> = {
   rowNumber: "№",
   select: "",
@@ -8125,6 +8134,7 @@ const SITE_COLUMN_LABELS: Record<SiteTableColumn, string> = {
   internalPages: "Внутренние страницы",
   menuType: "Тип меню",
   menuCount: "Пункты меню",
+  xDefault: "x-default",
   domainsCount: "Доменов в сетке"
 };
 const SITE_COLUMN_SORT_KEYS: Record<SiteTableColumn, string | null> = {
@@ -8138,6 +8148,7 @@ const SITE_COLUMN_SORT_KEYS: Record<SiteTableColumn, string | null> = {
   internalPages: "internalPages",
   menuType: "menuType",
   menuCount: "menuCount",
+  xDefault: null,
   domainsCount: "domainsCount"
 };
 
@@ -8300,10 +8311,8 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
   });
   const [columnOrder, setColumnOrder] = React.useState<SiteTableColumn[]>(() => {
     const stored = storedPreferences.columnOrder;
-    return Array.isArray(stored)
-      && stored.length === DEFAULT_SITE_COLUMN_ORDER.length
-      && DEFAULT_SITE_COLUMN_ORDER.every((column) => stored.includes(column))
-      ? stored
+    return Array.isArray(stored) && stored.every((column) => DEFAULT_SITE_COLUMN_ORDER.includes(column))
+      ? [...new Set([...stored, ...DEFAULT_SITE_COLUMN_ORDER])]
       : DEFAULT_SITE_COLUMN_ORDER;
   });
   const [hiddenColumns, setHiddenColumns] = React.useState<SiteTableColumn[]>(() => {
@@ -8396,6 +8405,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
       menuType: headerMenuCount && footerMenuCount ? "Header + Footer" : headerMenuCount ? "Header" : footerMenuCount ? "Footer" : "",
       menuCount: headerMenuCount + footerMenuCount,
       internalPagesCount: site.internal_pages_count,
+      xDefaultHistory: site.x_default_history || [],
       domainsCount: site.domains_count,
       domains: Array.isArray(site.cache_domains) ? site.cache_domains : [],
       syncedAt: site.cache_synced_at
@@ -8822,7 +8832,8 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
                   {formatNumber(row.menuCount)}
                 </button>
               ) : "0",
-              domainsCount: formatNumber(row.domainsCount)
+              xDefault: row.xDefaultHistory.length ? <span title="Домены, ранее указанные в x-default">{row.xDefaultHistory.join(", ")}</span> : "—",
+              domainsCount: <a href={pathForRoute("workspace", "network", row.name)} aria-label={`Открыть сетку проекта ${row.name}`}>{formatNumber(row.domainsCount)}</a>
             };
             return visibleColumnOrder.map((column) => cells[column]);
           })}

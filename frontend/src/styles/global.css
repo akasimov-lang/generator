@@ -9253,3 +9253,33 @@ a {
 .siteMenuReviewButton.active { color: var(--primary); border-color: var(--primary); background: var(--primary-soft); }
 .siteMenuReviewButton:disabled { opacity: .5; cursor: wait; }
 .siteMenuReviewButton:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+/* Project network history */
+button.projectMetricCard { cursor: pointer; color: inherit; font: inherit; }
+button.projectMetricCard:hover { border-color: #16a05a; }
+.networkTableWrap { overflow-x: auto; }
+.networkTable { width: 100%; border-collapse: collapse; }
+.networkTable th, .networkTable td { padding: 12px; text-align: left; border-bottom: 1px solid #d5dfec; }
+.networkHistoryCheck { accent-color: #16a05a; width: 18px; height: 18px; pointer-events: none; }
+
+.projectNetworkPanel .dataPanelBody { display: grid; gap: 16px; }
+.networkSection { display: grid; gap: 12px; border-top: 1px solid #d5dfec; padding-top: 18px; }
+.networkSection h3, .networkSection p { margin: 0; }
+.networkSection label { display: grid; gap: 6px; }
+.networkSection label:has(input[type="checkbox"]) { display: flex; align-items: center; }
+.networkSection input[type="checkbox"] { accent-color: #16a05a; }
+.networkSection select, .networkSection input:not([type="checkbox"]), .networkMarkup { width: 100%; max-width: 100%; min-width: 0; }
+.networkMarkup { min-height: 180px; font-family: monospace; resize: vertical; }
+.networkActions { display: flex; flex-wrap: wrap; gap: 10px; }
+.networkAlternateBuilder { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+.networkOperations { margin: 0; padding-left: 20px; display: grid; gap: 12px; }
+.networkOperations small { display: block; color: #596b80; }
+@media (max-width: 640px) {
+  .networkAlternateBuilder { grid-template-columns: 1fr; }
+  .networkTable th, .networkTable td { padding: 8px; font-size: 12px; }
+}
+.networkHistoryCheck:disabled { opacity: 1; appearance: none; border: 1px solid #94a3b8; border-radius: 4px; background: #fff; position: relative; }
+.networkHistoryCheck:checked:disabled { background: #16a05a; border-color: #16a05a; }
+.networkHistoryCheck:checked:disabled::after { content: "\2713"; position: absolute; inset: 0; color: #fff; font-size: 14px; line-height: 16px; text-align: center; }
+
+.networkSection input[type="checkbox"] { width: 18px; min-width: 18px; height: 18px; flex: 0 0 18px; margin: 0; }
+.networkSection label:has(input[type="checkbox"]) { justify-content: flex-start; gap: 8px; }

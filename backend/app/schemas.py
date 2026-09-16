@@ -112,6 +112,9 @@ class SiteResponse(BaseModel):
     internal_pages_count: int
     domains_count: int
     cache_domains: list[str]
+    main_domain_history: list[str] = Field(default_factory=list)
+    x_default_history: list[str] = Field(default_factory=list)
+    alternate_domain_history: list[str] = Field(default_factory=list)
     cache_server_ip: str | None
 
     @computed_field

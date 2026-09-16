@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import models
+from app.network_state import observe_network
 from app.core.config import get_settings
 
 
@@ -705,6 +706,7 @@ def _site_has_related_data(db: Session, site: models.Site) -> bool:
             models.GenerationTask,
             models.ContentItem,
             models.PublicationCampaign,
+            models.NetworkOperation,
         )
     )
 
@@ -1022,9 +1024,12 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
             created_count += 1
         else:
             updated_count += 1
+            # Merge history with the latest row if a network operation ran during cache fetch.
+            db.refresh(site, with_for_update=True)
 
         site.name = name
         site.base_url = f"https://{canon}"
+        observe_network(site, project)
         site.cache_canon = canon
         site.cache_language = language
         site.cache_geo = geo
