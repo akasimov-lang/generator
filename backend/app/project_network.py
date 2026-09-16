@@ -21,6 +21,11 @@ class NetworkConflict(ValueError):
     pass
 
 
+class DomainTypeUpdate(BaseModel):
+    domain: str = Field(min_length=1, max_length=253)
+    domain_type: Literal["drop", "newreg"]
+
+
 class DomainCheck(BaseModel):
     domain: str = Field(min_length=1, max_length=253)
     revision: str
@@ -136,7 +141,7 @@ def result(db, site, state):
     operations = db.scalars(select(models.NetworkOperation).where(models.NetworkOperation.site_id == site.id)
                            .order_by(models.NetworkOperation.created_at.desc()).limit(20)).all()
     return {
-        **state, "revision": state_revision(state), "main_history": site.main_domain_history or [],
+        **state, "domain_types": site.domain_types or {}, "revision": state_revision(state), "main_history": site.main_domain_history or [],
         "x_default_history": site.x_default_history or [],
         "alternate_history": site.alternate_domain_history or [],
         "alternates": alternate_links(state["alternateMarkup"]),
@@ -301,3 +306,17 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
                 operation.message = "Не удалось перечитать настройки. Обновите сетку для проверки результата."
                 db.commit()
         return result(db, site, state)
+
+
+def update_domain_type(db, site, payload):
+    # Separate local metadata: cache refreshes never overwrite these values.
+    db.refresh(site, with_for_update=True)
+    domain = domain_name(payload.domain)
+    known = set(site.cache_domains or []) | set(site.main_domain_history or []) | set(site.alternate_domain_history or [])
+    if site.cache_canon:
+        known.add(domain_name(site.cache_canon))
+    if domain not in known:
+        raise ValueError("Домен отсутствует в сохранённой сетке и истории проекта.")
+    site.domain_types = {**(site.domain_types or {}), domain: payload.domain_type}
+    db.commit()
+    return {"domain_types": site.domain_types}

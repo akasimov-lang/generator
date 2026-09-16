@@ -5,6 +5,10 @@ window.calls=[];
 window.fixture={canon:'main.test',reserve:'reserve.test',domains:['main.test','reserve.test','next.test'],revision:'revision-1',main_history:['main.test','old.test','next.test'],x_default_history:['old.test'],alternate_history:['old.test'],alternateMarkup:'<link rel="alternate" hreflang="x-default" href="https://old.test/" />',enableAlternates:true,has_head:true,alternates:[],operations:[]};
 async function api(path,options={}) {
  const payload=options.body?JSON.parse(options.body):null; window.calls.push({path,payload});
+ if(path.endsWith('/domain-type')) {
+  window.fixture.domain_types={...window.fixture.domain_types,[payload.domain]:payload.domain_type};
+  return {domain_types:window.fixture.domain_types};
+ }
  if(path.endsWith('/check-domain'))return {domain:payload.domain,reachable:true,reason:''};
  if(payload) {
   if(payload.action==='create_subdomains')window.fixture.domains.push(...payload.domains);

@@ -84,6 +84,7 @@ class Site(Base, TimestampMixin):
     main_domain_history: Mapped[list] = mapped_column(JSON, default=list)
     x_default_history: Mapped[list] = mapped_column(JSON, default=list)
     alternate_domain_history: Mapped[list] = mapped_column(JSON, default=list)
+    domain_types: Mapped[dict] = mapped_column(JSON, default=dict)
     network_state: Mapped[dict] = mapped_column(JSON, default=dict)
     cache_server_ip: Mapped[str | None] = mapped_column(String(120), nullable=True)
     project_status: Mapped[str] = mapped_column(String(32), default="working", index=True)

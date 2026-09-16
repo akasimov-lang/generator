@@ -223,3 +223,21 @@ def test_subdomain_parent_removed_remotely_blocks_creation(env):
     with pytest.raises(network.NetworkConflict):
         change(env, "create_subdomains", state["revision"], domains=["test.next.test"])
     assert not remote.calls
+
+
+def test_domain_types_persist_across_network_refresh_without_remote_write(env):
+    db, site, remote = env
+    network.read_network(db, site)
+    saved = network.update_domain_type(db, site, network.DomainTypeUpdate(domain="main.test", domain_type="drop"))
+    assert saved["domain_types"] == {"main.test": "drop"}
+    network.update_domain_type(db, site, network.DomainTypeUpdate(domain="reserve.test", domain_type="newreg"))
+    remote.data["settings"]["domains"].remove("main.test")
+    result = network.read_network(db, site)
+    assert result["domain_types"] == {"main.test": "drop", "reserve.test": "newreg"}
+    db.expire_all()
+    assert db.get(models.Site, site.id).domain_types == result["domain_types"]
+    assert not remote.calls
+    with pytest.raises(ValueError, match="отсутствует"):
+        network.update_domain_type(db, site, network.DomainTypeUpdate(domain="other.test", domain_type="drop"))
+    with pytest.raises(ValueError):
+        network.DomainTypeUpdate(domain="main.test", domain_type="unknown")

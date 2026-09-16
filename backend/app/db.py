@@ -55,6 +55,7 @@ def apply_lightweight_migrations() -> None:
             "main_domain_history": "JSON DEFAULT '[]' NOT NULL",
             "x_default_history": "JSON DEFAULT '[]' NOT NULL",
             "alternate_domain_history": "JSON DEFAULT '[]' NOT NULL",
+            "domain_types": "JSON DEFAULT '{}' NOT NULL",
             "network_state": "JSON DEFAULT '{}' NOT NULL",
             "cache_server_ip": "VARCHAR(120)",
             "project_status": "VARCHAR(32) DEFAULT 'working' NOT NULL",
