@@ -1,7 +1,7 @@
 import React from "react";
 import { Trash2 } from "lucide-react";
 
-type NetworkOperation = { id: string; action: "reserve" | "reglue" | "alternates" | "create_subdomains" | "delete_domain" | "create_fake_main" | "indexing"; task_id?: string; domains?: string[]; status: string; message: string | null; domain: string | null; initiator: string; created_at: string };
+type NetworkOperation = { id: string; action: "reserve" | "reglue" | "alternates" | "create_subdomains" | "delete_domain" | "create_fake_main" | "select_fake_main" | "indexing"; task_id?: string; domains?: string[]; status: string; message: string | null; domain: string | null; initiator: string; created_at: string };
 type DomainClassification = { is_subdomain: boolean; parent_domain: string | null; parent_type: "drop" | "newreg" | null; unused_as_main: boolean };
 type Network = {
   fake_main_paths?: string[]; fake_main_current?: string; fake_main_enabled?: boolean;
@@ -19,7 +19,7 @@ type Props = {
   api: <T>(path: string, options?: RequestInit) => Promise<T>; onChanged: () => void;
 };
 type Draft = { markup: string; enabled: boolean; originalMarkup: string; originalEnabled: boolean };
-const actionLabels = { indexing: "Индексация проекта", create_fake_main: "Создание фейковой главной", delete_domain: "Удаление домена", create_subdomains: "Создание поддоменов", reserve: "Сохранение резерва", reglue: "Переклей", alternates: "Альтернейты" };
+const actionLabels = { select_fake_main: "Выбор текущей фейковой страницы", indexing: "Индексация проекта", create_fake_main: "Создание фейковой главной", delete_domain: "Удаление домена", create_subdomains: "Создание поддоменов", reserve: "Сохранение резерва", reglue: "Переклей", alternates: "Альтернейты" };
 const statusLabels: Record<string, string> = { index_queued: "В очереди", index_submitting: "Отправляется", index_submitted: "Задача создана", index_unknown: "Отправка не подтверждена", confirmed: "Подтверждено", pending: "Ожидает подтверждения", unknown: "Результат пока неизвестен", failed: "Ошибка" };
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Не удалось выполнить запрос";
 
@@ -41,6 +41,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
   const busyRef = React.useRef(false);
   const [error, setError] = React.useState("");
   const [message, setMessage] = React.useState("");
+  const [fakeMainSelection, setFakeMainSelection] = React.useState("");
   const [fakeMainInput, setFakeMainInput] = React.useState("");
   const [subdomainsInput, setSubdomainsInput] = React.useState("");
   const mounted = React.useRef(true);
@@ -52,6 +53,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
     if (!mounted.current) return;
     dataRef.current = next;
     setData(next);
+    setFakeMainSelection(next.fake_main_current || "");
     setReserve((old) => old && next.domains.includes(old) && old !== next.canon ? old : next.reserve);
     setDraft((old) => old && (old.markup !== old.originalMarkup || old.enabled !== old.originalEnabled) && (old.markup !== next.alternateMarkup || old.enabled !== next.enableAlternates) ? old : {
       markup: next.alternateMarkup, enabled: next.enableAlternates,
@@ -114,7 +116,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
   async function mutate(action: Exclude<NetworkOperation["action"], "indexing">, targetDomain?: string) {
     if (!data || !draft || busyRef.current) return;
     busyRef.current = true; setBusy(action); setError(""); setMessage("");
-    const payload = { action, fake_main_path: fakeMainInput, revision: data.revision, domain: targetDomain || reserve, alternate_markup: draft.markup, enable_alternates: draft.enabled, ...(action === "create_subdomains" ? { domains: subdomains } : {}) };
+    const payload = { action, fake_main_path: action === "select_fake_main" ? fakeMainSelection : fakeMainInput, revision: data.revision, domain: targetDomain || reserve, alternate_markup: draft.markup, enable_alternates: draft.enabled, ...(action === "create_subdomains" ? { domains: subdomains } : {}) };
     const receiptKey = `network-request:${username}:${site.id}`;
     let requestId = crypto.randomUUID();
     try {
@@ -228,7 +230,6 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
         </div>}
         {draft && (mode !== "network" || networkView === "main") && <div className="networkSection">
           <h3>Альтернейты</h3>
-          <p>Разметка сохраняется отдельно. При переклее canonical меняется через выбранный резерв.</p>
           <label><input type="checkbox" checked={draft.enabled} disabled={disabled || !data.has_head} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} /> Включить альтернейты</label>
           <label>Альтернейты<textarea aria-label="Альтернейты" className="networkMarkup" rows={8} spellCheck={false} value={draft.markup} disabled={disabled || !data.has_head} onChange={(event) => setDraft({ ...draft, markup: event.target.value })} placeholder={'<link rel="alternate" hreflang="x-default" href="https://example.com/" />'} /></label>
           {!data.has_head && <p>Настройки head не получены. Редактирование недоступно.</p>}
@@ -248,8 +249,17 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
         {(mode !== "network" || networkView === "main") && <div className="networkSection"><h3>Фейковые внутренние страницы</h3>
           <p>Динамические страницы: <b>{data.fake_main_enabled ? "включены" : "выключены"}</b>.</p>
           {!!data.fake_main_paths?.length ? <ul>{data.fake_main_paths.map(path => <li key={path}><a href={`https://${data.canon}${path}`} target="_blank" rel="noreferrer">{path}</a>{path === data.fake_main_current ? " — текущая" : ""}</li>)}</ul> : <p className="muted">В кеше нет фейковых внутренних страниц.</p>}
+          {!!data.fake_main_paths?.length && <>
+            <label>Текущая фейковая страница
+              <select aria-label="Текущая фейковая страница" value={fakeMainSelection} onChange={event => setFakeMainSelection(event.target.value)} disabled={disabled}>
+                <option value="" disabled>Выберите страницу</option>
+                {data.fake_main_paths.map(path => <option key={path} value={path}>{path}</option>)}
+              </select>
+            </label>
+            <div className="networkActions"><button type="button" className="button compact secondary" disabled={disabled || !fakeMainSelection || fakeMainSelection === data.fake_main_current} onClick={() => void mutate("select_fake_main")}>{busy === "select_fake_main" ? "Сохраняем…" : "Сохранить текущую страницу"}</button></div>
+          </>}
           <label>Путь фейковой главной<input aria-label="Путь фейковой главной" value={fakeMainInput} onChange={e => setFakeMainInput(e.target.value)} disabled={disabled} placeholder="test1 или /events/" /></label>
-          <button type="button" className="button secondary" disabled={disabled || !fakeMainInput.trim() || !!data.fake_main_paths?.includes("/" + fakeMainInput.trim().replace(/^\/+|\/+$/g, "") + "/")} onClick={() => void mutate("create_fake_main")}>{busy === "create_fake_main" ? "Создаём…" : "Создать фейковую главную"}</button>
+          <div className="networkActions"><button type="button" className="button compact secondary" disabled={disabled || !fakeMainInput.trim() || !!data.fake_main_paths?.includes("/" + fakeMainInput.trim().replace(/^\/+|\/+$/g, "") + "/")} onClick={() => void mutate("create_fake_main")}>{busy === "create_fake_main" ? "Создаём…" : "Создать фейковую главную"}</button></div>
         </div>}
         {!!data.operations.length && <div className="networkSection"><h3>История операций</h3><ul className="networkOperations">{data.operations.map((operation) => <li key={operation.id}>
           <strong>{actionLabels[operation.action]}{operation.domain ? `: ${operation.domain}` : ""}</strong> — {statusLabels[operation.status] || operation.status}

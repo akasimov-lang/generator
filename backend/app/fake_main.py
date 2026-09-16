@@ -44,6 +44,15 @@ def create_fake_settings(project, value):
     return alternate
 
 
+def select_fake_settings(project, value):
+    path = normalize_fake_path(value)
+    alternate = dict((project.get('settings') or {}).get('alternate') or {})
+    if path not in fake_paths(alternate):
+        raise ValueError('Выбранная фейковая страница отсутствует в актуальных настройках проекта.')
+    alternate['currentFakeMain'] = path
+    return alternate
+
+
 def next_fake_path(site, state, cfg):
     from app.site_brands import GENERAL
 

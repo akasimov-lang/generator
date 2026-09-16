@@ -15,6 +15,7 @@ async function api(path,options={}) {
  if(path.endsWith('/operations') && !payload)return structuredClone(window.fixture.operations);
  if(path.endsWith('/check-domain'))return {domain:payload.domain,reachable:true,reason:''};
  if(payload) {
+  if(payload.action==='select_fake_main'){window.fixture.fake_main_current=payload.fake_main_path;}
   if(payload.action==='create_fake_main'){window.fixture.fake_main_paths=['/cz/','/'+payload.fake_main_path.replace(/^\/+|\/+$/g,'')+'/'];window.fixture.fake_main_enabled=true;}
   if(payload.action==='delete_domain')window.fixture.domains=window.fixture.domains.filter(d=>d!==payload.domain);
   if(payload.action==='create_subdomains')window.fixture.domains.push(...payload.domains);

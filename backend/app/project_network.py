@@ -18,7 +18,7 @@ from app.network_state import alternate_links, domain_name, observe_network, sta
 from app.project_cache import ProjectCacheError, project_server_url, refresh_project_server_id
 
 
-from app.fake_main import create_fake_settings
+from app.fake_main import create_fake_settings, select_fake_settings
 
 
 class NetworkConflict(ValueError):
@@ -37,7 +37,7 @@ class DomainCheck(BaseModel):
 
 class NetworkChange(BaseModel):
     request_id: UUID
-    action: Literal["reserve", "reglue", "alternates", "create_subdomains", "delete_domain", "create_fake_main"]
+    action: Literal["reserve", "reglue", "alternates", "create_subdomains", "delete_domain", "create_fake_main", "select_fake_main"]
     revision: str = Field(min_length=1, max_length=64)
     domain: str = Field(default="", max_length=253)
     alternate_markup: str = Field(default="", max_length=100000)
@@ -126,7 +126,7 @@ class Remote:
 
 def operation_matches(operation, state):
     payload = operation.request_payload
-    if operation.action == "create_fake_main":
+    if operation.action in {"create_fake_main", "select_fake_main"}:
         return all(state.get("fake_main_settings", {}).get(key) == value for key, value in payload["alternate"].items())
     if operation.action == "create_subdomains":
         return all(item["domain"] in state["domains"] for item in payload["domains"])
@@ -324,9 +324,10 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
                 "username": get_settings().project_cache_username,
                 "domains": [domain.encode("idna").decode()],
             }
-        elif payload.action == "create_fake_main":
+        elif payload.action in {"create_fake_main", "select_fake_main"}:
             path = "/projects/update-value"
-            request["alternate"] = create_fake_settings(project, payload.fake_main_path)
+            prepare = create_fake_settings if payload.action == "create_fake_main" else select_fake_settings
+            request["alternate"] = prepare(project, payload.fake_main_path)
         elif payload.action in {"reserve", "reglue"}:
             domain = require_domain(state, payload.domain)
             request["reserve"] = domain

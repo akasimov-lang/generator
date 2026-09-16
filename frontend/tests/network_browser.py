@@ -65,6 +65,16 @@ with sync_playwright() as p:
  page.get_by_role('button',name='Создать фейковую главную',exact=True).click()
  expect(page.get_by_role('link',name='/test1/',exact=True)).to_be_visible()
  expect(page.get_by_role('button',name='Создать фейковую главную',exact=True)).to_be_disabled()
+ current_fake=page.get_by_label('Текущая фейковая страница',exact=True)
+ current_fake.select_option('/test1/')
+ page.get_by_role('button',name='Сохранить текущую страницу',exact=True).click()
+ expect(current_fake).to_have_value('/test1/')
+ expect(page.get_by_role('button',name='Сохранить текущую страницу',exact=True)).to_be_disabled()
+ assert page.evaluate('window.calls.filter(c=>c.payload?.action==="select_fake_main").map(c=>c.payload.fake_main_path)') == ['/test1/']
+ button=page.get_by_role('button',name='Создать фейковую главную',exact=True)
+ bounds=button.bounding_box()
+ section=button.locator('xpath=../..').bounding_box()
+ assert bounds['width'] < section['width'] / 2 and abs(bounds['x']-section['x']) < 2
  subdomains=page.get_by_label('Поддомены',exact=True)
  create=page.get_by_role('button',name='Создать конфиги',exact=True)
  subdomains.fill('test.outside.test')

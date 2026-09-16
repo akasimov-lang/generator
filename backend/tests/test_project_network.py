@@ -374,3 +374,38 @@ def test_manual_reglue_does_not_require_check_or_create_auto_run(env):
     assert result['canon'] == 'reserve.test'
     assert not any(path.endswith('check-domain') for _, path, _ in remote.calls)
     assert not db.scalars(select(models.AutoReglueRun)).all()
+
+
+def test_select_existing_fake_main_preserves_other_settings_and_is_idempotent(env):
+    db, site, remote = env
+    alternate = remote.data['settings']['alternate']
+    alternate.update(fakeMain=['/cz/', '/test1/'], enableDynamicRoutes=False,
+                     redirectFakeMainsToCurrent=True, custom='keep')
+    state = network.read_network(db, site)
+    payload = network.NetworkChange(request_id=uuid4(), action='select_fake_main',
+                                    revision=state['revision'], fake_main_path='test1')
+    result = network.change_network(db, site, payload, 'editor')
+    assert result['fake_main_current'] == '/test1/'
+    assert result['fake_main_paths'] == ['/cz/', '/test1/']
+    assert result['fake_main_enabled'] is False
+    assert result['operations'][0]['status'] == 'confirmed'
+    assert remote.data['settings']['alternate'] == {
+        **alternate, 'currentFakeMain': '/test1/'
+    }
+    assert remote.data['head']['alternateMarkup'] == MARKUP
+    network.change_network(db, site, payload, 'editor')
+    assert len(remote.calls) == 1
+
+
+def test_select_fake_main_requires_existing_path_and_confirmation(env):
+    db, site, remote = env
+    state = network.read_network(db, site)
+    with pytest.raises(ValueError, match='отсутствует'):
+        change(env, 'select_fake_main', state['revision'], fake_main_path='missing')
+    assert not remote.calls
+    remote.data['settings']['alternate']['fakeMain'].append('/test1/')
+    state = network.read_network(db, site)
+    remote.delayed = True
+    result = change(env, 'select_fake_main', state['revision'], fake_main_path='/test1/')
+    assert result['operations'][0]['status'] != 'confirmed'
+    assert result['fake_main_current'] == '/cz/'
