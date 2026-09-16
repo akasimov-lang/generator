@@ -47,6 +47,7 @@ with sync_playwright() as p:
  expect(page).to_have_url(base+'/auto-reglue/guide')
  expect(page.get_by_role('heading',name='Инструкция по автопереклеям',exact=True)).to_be_visible()
  expect(page.get_by_role('navigation',name='Содержание инструкции')).to_be_visible()
+ expect(page.get_by_role('heading',name='Однократный автопереклей — по умолчанию')).to_be_visible()
  expect(page.get_by_role('link',name='Инструкция по автопереклеям',exact=True)).to_have_count(0)
  assert calls==before_guide, calls[len(before_guide):]
  page.set_viewport_size({'width':390,'height':844})
@@ -57,6 +58,7 @@ with sync_playwright() as p:
  page.get_by_label('Разрешить запуск автопереклеев').check()
  page.get_by_label('Языки для новых фейковых альтернейтов').fill('en, tr')
  page.get_by_label('Включить расписание автопереклеев').check()
+ expect(page.get_by_label('Периодичность автопереклея')).to_have_value('0')
  page.get_by_label('Периодичность автопереклея').select_option('4')
  page.get_by_label('Добавлять новый фейковый альтернейт при каждом переклее').check()
  expect(page.get_by_label('Сохранять схему: обновлять адреса и дроп в x-default')).not_to_be_checked()

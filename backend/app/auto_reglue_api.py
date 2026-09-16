@@ -41,6 +41,7 @@ def kick_due_schedule(db):
     from datetime import datetime, timezone
     if not db.scalar(select(models.AutoReglueSchedule.site_id).where(
         models.AutoReglueSchedule.enabled.is_(True),
+        (models.AutoReglueSchedule.interval_days > 0) | models.AutoReglueSchedule.last_scheduled_at.is_(None),
         models.AutoReglueSchedule.next_run_at <= datetime.now(timezone.utc)).limit(1)):
         return
     from app.worker import schedule_auto_reglue_job

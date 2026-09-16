@@ -24,7 +24,7 @@ ACTIVE = ('queued', 'running', 'waiting', 'partial')
 class GlobalConfig(BaseModel):
     enabled: bool = False
     schedule_enabled: bool = False
-    interval_days: Literal[3, 4, 5, 7, 14] = 7
+    interval_days: Literal[0, 3, 4, 5, 7, 14] = 0
     scheme_mode: Literal["preserve", "add_auxiliary", "base_only"] = "preserve"
     auxiliary_hreflangs: list[str] = Field(default_factory=default_language_pool, max_length=200)
     max_projects: int = Field(default=20, ge=1, le=100)
@@ -42,7 +42,7 @@ class ProjectConfig(BaseModel):
     scope: Literal["mass", "personal"] = "mass"
     domain_layout: Literal['subdomain_main', 'root_main'] = 'subdomain_main'
     schedule_enabled: bool = False
-    interval_days: Literal[3, 4, 5, 7, 14] = 7
+    interval_days: Literal[0, 3, 4, 5, 7, 14] = 0
     scheme_mode: Literal["preserve", "add_auxiliary", "base_only"] = "preserve"
     auxiliary_hreflangs: list[str] = Field(default_factory=default_language_pool, max_length=200)
 
@@ -400,7 +400,11 @@ def sync_schedules(db, now, immediate=None):
             if row.interval_days != rules.interval_days:
                 row.interval_days = rules.interval_days
                 # Period changes are measured from the last scheduled slot, never from a save.
-                if row.last_scheduled_at:
+                if rules.interval_days == 0:
+                    row.last_scheduled_at = None
+                    row.anchor_at = now
+                    row.next_run_at = now
+                elif row.last_scheduled_at:
                     row.next_run_at = utc(row.last_scheduled_at) + timedelta(days=rules.interval_days)
     db.flush()
 
@@ -410,12 +414,14 @@ def next_scheduled_at(db, site):
     if not schedule_eligible(site, config(db), cfg):
         return None
     row = db.get(models.AutoReglueSchedule, site.id)
-    return utc(row.next_run_at) if row and row.enabled else None
+    return utc(row.next_run_at) if row and row.enabled and not (row.interval_days == 0 and row.last_scheduled_at) else None
 
 
 def advance_schedule(row, due, now):
-    interval = timedelta(days=row.interval_days)
     row.last_scheduled_at = due
+    if row.interval_days == 0:
+        return
+    interval = timedelta(days=row.interval_days)
     # Keep the calendar anchored; collapse missed slots to one run after downtime.
     row.next_run_at = due + interval * (max(0, (now - due) // interval) + 1)
 
@@ -438,6 +444,8 @@ def schedule_tick(db, enqueue, now=None):
                 if pending.status == 'queued' and pending.plan.get('scheduled'):
                     enqueue(pending.id)  # Recover commit -> queue failures using the same receipt.
                     started.append(pending.id)
+                continue
+            if schedule.interval_days == 0 and schedule.last_scheduled_at:
                 continue
             due = utc(schedule.next_run_at)
             if due > now:

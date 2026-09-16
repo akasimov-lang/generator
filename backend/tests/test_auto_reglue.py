@@ -423,3 +423,41 @@ def test_legacy_schedule_keeps_due_date_on_upgrade():
         db.commit()
         auto.sync_schedules(db, anchor + timedelta(days=1)); db.commit()
         assert auto.next_scheduled_at(db, site) == anchor + timedelta(days=3)
+
+
+def test_once_default_all_mass_projects_personal_excluded_and_no_repeats(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    _, sessions = make_client()
+    assert auto.GlobalConfig().interval_days == auto.ProjectConfig().interval_days == 0
+    monkeypatch.setattr(auto, 'preview', lambda db, site: {'project': site.name})
+    with sessions() as db:
+        original = db.scalar(select(models.Site))
+        original.project_status = 'mass_actions'
+        # Copy required Site fields without copying relationships.
+        from sqlalchemy.inspection import inspect
+        values = {c.key: getattr(original, c.key) for c in inspect(models.Site).columns
+                  if c.key not in {'id', 'name', 'created_at', 'updated_at'}}
+        second = models.Site(id=str(uuid4()), name='second.test', **values)
+        personal = models.Site(id=str(uuid4()), name='personal.test', **values)
+        db.add_all([second, personal]); db.commit()
+        for site in [original, second]:
+            auto.save_config(db, auto.ProjectConfig(enabled=True), site.id)
+        auto.save_config(db, auto.ProjectConfig(enabled=True, scope='personal', schedule_enabled=False), personal.id)
+        g = auto.GlobalConfig(enabled=True, schedule_enabled=True, max_projects=1)
+        auto.save_config(db, g)
+        queued = []
+        now = datetime.now(timezone.utc)
+        first = auto.schedule_tick(db, queued.append, now)
+        assert len(first) == 1
+        run = db.get(models.AutoReglueRun, first[0])
+        # Queue recovery uses the same receipt even though this was the only slot.
+        assert auto.schedule_tick(db, queued.append, now) == first
+        run.status = 'completed'; db.commit()
+        second_run = auto.schedule_tick(db, queued.append, now)
+        assert len(second_run) == 1 and second_run != first
+        db.get(models.AutoReglueRun, second_run[0]).status = 'completed'; db.commit()
+        auto.save_config(db, g)
+        assert auto.schedule_tick(db, queued.append, now + timedelta(days=90)) == []
+        runs = db.scalars(select(models.AutoReglueRun)).all()
+        assert {r.site_id for r in runs} == {original.id, second.id}
+        assert all(auto.next_scheduled_at(db, site) is None for site in [original, second, personal])
