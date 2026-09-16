@@ -1,6 +1,7 @@
 import React from "react";
+import { Trash2 } from "lucide-react";
 
-type NetworkOperation = { id: string; action: "reserve" | "reglue" | "alternates" | "create_subdomains"; status: string; message: string | null; domain: string | null; initiator: string; created_at: string };
+type NetworkOperation = { id: string; action: "reserve" | "reglue" | "alternates" | "create_subdomains" | "delete_domain"; status: string; message: string | null; domain: string | null; initiator: string; created_at: string };
 type DomainClassification = { is_subdomain: boolean; parent_domain: string | null; parent_type: "drop" | "newreg" | null; unused_as_main: boolean };
 type Network = {
   domain_classification?: Record<string, DomainClassification>;
@@ -16,7 +17,7 @@ type Props = {
   api: <T>(path: string, options?: RequestInit) => Promise<T>; onChanged: () => void;
 };
 type Draft = { markup: string; enabled: boolean; originalMarkup: string; originalEnabled: boolean };
-const actionLabels = { create_subdomains: "Создание поддоменов", reserve: "Сохранение резерва", reglue: "Переклей", alternates: "Альтернейты" };
+const actionLabels = { delete_domain: "Удаление домена", create_subdomains: "Создание поддоменов", reserve: "Сохранение резерва", reglue: "Переклей", alternates: "Альтернейты" };
 const statusLabels: Record<string, string> = { confirmed: "Подтверждено", pending: "Ожидает подтверждения", unknown: "Результат пока неизвестен", failed: "Ошибка" };
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Не удалось выполнить запрос";
 
@@ -86,10 +87,10 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
     if (!data?.domains.some((parent) => domain.endsWith("." + parent.replace(/^www\./, "")) && domain !== "www." + parent.replace(/^www\./, ""))) return [domain + ": родительского домена нет в сетке"];
     return [];
   });
-  async function mutate(action: NetworkOperation["action"]) {
+  async function mutate(action: NetworkOperation["action"], targetDomain?: string) {
     if (!data || !draft || busyRef.current) return;
     busyRef.current = true; setBusy(action); setError(""); setMessage("");
-    const payload = { action, revision: data.revision, domain: reserve, alternate_markup: draft.markup, enable_alternates: draft.enabled, ...(action === "create_subdomains" ? { domains: subdomains } : {}) };
+    const payload = { action, revision: data.revision, domain: targetDomain || reserve, alternate_markup: draft.markup, enable_alternates: draft.enabled, ...(action === "create_subdomains" ? { domains: subdomains } : {}) };
     const receiptKey = `network-request:${username}:${site.id}`;
     let requestId = crypto.randomUUID();
     try {
@@ -153,7 +154,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
         {mode === "network" && <>
           <p>Отметки истории сохраняются после смены домена. x-default означает, что домен был указан в альтернейте с hreflang="x-default".</p>
           <p className="muted">Поддомены определяются по родительским доменам в сетке. Тип наследуется от родителя и сохраняется через его настройку в нашей БД. «Не был Main» — отдельный признак; тип домена не меняется после переклея.</p>
-          <div className="networkTableWrap" tabIndex={0} role="region" aria-label="Домены сетки"><table className="networkTable"><thead><tr><th scope="col">Домен</th><th scope="col">Тип домена</th><th scope="col">Поддомен</th><th scope="col">Статус</th><th scope="col">Был Main</th><th scope="col">Был в альтернейтах</th><th scope="col">x-default</th></tr></thead>
+          <div className="networkTableWrap" tabIndex={0} role="region" aria-label="Домены сетки"><table className="networkTable"><thead><tr><th scope="col">Домен</th><th scope="col">Тип домена</th><th scope="col">Поддомен</th><th scope="col">Статус</th><th scope="col">Был Main</th><th scope="col">Был в альтернейтах</th><th scope="col">x-default</th><th scope="col">Действия</th></tr></thead>
             <tbody>{known.map((domain) => <tr key={domain}><td data-label="Домен">{domain}</td><td data-label="Тип домена">{data.domain_classification?.[domain]?.is_subdomain ? <span title="Тип задаётся у родительского домена">{data.domain_classification[domain].parent_type === "drop" ? "Дроп (родитель)" : data.domain_classification[domain].parent_type === "newreg" ? "Новорег (родитель)" : "Не указан у родителя"}</span> : <select className="networkDomainType" aria-label={`Тип домена ${domain}`} value={data.domain_types?.[domain] || ""} disabled={Boolean(busy)} onChange={(event) => void saveDomainType(domain, event.target.value)}><option value="" disabled>Не указан</option><option value="drop">Дроп</option><option value="newreg">Новорег</option></select>}</td><td data-label="Поддомен">
                 <span className="networkSubdomain"><input type="checkbox" className="networkHistoryCheck" disabled checked={!!data.domain_classification?.[domain]?.is_subdomain} aria-label={domain + ": поддомен"} />
                 {data.domain_classification?.[domain]?.is_subdomain && <span title={"Родитель: " + data.domain_classification[domain].parent_domain}>
@@ -161,7 +162,12 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
                   {data.domain_classification[domain].unused_as_main && <small>Не был Main</small>}
                 </span>}</span>
               </td><td data-label="Статус">{domain === data.canon ? "Main" : domain === data.reserve ? "Резерв" : data.domains.includes(domain) ? "В сетке" : "В истории"}</td>
-              {[data.main_history, data.alternate_history, data.x_default_history].map((history, i) => <td key={i} data-label={["Был Main", "Был в альтернейтах", "x-default"][i]}><input type="checkbox" className="networkHistoryCheck" disabled checked={history.includes(domain)} aria-label={`${domain}: ${["был Main", "был в альтернейтах", "x-default"][i]}`} /></td>)}</tr>)}</tbody>
+              {[data.main_history, data.alternate_history, data.x_default_history].map((history, i) => <td key={i} data-label={["Был Main", "Был в альтернейтах", "x-default"][i]}><input type="checkbox" className="networkHistoryCheck" disabled checked={history.includes(domain)} aria-label={`${domain}: ${["был Main", "был в альтернейтах", "x-default"][i]}`} /></td>)}
+              <td data-label="Действия"><button type="button" className="networkDeleteButton" aria-label={`Удалить ${domain} из сетки`}
+                title={domain === data.canon || domain === data.reserve || domain === site.name ? "Домен проекта, Main и резерв защищены от удаления" : "Удалить домен из сетки"}
+                disabled={disabled || !data.domains.includes(domain) || [data.canon, data.reserve, site.name].includes(domain)}
+                onClick={() => void mutate("delete_domain", domain)}><Trash2 size={15} /></button></td>
+            </tr>)}</tbody>
           </table></div>
           <div className="networkSection">
             <h3>Создание поддоменов</h3>

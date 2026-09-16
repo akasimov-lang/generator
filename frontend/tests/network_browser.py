@@ -60,6 +60,11 @@ with sync_playwright() as p:
  expect(page.get_by_text('Создание поддоменов: подтверждено.',exact=True)).to_be_visible()
  expect(page.locator('.networkTable').get_by_text('test1.main.test',exact=True)).to_be_visible()
  assert page.evaluate('window.calls.filter(c=>c.payload?.action==="create_subdomains").length') == 1
+ expect(page.get_by_role('button',name='Удалить next.test из сетки',exact=True)).to_be_disabled()
+ page.get_by_role('button',name='Удалить test1.main.test из сетки',exact=True).click()
+ expect(page.get_by_text('Удаление домена: подтверждено.',exact=True)).to_be_visible()
+ expect(page.locator('.networkTable').get_by_text('test1.main.test',exact=True)).to_have_count(0)
+ assert page.evaluate('window.calls.filter(c=>c.payload?.action==="delete_domain").map(c=>c.payload.domain)') == ['test1.main.test']
  page.screenshot(path=str(artifacts / 'compact-table.png'),full_page=True)
  expect(page.locator('th').filter(has_text='Был Main')).to_be_visible()
  page.get_by_role('button',name='Test reglue',exact=True).click()

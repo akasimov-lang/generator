@@ -34,6 +34,7 @@ def env(monkeypatch):
                     "head": {"alternateMarkup": MARKUP, "enableAlternates": True, "canonicalDefaultMarkup": "untouched", "customHeaders": [{"key": "X-Test", "value": "keep"}]},
                 }
             def project(self): return copy.deepcopy(self.data)
+            def job_state(self, job_id): return None
             def request(self, method, path, payload):
                 self.calls.append((method, path, copy.deepcopy(payload)))
                 if path.endswith("check-domain"): return 200, {"reachable": self.reachable, "reason": "unavailable"}
@@ -263,3 +264,52 @@ def test_subdomain_classification_tracks_parent_type_and_main_history(env):
     db.expire_all()
     assert network.read_network(db, site)['domain_classification']['unused.main.test']['parent_type'] == 'newreg'
     assert not remote.calls
+
+
+def test_delete_domain_job_contract_confirmation_and_no_resend(env):
+    db, site, remote = env
+    site.cache_server_ip = 'dolphin'
+    remote.data['settings']['domains'].append('test1.main.test')
+    site.main_domain_history = ['test1.main.test']
+    db.commit()
+    state = network.read_network(db, site)
+    def request(method, path, payload):
+        remote.calls.append((method, path, copy.deepcopy(payload)))
+        return 201, {'jobId': 'delete-job'}
+    remote.request = request
+    payload = network.NetworkChange(request_id=uuid4(), action='delete_domain', revision=state['revision'], domain='test1.main.test')
+    result = network.change_network(db, site, payload, 'tester')
+    assert result['operations'][0]['status'] == 'pending'
+    assert result['operations'][0]['domain'] == 'test1.main.test'
+    assert remote.calls[0][0:2] == ('POST','/site-config/delete')
+    body = remote.calls[0][2]
+    assert body['domains'] == ['test1.main.test']
+    assert body['project'] == 'project.test'
+    assert body['server'] == 'dolphin.slf-hostesting.com'
+    assert 'port' not in body
+    network.change_network(db, site, payload, 'tester')
+    assert len(remote.calls) == 1
+    remote.data['settings']['domains'].remove('test1.main.test')
+    result = network.read_network(db, site)
+    assert result['operations'][0]['status'] == 'confirmed'
+    assert 'test1.main.test' not in result['domains']
+    assert 'test1.main.test' in result['main_history']
+    assert result['canon'] == state['canon'] and result['alternateMarkup'] == state['alternateMarkup']
+
+
+def test_delete_domain_guards_and_terminal_job_failure(env, monkeypatch):
+    db, site, remote = env
+    site.cache_server_ip = 'dolphin'
+    remote.data['settings']['domains'] += ['project.test','old.test']
+    state = network.read_network(db, site)
+    for domain in ['main.test', 'reserve.test', 'project.test', 'old.test', 'outside.test']:
+        with pytest.raises(ValueError):
+            change(env, 'delete_domain', state['revision'], domain=domain)
+    assert not remote.calls
+    remote.request = lambda *_: (201, {'jobId': 'failed-job'})
+    result = change(env, 'delete_domain', state['revision'], domain='next.test')
+    remote.job_state = lambda _: {'state': 'failed', 'error': 'permission denied'}
+    result = network.read_network(db, site)
+    assert result['operations'][0]['status'] == 'failed'
+    assert result['operations'][0]['message'] == 'permission denied'
+    assert 'next.test' in result['domains']

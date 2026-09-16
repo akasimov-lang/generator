@@ -34,7 +34,7 @@ class DomainCheck(BaseModel):
 
 class NetworkChange(BaseModel):
     request_id: UUID
-    action: Literal["reserve", "reglue", "alternates", "create_subdomains"]
+    action: Literal["reserve", "reglue", "alternates", "create_subdomains", "delete_domain"]
     revision: str = Field(min_length=1, max_length=64)
     domain: str = Field(default="", max_length=253)
     alternate_markup: str = Field(default="", max_length=100000)
@@ -93,9 +93,22 @@ class Remote:
             raise ProjectCacheError("Webdev вернул неполные настройки проекта.")
         return project
 
+    def job_state(self, job_id):
+        url = get_settings().project_cache_url.rstrip("/") + "/site-config/" + quote(str(job_id), safe="") + "/stream"
+        token = self.client.headers["Authorization"].removeprefix("Bearer ")
+        # Read just the current SSE snapshot; never wait for the whole task.
+        with self.client.stream("GET", url, params={"token": token}, timeout=5.0) as response:
+            response.raise_for_status()
+            for line in response.iter_lines():
+                if line.startswith("data:"):
+                    event = json.loads(line[5:].strip())
+                    if isinstance(event, dict) and event.get("type") != "heartbeat":
+                        return event
+        return None
+
     def request(self, method, path, payload):
         # No retries for mutations: a timeout does not mean the operation failed.
-        url = get_settings().project_cache_url.rstrip("/") + path if path == "/site-config/create" else project_server_url(self.site, path)
+        url = get_settings().project_cache_url.rstrip("/") + path if path in {"/site-config/create", "/site-config/delete"} else project_server_url(self.site, path)
         response = self.client.request(method, url, json=payload)
         response.raise_for_status()
         result = response.json() if response.content else {}
@@ -111,6 +124,8 @@ def operation_matches(operation, state):
     payload = operation.request_payload
     if operation.action == "create_subdomains":
         return all(item["domain"] in state["domains"] for item in payload["domains"])
+    if operation.action == "delete_domain":
+        return all(domain not in state["domains"] for domain in payload["domains"])
     if operation.action == "reserve":
         return state["reserve"] == payload["reserve"]
     if operation.action == "reglue":
@@ -148,7 +163,7 @@ def result(db, site, state):
         "alternates": alternate_links(state["alternateMarkup"]),
         "operations": [{"id": op.id, "action": op.action, "status": op.status, "message": op.message,
                         "initiator": op.initiator, "created_at": op.created_at,
-                        "domain": op.request_payload.get("reserve"), "domains": [item["domain"] for item in op.request_payload.get("domains", [])], "response_status": op.response_status}
+                        "domain": op.request_payload.get("reserve") or ((op.request_payload.get("domains") or [None])[0] if op.action == "delete_domain" else None), "domains": [item["domain"] if isinstance(item, dict) else item for item in op.request_payload.get("domains", [])], "response_status": op.response_status}
                        for op in operations],
     }
 
@@ -170,6 +185,24 @@ def require_domain(state, value):
 def read_network(db, site):
     with network_lock(db, site.id), Remote(db, site) as remote:
         state = observe(db, site, remote.project())
+        for operation in db.scalars(select(models.NetworkOperation).where(
+            models.NetworkOperation.site_id == site.id,
+            models.NetworkOperation.action == "delete_domain",
+            models.NetworkOperation.status.in_(["pending", "unknown"]),
+        )):
+            job_id = operation.request_payload.get("job_id")
+            if not job_id:
+                continue
+            try:
+                job = remote.job_state(job_id)
+            except (httpx.HTTPError, ValueError):
+                continue
+            if job and job.get("state") in {"failed", "completed"}:
+                failures = [item for item in job.get("domains", []) if item.get("status") == "error"]
+                if job["state"] == "failed" or failures:
+                    operation.status = "failed"
+                    operation.message = str(job.get("error") or (failures[0].get("logs") if failures else None) or "Задача удаления завершилась ошибкой.")[:2000]
+        db.commit()
         return result(db, site, state)
 
 
@@ -213,6 +246,9 @@ def validate_subdomains(values, cached_domains):
 def change_network(db, site, payload, username, *, auto_run_id=None):
     # Local cache gate runs before authentication or any remote requests.
     existing_receipt = db.get(models.NetworkOperation, str(payload.request_id))
+    if payload.action == "delete_domain" and not existing_receipt:
+        if domain_name(payload.domain) not in (site.cache_domains or []):
+            raise ValueError("Домен отсутствует в сохранённой сетке проекта.")
     if payload.action == "create_subdomains" and not existing_receipt:
         validate_subdomains(payload.domains, site.cache_domains or [])
     with network_lock(db, site.id), Remote(db, site) as remote:
@@ -250,6 +286,24 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
                 "port": port,
                 "domains": [{"id": f"{payload.request_id}-{i}", "domain": domain, "wwwPrimary": False} for i, domain in enumerate(domains)],
             }
+        elif payload.action == "delete_domain":
+            domain = domain_name(payload.domain)
+            if domain not in state["domains"]:
+                raise ValueError("Домен отсутствует в актуальной сетке проекта.")
+            bare = domain.removeprefix("www.")
+            protected = {domain_name(value).removeprefix("www.") for value in [site.name, state["canon"], state["reserve"]]}
+            if bare in protected:
+                raise ValueError("Нельзя удалить домен проекта, текущий Main или резерв. Сначала измените назначение домена.")
+            markup = state["alternateMarkup"].replace("{{settings.canon}}", state["canon"])
+            if any(link["domain"].removeprefix("www.") == bare for link in alternate_links(markup)):
+                raise ValueError("Домен используется в альтернейтах. Сначала измените разметку.")
+            path = "/site-config/delete"
+            request = {
+                "server": project_server_url(site, "/").split("://", 1)[1].rstrip("/"),
+                "project": site.name.encode("idna").decode(),
+                "username": get_settings().project_cache_username,
+                "domains": [domain.encode("idna").decode()],
+            }
         elif payload.action in {"reserve", "reglue"}:
             domain = require_domain(state, payload.domain)
             request["reserve"] = domain
@@ -280,12 +334,14 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
             if isinstance(response, dict) and (response.get("errors") or response.get("success") is False or response.get("error")):
                 operation.status = "failed"
                 operation.message = str(response.get("message") or response.get("errors") or response.get("error"))[:2000]
-            elif payload.action == "create_subdomains":
+            elif payload.action in {"create_subdomains", "delete_domain"}:
                 if not isinstance(response, dict) or not response.get("jobId"):
                     operation.status = "unknown"
                     operation.message = "Webdev не вернул номер задачи. Повторная отправка заблокирована; обновите сетку."
                 else:
-                    operation.message = f"Задача создания {response['jobId']} запущена. Ожидаем появления поддоменов в сетке."
+                    operation.request_payload = {**operation.request_payload, "job_id": str(response["jobId"])}
+                    operation.message = (f"Задача удаления {response['jobId']} запущена. Ожидаем удаления домена из сетки."
+                        if payload.action == "delete_domain" else f"Задача создания {response['jobId']} запущена. Ожидаем появления поддоменов в сетке.")
                     if response.get("skipped"):
                         operation.message += " Webdev пропустил часть доменов: " + str(response["skipped"])[:1000]
             else:
