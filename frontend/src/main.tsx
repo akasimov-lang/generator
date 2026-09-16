@@ -8755,6 +8755,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
               ariaLabel="Фильтр сайтов по GEO"
               searchPlaceholder="Введите GEO"
               searchMode="prefix"
+              compact
               options={[
                 { value: "", label: "Все GEO" },
                 ...geoOptions.map(geo => ({ value: geo, label: geo.toUpperCase(), leading: <span>{localeFlag(geo) || "🌐"}</span> }))
@@ -10051,6 +10052,7 @@ function SearchableSelect({
   ariaLabel,
   showSelectedIndicator = true,
   searchMode = "contains",
+  compact = false,
   optionPredicate,
   dropdownToolbar,
   renderOptionAction
@@ -10063,6 +10065,7 @@ function SearchableSelect({
   ariaLabel?: string;
   showSelectedIndicator?: boolean;
   searchMode?: "contains" | "prefix";
+  compact?: boolean;
   optionPredicate?: (option: SearchableSelectOption) => boolean;
   dropdownToolbar?: React.ReactNode;
   renderOptionAction?: (option: SearchableSelectOption, closeDropdown: () => void) => React.ReactNode;
@@ -10088,7 +10091,7 @@ function SearchableSelect({
     const rect = control.getBoundingClientRect();
     const availableBelow = window.innerHeight - rect.bottom - 12;
     const availableAbove = rect.top - 12;
-    const desiredHeight = Math.min(360, Math.max(210, options.length * 44 + 62));
+    const desiredHeight = compact ? Math.min(280, options.length * 28 + 46) : Math.min(360, Math.max(210, options.length * 44 + 62));
     const placeAbove = availableBelow < Math.min(240, desiredHeight) && availableAbove > availableBelow;
     const maxHeight = Math.max(180, Math.min(desiredHeight, placeAbove ? availableAbove : availableBelow));
     setDropdownStyle({
@@ -10097,7 +10100,7 @@ function SearchableSelect({
       width: Math.min(rect.width, window.innerWidth - 16),
       maxHeight
     });
-  }, [options.length]);
+  }, [options.length, compact]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -10175,7 +10178,7 @@ function SearchableSelect({
         <ChevronDown className="searchableSelectChevron" size={17} />
       </button>
       {open ? createPortal(
-        <div ref={dropdownRef} className="searchableSelectDropdown" style={dropdownStyle}>
+        <div ref={dropdownRef} className={`searchableSelectDropdown ${compact ? "searchableSelectDropdownCompact" : ""}`} style={dropdownStyle}>
           <div className="searchableSelectSearch">
             <Search size={16} />
             <input

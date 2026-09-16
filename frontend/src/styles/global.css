@@ -9453,3 +9453,41 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 }
 
 .networkReglueButton { justify-self: start; width: auto; max-width: 100%; }
+
+.searchableSelectDropdownCompact {
+  padding: 4px;
+}
+.searchableSelectDropdownCompact .searchableSelectSearch input {
+  min-width: 0;
+  width: 100%;
+  min-height: 28px;
+  height: 28px;
+  padding: 4px 5px 4px 25px;
+  font-size: 11px;
+}
+.searchableSelectDropdownCompact .searchableSelectSearch svg {
+  left: 7px;
+  width: 13px;
+  height: 13px;
+}
+.searchableSelectDropdownCompact .searchableSelectOptions {
+  gap: 0;
+  margin-top: 4px;
+}
+.searchableSelectDropdownCompact .searchableSelectOption {
+  min-height: 28px;
+  padding: 4px 7px;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 18px;
+}
+.searchableSelectDropdownCompact .searchableSelectOptionHeading {
+  gap: 5px;
+}
+.searchableSelectDropdownCompact .searchableSelectOptionLabel {
+  white-space: nowrap;
+}
+.searchableSelectDropdownCompact .searchableSelectOptionAside svg {
+  width: 13px;
+  height: 13px;
+}
