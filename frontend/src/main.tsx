@@ -539,7 +539,7 @@ type PublicationCampaignQueue = {
 type ThemeMode = "light" | "dark";
 type InputStyle = "balanced" | "classic" | "soft" | "inset" | "underline" | "emerald" | "graphite" | "rounded" | "contrast" | "glass";
 type AppView = "autoReglueGuide" | "autoReglue" | "published" | "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "favorites" | "guide" | "settings";
-type WorkspaceTab = "overview" | "topics" | "content" | "publication" | "menu" | "network" | "redirects";
+type WorkspaceTab = "overview" | "topics" | "content" | "publication" | "menu" | "network" | "redirects" | "autoReglue";
 
 type WorkspaceAccordionContextValue = {
   storagePrefix: string;
@@ -688,7 +688,8 @@ const WORKSPACE_TAB_PATHS: Record<WorkspaceTab, string> = {
   publication: "/project-publication",
   menu: "/project-menu",
   network: "/project-network",
-  redirects: "/project-redirects"
+  redirects: "/project-redirects",
+  autoReglue: "/project-auto-reglue"
 };
 
 function routeFromPath(pathname: string): AppRoute {
@@ -1895,7 +1896,7 @@ function ProjectWorkspaceView({
     const requestId = projectLoadRequestRef.current + 1;
     projectLoadRequestRef.current = requestId;
     setWorkspaceError("");
-    if (activeTab === "network" || activeTab === "redirects") return { success: true, errorCode: "" };
+    if (activeTab === "network" || activeTab === "redirects" || activeTab === "autoReglue") return { success: true, errorCode: "" };
     const requestResource = async <T,>(path: string): Promise<{ value: T | null; error: string; errorCode: string }> => {
       try {
         return { value: await api<T>(path), error: "", errorCode: "" };
@@ -2404,6 +2405,12 @@ function ProjectWorkspaceView({
           >
             <Sparkles size={15} /> Сгенерировать структуру меню
           </button>
+          {canManageAutomation && selectedSite && <a
+            className={`workspaceMenuGeneratorShortcut workspaceAutoReglueShortcut ${activeTab === "autoReglue" ? "isActive" : ""}`}
+            href={pathForRoute("workspace", "autoReglue", selectedSite.name)}
+            aria-current={activeTab === "autoReglue" ? "page" : undefined}
+            onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onTabChange("autoReglue", selectedSite.name); }}
+          ><Star size={15} /> Автопереклей проекта</a>}
         </div>
         {workspaceError ? <div className="notice">{workspaceError}</div> : null}
       </DataPanel>
@@ -2432,7 +2439,7 @@ function ProjectWorkspaceView({
           <WorkspaceTabPane active={activeTab === "overview"} storagePrefix={`${currentUsername}:${selectedSite.id}:overview`}>
             {overview ? <FastProjectOverviewPanel key={selectedSite.id} overview={overview} content={siteContent} sections={sections} logs={logs} /> : null}
           </WorkspaceTabPane>
-          {canManageAutomation && activeTab === "redirects" && <ProjectAutoReglue key={`auto-reglue:${selectedSite.id}`} siteId={selectedSite.id} api={api} />}
+          {canManageAutomation && activeTab === "autoReglue" && <ProjectAutoReglue key={`auto-reglue:${selectedSite.id}`} siteId={selectedSite.id} api={api} />}
           {activeTab === "network" || activeTab === "redirects" ? <ProjectNetworkPanel key={`network:${selectedSite.id}`} site={selectedSite} mode={activeTab} api={api} username={currentUsername} onChanged={refreshProject} /> : null}
           <WorkspaceTabPane active={activeTab === "topics"} storagePrefix={`${currentUsername}:${selectedSite.id}:topics`}>
             <FastTasksView

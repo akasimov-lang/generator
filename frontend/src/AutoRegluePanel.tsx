@@ -1,5 +1,4 @@
 import React from "react";
-import { RefreshCw, Settings2, ChevronDown } from "lucide-react";
 
 type Api = <T>(path: string, options?: RequestInit) => Promise<T>;
 type Rules = { schedule_enabled: boolean; interval_days: number; scheme_mode: "preserve" | "add_auxiliary" | "base_only"; auxiliary_hreflangs: string[] };
@@ -168,17 +167,10 @@ function ProjectConfigEditor({ siteId, api, onTask }: { siteId: string; api: Api
 }
 
 export function ProjectAutoReglue({ siteId, api }: { siteId: string; api: Api }) {
-  const [expanded, setExpanded] = React.useState(false);
   const [task, setTask] = React.useState<ScheduleTask | null>(null);
-  const panelId = `auto-reglue-settings-${siteId}`;
   return <section className="projectAutoReglueCard">
     {task && <div className="notice autoReglueTaskNotice" role="status">Задача автопереклея проекта сохранена. <a href={task.url}>Открыть задачу автопереклея →</a></div>}
-    <button type="button" className="newGenerationTaskButton menuStructureGenerationButton autoReglueSettingsButton" aria-label={expanded ? "Свернуть настройки" : "Настроить автопереклей"} aria-expanded={expanded} aria-controls={panelId} onClick={() => setExpanded(v => !v)}>
-      <span className="newGenerationTaskIcon" aria-hidden="true"><RefreshCw size={27} strokeWidth={2} /><Settings2 className="autoReglueSettingsBadge" size={16} strokeWidth={2.2} /></span>
-      <span className="newGenerationTaskCopy"><strong>Автопереклей проекта</strong><small>Настроить схему, домены и расписание для этого проекта</small></span>
-      <ChevronDown className="autoReglueExpandIcon" size={20} aria-hidden="true" />
-    </button>
-    {expanded && <div className="dataPanel autoReglueExpandedPanel" id={panelId}><div className="dataPanelBody"><ProjectConfigEditor key={siteId} siteId={siteId} api={api} onTask={setTask} /></div></div>}
+    <section className="dataPanel"><div className="dataPanelHeader"><h2>Автопереклей проекта</h2></div><div className="dataPanelBody"><ProjectConfigEditor key={siteId} siteId={siteId} api={api} onTask={setTask} /></div></section>
   </section>;
 }
 
@@ -201,7 +193,7 @@ export function AutoReglueView({ api }: { api: Api }) {
   if (!data || !draft) return <p>{error || "Загружаем настройки…"}</p>;
   const value = draft;
   const dirty = JSON.stringify(value) !== JSON.stringify(data.settings);
-  return <section className="viewStack">{!!data.tasks?.length && <section className="dataPanel"><div className="dataPanelBody"><h2>Задачи автопереклея</h2>{data.tasks.map(task => <article className="autoReglueRun autoReglueScheduleTask" id={`auto-task-${task.site_id}`} key={task.site_id}><strong>{task.project}</strong><p>{task.scope === "personal" ? "Персональное расписание" : "Глобальное расписание"} · {task.interval_days === 0 ? "Однократно" : `Раз в ${task.interval_days} дней`}</p><p>{task.status === "disabled" ? "Расписание выключено" : task.status === "completed" ? "Однократный запуск обработан — результат ниже в истории запусков" : "Задача сохранена"}{task.next_run_at ? ` · Следующий запуск: ${new Date(task.next_run_at).toLocaleString("ru-RU")}` : ""}</p><a href={`/project-redirects/${encodeURIComponent(task.project)}/`}>Открыть настройки проекта</a></article>)}</div></section>}<section className="dataPanel"><div className="dataPanelHeader"><h2>Автопереклей — общие настройки</h2></div><div className="dataPanelBody autoReglueSettings">
+  return <section className="viewStack">{!!data.tasks?.length && <section className="dataPanel"><div className="dataPanelBody"><h2>Задачи автопереклея</h2>{data.tasks.map(task => <article className="autoReglueRun autoReglueScheduleTask" id={`auto-task-${task.site_id}`} key={task.site_id}><strong>{task.project}</strong><p>{task.scope === "personal" ? "Персональное расписание" : "Глобальное расписание"} · {task.interval_days === 0 ? "Однократно" : `Раз в ${task.interval_days} дней`}</p><p>{task.status === "disabled" ? "Расписание выключено" : task.status === "completed" ? "Однократный запуск обработан — результат ниже в истории запусков" : "Задача сохранена"}{task.next_run_at ? ` · Следующий запуск: ${new Date(task.next_run_at).toLocaleString("ru-RU")}` : ""}</p><a href={`/project-auto-reglue/${encodeURIComponent(task.project)}/`}>Открыть настройки проекта</a></article>)}</div></section>}<section className="dataPanel"><div className="dataPanelHeader"><h2>Автопереклей — общие настройки</h2></div><div className="dataPanelBody autoReglueSettings">
     {error && <div className="notice" role="alert">{error}</div>}
     <p>Один запуск — один следующий неиспользованный Main для каждого выбранного проекта. Участвуют только проекты со статусом «Массовые действия» и сохранёнными настройками.</p>
     <label className="checkboxRow"><input type="checkbox" checked={draft.enabled} onChange={e => { setDraft({ ...draft, enabled: e.target.checked }); setPlans([]); }} /> Разрешить запуск автопереклеев</label>
@@ -212,7 +204,7 @@ export function AutoReglueView({ api }: { api: Api }) {
     <p className="muted">Массовые правила не применяются к проектам с персональным автопереклеем. Дроп для x-default задаётся в каждом проекте.</p>
     <button className="button secondary" disabled={busy || !dirty} onClick={() => void perform(async () => { const saved = await api<GlobalConfig>("/auto-reglue/settings", body("PUT", value)); setDraft(saved); setPlans([]); await load(); })}>Сохранить общие настройки</button>
     <h3>Проекты</h3>{!data.projects.length && <p>Нет проектов со статусом «Массовые действия». Статус никому не назначается автоматически.</p>}
-    <div className="autoReglueProjects">{data.projects.map(site => <label className="checkboxRow" key={site.id}><input type="checkbox" checked={selected.includes(site.id)} disabled={data.runs.some(r => r.site_id === site.id && active.includes(r.status))} onChange={e => { setSelected(v => e.target.checked ? [...v, site.id] : v.filter(id => id !== site.id)); setPlans([]); }} /><a href={`/project-redirects/${encodeURIComponent(site.name)}/`}>{site.name}</a><span>{site.geo || "GEO не задано"} · Допущен по статусу «Массовые действия»{site.next_run_at ? ` · Следующий запуск: ${new Date(site.next_run_at).toLocaleString("ru-RU")}` : ""}</span></label>)}</div>
+    <div className="autoReglueProjects">{data.projects.map(site => <label className="checkboxRow" key={site.id}><input type="checkbox" checked={selected.includes(site.id)} disabled={data.runs.some(r => r.site_id === site.id && active.includes(r.status))} onChange={e => { setSelected(v => e.target.checked ? [...v, site.id] : v.filter(id => id !== site.id)); setPlans([]); }} /><a href={`/project-auto-reglue/${encodeURIComponent(site.name)}/`}>{site.name}</a><span>{site.geo || "GEO не задано"} · Допущен по статусу «Массовые действия»{site.next_run_at ? ` · Следующий запуск: ${new Date(site.next_run_at).toLocaleString("ru-RU")}` : ""}</span></label>)}</div>
     <button className="button secondary" disabled={busy || dirty || !value.enabled || !selected.length} onClick={() => void perform(async () => { setPlans([]); const next: Plan[] = []; for (const id of selected) { const plan = await api<Plan>(`/auto-reglue/projects/${id}/preview`, { method: "POST" }); next.push({ ...plan, requestId: crypto.randomUUID() }); } setPlans(next); })}>Подготовить планы ({selected.length})</button>
     {plans.map(plan => <PlanPreview key={plan.site_id} plan={plan} />)}
     {plans.length > 0 && <button className="button primary" disabled={busy || dirty} onClick={() => void perform(async () => { const result = await api<{ results: { error?: string }[] }>("/auto-reglue/start", body("POST", { items: plans.map(p => ({ site_id: p.site_id, request_id: p.requestId, preview_token: p.preview_token })) })); await load(); const failures = result.results.filter(r => r.error); if (failures.length) throw new Error(failures.map(r => r.error).join("; ")); setPlans([]); })}>Запустить группу ({plans.length})</button>}
