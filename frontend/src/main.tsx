@@ -4770,7 +4770,6 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
   const [parentName, setParentName] = React.useState("");
   const [parentTreeKey, setParentTreeKey] = React.useState("");
   const [formError, setFormError] = React.useState("");
-  const [addExpanded, setAddExpanded] = usePersistentWorkspacePanelState("menu-add-item", false);
   const [inlineMenuType, setInlineMenuType] = React.useState<"header" | "footer" | null>(null);
   const [addingMenuItemId, setAddingMenuItemId] = React.useState<string | null>(null);
   const [libraryFormExpanded, setLibraryFormExpanded] = React.useState(false);
@@ -4959,7 +4958,6 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
     setParentName("");
     setParentTreeKey("");
     setInlineMenuType((current) => current === targetMenuType ? null : targetMenuType);
-    setAddExpanded(false);
     setFormError("");
   }
 
@@ -5002,7 +5000,6 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
       setParentTreeKey(treeKey);
       setTemporaryParentId(adopted.created || adopted.section.is_temporary_parent ? adopted.section.id : null);
       setInlineMenuType(targetMenuType);
-      setAddExpanded(false);
       await onChanged();
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Не удалось выбрать родительский пункт");
@@ -5530,25 +5527,6 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
           </button>
           <span>Предпросмотр структуры перед добавлением на сайт</span>
         </div>
-        <section className={`menuAddPanel embeddedMenuAddPanel ${addExpanded ? "expanded" : ""}`}>
-          <button className="menuAddToggle" type="button" onClick={() => { setInlineMenuType(null); setAddExpanded((current) => !current); }} aria-expanded={addExpanded}>
-            <span className="menuAddToggleIcon"><Plus size={18} /></span>
-            <span><strong>Добавить пункт меню</strong><small>{addExpanded ? "Нажмите, чтобы свернуть" : "Добавить новый пункт в существующую структуру"}</small></span>
-            {addExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-          </button>
-          {addExpanded ? <form className="menuAddForm simplifiedMenuForm" onSubmit={createSection}>
-            <label>
-              Тип меню
-              <select value={menuType} onChange={(event) => setMenuType(event.target.value as "header" | "footer")}>
-                <option value="header">Header</option>
-                <option value="footer">Footer</option>
-              </select>
-            </label>
-            {menuFields()}
-            {formError ? <span className="formError simplifiedMenuFormError">{formError}</span> : null}
-            {updatedAt ? <span className="formSuccess simplifiedMenuFormError">Информация обновлена: {formatDate(updatedAt)}</span> : null}
-          </form> : null}
-        </section>
         <div className="projectMenuStructureGrid">
           <SiteMenuPreviewSection key={`${site.id}:header`} site={site} title="Меню Header" icon={<HeaderMenuIcon />} headerAction={<button className="button compact secondary siteMenuTransliterateButton" type="button" onClick={() => void transliterateMenuSlugs("header")} disabled={!cachedHeader.length || transliteratingMenuType !== null}>{transliteratingMenuType === "header" ? <LoaderCircle size={14} /> : <Sparkles size={14} />} {transliteratingMenuType === "header" ? "Обновляем…" : "Транслитерация"}</button>} items={cachedHeader} sections={sections.filter((section) => section.menu_type === "header" && section.sync_status !== "external_deleted")} content={content} publicationLogs={logs} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "header" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} editingTreeKey={editingTreeKey} openingEditKey={openingTreeEditKey} editName={editingSectionName} editPath={editingSectionPath} savingEdit={savingSectionEdit} editError={formError} deletingNestedPageId={deletingNestedPageId} retryingNestedPageId={retryingNestedPageId} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onEditItem={(item, section, treeKey) => void openTreeSectionEdit("header", item, section, treeKey)} onEditNameChange={setEditingSectionName} onEditPathChange={setEditingSectionPath} onSaveEdit={() => { if (editingTreeSection) void saveSectionEdit(editingTreeSection, true); }} onCancelEdit={cancelSectionEdit} onDeletePage={(item) => void deleteNestedPage(item)} onRetryPage={(item) => void retryNestedPagePublication(item)} onAddContent={(item, section) => void addContentToMenuItem("header", item, section)} onToggleReview={(item, section) => void toggleMenuReview("header", item, section)} reviewSaving={reviewSaving} onDeleteMenuItem={(item) => void deleteMenuBranch("header", item)} deletingMenuItem={Boolean(deletingSectionId)} onAddChild={(item, section, treeKey) => openChildForm("header", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("header")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Header</button>}>
             {inlineMenuType === "header" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "header")}>{menuFields("header")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
