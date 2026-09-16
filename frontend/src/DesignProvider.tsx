@@ -25,7 +25,7 @@ export function DesignProvider({ children }: { children: React.ReactNode }) {
     document.documentElement.dataset.designVersion = designVersion;
     document.title = designVersion === "1.0" ? "AI Content panel — версия 1.0" : "PagePilot — версия 2.0";
     const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-    if (favicon) favicon.href = designVersion === "1.0" ? "/favicon-v1.svg" : "/favicon.svg";
+    if (favicon) favicon.href = designVersion === "1.0" ? "/favicon-v1.svg" : "/pagepilot-mark.svg?v=20260916";
   }, [designVersion]);
 
   React.useEffect(() => {

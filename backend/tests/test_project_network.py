@@ -172,3 +172,54 @@ def test_supported_markup(markup): validate_markup(markup)
 @pytest.mark.parametrize("markup", ['<script>alert(1)</script>', '<link rel="alternate" hreflang="x-default" href="javascript:alert(1)" />', '<link rel="alternate" hreflang="cz" href="https://" />', '<link rel="alternate" hreflang="cz" href="https://a.test/" onload="alert(1)" />', MARKUP + MARKUP])
 def test_invalid_markup(markup):
     with pytest.raises(ValueError): validate_markup(markup)
+
+
+def test_subdomain_rejected_locally_before_remote(env, monkeypatch):
+    db, site, remote = env
+    network.read_network(db, site)
+    def forbidden(*args):
+        raise AssertionError("Remote must not be entered for invalid cached domains")
+    monkeypatch.setattr(network, "Remote", forbidden)
+    for domains in (["test.outside.test"], ["main.test"], ["https://test.main.test"], ["www.main.test"]):
+        with pytest.raises(ValueError):
+            change(env, "create_subdomains", "unused", domains=domains)
+
+
+def test_subdomain_creation_contract_confirmation_and_retry(env):
+    db, site, remote = env
+    site.cache_server_ip = "dolphin"
+    remote.data["settings"]["port"] = 1141
+    state = network.read_network(db, site)
+    original = remote.request
+    def request(method, path, payload):
+        if path == "/site-config/create":
+            remote.calls.append((method, path, copy.deepcopy(payload)))
+            return 201, {"jobId": "1504", "skipped": []}
+        return original(method, path, payload)
+    remote.request = request
+    payload = network.NetworkChange(request_id=uuid4(), action="create_subdomains", revision=state["revision"], domains=["test1.main.test", "test2.main.test", "test1.main.test"])
+    result = network.change_network(db, site, payload, "anton")
+    assert result["operations"][0]["status"] == "pending"
+    method, path, body = remote.calls[0]
+    assert (method, path) == ("POST", "/site-config/create")
+    assert body["server"] == "dolphin.slf-hostesting.com"
+    assert body["project"] == "project.test" and body["port"] == "1141"
+    assert [item["domain"] for item in body["domains"]] == ["test1.main.test", "test2.main.test"]
+    assert all(item["wwwPrimary"] is False for item in body["domains"])
+    network.change_network(db, site, payload, "anton")
+    assert len(remote.calls) == 1
+    remote.data["settings"]["domains"] += ["test1.main.test", "test2.main.test"]
+    confirmed = network.read_network(db, site)
+    assert confirmed["operations"][0]["status"] == "confirmed"
+    assert "test1.main.test" in site.cache_domains
+    assert confirmed["canon"] == state["canon"]
+    assert confirmed["alternateMarkup"] == state["alternateMarkup"]
+
+
+def test_subdomain_parent_removed_remotely_blocks_creation(env):
+    db, site, remote = env
+    state = network.read_network(db, site)
+    remote.data["settings"]["domains"].remove("next.test")
+    with pytest.raises(network.NetworkConflict):
+        change(env, "create_subdomains", state["revision"], domains=["test.next.test"])
+    assert not remote.calls

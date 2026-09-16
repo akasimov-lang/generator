@@ -395,3 +395,13 @@ def publish_campaign_bundle_job(campaign_id: str, log_id: str) -> dict:
         }
     finally:
         db.close()
+
+
+@celery_app.task(name="app.worker.auto_reglue", acks_late=True, reject_on_worker_lost=True)
+def auto_reglue_job(run_id: str, confirmation_attempt: int = 0) -> None:
+    from app.auto_reglue import execute
+    with SessionLocal() as db:
+        execute(db, run_id)
+        run = db.get(models.AutoReglueRun, run_id)
+        if run is not None and run.status == "waiting" and confirmation_attempt < 30:
+            auto_reglue_job.apply_async(args=[run_id, confirmation_attempt + 1], countdown=10)

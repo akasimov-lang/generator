@@ -7,6 +7,7 @@ async function api(path,options={}) {
  const payload=options.body?JSON.parse(options.body):null; window.calls.push({path,payload});
  if(path.endsWith('/check-domain'))return {domain:payload.domain,reachable:true,reason:''};
  if(payload) {
+  if(payload.action==='create_subdomains')window.fixture.domains.push(...payload.domains);
   if(payload.action==='reserve')window.fixture.reserve=payload.domain;
   if(payload.action==='reglue')window.fixture.canon=payload.domain;
   if(payload.action==='alternates'){window.fixture.alternateMarkup=payload.alternate_markup;window.fixture.enableAlternates=payload.enable_alternates;}

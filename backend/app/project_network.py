@@ -2,6 +2,7 @@
 from contextlib import contextmanager
 import hashlib
 import json
+import re
 from typing import Literal
 from urllib.parse import quote
 from uuid import UUID
@@ -27,11 +28,12 @@ class DomainCheck(BaseModel):
 
 class NetworkChange(BaseModel):
     request_id: UUID
-    action: Literal["reserve", "reglue", "alternates"]
+    action: Literal["reserve", "reglue", "alternates", "create_subdomains"]
     revision: str = Field(min_length=1, max_length=64)
     domain: str = Field(default="", max_length=253)
     alternate_markup: str = Field(default="", max_length=100000)
     enable_alternates: bool = True
+    domains: list[str] = Field(default_factory=list, max_length=100)
 
 
 @contextmanager
@@ -87,7 +89,8 @@ class Remote:
 
     def request(self, method, path, payload):
         # No retries for mutations: a timeout does not mean the operation failed.
-        response = self.client.request(method, project_server_url(self.site, path), json=payload)
+        url = get_settings().project_cache_url.rstrip("/") + path if path == "/site-config/create" else project_server_url(self.site, path)
+        response = self.client.request(method, url, json=payload)
         response.raise_for_status()
         result = response.json() if response.content else {}
         if isinstance(result, str):
@@ -100,6 +103,8 @@ class Remote:
 
 def operation_matches(operation, state):
     payload = operation.request_payload
+    if operation.action == "create_subdomains":
+        return all(item["domain"] in state["domains"] for item in payload["domains"])
     if operation.action == "reserve":
         return state["reserve"] == payload["reserve"]
     if operation.action == "reglue":
@@ -122,7 +127,7 @@ def observe(db, site, project):
     )):
         if operation_matches(operation, state):
             operation.status = "confirmed"
-            operation.message = "Изменение подтверждено чтением настроек проекта."
+            operation.message = ("Поддомены появились в сетке. Завершение настройки HTTPS проверяйте отдельно." if operation.action == "create_subdomains" else "Изменение подтверждено чтением настроек проекта.")
     db.commit()
     return state
 
@@ -137,7 +142,7 @@ def result(db, site, state):
         "alternates": alternate_links(state["alternateMarkup"]),
         "operations": [{"id": op.id, "action": op.action, "status": op.status, "message": op.message,
                         "initiator": op.initiator, "created_at": op.created_at,
-                        "domain": op.request_payload.get("reserve"), "response_status": op.response_status}
+                        "domain": op.request_payload.get("reserve"), "domains": [item["domain"] for item in op.request_payload.get("domains", [])], "response_status": op.response_status}
                        for op in operations],
     }
 
@@ -173,12 +178,49 @@ def check_domain(db, site, payload):
         return {"domain": domain, "reachable": response["reachable"], "reason": str(response.get("reason") or "")}
 
 
-def change_network(db, site, payload, username):
+def validate_subdomains(values, cached_domains):
+    if not values:
+        raise ValueError("Укажите поддомены для создания.")
+    known = {domain_name(value) for value in cached_domains}
+    known.discard("")
+    if not known:
+        raise ValueError("В базе нет сохранённой сетки. Сначала загрузите кэш проекта.")
+    parents = {value.removeprefix("www.") for value in known}
+    domains = []
+    for value in values:
+        raw = value.strip().lower().rstrip(".")
+        try:
+            domain = raw.encode("idna").decode()
+        except UnicodeError:
+            raise ValueError("Некорректное имя поддомена.") from None
+        if len(domain) > 253 or not all(re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label) for label in domain.split(".")):
+            raise ValueError("Укажите имена поддоменов без протокола, пути и wildcard.")
+        if domain in known:
+            raise ValueError(f"Поддомен {domain} уже есть в сетке.")
+        if not any(domain.endswith("." + parent) and domain != "www." + parent for parent in parents):
+            raise ValueError(f"Родительский домен для {domain} отсутствует в сохранённой сетке проекта.")
+        if domain not in domains:
+            domains.append(domain)
+    return domains
+
+
+def change_network(db, site, payload, username, *, auto_run_id=None):
+    # Local cache gate runs before authentication or any remote requests.
+    existing_receipt = db.get(models.NetworkOperation, str(payload.request_id))
+    if payload.action == "create_subdomains" and not existing_receipt:
+        validate_subdomains(payload.domains, site.cache_domains or [])
     with network_lock(db, site.id), Remote(db, site) as remote:
+        active_auto = db.scalar(select(models.AutoReglueRun).where(
+            models.AutoReglueRun.site_id == site.id,
+            models.AutoReglueRun.status.in_(["queued", "running", "waiting", "partial"]),
+        ))
+        if active_auto is not None and active_auto.id != auto_run_id:
+            raise NetworkConflict("У проекта незавершённый автопереклей. Дождитесь результата или остановите его в настройках.")
         existing = db.get(models.NetworkOperation, str(payload.request_id))
         if existing and (existing.site_id != site.id or existing.action != payload.action):
             raise NetworkConflict("Идентификатор запроса уже используется другой операцией.")
-        state = observe(db, site, remote.project())
+        project = remote.project()
+        state = observe(db, site, project)
         if existing:
             return result(db, site, state)
         require_revision(state, payload.revision)
@@ -189,7 +231,20 @@ def change_network(db, site, payload, username):
             raise NetworkConflict("Предыдущая операция ещё не подтверждена. Обновите данные сетки; повторная отправка заблокирована.")
         request = {"folder": site.name.encode("idna").decode()}
         method = "POST"
-        if payload.action in {"reserve", "reglue"}:
+        if payload.action == "create_subdomains":
+            domains = validate_subdomains(payload.domains, state["domains"])
+            port = str(project["settings"].get("port") or "")
+            if not port.isdigit() or not 0 < int(port) <= 65535:
+                raise ValueError("В настройках проекта отсутствует корректный port.")
+            path = "/site-config/create"
+            request = {
+                "server": project_server_url(site, "/").split("://", 1)[1].rstrip("/"),
+                "project": site.name.encode("idna").decode(),
+                "username": get_settings().project_cache_username,
+                "port": port,
+                "domains": [{"id": f"{payload.request_id}-{i}", "domain": domain, "wwwPrimary": False} for i, domain in enumerate(domains)],
+            }
+        elif payload.action in {"reserve", "reglue"}:
             domain = require_domain(state, payload.domain)
             request["reserve"] = domain
             if payload.action == "reserve":
@@ -219,6 +274,14 @@ def change_network(db, site, payload, username):
             if isinstance(response, dict) and (response.get("errors") or response.get("success") is False or response.get("error")):
                 operation.status = "failed"
                 operation.message = str(response.get("message") or response.get("errors") or response.get("error"))[:2000]
+            elif payload.action == "create_subdomains":
+                if not isinstance(response, dict) or not response.get("jobId"):
+                    operation.status = "unknown"
+                    operation.message = "Webdev не вернул номер задачи. Повторная отправка заблокирована; обновите сетку."
+                else:
+                    operation.message = f"Задача создания {response['jobId']} запущена. Ожидаем появления поддоменов в сетке."
+                    if response.get("skipped"):
+                        operation.message += " Webdev пропустил часть доменов: " + str(response["skipped"])[:1000]
             else:
                 operation.message = "Запрос отправлен. Ожидается подтверждение настроек проекта."
         except httpx.HTTPStatusError as exc:

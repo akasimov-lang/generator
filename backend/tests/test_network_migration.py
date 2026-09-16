@@ -19,7 +19,7 @@ def test_network_migrations_preserve_existing_sites_and_backfill_main():
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE sites (id VARCHAR(36) PRIMARY KEY, cache_canon TEXT, name TEXT)"))
         connection.execute(text("INSERT INTO sites VALUES ('site-1', 'https://MAIN.test/', 'keep-name')"))
-        migrations = [load_migration(name) for name in ("0042_main_domain_history.py", "0043_network_operations.py")]
+        migrations = [load_migration(name) for name in ("0042_main_domain_history.py", "0043_network_operations.py", "0044_auto_reglue.py")]
         with Operations.context(MigrationContext.configure(connection)):
             for migration in migrations: migration.upgrade()
             row = connection.execute(text("SELECT * FROM sites")).mappings().one()
@@ -28,5 +28,7 @@ def test_network_migrations_preserve_existing_sites_and_backfill_main():
             assert row["x_default_history"] == '[]'
             assert row["network_state"] == '{}'
             assert "network_operations" in inspect(connection).get_table_names()
+            assert "auto_reglue_runs" in inspect(connection).get_table_names()
+            assert "auto_reglue_configs" in inspect(connection).get_table_names()
             for migration in reversed(migrations): migration.downgrade()
             assert connection.execute(text("SELECT name FROM sites")).scalar() == "keep-name"

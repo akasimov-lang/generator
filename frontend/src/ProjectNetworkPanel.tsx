@@ -1,6 +1,6 @@
 import React from "react";
 
-type NetworkOperation = { id: string; action: "reserve" | "reglue" | "alternates"; status: string; message: string | null; domain: string | null; initiator: string; created_at: string };
+type NetworkOperation = { id: string; action: "reserve" | "reglue" | "alternates" | "create_subdomains"; status: string; message: string | null; domain: string | null; initiator: string; created_at: string };
 type Network = {
   canon: string; reserve: string; domains: string[]; revision: string;
   main_history: string[]; x_default_history: string[]; alternate_history: string[];
@@ -13,7 +13,7 @@ type Props = {
   api: <T>(path: string, options?: RequestInit) => Promise<T>; onChanged: () => void;
 };
 type Draft = { markup: string; enabled: boolean; originalMarkup: string; originalEnabled: boolean };
-const actionLabels = { reserve: "Сохранение резерва", reglue: "Переклей", alternates: "Альтернейты" };
+const actionLabels = { create_subdomains: "Создание поддоменов", reserve: "Сохранение резерва", reglue: "Переклей", alternates: "Альтернейты" };
 const statusLabels: Record<string, string> = { confirmed: "Подтверждено", pending: "Ожидает подтверждения", unknown: "Результат пока неизвестен", failed: "Ошибка" };
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Не удалось выполнить запрос";
 const escapeAttribute = (value: string) => value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
@@ -37,6 +37,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
   const [message, setMessage] = React.useState("");
   const [newLang, setNewLang] = React.useState("x-default");
   const [newUrl, setNewUrl] = React.useState("");
+  const [subdomainsInput, setSubdomainsInput] = React.useState("");
   const [formerMain, setFormerMain] = React.useState("");
   const mounted = React.useRef(true);
   const uncertain = data?.operations.some((op) => ["pending", "unknown"].includes(op.status)) || false;
@@ -79,10 +80,17 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
     return () => window.clearInterval(timer);
   }, [uncertain]);
 
+  const subdomains = [...new Set(subdomainsInput.toLowerCase().split(/[\s,;]+/).map((value) => value.trim().replace(/\.$/, "")).filter(Boolean))];
+  const subdomainErrors = subdomains.flatMap((domain) => {
+    if (domain.length > 253 || !domain.split(".").every((label) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) return [domain + ": некорректное имя"];
+    if (data?.domains.includes(domain)) return [domain + ": уже есть в сетке"];
+    if (!data?.domains.some((parent) => domain.endsWith("." + parent.replace(/^www\./, "")) && domain !== "www." + parent.replace(/^www\./, ""))) return [domain + ": родительского домена нет в сетке"];
+    return [];
+  });
   async function mutate(action: NetworkOperation["action"]) {
     if (!data || !draft || busyRef.current) return;
     busyRef.current = true; setBusy(action); setError(""); setMessage("");
-    const payload = { action, revision: data.revision, domain: reserve, alternate_markup: draft.markup, enable_alternates: draft.enabled };
+    const payload = { action, revision: data.revision, domain: reserve, alternate_markup: draft.markup, enable_alternates: draft.enabled, ...(action === "create_subdomains" ? { domains: subdomains } : {}) };
     const receiptKey = `network-request:${username}:${site.id}`;
     let requestId = crypto.randomUUID();
     try {
@@ -95,6 +103,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
       if (!mounted.current) return;
       accept(next);
       const operation = next.operations.find((op) => op.id === requestId);
+      if (action === "create_subdomains" && operation && operation.status !== "failed") setSubdomainsInput("");
       if (operation?.status === "confirmed") {
         if (action === "alternates") setDraft({ markup: next.alternateMarkup, enabled: next.enableAlternates, originalMarkup: next.alternateMarkup, originalEnabled: next.enableAlternates });
         setMessage(`${actionLabels[action]}: подтверждено.`);
@@ -148,6 +157,16 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
             <tbody>{known.map((domain) => <tr key={domain}><td data-label="Домен">{domain}</td><td data-label="Статус">{domain === data.canon ? "Main" : domain === data.reserve ? "Резерв" : data.domains.includes(domain) ? "В сетке" : "В истории"}</td>
               {[data.main_history, data.alternate_history, data.x_default_history].map((history, i) => <td key={i} data-label={["Был Main", "Был в альтернейтах", "x-default"][i]}><input type="checkbox" className="networkHistoryCheck" disabled checked={history.includes(domain)} aria-label={`${domain}: ${["был Main", "был в альтернейтах", "x-default"][i]}`} /></td>)}</tr>)}</tbody>
           </table></div>
+          <div className="networkSection">
+            <h3>Создание поддоменов</h3>
+            <p>Укажите полные имена через запятую, пробел или новую строку. Родительский домен должен быть в сохранённой сетке проекта.</p>
+            <label>Поддомены<textarea aria-label="Поддомены" rows={3} value={subdomainsInput} disabled={disabled} placeholder="test1.example.com, test2.example.com" onChange={(event) => setSubdomainsInput(event.target.value)} /></label>
+            {subdomains.length > 0 && <><p>Будет создано: {subdomains.length}</p><ul>{subdomains.map((domain) => <li key={domain}>{domain}</li>)}</ul></>}
+            {!!subdomainErrors.length && <div className="notice" role="alert">{subdomainErrors.map((text) => <p key={text}>{text}</p>)}</div>}
+            {subdomains.length > 100 && <p role="alert">За один запуск можно создать до 100 поддоменов.</p>}
+            <button type="button" className="button" disabled={disabled || !subdomains.length || subdomains.length > 100 || !!subdomainErrors.length} onClick={() => void mutate("create_subdomains")}>{busy === "create_subdomains" ? "Запускаем создание…" : "Создать конфиги"}</button>
+            <p className="muted">Перед запуском сервер проверит домены по нашей базе и актуальной сетке Webdev. Поддомены добавятся в сетку автоматически; появление в списке ещё не подтверждает готовность HTTPS.</p>
+          </div>
         </>}
         {mode === "redirects" && <div className="networkSection">
           <h3>Резервный домен</h3>

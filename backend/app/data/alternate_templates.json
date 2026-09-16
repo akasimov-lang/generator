@@ -1,0 +1,898 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "file": "Схемы сплитов - mostbet az.csv",
+      "sha256": "ee35e43ef591f512853aeff6a803b27c3e25b7e1adcf25075e2de9cef8af2b60"
+    },
+    {
+      "file": "Схемы сплитов - pinup az.csv",
+      "sha256": "1b099f1a637e4d6be22aef691bed867f5917145f22d823366ce93666205f06aa"
+    }
+  ],
+  "profiles": [
+    {
+      "id": "mostbet:az:www.horaceanddickies.com",
+      "project": "www.horaceanddickies.com",
+      "brand": "mostbet",
+      "geo": "AZ",
+      "language": "az",
+      "geo_source": "CSV filename; verify against project cache_geo",
+      "source_file": "Схемы сплитов - mostbet az.csv",
+      "source_row": 2,
+      "variants": {
+        "provided": {
+          "source_markup": "<link rel=\"alternate\" hreflang=\"az\" href=\"https://mostbet-giris.horaceanddickies.com/\"/>",
+          "links": [
+            {
+              "hreflang": "az",
+              "href": "https://mostbet-giris.horaceanddickies.com/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            }
+          ],
+          "canonical_references": []
+        }
+      },
+      "notes": []
+    },
+    {
+      "id": "mostbet:az:mess-earth.org",
+      "project": "mess-earth.org",
+      "brand": "mostbet",
+      "geo": "AZ",
+      "language": "az",
+      "geo_source": "CSV filename; verify against project cache_geo",
+      "source_file": "Схемы сплитов - mostbet az.csv",
+      "source_row": 3,
+      "variants": {
+        "provided": {
+          "source_markup": "<link rel=\"alternate\" hreflang=\"x-default\" href=\"https://mess-earth.org/\"/>",
+          "links": [
+            {
+              "hreflang": "x-default",
+              "href": "https://mess-earth.org/",
+              "role": "default",
+              "dynamic_canon": false
+            }
+          ],
+          "canonical_references": []
+        }
+      },
+      "notes": []
+    },
+    {
+      "id": "mostbet:az:unazerbaijan.org",
+      "project": "unazerbaijan.org",
+      "brand": "mostbet",
+      "geo": "AZ",
+      "language": "az",
+      "geo_source": "CSV filename; verify against project cache_geo",
+      "source_file": "Схемы сплитов - mostbet az.csv",
+      "source_row": 4,
+      "variants": {
+        "provided": {
+          "source_markup": "<link rel=\"alternate\" hreflang=\"az-AZ\" href=\"https://mostbet-az.unazerbaijan.org/\"/>",
+          "links": [
+            {
+              "hreflang": "az-AZ",
+              "href": "https://mostbet-az.unazerbaijan.org/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            }
+          ],
+          "canonical_references": []
+        }
+      },
+      "notes": []
+    },
+    {
+      "id": "mostbet:az:uwhen.org",
+      "project": "uwhen.org",
+      "brand": "mostbet",
+      "geo": "AZ",
+      "language": "az",
+      "geo_source": "CSV filename; verify against project cache_geo",
+      "source_file": "Схемы сплитов - mostbet az.csv",
+      "source_row": 5,
+      "variants": {
+        "provided": {
+          "source_markup": "<link rel=\"alternate\" hreflang=\"az-AZ\" href=\"https://giris-casino.uwhen.org/\"/>\n      <link rel=\"alternate\" hreflang=\"en-AZ\" href=\"https://en-az.uwhen.org/\"/>\n      <link rel=\"alternate\" hreflang=\"x-default\" href=\"https://{{settings.canon}}/\"/>",
+          "links": [
+            {
+              "hreflang": "az-AZ",
+              "href": "https://giris-casino.uwhen.org/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "en-AZ",
+              "href": "https://en-az.uwhen.org/",
+              "role": "auxiliary",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "x-default",
+              "href": "https://{{settings.canon}}/",
+              "role": "default",
+              "dynamic_canon": true
+            }
+          ],
+          "canonical_references": []
+        }
+      },
+      "notes": []
+    },
+    {
+      "id": "mostbet:az:felixcontinentalcafe.com",
+      "project": "felixcontinentalcafe.com",
+      "brand": "mostbet",
+      "geo": "AZ",
+      "language": "az",
+      "geo_source": "CSV filename; verify against project cache_geo",
+      "source_file": "Схемы сплитов - mostbet az.csv",
+      "source_row": 6,
+      "variants": {
+        "provided": {
+          "source_markup": "<link rel=\"canonical\" href=\"https://{{settings.canon}}/\" />\n   <link rel=\"alternate\" hreflang=\"az\" href=\"https://{{settings.canon}}/\"/>\n    <link rel=\"alternate\" hreflang=\"az-AZ\" href=\"https://{{settings.canon}}/\"/>\n    <link rel=\"alternate\" hreflang=\"tr-AZ\" href=\"https://{{settings.canon}}/\"/>\n    <link rel=\"alternate\" hreflang=\"x-default\" href=\"https://felixcontinentalcafe.com/\"/>",
+          "links": [
+            {
+              "hreflang": "az",
+              "href": "https://{{settings.canon}}/",
+              "role": "geo_language",
+              "dynamic_canon": true
+            },
+            {
+              "hreflang": "az-AZ",
+              "href": "https://{{settings.canon}}/",
+              "role": "geo_language",
+              "dynamic_canon": true
+            },
+            {
+              "hreflang": "tr-AZ",
+              "href": "https://{{settings.canon}}/",
+              "role": "auxiliary",
+              "dynamic_canon": true
+            },
+            {
+              "hreflang": "x-default",
+              "href": "https://felixcontinentalcafe.com/",
+              "role": "default",
+              "dynamic_canon": false
+            }
+          ],
+          "canonical_references": [
+            "https://{{settings.canon}}/"
+          ]
+        }
+      },
+      "notes": []
+    },
+    {
+      "id": "mostbet:az:sarahmbroom.com",
+      "project": "sarahmbroom.com",
+      "brand": "mostbet",
+      "geo": "AZ",
+      "language": "az",
+      "geo_source": "CSV filename; verify against project cache_geo",
+      "source_file": "Схемы сплитов - mostbet az.csv",
+      "source_row": 7,
+      "variants": {
+        "provided": {
+          "source_markup": "<link rel=\"alternate\" hreflang=\"az\" href=\"https://mos-bet-az.sarahmbroom.com/\"/>\n    <link rel=\"alternate\" hreflang=\"en\" href=\"https://mos-bet-az.sarahmbroom.com/\"/>\n    <link rel=\"alternate\" hreflang=\"tr\" href=\"https://mos-bet-az.sarahmbroom.com/\"/>\n    <link rel=\"alternate\" hreflang=\"x-default\" href=\"https://{{settings.canon}}/\"/>",
+          "links": [
+            {
+              "hreflang": "az",
+              "href": "https://mos-bet-az.sarahmbroom.com/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "en",
+              "href": "https://mos-bet-az.sarahmbroom.com/",
+              "role": "auxiliary",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "tr",
+              "href": "https://mos-bet-az.sarahmbroom.com/",
+              "role": "auxiliary",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "x-default",
+              "href": "https://{{settings.canon}}/",
+              "role": "default",
+              "dynamic_canon": true
+            }
+          ],
+          "canonical_references": []
+        }
+      },
+      "notes": []
+    },
+    {
+      "id": "mostbet:az:saferpatients.com",
+      "project": "saferpatients.com",
+      "brand": "mostbet",
+      "geo": "AZ",
+      "language": "az",
+      "geo_source": "CSV filename; verify against project cache_geo",
+      "source_file": "Схемы сплитов - mostbet az.csv",
+      "source_row": 8,
+      "variants": {
+        "provided": {
+          "source_markup": "<link rel=\"alternate\" hreflang=\"az-AZ\" href=\"https://{{settings.canon}}/\"/>\n    <link rel=\"alternate\" hreflang=\"x-default\" href=\"https://saferpatients.com/\"/>",
+          "links": [
+            {
+              "hreflang": "az-AZ",
+              "href": "https://{{settings.canon}}/",
+              "role": "geo_language",
+              "dynamic_canon": true
+            },
+            {
+              "hreflang": "x-default",
+              "href": "https://saferpatients.com/",
+              "role": "default",
+              "dynamic_canon": false
+            }
+          ],
+          "canonical_references": []
+        }
+      },
+      "notes": []
+    },
+    {
+      "id": "mostbet:az:soulvisionmagazine.com",
+      "project": "soulvisionmagazine.com",
+      "brand": "mostbet",
+      "geo": "AZ",
+      "language": "az",
+      "geo_source": "CSV filename; verify against project cache_geo",
+      "source_file": "Схемы сплитов - mostbet az.csv",
+      "source_row": 9,
+      "variants": {
+        "provided": {
+          "source_markup": "<link rel=\"alternate\" hreflang=\"az-AZ\" href=\"https://mostbet-az-casino.soulvisionmagazine.com/\"/>\n    <link rel=\"alternate\" hreflang=\"az\" href=\"https://mostbet-az-casino.soulvisionmagazine.com/\"/>\n    <link rel=\"alternate\" hreflang=\"en-AZ\" href=\"https://mostbet-az-casino.soulvisionmagazine.com/\"/>\n    <link rel=\"alternate\" hreflang=\"fr-AZ\" href=\"https://mostbet-az-casino.soulvisionmagazine.com/\"/>\n    <link rel=\"alternate\" hreflang=\"kz-AZ\" href=\"https://mostbet-az-casino.soulvisionmagazine.com/\"/>\n    <link rel=\"alternate\" hreflang=\"x-default\" href=\"https://{{settings.canon}}/\"/>",
+          "links": [
+            {
+              "hreflang": "az-AZ",
+              "href": "https://mostbet-az-casino.soulvisionmagazine.com/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "az",
+              "href": "https://mostbet-az-casino.soulvisionmagazine.com/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "en-AZ",
+              "href": "https://mostbet-az-casino.soulvisionmagazine.com/",
+              "role": "auxiliary",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "fr-AZ",
+              "href": "https://mostbet-az-casino.soulvisionmagazine.com/",
+              "role": "auxiliary",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "kz-AZ",
+              "href": "https://mostbet-az-casino.soulvisionmagazine.com/",
+              "role": "auxiliary",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "x-default",
+              "href": "https://{{settings.canon}}/",
+              "role": "default",
+              "dynamic_canon": true
+            }
+          ],
+          "canonical_references": []
+        }
+      },
+      "notes": []
+    },
+    {
+      "id": "mostbet:az:www.fortmiles.org",
+      "project": "www.fortmiles.org",
+      "brand": "mostbet",
+      "geo": "AZ",
+      "language": "az",
+      "geo_source": "CSV filename; verify against project cache_geo",
+      "source_file": "Схемы сплитов - mostbet az.csv",
+      "source_row": 10,
+      "variants": {
+        "provided": {
+          "source_markup": "<link rel=\"alternate\" hreflang=\"az-AZ\" href=\"https://giris-mostbet26.fortmiles.org/\"/>\n    <link rel=\"alternate\" hreflang=\"en-AZ\" href=\"https://giris-mostbet26.fortmiles.org/\"/>\n    <link rel=\"alternate\" hreflang=\"tr-AZ\" href=\"https://giris-mostbet26.fortmiles.org/\"/>\n    <link rel=\"alternate\" hreflang=\"x-default\" href=\"https://www.fortmiles.org/\"/>",
+          "links": [
+            {
+              "hreflang": "az-AZ",
+              "href": "https://giris-mostbet26.fortmiles.org/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "en-AZ",
+              "href": "https://giris-mostbet26.fortmiles.org/",
+              "role": "auxiliary",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "tr-AZ",
+              "href": "https://giris-mostbet26.fortmiles.org/",
+              "role": "auxiliary",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "x-default",
+              "href": "https://www.fortmiles.org/",
+              "role": "default",
+              "dynamic_canon": false
+            }
+          ],
+          "canonical_references": []
+        }
+      },
+      "notes": []
+    },
+    {
+      "id": "pinup:az:clubheavenjax.com",
+      "project": "clubheavenjax.com",
+      "brand": "pinup",
+      "geo": "AZ",
+      "language": "az",
+      "geo_source": "CSV filename; verify against project cache_geo",
+      "source_file": "Схемы сплитов - pinup az.csv",
+      "source_row": 2,
+      "variants": {
+        "before": {
+          "source_markup": "<link rel=\"canonical\" href=\"https://pinup-casino-az.clubheavenjax.com\" />\n    <link rel=\"alternate\" hreflang=\"az\" href=\"https://pinup-casino-az.clubheavenjax.com/\"/>\n    <link rel=\"alternate\" hreflang=\"en\" href=\"https://pinup-casino-az.clubheavenjax.com/\"/>\n    <link rel=\"alternate\" hreflang=\"tr\" href=\"https://pinup-casino-az.clubheavenjax.com/\"/>\n    <link rel=\"alternate\" hreflang=\"x-default\" href=\"https://clubheavenjax.com/\"/>",
+          "links": [
+            {
+              "hreflang": "az",
+              "href": "https://pinup-casino-az.clubheavenjax.com/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "en",
+              "href": "https://pinup-casino-az.clubheavenjax.com/",
+              "role": "auxiliary",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "tr",
+              "href": "https://pinup-casino-az.clubheavenjax.com/",
+              "role": "auxiliary",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "x-default",
+              "href": "https://clubheavenjax.com/",
+              "role": "default",
+              "dynamic_canon": false
+            }
+          ],
+          "canonical_references": [
+            "https://pinup-casino-az.clubheavenjax.com"
+          ]
+        },
+        "after": {
+          "source_markup": "<link rel=\"alternate\" hreflang=\"az\" href=\"https://pinup-casino-az.clubheavenjax.com/\"/>\n    <link rel=\"alternate\" hreflang=\"az-AZ\" href=\"https://pinup-casino-az.clubheavenjax.com/events/\"/>",
+          "links": [
+            {
+              "hreflang": "az",
+              "href": "https://pinup-casino-az.clubheavenjax.com/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "az-AZ",
+              "href": "https://pinup-casino-az.clubheavenjax.com/events/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            }
+          ],
+          "canonical_references": []
+        }
+      },
+      "notes": []
+    },
+    {
+      "id": "pinup:az:theworkathomewomanshop.com",
+      "project": "theworkathomewomanshop.com",
+      "brand": "pinup",
+      "geo": "AZ",
+      "language": "az",
+      "geo_source": "CSV filename; verify against project cache_geo",
+      "source_file": "Схемы сплитов - pinup az.csv",
+      "source_row": 3,
+      "variants": {
+        "before": {
+          "source_markup": "<link rel=\"canonical\" href=\"https://theworkathomewomanshop.com\" />\n    <link rel=\"alternate\" hreflang=\"x-default\" href=\"https://theworkathomewomanshop.com/\"/>\n    <link rel=\"alternate\" hreflang=\"az-AZ\" href=\"https://az-pinup.theworkathomewomanshop.com/\"/>\n    <link rel=\"alternate\" hreflang=\"en-AZ\" href=\"https://az-pinup.theworkathomewomanshop.com/\"/>\n    <link rel=\"alternate\" hreflang=\"tr-AZ\" href=\"https://az-pinup.theworkathomewomanshop.com/\"/>",
+          "links": [
+            {
+              "hreflang": "x-default",
+              "href": "https://theworkathomewomanshop.com/",
+              "role": "default",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "az-AZ",
+              "href": "https://az-pinup.theworkathomewomanshop.com/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "en-AZ",
+              "href": "https://az-pinup.theworkathomewomanshop.com/",
+              "role": "auxiliary",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "tr-AZ",
+              "href": "https://az-pinup.theworkathomewomanshop.com/",
+              "role": "auxiliary",
+              "dynamic_canon": false
+            }
+          ],
+          "canonical_references": [
+            "https://theworkathomewomanshop.com"
+          ]
+        },
+        "after": {
+          "source_markup": "<link rel=\"alternate\" hreflang=\"az\" href=\"https://theworkathomewomanshop.com/\"/>\n    <link rel=\"alternate\" hreflang=\"az-AZ\" href=\"https://az-pinup.theworkathomewomanshop.com/products/\"/>",
+          "links": [
+            {
+              "hreflang": "az",
+              "href": "https://theworkathomewomanshop.com/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "az-AZ",
+              "href": "https://az-pinup.theworkathomewomanshop.com/products/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            }
+          ],
+          "canonical_references": []
+        }
+      },
+      "notes": [
+        "poland-verdecasino.com"
+      ]
+    },
+    {
+      "id": "pinup:az:firesciencedegreeschools.com",
+      "project": "firesciencedegreeschools.com",
+      "brand": "pinup",
+      "geo": "AZ",
+      "language": "az",
+      "geo_source": "CSV filename; verify against project cache_geo",
+      "source_file": "Схемы сплитов - pinup az.csv",
+      "source_row": 4,
+      "variants": {
+        "before": {
+          "source_markup": "<link rel=\"canonical\" href=\"https://az-az.firesciencedegreeschools.com\" />\n    <link rel=\"alternate\" hreflang=\"az-AZ\" href=\"https://az-az.firesciencedegreeschools.com/\"/>\n    <link rel=\"alternate\" hreflang=\"ru-AZ\" href=\"https://az-az.firesciencedegreeschools.com/\"/>\n      <link rel=\"alternate\" hreflang=\"x-default\" href=\"https://firesciencedegreeschools.com/\"/>",
+          "links": [
+            {
+              "hreflang": "az-AZ",
+              "href": "https://az-az.firesciencedegreeschools.com/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "ru-AZ",
+              "href": "https://az-az.firesciencedegreeschools.com/",
+              "role": "auxiliary",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "x-default",
+              "href": "https://firesciencedegreeschools.com/",
+              "role": "default",
+              "dynamic_canon": false
+            }
+          ],
+          "canonical_references": [
+            "https://az-az.firesciencedegreeschools.com"
+          ]
+        },
+        "after": {
+          "source_markup": "<link rel=\"alternate\" hreflang=\"az\" href=\"https://az-az.firesciencedegreeschools.com/\"/>\n    <link rel=\"alternate\" hreflang=\"az-AZ\" href=\"https://az-az.firesciencedegreeschools.com/pinup-az/\"/>",
+          "links": [
+            {
+              "hreflang": "az",
+              "href": "https://az-az.firesciencedegreeschools.com/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "az-AZ",
+              "href": "https://az-az.firesciencedegreeschools.com/pinup-az/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            }
+          ],
+          "canonical_references": []
+        }
+      },
+      "notes": []
+    },
+    {
+      "id": "pinup:az:goldenpickleball.com",
+      "project": "goldenpickleball.com",
+      "brand": "pinup",
+      "geo": "AZ",
+      "language": "az",
+      "geo_source": "CSV filename; verify against project cache_geo",
+      "source_file": "Схемы сплитов - pinup az.csv",
+      "source_row": 5,
+      "variants": {
+        "before": {
+          "source_markup": "<link rel=\"canonical\" href=\"https://{{settings.canon}}/\" />\n    <link rel=\"alternate\" hreflang=\"az\" href=\"https://azz.goldenpickleball.com/\"/>\n    <link rel=\"alternate\" hreflang=\"uz\" href=\"https://azz.goldenpickleball.com/\"/>\n    <link rel=\"alternate\" hreflang=\"tr\" href=\"https://azz.goldenpickleball.com/\"/>\n    <link rel=\"alternate\" hreflang=\"x-default\" href=\"https://{{settings.canon}}/\"/>",
+          "links": [
+            {
+              "hreflang": "az",
+              "href": "https://azz.goldenpickleball.com/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "uz",
+              "href": "https://azz.goldenpickleball.com/",
+              "role": "auxiliary",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "tr",
+              "href": "https://azz.goldenpickleball.com/",
+              "role": "auxiliary",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "x-default",
+              "href": "https://{{settings.canon}}/",
+              "role": "default",
+              "dynamic_canon": true
+            }
+          ],
+          "canonical_references": [
+            "https://{{settings.canon}}/"
+          ]
+        },
+        "after": {
+          "source_markup": "<link rel=\"alternate\" hreflang=\"az\" href=\"https://azz.goldenpickleball.com/\"/>\n    <link rel=\"alternate\" hreflang=\"az-AZ\" href=\"https://azz.goldenpickleball.com/collections/\"/>",
+          "links": [
+            {
+              "hreflang": "az",
+              "href": "https://azz.goldenpickleball.com/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "az-AZ",
+              "href": "https://azz.goldenpickleball.com/collections/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            }
+          ],
+          "canonical_references": []
+        }
+      },
+      "notes": []
+    },
+    {
+      "id": "pinup:az:www.c4waterman.com",
+      "project": "www.c4waterman.com",
+      "brand": "pinup",
+      "geo": "AZ",
+      "language": "az",
+      "geo_source": "CSV filename; verify against project cache_geo",
+      "source_file": "Схемы сплитов - pinup az.csv",
+      "source_row": 6,
+      "variants": {
+        "before": {
+          "source_markup": "<link rel=\"alternate\" hreflang=\"az-AZ\" href=\"https://{{settings.canon}}/\"/>\n    <link rel=\"alternate\" hreflang=\"uz-AZ\" href=\"https://{{settings.canon}}/\"/>\n    <link rel=\"alternate\" hreflang=\"en-AZ\" href=\"https://{{settings.canon}}/\"/>\n    <link rel=\"alternate\" hreflang=\"fr-AZ\" href=\"https://{{settings.canon}}/\"/>\n    <link rel=\"alternate\" hreflang=\"kz-AZ\" href=\"https://{{settings.canon}}/\"/>\n    <link rel=\"alternate\" hreflang=\"x-default\" href=\"https://www.c4waterman.com/\"/>",
+          "links": [
+            {
+              "hreflang": "az-AZ",
+              "href": "https://{{settings.canon}}/",
+              "role": "geo_language",
+              "dynamic_canon": true
+            },
+            {
+              "hreflang": "uz-AZ",
+              "href": "https://{{settings.canon}}/",
+              "role": "auxiliary",
+              "dynamic_canon": true
+            },
+            {
+              "hreflang": "en-AZ",
+              "href": "https://{{settings.canon}}/",
+              "role": "auxiliary",
+              "dynamic_canon": true
+            },
+            {
+              "hreflang": "fr-AZ",
+              "href": "https://{{settings.canon}}/",
+              "role": "auxiliary",
+              "dynamic_canon": true
+            },
+            {
+              "hreflang": "kz-AZ",
+              "href": "https://{{settings.canon}}/",
+              "role": "auxiliary",
+              "dynamic_canon": true
+            },
+            {
+              "hreflang": "x-default",
+              "href": "https://www.c4waterman.com/",
+              "role": "default",
+              "dynamic_canon": false
+            }
+          ],
+          "canonical_references": []
+        },
+        "after": {
+          "source_markup": "<link rel=\"alternate\" hreflang=\"az\" href=\"https://pinup-pinup.c4waterman.com/\"/>\n    <link rel=\"alternate\" hreflang=\"az-AZ\" href=\"https://pinup-pinup.c4waterman.com/demo/\"/>",
+          "links": [
+            {
+              "hreflang": "az",
+              "href": "https://pinup-pinup.c4waterman.com/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "az-AZ",
+              "href": "https://pinup-pinup.c4waterman.com/demo/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            }
+          ],
+          "canonical_references": []
+        }
+      },
+      "notes": []
+    },
+    {
+      "id": "pinup:az:www.donnamckechnie.com",
+      "project": "www.donnamckechnie.com",
+      "brand": "pinup",
+      "geo": "AZ",
+      "language": "az",
+      "geo_source": "CSV filename; verify against project cache_geo",
+      "source_file": "Схемы сплитов - pinup az.csv",
+      "source_row": 7,
+      "variants": {
+        "before": {
+          "source_markup": "<link rel=\"alternate\" hreflang=\"az-AZ\" href=\"https://pinup-az-az.donnamckechnie.com/\"/>\n    <link rel=\"alternate\" hreflang=\"ru-AZ\" href=\"https://pinup-az-az.donnamckechnie.com/\"/>\n    <link rel=\"alternate\" hreflang=\"tr-AZ\" href=\"https://pinup-az-az.donnamckechnie.com/\"/>\n    <link rel=\"alternate\" hreflang=\"x-default\" href=\"https://{{settings.canon}}/\"/>",
+          "links": [
+            {
+              "hreflang": "az-AZ",
+              "href": "https://pinup-az-az.donnamckechnie.com/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "ru-AZ",
+              "href": "https://pinup-az-az.donnamckechnie.com/",
+              "role": "auxiliary",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "tr-AZ",
+              "href": "https://pinup-az-az.donnamckechnie.com/",
+              "role": "auxiliary",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "x-default",
+              "href": "https://{{settings.canon}}/",
+              "role": "default",
+              "dynamic_canon": true
+            }
+          ],
+          "canonical_references": []
+        }
+      },
+      "notes": []
+    },
+    {
+      "id": "pinup:az:www.whiterabbittruck.com",
+      "project": "www.whiterabbittruck.com",
+      "brand": "pinup",
+      "geo": "AZ",
+      "language": "az",
+      "geo_source": "CSV filename; verify against project cache_geo",
+      "source_file": "Схемы сплитов - pinup az.csv",
+      "source_row": 8,
+      "variants": {
+        "before": {
+          "source_markup": "<link rel=\"alternate\" hreflang=\"x-default\" href=\"https://www.whiterabbittruck.com/\"/>\n    <link rel=\"alternate\" hreflang=\"az-AZ\" href=\"https://{{settings.canon}}/\"/>\n    <link rel=\"alternate\" hreflang=\"en-AZ\" href=\"https://{{settings.canon}}/\"/>\n    <link rel=\"alternate\" hreflang=\"tr-AZ\" href=\"https://{{settings.canon}}/\"/>",
+          "links": [
+            {
+              "hreflang": "x-default",
+              "href": "https://www.whiterabbittruck.com/",
+              "role": "default",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "az-AZ",
+              "href": "https://{{settings.canon}}/",
+              "role": "geo_language",
+              "dynamic_canon": true
+            },
+            {
+              "hreflang": "en-AZ",
+              "href": "https://{{settings.canon}}/",
+              "role": "auxiliary",
+              "dynamic_canon": true
+            },
+            {
+              "hreflang": "tr-AZ",
+              "href": "https://{{settings.canon}}/",
+              "role": "auxiliary",
+              "dynamic_canon": true
+            }
+          ],
+          "canonical_references": []
+        }
+      },
+      "notes": []
+    },
+    {
+      "id": "pinup:az:www.wildhartdistillery.com",
+      "project": "www.wildhartdistillery.com",
+      "brand": "pinup",
+      "geo": "AZ",
+      "language": "az",
+      "geo_source": "CSV filename; verify against project cache_geo",
+      "source_file": "Схемы сплитов - pinup az.csv",
+      "source_row": 9,
+      "variants": {
+        "before": {
+          "source_markup": "<link rel=\"alternate\" hreflang=\"az-AZ\" href=\"https://{{settings.canon}}/\"/>\n    <link rel=\"alternate\" hreflang=\"uz-AZ\" href=\"https://{{settings.canon}}/\"/>\n    <link rel=\"alternate\" hreflang=\"en-AZ\" href=\"https://{{settings.canon}}/\"/>\n    <link rel=\"alternate\" hreflang=\"ru-AZ\" href=\"https://{{settings.canon}}/\"/>\n    <link rel=\"alternate\" hreflang=\"x-default\" href=\"https://www.wildhartdistillery.com/\"/>",
+          "links": [
+            {
+              "hreflang": "az-AZ",
+              "href": "https://{{settings.canon}}/",
+              "role": "geo_language",
+              "dynamic_canon": true
+            },
+            {
+              "hreflang": "uz-AZ",
+              "href": "https://{{settings.canon}}/",
+              "role": "auxiliary",
+              "dynamic_canon": true
+            },
+            {
+              "hreflang": "en-AZ",
+              "href": "https://{{settings.canon}}/",
+              "role": "auxiliary",
+              "dynamic_canon": true
+            },
+            {
+              "hreflang": "ru-AZ",
+              "href": "https://{{settings.canon}}/",
+              "role": "auxiliary",
+              "dynamic_canon": true
+            },
+            {
+              "hreflang": "x-default",
+              "href": "https://www.wildhartdistillery.com/",
+              "role": "default",
+              "dynamic_canon": false
+            }
+          ],
+          "canonical_references": []
+        },
+        "after": {
+          "source_markup": "<link rel=\"alternate\" hreflang=\"az\" href=\"https://pin-up-azer.wildhartdistillery.com/\"/>\n    <link rel=\"alternate\" hreflang=\"az-AZ\" href=\"https://pin-up-azer.wildhartdistillery.com/about-us/\"/>",
+          "links": [
+            {
+              "hreflang": "az",
+              "href": "https://pin-up-azer.wildhartdistillery.com/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "az-AZ",
+              "href": "https://pin-up-azer.wildhartdistillery.com/about-us/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            }
+          ],
+          "canonical_references": []
+        }
+      },
+      "notes": []
+    },
+    {
+      "id": "pinup:az:centaursystems.com",
+      "project": "centaursystems.com",
+      "brand": "pinup",
+      "geo": "AZ",
+      "language": "az",
+      "geo_source": "CSV filename; verify against project cache_geo",
+      "source_file": "Схемы сплитов - pinup az.csv",
+      "source_row": 10,
+      "variants": {
+        "before": {
+          "source_markup": "<link rel=\"alternate\" hreflang=\"az\" href=\"https://pinuup.centaursystems.com/\"/>\n    <link rel=\"alternate\" hreflang=\"az-AZ\" href=\"https://pinuup.centaursystems.com/\"/>",
+          "links": [
+            {
+              "hreflang": "az",
+              "href": "https://pinuup.centaursystems.com/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "az-AZ",
+              "href": "https://pinuup.centaursystems.com/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            }
+          ],
+          "canonical_references": []
+        },
+        "after": {
+          "source_markup": "<link rel=\"alternate\" hreflang=\"az\" href=\"https://pinuup.centaursystems.com/\"/>\n    <link rel=\"alternate\" hreflang=\"az-AZ\" href=\"https://pinuup.centaursystems.com/catalog/\"/>",
+          "links": [
+            {
+              "hreflang": "az",
+              "href": "https://pinuup.centaursystems.com/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "az-AZ",
+              "href": "https://pinuup.centaursystems.com/catalog/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            }
+          ],
+          "canonical_references": []
+        }
+      },
+      "notes": []
+    },
+    {
+      "id": "pinup:az:janzywaxco.com",
+      "project": "janzywaxco.com",
+      "brand": "pinup",
+      "geo": "AZ",
+      "language": "az",
+      "geo_source": "CSV filename; verify against project cache_geo",
+      "source_file": "Схемы сплитов - pinup az.csv",
+      "source_row": 11,
+      "variants": {
+        "before": {
+          "source_markup": "<link rel=\"alternate\" hreflang=\"az\" href=\"https://janzywaxco.com/\"/>\n    <link rel=\"alternate\" hreflang=\"az-AZ\" href=\"https://janzywaxco.com/collections/\"/>",
+          "links": [
+            {
+              "hreflang": "az",
+              "href": "https://janzywaxco.com/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            },
+            {
+              "hreflang": "az-AZ",
+              "href": "https://janzywaxco.com/collections/",
+              "role": "geo_language",
+              "dynamic_canon": false
+            }
+          ],
+          "canonical_references": []
+        }
+      },
+      "notes": []
+    }
+  ]
+}

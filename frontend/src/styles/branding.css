@@ -298,3 +298,25 @@
   background: var(--success-pearl);
   box-shadow: var(--success-sheen), inset 0 3px var(--primary);
 }
+
+/* The card follows navigation; the result within it keeps its success color. */
+:root[data-design-version="2.0"] .projectTopDetails > button.projectMetricCard.isActive {
+  background: linear-gradient(135deg, var(--surface), var(--brand-soft));
+  border-color: color-mix(in srgb, var(--brand-text) 45%, var(--border));
+  box-shadow: inset 0 3px var(--brand-text), 0 2px 6px var(--focus-ring);
+}
+:root[data-design-version="2.0"] .projectTopDetails > button.projectMetricCard.isActive small,
+:root[data-design-version="2.0"] .projectTopDetails > button.projectMetricCard.isActive b { color: var(--brand-text); }
+:root[data-design-version="2.0"] .projectTopDetails > .projectMenuCapability.isReady {
+  background: linear-gradient(135deg, var(--surface), var(--surface-2));
+  border-color: var(--border);
+  box-shadow: none;
+}
+:root[data-design-version="2.0"] .projectMenuCapability.isReady .projectMenuCapabilityValue {
+  background: var(--success-pearl);
+  box-shadow: var(--success-sheen);
+  border: 1px solid var(--success-border);
+  border-radius: 8px;
+  padding: 4px 6px;
+  width: 100%;
+}

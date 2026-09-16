@@ -6,6 +6,7 @@ import { getMenuLibrary, type MenuLibraryItem } from "./menuLibrary";
 import { matchesProjectSearch, projectSearchKeywords } from "./projectSearch";
 import { TechnicalPagesForm } from "./TechnicalPagesForm";
 import { ProjectNetworkPanel } from "./ProjectNetworkPanel";
+import { AutoReglueView, ProjectAutoReglue } from "./AutoRegluePanel";
 import {
   Activity,
   AlertTriangle,
@@ -533,7 +534,7 @@ type PublicationCampaignQueue = {
 
 type ThemeMode = "light" | "dark";
 type InputStyle = "balanced" | "classic" | "soft" | "inset" | "underline" | "emerald" | "graphite" | "rounded" | "contrast" | "glass";
-type AppView = "published" | "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "favorites" | "guide" | "settings";
+type AppView = "autoReglue" | "published" | "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "favorites" | "guide" | "settings";
 type WorkspaceTab = "overview" | "topics" | "content" | "publication" | "menu" | "network" | "redirects";
 
 type WorkspaceAccordionContextValue = {
@@ -660,6 +661,7 @@ function generateSecurePassword(length = 10): string {
 }
 
 const MAIN_VIEW_PATHS: Record<Exclude<AppView, "workspace">, string> = {
+  autoReglue: "/auto-reglue",
   dashboard: "/dashboard",
   prompts: "/prompts",
   tasks: "/tasks",
@@ -737,7 +739,7 @@ function pathForRoute(view: AppView, workspaceTab: WorkspaceTab = DEFAULT_WORKSP
 }
 
 function isAdminOnlyView(view: AppView) {
-  return ["dashboard", "providers", "published"].includes(view);
+  return ["dashboard", "providers", "published", "autoReglue"].includes(view);
 }
 
 const DEFAULT_PROMPT_DRAFT = `Рабочий промпт для конкретной задачи.
@@ -1170,6 +1172,7 @@ function App() {
             </>
           )}
           <NavButton href={pathForRoute("guide")} icon={<BookOpen />} label="Инструкция" active={activeView === "guide"} onClick={() => navigateTo("guide")} />
+          {isAdmin && <NavButton href={pathForRoute("autoReglue")} icon={<RefreshCcw />} label="Автопереклей" active={activeView === "autoReglue"} onClick={() => navigateTo("autoReglue")} />}
           <NavButton href={pathForRoute("settings")} icon={<Settings />} label="Настройки" active={activeView === "settings"} onClick={() => navigateTo("settings")} />
           {isAdmin ? <NavButton href={pathForRoute("published")} icon={<CheckCircle2 />} label="Опубликовано" active={activeView === "published"} onClick={() => navigateTo("published")} /> : null}
         </nav>
@@ -1233,7 +1236,7 @@ function App() {
 
         {message ? <div className="notice">{message}</div> : null}
 
-        {activeView === "workspace" && <ProjectWorkspaceView api={api} sites={sites} providers={providers} currentUsername={currentUser.username} activeTab={workspaceTab} contentOpenRequest={workspaceContentOpenRequest} onTabChange={(tab, projectName) => navigateTo("workspace", tab, false, projectName)} onChanged={loadAll} />}
+        {activeView === "workspace" && <ProjectWorkspaceView canManageAutomation={isAdmin} api={api} sites={sites} providers={providers} currentUsername={currentUser.username} activeTab={workspaceTab} contentOpenRequest={workspaceContentOpenRequest} onTabChange={(tab, projectName) => navigateTo("workspace", tab, false, projectName)} onChanged={loadAll} />}
         {activeView === "prompts" && <PromptsView api={api} sites={sites} isAdmin={isAdmin} onChanged={loadAll} />}
         {isAdmin && activeView === "dashboard" && dashboard && <DashboardView api={api} dashboard={dashboard} tasks={tasks} content={content} sites={sites} onOpenTask={(task) => {
           const site = sites.find((candidate) => candidate.id === task.site_id);
@@ -1261,6 +1264,7 @@ function App() {
         {activeView === "sites" && <SitesView api={api} sites={sites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll} />}
         {activeView === "favorites" && <SitesView api={api} sites={sites} currentUsername={currentUser.username} favoritesOnly readOnly={!isAdmin} onChanged={loadAll} />}
         {activeView === "guide" && <UserGuideView />}
+        {isAdmin && activeView === "autoReglue" && <AutoReglueView api={api} />}
         {activeView === "settings" && <SettingsView api={api} currentUser={currentUser} users={users} designVersion={designVersion} onDesignVersionChange={setDesignVersion} inputStyle={inputStyle} onInputStyleChange={setInputStyle} onChanged={loadAll} />}
       </main>
       {notificationPromptVisible ? (
@@ -1784,6 +1788,7 @@ function ProjectWorkspaceView({
   sites,
   providers,
   currentUsername,
+  canManageAutomation,
   activeTab,
   contentOpenRequest,
   onTabChange,
@@ -1792,6 +1797,7 @@ function ProjectWorkspaceView({
   sites: Site[];
   providers: AiProvider[];
   currentUsername: string;
+  canManageAutomation: boolean;
   activeTab: WorkspaceTab;
   contentOpenRequest: number;
   onTabChange: (tab: WorkspaceTab, projectName?: string) => void;
@@ -2411,6 +2417,7 @@ function ProjectWorkspaceView({
           <WorkspaceTabPane active={activeTab === "overview"} storagePrefix={`${currentUsername}:${selectedSite.id}:overview`}>
             {overview ? <FastProjectOverviewPanel key={selectedSite.id} overview={overview} content={siteContent} sections={sections} logs={logs} /> : null}
           </WorkspaceTabPane>
+          {canManageAutomation && activeTab === "redirects" && <ProjectAutoReglue key={selectedSite.id} siteId={selectedSite.id} api={api} />}
           {activeTab === "network" || activeTab === "redirects" ? <ProjectNetworkPanel key={selectedSite.id} site={selectedSite} mode={activeTab} api={api} username={currentUsername} onChanged={refreshProject} /> : null}
           <WorkspaceTabPane active={activeTab === "topics"} storagePrefix={`${currentUsername}:${selectedSite.id}:topics`}>
             <FastTasksView
@@ -10768,6 +10775,7 @@ function viewTitle(view: AppView, _workspaceTab: WorkspaceTab) {
     sites: "Сайты",
     favorites: "Избранное",
     guide: "Инструкция по работе",
+    autoReglue: "Автопереклей",
     settings: "Настройки"
   };
   return titles[view];

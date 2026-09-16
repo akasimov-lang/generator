@@ -338,3 +338,20 @@ class PublicationLog(Base, TimestampMixin):
     response_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
     response_body: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class AutoReglueConfig(Base, TimestampMixin):
+    __tablename__ = "auto_reglue_configs"
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    value: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class AutoReglueRun(Base, TimestampMixin):
+    __tablename__ = "auto_reglue_runs"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), index=True)
+    initiator: Mapped[str] = mapped_column(String(80))
+    status: Mapped[str] = mapped_column(String(24), default="queued")
+    phase: Mapped[str] = mapped_column(String(32), default="prepared")
+    plan: Mapped[dict] = mapped_column(JSON)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)

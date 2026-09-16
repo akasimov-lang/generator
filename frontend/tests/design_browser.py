@@ -56,7 +56,7 @@ with sync_playwright() as p:
         page.evaluate('(v)=>{localStorage.removeItem("admin_token");localStorage.setItem("pagepilot_design_version",v)}', version)
         page.reload()
         expect(page.locator('.loginBrandRow h1')).to_contain_text('Версия ' + version)
-        expect(page.locator('link[rel="icon"]')).to_have_attribute('href', '/favicon-v1.svg' if version == '1.0' else '/favicon.svg')
+        expect(page.locator('link[rel="icon"]')).to_have_attribute('href', '/favicon-v1.svg' if version == '1.0' else '/pagepilot-mark.svg?v=20260916')
     assert not writes, writes
     assert not errors, errors
     browser.close()
