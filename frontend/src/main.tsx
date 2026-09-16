@@ -8188,7 +8188,7 @@ function ProvidersView({ api, providers, onChanged }: ViewProps & { providers: A
 }
 
 type SiteTableColumn = "brand" | "rowNumber" | "select" | "name" | "title" | "canon" | "language" | "status" | "internalPages" | "menuType" | "menuCount" | "domainsCount" | "xDefault";
-type SiteSummaryFilter = "projects" | "working" | "menu" | "test" | "duplicate" | "all";
+type SiteSummaryFilter = "projects" | "working" | "menu" | "mass_actions" | "duplicate" | "all";
 
 const DEFAULT_SITE_COLUMN_ORDER: SiteTableColumn[] = ["rowNumber", "select", "name", "brand", "title", "canon", "language", "status", "internalPages", "menuType", "menuCount", "domainsCount", "xDefault"];
 const SITE_COLUMN_LABELS: Record<SiteTableColumn, string> = {
@@ -8366,7 +8366,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
   const [syncError, setSyncError] = React.useState("");
   const [selectedProjectNames, setSelectedProjectNames] = React.useState<string[]>([]);
   const [syncMessage, setSyncMessage] = React.useState("");
-  const [summaryFilter, setSummaryFilter] = React.useState<SiteSummaryFilter | null>(() => storedPreferences.summaryFilter || null);
+  const [summaryFilter, setSummaryFilter] = React.useState<SiteSummaryFilter | null>(() => String(storedPreferences.summaryFilter) === "test" ? null : storedPreferences.summaryFilter || null);
   const [medalFilter, setMedalFilter] = React.useState<ProjectMedalStatus | null>(() => {
     const stored = storedPreferences.medalFilter;
     return stored && (["gold", "verified", "missing", "unchecked"] as ProjectMedalStatus[]).includes(stored) ? stored : null;
@@ -8545,7 +8545,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
     if (summaryFilter === "projects") return Boolean(row.externalProjectId);
     if (summaryFilter === "working") return row.projectStatus === "working";
     if (summaryFilter === "menu") return row.hasMenu;
-    if (summaryFilter === "test") return row.projectStatus === "test";
+    if (summaryFilter === "mass_actions") return row.projectStatus === "mass_actions";
     return row.projectStatus === "duplicate";
   };
   const filteredRows = domainRows.filter((row) => (
@@ -8580,6 +8580,9 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
   }, [brandFilter, geoFilter, medalFilter, menuTypeFilters, rowsPerPage, searchQuery, siteSort, statusFilters, summaryFilter]);
 
   function toggleSummaryFilter(filter: SiteSummaryFilter) {
+    if (filter === "mass_actions" && summaryFilter !== filter && !statusFilters.includes("mass_actions")) {
+      setStatusFilters(current => [...current, "mass_actions"]);
+    }
     setSummaryFilter((current) => current === filter ? null : filter);
   }
 
@@ -8695,7 +8698,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
             <button className={summaryFilter === "projects" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("projects")} aria-pressed={summaryFilter === "projects"}><span>Проекты</span><strong>{formatNumber(cacheResult?.cache_count || managedSites.filter((site) => site.external_project_id).length)}</strong></button>
             <button className={summaryFilter === "working" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("working")} aria-pressed={summaryFilter === "working"}><span>Рабочие</span><strong>{formatNumber(workingCount)}</strong></button>
             <button className={summaryFilter === "menu" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("menu")} aria-pressed={summaryFilter === "menu"}><span>С меню</span><strong>{formatNumber(menuCount)}</strong></button>
-            <button className={summaryFilter === "test" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("test")} aria-pressed={summaryFilter === "test"}><span>Тестовые</span><strong>{formatNumber(managedSites.filter((site) => site.project_status === "test").length)}</strong></button>
+            <button className={summaryFilter === "mass_actions" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("mass_actions")} aria-pressed={summaryFilter === "mass_actions"}><span>Массовые действия</span><strong>{formatNumber(managedSites.filter((site) => site.project_status === "mass_actions").length)}</strong></button>
             <button className={summaryFilter === "duplicate" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("duplicate")} aria-pressed={summaryFilter === "duplicate"}><span>Дубликаты</span><strong>{formatNumber(duplicateCount)}</strong></button>
             <button className={summaryFilter === "all" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("all")} aria-pressed={summaryFilter === "all"}><span>Всего сайтов</span><strong>{formatNumber(managedSites.length)}</strong></button>
           </div>
@@ -8787,7 +8790,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
             <strong><ListChecks size={16} /> Включены фильтры</strong>
             {summaryFilter ? (
               <button type="button" onClick={() => setSummaryFilter(null)}>
-                Панель: {{ projects: "Проекты", working: "Рабочие", menu: "С меню", test: "Тестовые", duplicate: "Дубликаты", all: "Все сайты" }[summaryFilter]}
+                Панель: {{ projects: "Проекты", working: "Рабочие", menu: "С меню", mass_actions: "Массовые действия", duplicate: "Дубликаты", all: "Все сайты" }[summaryFilter]}
                 <X size={13} />
               </button>
             ) : null}
