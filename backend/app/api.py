@@ -898,7 +898,8 @@ def _active_site_menu_visibility_check(db: Session, site_id: str) -> models.Menu
 def _site_menu_capabilities_payload(
     site: models.Site, latest_check: models.MenuVisibilityCheck | None
 ) -> dict[str, Any]:
-    result_is_current = site.menu_capabilities_checked_at is not None
+    # Legacy rows can have a persisted result without a check timestamp.
+    result_is_current = site.header_menu_rendered is not None or site.footer_menu_rendered is not None
     check_status = (
         latest_check.status
         if latest_check is not None and latest_check.status in {"queued", "running", "failed"}
@@ -907,10 +908,10 @@ def _site_menu_capabilities_payload(
     return {
         "checked_at": site.menu_capabilities_checked_at,
         "header_menu_template_rendered": site.header_menu_template_rendered,
-        "header_menu_rendered": site.header_menu_rendered if result_is_current else None,
+        "header_menu_rendered": site.header_menu_rendered,
         "header_menu_nested": site.header_menu_nested if result_is_current or site.header_menu_template_rendered is not None else None,
         "footer_menu_template_rendered": site.footer_menu_template_rendered,
-        "footer_menu_rendered": site.footer_menu_rendered if result_is_current else None,
+        "footer_menu_rendered": site.footer_menu_rendered,
         "footer_menu_nested": site.footer_menu_nested if result_is_current or site.footer_menu_template_rendered is not None else None,
         "check_id": latest_check.id if latest_check is not None else None,
         "check_status": check_status,
@@ -937,10 +938,13 @@ def check_site_menu_template_capabilities(site_id: str, _: AuthUser, db: Session
         capabilities = fetch_project_template_capabilities_resilient(site)
     except ProjectCacheError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+    db.refresh(site, with_for_update=True)
     site.header_menu_template_rendered = capabilities["header_menu_rendered"]
-    site.header_menu_nested = capabilities["header_menu_nested"]
+    if site.header_menu_rendered is None:
+        site.header_menu_nested = capabilities["header_menu_nested"]
     site.footer_menu_template_rendered = capabilities["footer_menu_rendered"]
-    site.footer_menu_nested = capabilities["footer_menu_nested"]
+    if site.footer_menu_rendered is None:
+        site.footer_menu_nested = capabilities["footer_menu_nested"]
     db.commit()
     db.refresh(site)
     return _site_menu_capabilities_payload(site, _latest_site_menu_visibility_check(db, site.id))

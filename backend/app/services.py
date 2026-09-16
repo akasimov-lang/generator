@@ -4672,10 +4672,13 @@ async def sync_project_menus(
         raise ValueError("Menu types must contain header and/or footer")
     refresh_project_server_id(db, site)
     capabilities = fetch_project_template_capabilities(site)
+    db.refresh(site, with_for_update=True)
     site.header_menu_template_rendered = capabilities["header_menu_rendered"]
-    site.header_menu_nested = capabilities["header_menu_nested"]
+    if site.header_menu_rendered is None:
+        site.header_menu_nested = capabilities["header_menu_nested"]
     site.footer_menu_template_rendered = capabilities["footer_menu_rendered"]
-    site.footer_menu_nested = capabilities["footer_menu_nested"]
+    if site.footer_menu_rendered is None:
+        site.footer_menu_nested = capabilities["footer_menu_nested"]
     db.commit()
     endpoint = project_server_url(site, "/projects/menu")
     results: list[dict] = []

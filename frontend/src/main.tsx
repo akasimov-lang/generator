@@ -1824,7 +1824,6 @@ function ProjectWorkspaceView({
   const [publicationWorkflowSection, setPublicationWorkflowSection] = React.useState<PublicationWorkspaceSection>("campaigns");
   const projectLoadRequestRef = React.useRef(0);
   const loadedWorkspaceTabRef = React.useRef("");
-  const automaticTemplateChecksRef = React.useRef(new Set<string>());
   const selectedSite = sites.find((site) => site.id === selectedSiteId) || null;
   const routeProjectName = workspaceProjectNameFromPath(window.location.pathname);
   const pendingSectionsCount = sections.filter((section) => section.sync_status === "pending").length;
@@ -1832,12 +1831,12 @@ function ProjectWorkspaceView({
   const headerNestingRequired = projectRequiresHeaderNesting(sections, siteContent);
   const headerNestingRenderingMissing = Boolean(
     headerNestingRequired
-    && menuCapabilities?.checked_at
+    && menuCapabilities?.header_menu_rendered != null
     && menuCapabilities.header_menu_nested === false
   );
   const selectedProjectMedalStatus = headerNestingRenderingMissing
     ? "missing"
-    : menuCapabilities?.checked_at
+    : menuCapabilities?.header_menu_rendered != null
     ? menuMedalStatus(
         menuCapabilities.checked_at,
         menuCapabilities.header_menu_rendered,
@@ -1873,13 +1872,12 @@ function ProjectWorkspaceView({
     if (selectedSiteId) window.localStorage.setItem(`publication_workspace_section:${currentUsername}:${selectedSiteId}`, "content");
   }, [contentOpenRequest, currentUsername, selectedSiteId]);
 
-  const loadProject = React.useCallback(async (refreshCapabilities = false) => {
+  const loadProject = React.useCallback(async () => {
     if (!selectedSiteId || selectedSiteIdRef.current !== selectedSiteId) return { success: false, errorCode: "NO_PROJECT" };
     const requestId = projectLoadRequestRef.current + 1;
     projectLoadRequestRef.current = requestId;
     setWorkspaceError("");
-    setMenuCapabilitiesLoading(true);
-    setMenuCapabilitiesError("");
+    if (activeTab === "network" || activeTab === "redirects") return { success: true, errorCode: "" };
     const requestResource = async <T,>(path: string): Promise<{ value: T | null; error: string; errorCode: string }> => {
       try {
         return { value: await api<T>(path), error: "", errorCode: "" };
@@ -1893,17 +1891,13 @@ function ProjectWorkspaceView({
     };
     // The overview must be fast.  Article bodies, publication payloads and the
     // tools for other tabs are deliberately not requested until their tab opens.
-    const [nextOverview, nextSections, nextMenuCapabilities] = await Promise.all([
+    const [nextOverview, nextSections] = await Promise.all([
       requestResource<SiteOverview>(`/sites/${selectedSiteId}/overview`),
-      requestResource<Section[]>(`/sites/${selectedSiteId}/sections`),
-      requestResource<MenuCapabilities>(`/sites/${selectedSiteId}/menu-capabilities${refreshCapabilities ? "?refresh=true" : ""}`)
+      requestResource<Section[]>(`/sites/${selectedSiteId}/sections`)
     ]);
     if (requestId !== projectLoadRequestRef.current || selectedSiteIdRef.current !== selectedSiteId) return { success: false, errorCode: "CANCELLED" };
     if (nextOverview.value) setOverview(nextOverview.value);
     if (nextSections.value) setSections(nextSections.value);
-    setMenuCapabilities(nextMenuCapabilities.value);
-    setMenuCapabilitiesError(nextMenuCapabilities.error);
-    setMenuCapabilitiesLoading(false);
 
     const deferredRequests: Array<Promise<{ value: unknown; error: string; errorCode: string }>> = [];
     if (["topics", "content", "publication", "menu"].includes(activeTab)) deferredRequests.push(requestResource<ContentItem[]>(`/sites/${selectedSiteId}/content`));
@@ -1942,11 +1936,11 @@ function ProjectWorkspaceView({
       const logs = deferred[deferredIndex++] as { value: PublicationLog[] | null };
       if (logs.value) setLogs(logs.value);
     }
-    const dataErrors = [nextOverview, nextSections, nextMenuCapabilities, ...deferred]
+    const dataErrors = [nextOverview, nextSections, ...deferred]
       .map((result) => result.error)
       .filter(Boolean);
     setWorkspaceError(dataErrors.length ? "Не удалось загрузить часть данных проекта. Повторите попытку через несколько секунд." : "");
-    const failedResource = [nextOverview, nextSections, nextMenuCapabilities, ...deferred]
+    const failedResource = [nextOverview, nextSections, ...deferred]
       .find((result) => Boolean(result.error));
     return {
       success: !failedResource,
@@ -1970,7 +1964,6 @@ function ProjectWorkspaceView({
         setMenuCapabilities(result);
         if (result.check_status === "completed" || result.check_status === "failed") {
           await onChanged();
-          await loadProject();
         }
       } catch (error) {
         if (!cancelled) setMenuCapabilitiesError(error instanceof Error ? error.message : "Не удалось обновить очередь проверки меню");
@@ -1981,27 +1974,7 @@ function ProjectWorkspaceView({
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [api, loadProject, menuCheckPending, onChanged, selectedSite]);
-
-  React.useEffect(() => {
-    if (!selectedSite || !menuCapabilities || menuCapabilities.checked_at) return;
-    if (menuCapabilities.header_menu_template_rendered != null || menuCapabilities.footer_menu_template_rendered != null) return;
-    if (automaticTemplateChecksRef.current.has(selectedSite.id)) return;
-    automaticTemplateChecksRef.current.add(selectedSite.id);
-    let cancelled = false;
-    setTemplateCapabilitiesLoading(true);
-    void api<MenuCapabilities>(`/sites/${selectedSite.id}/menu-capabilities/template-check`, { method: "POST" })
-      .then((result) => {
-        if (!cancelled) setMenuCapabilities(result);
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) setMenuCapabilitiesError(error instanceof Error ? error.message : "Не удалось проверить шаблоны меню");
-      })
-      .finally(() => {
-        if (!cancelled) setTemplateCapabilitiesLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [api, menuCapabilities, selectedSite]);
+  }, [api, menuCheckPending, onChanged, selectedSite]);
 
   React.useEffect(() => {
     const routeSite = routeProjectName ? sites.find((site) => site.name === routeProjectName) : null;
@@ -2036,7 +2009,18 @@ function ProjectWorkspaceView({
       setPromptTemplates([]);
       setLogs([]);
       setCampaigns([]);
-      setMenuCapabilities(null);
+      // Hydrate from our persisted site row while reading queue state from the DB.
+      const site = sites.find((item) => item.id === selectedSiteId);
+      setMenuCapabilities(site ? {
+        checked_at: site.menu_capabilities_checked_at,
+        header_menu_template_rendered: site.header_menu_template_rendered,
+        header_menu_rendered: site.header_menu_rendered,
+        header_menu_nested: site.header_menu_nested,
+        footer_menu_template_rendered: site.footer_menu_template_rendered,
+        footer_menu_rendered: site.footer_menu_rendered,
+        footer_menu_nested: site.footer_menu_nested,
+        check_id: null, check_status: "not_checked", check_error_code: null, check_error_message: null
+      } : null);
       setMenuCapabilitiesLoading(false);
       setTemplateCapabilitiesLoading(false);
       setMenuCapabilitiesError("");
@@ -2046,6 +2030,16 @@ function ProjectWorkspaceView({
       loadedWorkspaceTabRef.current = "";
     }
   }, [selectedSiteId, workspaceSiteStorageKey]);
+
+  // This GET only reads saved results; navigation must never start a check.
+  React.useEffect(() => {
+    if (!selectedSiteId) return;
+    let cancelled = false;
+    void api<MenuCapabilities>(`/sites/${selectedSiteId}/menu-capabilities`)
+      .then((result) => { if (!cancelled) setMenuCapabilities(result); })
+      .catch((error: unknown) => { if (!cancelled) setMenuCapabilitiesError(error instanceof Error ? error.message : "Не удалось прочитать результат проверки меню"); });
+    return () => { cancelled = true; };
+  }, [api, selectedSiteId]);
 
   React.useEffect(() => {
     if (!selectedSiteId) return;
@@ -2417,7 +2411,7 @@ function ProjectWorkspaceView({
           <WorkspaceTabPane active={activeTab === "overview"} storagePrefix={`${currentUsername}:${selectedSite.id}:overview`}>
             {overview ? <FastProjectOverviewPanel key={selectedSite.id} overview={overview} content={siteContent} sections={sections} logs={logs} /> : null}
           </WorkspaceTabPane>
-          {activeTab === "network" || activeTab === "redirects" ? <ProjectNetworkPanel key={`${selectedSite.id}:${activeTab}`} site={selectedSite} mode={activeTab} api={api} username={currentUsername} onChanged={refreshProject} /> : null}
+          {activeTab === "network" || activeTab === "redirects" ? <ProjectNetworkPanel key={selectedSite.id} site={selectedSite} mode={activeTab} api={api} username={currentUsername} onChanged={refreshProject} /> : null}
           <WorkspaceTabPane active={activeTab === "topics"} storagePrefix={`${currentUsername}:${selectedSite.id}:topics`}>
             <FastTasksView
               key={selectedSite.id}
@@ -2490,9 +2484,9 @@ function AutoFitDomain({ value }: { value: string }) {
 function MenuCapabilityCard({ label, templateRendered, rendered, nested, nestedRequired = false, icon, loading, error, onRetry }: { label: string; templateRendered: boolean | null | undefined; rendered: boolean | null | undefined; nested: boolean | null | undefined; nestedRequired?: boolean; icon: "header" | "footer"; loading: boolean; error: string; onRetry: () => void }) {
   const effectiveRendered = rendered ?? templateRendered;
   const nestedRenderingMissing = effectiveRendered === true && nestedRequired && nested === false;
-  const statusText = loading
+  const statusText = loading && effectiveRendered == null
     ? "Проверяем"
-    : error
+    : error && effectiveRendered == null
       ? "Ошибка сервера"
       : nestedRenderingMissing
         ? "Вложенность не реализована"
@@ -2509,7 +2503,7 @@ function MenuCapabilityCard({ label, templateRendered, rendered, nested, nestedR
         : nested ? "Вложенность поддерживается" : "Только один уровень"
       : templateRendered ? nested ? "Шаблон поддерживает вложенность" : "Шаблон поддерживает один уровень" : "Шаблон не содержит меню";
   return (
-    <span className={`projectMenuCapability ${error ? "isError" : nestedRenderingMissing || effectiveRendered === false ? "isMissing" : effectiveRendered === true ? "isReady" : "isChecking"}`} title={error || `${label}: ${statusText}${renderingDetails ? `. ${renderingDetails}` : ""}`}>
+    <span className={`projectMenuCapability ${error && effectiveRendered == null ? "isError" : nestedRenderingMissing || effectiveRendered === false ? "isMissing" : effectiveRendered === true ? "isReady" : "isChecking"}`} title={error || `${label}: ${statusText}${renderingDetails ? `. ${renderingDetails}` : ""}`}>
       <span className="projectMenuCapabilityHeader">
         <small>{label}</small>
         <button className="projectMenuCapabilityRetry" type="button" onClick={onRetry} disabled={loading} title={`Обновить проверку шаблона ${label}`} aria-label={`Обновить проверку шаблона ${label}`}>
@@ -8255,7 +8249,7 @@ function menuMedalStatus(
   footerRendered: boolean | null,
   headerNested: boolean | null
 ): ProjectMedalStatus {
-  if (!checkedAt || headerRendered == null) return "unchecked";
+  if (headerRendered == null) return "unchecked";
   if (!headerRendered) return "missing";
   return footerRendered === true && headerNested === true ? "gold" : "verified";
 }
