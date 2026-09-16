@@ -12,6 +12,8 @@ def test_detection_requires_clear_cached_identity():
     assert detect('Pin-Up Casino Azərbaycanda') == 'Pin-Up'
     assert detect('1xslots Casino — Official') == '1xslots'
     assert detect('1X Slots Casino') == '1xslots'
+    assert detect('Qizilbilet — rəsmi sayt') == 'Qizilbilet'
+    assert detect('Qızılbilet Casino') == 'Qizilbilet'
     assert detect('Pinco — официальный сайт') == 'Pinco'
     assert detect('Пинко казино') == 'Pinco'
     assert detect('1win – Top Sports Betting') == '1win'

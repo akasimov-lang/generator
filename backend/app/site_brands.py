@@ -10,6 +10,7 @@ BRANDS = {
     "Mostbet": ["mostbet", "most bet", "мостбет"], "Pin-Up": ["pinup", "pin-up", "pin up", "пин ап", "пинап"],
     "Pinco": ["pinco", "пинко"],
     "1xslots": ["1xslots", "1x slots"],
+    "Qizilbilet": ["qizilbilet", "qızılbilet", "qizil bilet"],
     "BetOnRed": ["betonred", "bet on red", "bet-on-red"],
     "Betwinner": ["betwinner"], "Melbet": ["melbet"], "Parimatch": ["parimatch", "pari match"],
     "22Bet": ["22bet"], "1Go": ["1go"], "Vavada": ["vavada"], "Gama": ["gama casino"],
