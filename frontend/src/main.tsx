@@ -1128,8 +1128,11 @@ function App() {
     return (
       <AuthScreen>
         <div className="loginPanel">
-          <div className="brandMark large logoMark"><BrandLogo /></div>
-          <h1>Загрузка панели</h1>
+          <div className="loginBrandRow">
+            <div className="brandMark large logoMark loginBrandLogo"><BrandLogo /></div>
+            <LoginBrandName />
+          </div>
+          <h2>Загрузка панели</h2>
           <p>{message || "Проверяем сессию и права пользователя."}</p>
           <div className="loginLoadingBar" aria-hidden="true"><span /></div>
         </div>
