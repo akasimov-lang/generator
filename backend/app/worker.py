@@ -83,6 +83,8 @@ def check_site_menu_visibility_job(check_id: str) -> dict:
         site.footer_menu_rendered = capabilities["footer_menu_rendered"]
         site.footer_menu_nested = capabilities["footer_menu_nested"]
         site.menu_capabilities_checked_at = datetime.now(timezone.utc)
+        from app.project_notices import refresh_notices
+        refresh_notices(db, [site])
         check.status = "completed"
         check.finished_at = datetime.now(timezone.utc)
         db.commit()

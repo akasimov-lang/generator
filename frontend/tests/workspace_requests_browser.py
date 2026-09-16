@@ -22,6 +22,16 @@ with sync_playwright() as p:
   elif path in ['/sites','/sites/cache/projects']:data=[site]
   elif path=='/dashboard':data={}
   elif '/favorite-sites' in path:data={'site_ids':['preview']}
+  elif path.endswith('/notices/core-update/done'):
+   assert r.request.post_data_json == {'stamp':site['core_update_notice']}
+   site['core_update_notice']=None
+   data=site
+  elif path.endswith('/menu-capabilities/check') and site.get('menu_warning'):
+   site['menu_warning']=None
+   site['header_menu_nested']=True
+   caps['header_menu_nested']=True
+   caps['check_status']='completed'
+   data=caps
   elif '/menu-capabilities' in path:data=caps
   elif path.endswith('/network'):data=network
   elif path=='/auto-reglue/projects/preview':data={'config':{'enabled':False,'scope':'mass','schedule_enabled':False,'interval_days':0,'scheme_mode':'preserve','auxiliary_hreflangs':[],'drop_domain':'','newreg_domain':'','language':'','profile_id':'','variant':'current','fake_main_path':''},'settings':{'enabled':False},'eligible':False,'geo':'CZ','templates':[],'runs':[]}
@@ -95,6 +105,28 @@ with sync_playwright() as p:
  page.reload();expect(page.get_by_text('Не проверено',exact=True)).to_have_count(2)
  page.wait_for_timeout(250)
  assert len([c for c in calls if c[0]=='POST'])==before_posts
+ # Saved notices appear even on a cold network tab, without content loading.
+ site.update(menu_warning='header_nested',core_update_notice='2026-09-16T20:00:00:item',header_menu_rendered=True,header_menu_nested=False)
+ caps.update(header_menu_rendered=True,header_menu_nested=False,check_status='completed')
+ page.reload()
+ menu_notice=page.locator('.projectMenuImplementationWarning').filter(has_text='Вложенное меню Header')
+ core_notice=page.locator('.projectCoreUpdateNotice')
+ expect(menu_notice).to_be_visible()
+ expect(core_notice).to_be_visible()
+ for label in ['Переклей','Автопереклей','Обзор','Контент и публикация','Сетка']:
+  page.locator('.workspaceTabs').get_by_role('link',name=label,exact=True).click()
+  expect(menu_notice).to_be_visible()
+  expect(core_notice).to_be_visible()
+ core_notice.get_by_role('button',name='Готово',exact=True).click()
+ expect(core_notice).to_have_count(0)
+ page.reload()
+ expect(core_notice).to_have_count(0)
+ expect(menu_notice).to_be_visible()
+ menu_notice.get_by_role('button',name='Проверить',exact=True).click()
+ expect(menu_notice).to_have_count(0)
+ page.reload()
+ expect(menu_notice).to_have_count(0)
+ expect(core_notice).to_have_count(0)
  assert not errors,errors
  print('PASS: saved legacy results; no automatic checks; one initial network read; zero extra requests across network/reglue tabs; manual check only; reload persists; unchecked stays unchecked.')
  b.close()

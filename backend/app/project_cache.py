@@ -594,6 +594,7 @@ def _confirm_published_content(db: Session, site: models.Site, project: dict[str
             continue
         item.status = "published"
         item.published_at = now
+        site.core_update_notice = now.isoformat().replace("+00:00", "") + ":" + item.id
         item.scheduled_at = None
         item.indexing_status = "queued"
         item.indexing_task_id = None

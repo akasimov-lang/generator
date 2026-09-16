@@ -231,6 +231,8 @@ type CompetitorResearch = {
 };
 
 type Site = {
+  menu_warning?: string | null;
+  core_update_notice?: string | null;
   id: string;
   name: string;
   brand?: string;
@@ -1843,8 +1845,8 @@ function ProjectWorkspaceView({
   const routeProjectName = workspaceProjectNameFromPath(window.location.pathname);
   const pendingSectionsCount = sections.filter((section) => section.sync_status === "pending").length;
   const unpublishedGeneratedContentCount = siteContent.filter((item) => Boolean(item.generated_at) && !["published", "deleted", "deletion_pending"].includes(item.status)).length;
-  const headerNestingRequired = projectRequiresHeaderNesting(sections, siteContent);
-  const headerNestingRenderingMissing = Boolean(
+  const headerNestingRequired = selectedSite?.menu_warning === "header_nested" || projectRequiresHeaderNesting(sections, siteContent);
+  const headerNestingRenderingMissing = selectedSite?.menu_warning === "header_nested" || Boolean(
     headerNestingRequired
     && menuCapabilities?.header_menu_rendered != null
     && menuCapabilities.header_menu_nested === false
@@ -2071,7 +2073,7 @@ function ProjectWorkspaceView({
   }, [projectRefreshStatus, refreshProject, selectedSite]);
 
   async function retryMenuCapabilities() {
-    if (!selectedSite || menuCapabilitiesLoading) return;
+    if (!selectedSite || menuCapabilitiesLoading || menuCheckPending) return;
     setMenuCapabilitiesLoading(true);
     setMenuCapabilitiesError("");
     try {
@@ -2284,7 +2286,7 @@ function ProjectWorkspaceView({
             {selectedSite ? <span className="projectRefreshMeta"><small title={selectedSite.cache_server_host || "Сервер не указан"}>{selectedSite.cache_server_host || "—"}</small>{projectRefreshStatus === "success" || projectRefreshStatus === "error" ? <em className={projectRefreshStatus === "success" ? "success" : ""}>Status Code: {projectRefreshResponseCode || "UNKNOWN"}</em> : null}</span> : null}
           </button>
         </div>
-        {selectedSite && selectedProjectMedalStatus === "missing" ? (
+        {selectedSite && (selectedSite.menu_warning || selectedProjectMedalStatus === "missing") ? (
           <div className="projectMenuImplementationWarning" role="status">
             <AlertTriangle size={20} />
             <div>
@@ -2293,17 +2295,18 @@ function ProjectWorkspaceView({
                 ? "В проекте есть вложенные пункты или страницы. Необходимо обратиться к веб-разработчику, чтобы реализовать рендеринг вложенного меню Header, затем повторить проверку."
                 : "Необходимо обратиться к веб-разработчику для добавления рендеринга меню на сайт."}</span>
             </div>
+            <button className="button compact" type="button" disabled={menuCapabilitiesLoading || menuCheckPending} onClick={() => void retryMenuCapabilities()}>
+              <RefreshCcw size={15} /> {menuCapabilitiesLoading || menuCheckPending ? "Проверка…" : "Проверить"}
+            </button>
           </div>
         ) : null}
         {selectedSite ? (
           <ProjectCoreUpdateNotice
             key={`${currentUsername}:${selectedSite.id}`}
             siteId={selectedSite.id}
-            username={currentUsername}
-            publicationStamp={siteContent
-              .filter((item) => item.site_id === selectedSite.id && item.status === "published")
-              .map((item) => `${item.published_at || item.generated_at || item.created_at || ""}:${item.id}`)
-              .sort().at(-1) || ""}
+            publicationStamp={selectedSite.core_update_notice || ""}
+            api={api}
+            onChanged={onChanged}
           />
         ) : null}
         {selectedSite ? (
@@ -2521,16 +2524,28 @@ function MenuReadyMedal({ tone = "green" }: { tone?: "green" | "red" | "gold" })
   );
 }
 
-function ProjectCoreUpdateNotice({ siteId, username, publicationStamp }: { siteId: string; username: string; publicationStamp: string }) {
-  const storageKey = `project_core_update_done:${username}:${siteId}`;
-  const [acknowledgedPublication, setAcknowledgedPublication] = React.useState(() => {
-    try { return window.localStorage.getItem(storageKey) || ""; } catch { return ""; }
-  });
-  if (!publicationStamp || acknowledgedPublication >= publicationStamp) return null;
+function ProjectCoreUpdateNotice({ siteId, publicationStamp, api, onChanged }: {
+  siteId: string; publicationStamp: string; api: ViewProps["api"]; onChanged: ViewProps["onChanged"];
+}) {
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [dismissed, setDismissed] = React.useState("");
+  if (!publicationStamp || dismissed === publicationStamp) return null;
 
-  function acknowledge() {
-    setAcknowledgedPublication(publicationStamp);
-    try { window.localStorage.setItem(storageKey, publicationStamp); } catch { /* Still dismiss for this session. */ }
+  async function acknowledge() {
+    setSaving(true);
+    setError("");
+    try {
+      await api(`/sites/${siteId}/notices/core-update/done`, {
+        method: "POST", body: JSON.stringify({ stamp: publicationStamp })
+      });
+      setDismissed(publicationStamp);
+      await onChanged();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Не удалось сохранить");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -2539,8 +2554,9 @@ function ProjectCoreUpdateNotice({ siteId, username, publicationStamp }: { siteI
       <div>
         <strong>Текст опубликован на сайте — требуется обновление ядра проекта</strong>
         <span>Необходимо обратиться к веб-разработчику для обновления ядра проекта.</span>
+        {error ? <span role="alert">{error}</span> : null}
       </div>
-      <button className="button compact" type="button" onClick={acknowledge}><CheckCircle2 size={15} /> Готово</button>
+      <button className="button compact" type="button" disabled={saving} onClick={acknowledge}><CheckCircle2 size={15} /> {saving ? "Сохранение…" : "Готово"}</button>
     </div>
   );
 }

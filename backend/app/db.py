@@ -37,6 +37,9 @@ def apply_lightweight_migrations() -> None:
     if "sites" in tables:
         columns = {column["name"] for column in inspector.get_columns("sites")}
         site_columns = {
+            "menu_warning": "VARCHAR(40)",
+            "core_update_notice": "VARCHAR(160)",
+            "core_update_acknowledged": "VARCHAR(160)",
             "payload_mode": "VARCHAR(40) DEFAULT 'simple_page' NOT NULL",
             "editor_version": "VARCHAR(40) DEFAULT '2.31.0' NOT NULL",
             "default_menu": "JSON DEFAULT '{\"header\":[],\"footer\":[]}'",

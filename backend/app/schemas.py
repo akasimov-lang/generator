@@ -95,6 +95,8 @@ class SiteBrandUpdate(BaseModel):
 
 
 class SiteResponse(BaseModel):
+    menu_warning: str | None = None
+    core_update_notice: str | None = None
     brand: str = "Общие ключи"
     brand_source: str = "generic"
     model_config = ConfigDict(from_attributes=True)

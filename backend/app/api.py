@@ -530,7 +530,7 @@ def validate_ai_provider(provider_id: str, _: AdminUser, db: Session = Depends(g
 
 @router.get("/sites", response_model=list[SiteResponse])
 def list_sites(_: AuthUser, db: Session = Depends(get_db)) -> Any:
-    return db.scalars(
+    sites = db.scalars(
         select(models.Site).order_by(
             models.Site.is_test_project.desc(),
             models.Site.has_menu.desc(),
@@ -538,12 +538,34 @@ def list_sites(_: AuthUser, db: Session = Depends(get_db)) -> Any:
         )
     ).all()
 
+    from app.project_notices import refresh_and_commit_notices
+    refresh_and_commit_notices(db, sites)
+    return sites
+
 
 @router.get("/sites/cache/projects", response_model=list[SiteResponse])
 def list_cached_projects(_: AuthUser, db: Session = Depends(get_db)) -> Any:
     status_order = {"test": 0, "working": 1, "mass_actions": 2, "not_in_focus": 3, "duplicate": 4}
     sites = db.scalars(select(models.Site)).all()
+    from app.project_notices import refresh_and_commit_notices
+    refresh_and_commit_notices(db, sites)
     return sorted(sites, key=lambda site: (status_order.get(site.project_status, 3), not site.has_menu, site.name.lower()))
+
+
+@router.post("/sites/{site_id}/notices/core-update/done", response_model=SiteResponse)
+def acknowledge_core_update(site_id: str, payload: dict, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+    from app.project_notices import refresh_notices
+    site = db.scalar(select(models.Site).where(models.Site.id == site_id).with_for_update())
+    if not site:
+        raise HTTPException(status_code=404, detail="Project not found")
+    refresh_notices(db, [site])
+    # A stale browser must not dismiss a newer publication.
+    if payload.get("stamp") != site.core_update_notice:
+        raise HTTPException(status_code=409, detail="Уведомление изменилось. Обновите данные проекта.")
+    site.core_update_acknowledged = site.core_update_notice
+    site.core_update_notice = None
+    db.commit()
+    return site
 
 
 @router.post("/sites", response_model=SiteResponse)
