@@ -10,6 +10,8 @@ def test_detection_requires_clear_cached_identity():
         return detect_brand(SimpleNamespace(homepage_title=title, name=name, cache_canon='drop.test'))
     assert detect('BetOnRed Casino CZ 2026') == 'BetOnRed'
     assert detect('Pin-Up Casino Azərbaycanda') == 'Pin-Up'
+    assert detect('Pinco — официальный сайт') == 'Pinco'
+    assert detect('Пинко казино') == 'Pinco'
     assert detect('1win – Top Sports Betting') == '1win'
     assert detect('Mostbet vs 1win — comparison') == GENERAL
     assert detect('Best Online Casino Australia') == GENERAL

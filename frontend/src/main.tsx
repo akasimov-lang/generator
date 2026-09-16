@@ -8236,6 +8236,13 @@ function localeCountryCode(value: string): string | null {
   return LANGUAGE_COUNTRIES[normalized] || (normalized.length === 2 ? normalized.toUpperCase() : null);
 }
 
+function siteGeoFilterCode(value: string | null | undefined): string {
+  const normalized = (value || "").trim().toUpperCase();
+  if (/^[A-Z]{2}$/.test(normalized)) return normalized;
+  const parts = normalized.split(/[-_]/).filter(Boolean);
+  return parts.length > 1 ? [...parts].reverse().find(part => /^[A-Z]{2}$/.test(part)) || normalized : normalized;
+}
+
 function localeFlag(countryCode: string | null): string {
   if (!countryCode || !/^[A-Z]{2}$/.test(countryCode)) return "";
   return String.fromCodePoint(...countryCode.split("").map((character) => 127397 + character.charCodeAt(0)));
@@ -8354,7 +8361,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
   const [managedSites, setManagedSites] = React.useState<Site[]>(sites);
   const [cacheResult, setCacheResult] = React.useState<ProjectCacheSyncResult | null>(null);
   const [searchQuery, setSearchQuery] = React.useState("");
-  const [geoFilter, setGeoFilter] = React.useState(() => storedPreferences.geoFilter || "");
+  const [geoFilter, setGeoFilter] = React.useState(() => siteGeoFilterCode(storedPreferences.geoFilter));
   const [brandFilter, setBrandFilter] = React.useState(() => storedPreferences.brandFilter || "");
   const [syncing, setSyncing] = React.useState(false);
   const [syncError, setSyncError] = React.useState("");
@@ -8532,7 +8539,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
   });
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const normalizedBrandFilter = brandFilter.trim().toLowerCase();
-  const geoOptions = Array.from(new Set(domainRows.map((row) => (row.geo || "").trim().toLowerCase()).filter(Boolean)))
+  const geoOptions = Array.from(new Set(domainRows.map((row) => siteGeoFilterCode(row.geo)).filter(Boolean)))
     .sort((left, right) => left.localeCompare(right));
   const matchesSummaryFilter = (row: (typeof domainRows)[number]) => {
     if (!summaryFilter || summaryFilter === "all") return true;
@@ -8548,7 +8555,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
     && (!medalFilter || row.medalStatus === medalFilter)
     && statusFilters.includes(row.projectStatus)
     && menuTypeFilters.includes(row.menuTypeKey)
-    && (!geoFilter || (row.geo || "").trim().toLowerCase() === geoFilter)
+    && (!geoFilter || siteGeoFilterCode(row.geo) === geoFilter)
     && (!normalizedBrandFilter || matchesProjectSearch(row.brand, normalizedBrandFilter))
     && (!normalizedQuery || [row.name, row.homepageTitle || "", row.canon, row.externalProjectId || "", row.projectStatus, ...row.domains].some((value) => matchesProjectSearch(value, normalizedQuery)))
   ));
@@ -8756,7 +8763,7 @@ function SitesView({ api, sites, currentUsername, favoritesOnly = false, readOnl
             <span>GEO</span>
             <select value={geoFilter} onChange={(event) => setGeoFilter(event.target.value)} aria-label="Фильтр сайтов по GEO">
               <option value="">Все GEO</option>
-              {geoOptions.map((geo) => <option value={geo} key={geo}>{localeFlag(localeCountryCode(geo)) || "🌐"} {geo.toUpperCase()}</option>)}
+              {geoOptions.map((geo) => <option value={geo} key={geo}>{localeFlag(geo) || "🌐"} {geo.toUpperCase()}</option>)}
             </select>
           </label>
           <label className="siteCacheFilter siteBrandFilter">
