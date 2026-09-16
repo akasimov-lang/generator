@@ -249,15 +249,15 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
         {(mode !== "network" || networkView === "main") && <div className="networkSection"><h3>Фейковые внутренние страницы</h3>
           <p>Динамические страницы: <b>{data.fake_main_enabled ? "включены" : "выключены"}</b>.</p>
           {!!data.fake_main_paths?.length ? <ul>{data.fake_main_paths.map(path => <li key={path}><a href={`https://${data.canon}${path}`} target="_blank" rel="noreferrer">{path}</a>{path === data.fake_main_current ? " — текущая" : ""}</li>)}</ul> : <p className="muted">В кеше нет фейковых внутренних страниц.</p>}
-          {!!data.fake_main_paths?.length && <>
+          {!!data.fake_main_paths?.length && <div className="networkFakeCurrent">
             <label>Текущая фейковая страница
               <select aria-label="Текущая фейковая страница" value={fakeMainSelection} onChange={event => setFakeMainSelection(event.target.value)} disabled={disabled}>
                 <option value="" disabled>Выберите страницу</option>
                 {data.fake_main_paths.map(path => <option key={path} value={path}>{path}</option>)}
               </select>
             </label>
-            <div className="networkActions"><button type="button" className="button compact secondary" disabled={disabled || !fakeMainSelection || fakeMainSelection === data.fake_main_current} onClick={() => void mutate("select_fake_main")}>{busy === "select_fake_main" ? "Сохраняем…" : "Сохранить текущую страницу"}</button></div>
-          </>}
+            <button type="button" className="button compact secondary" disabled={disabled || !fakeMainSelection || fakeMainSelection === data.fake_main_current} onClick={() => void mutate("select_fake_main")}>{busy === "select_fake_main" ? "Сохраняем…" : "Сохранить текущую страницу"}</button>
+          </div>}
           <label>Путь фейковой главной<input aria-label="Путь фейковой главной" value={fakeMainInput} onChange={e => setFakeMainInput(e.target.value)} disabled={disabled} placeholder="test1 или /events/" /></label>
           <div className="networkActions"><button type="button" className="button compact secondary" disabled={disabled || !fakeMainInput.trim() || !!data.fake_main_paths?.includes("/" + fakeMainInput.trim().replace(/^\/+|\/+$/g, "") + "/")} onClick={() => void mutate("create_fake_main")}>{busy === "create_fake_main" ? "Создаём…" : "Создать фейковую главную"}</button></div>
         </div>}

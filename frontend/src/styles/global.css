@@ -9539,3 +9539,20 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
   .guideHub .guideSection { padding: 20px 16px; }
   .guideTopicList a { padding: 14px 0; }
 }
+
+.networkFakeCurrent {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  justify-self: start;
+  width: max-content;
+  max-width: 100%;
+}
+.networkFakeCurrent label {
+  width: 0;
+  min-width: 100%;
+}
+.networkFakeCurrent > .button {
+  max-width: 100%;
+  white-space: normal;
+}
