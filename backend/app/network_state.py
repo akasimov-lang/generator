@@ -85,7 +85,18 @@ def project_network_state(project: dict) -> dict:
             item = item.get("domain") or item.get("url") or item.get("name")
         if domain := domain_name(item):
             domains.append(domain)
+    amp_values = settings.get("ampDomains", settings.get("ampList", []))
+    amp_domains = []
+    for item in amp_values if isinstance(amp_values, list) else []:
+        if isinstance(item, dict):
+            item = item.get("domain") or item.get("name") or item.get("url")
+        if domain := domain_name(item):
+            amp_domains.append(domain)
+    amp = domain_name(settings.get("amp"))
+    prev_amp = domain_name(settings.get("prevAmp"))
     return {
+        "amp": amp, "prev_amp": prev_amp,
+        "amp_domains": list(dict.fromkeys([*amp_domains, *filter(None, [amp, prev_amp])])),
         "canon": domain_name(settings.get("canon")),
         "prev": domain_name(settings.get("prev")),
         "reserve": domain_name(settings.get("reserveOption", settings.get("reserve"))),
@@ -98,6 +109,10 @@ def project_network_state(project: dict) -> dict:
 
 def observe_network(site, project: dict) -> dict:
     state = project_network_state(project)
+    settings = project.get("settings") if isinstance(project.get("settings"), dict) else {}
+    if not any(key in settings for key in ("amp", "prevAmp", "ampDomains", "ampList")):
+        for key in ("amp", "prev_amp", "amp_domains"):
+            state[key] = (site.network_state or {}).get(key, state[key])
     site.main_domain_history = list(dict.fromkeys(filter(None, [
         *(site.main_domain_history or []), domain_name(site.cache_canon), state["prev"], state["canon"],
     ])))
@@ -113,6 +128,7 @@ def observe_network(site, project: dict) -> dict:
         *(site.x_default_history or []),
         *(link["domain"] for link in links if link["hreflang"].lower() == "x-default" and link["domain"]),
     ]))
+    site.domain_types = {**(site.domain_types or {}), **{domain: "amp" for domain in state["amp_domains"]}}
     site.network_state = state
     return state
 

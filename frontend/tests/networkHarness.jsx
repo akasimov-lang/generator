@@ -2,7 +2,8 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { ProjectNetworkPanel } from "../src/ProjectNetworkPanel";
 window.calls=[];
-window.fixture={canon:'main.test',reserve:'reserve.test',domains:['main.test','reserve.test','next.test','unused.reserve.test'],revision:'revision-1',main_history:['main.test','old.test','next.test'],x_default_history:['old.test'],alternate_history:['old.test'],alternateMarkup:'<link rel="alternate" hreflang="x-default" href="https://old.test/" />',enableAlternates:true,has_head:true,alternates:[],operations:[]};
+window.fixture={canon:'main.test',reserve:'reserve.test',domains:['main.test','reserve.test','next.test','unused.reserve.test','mobile.test'],revision:'revision-1',main_history:['main.test','old.test','next.test'],x_default_history:['old.test'],alternate_history:['old.test'],alternateMarkup:'<link rel="alternate" hreflang="x-default" href="https://old.test/" />',enableAlternates:true,has_head:true,alternates:[],operations:[]};
+window.fixture.amp='mobile.test'; window.fixture.amp_domains=['mobile.test'];
 window.fixture.domain_classification={'unused.reserve.test':{is_subdomain:true,parent_domain:'reserve.test',parent_type:null,unused_as_main:true}};
 async function api(path,options={}) {
  const payload=options.body?JSON.parse(options.body):null; window.calls.push({path,payload});

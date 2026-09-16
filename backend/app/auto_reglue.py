@@ -123,7 +123,7 @@ def select_next_domain(site, state, cfg):
     parent = (cfg.drop_domain if cfg.parent_kind == 'drop' else cfg.newreg_domain).removeprefix('www.')
     if not parent:
         raise ValueError('Укажите родительский домен выбранного варианта.')
-    domains = state['domains']
+    domains = [domain for domain in state['domains'] if domain not in state.get('amp_domains', [])]
     start = domains.index(state['canon']) + 1 if state['canon'] in domains else 0
     used = {domain_name(x) for x in [*(site.main_domain_history or []), state['canon'], state.get('prev')]}
     # No wrap and no recycling of former Main domains.
@@ -134,7 +134,7 @@ def select_next_domain(site, state, cfg):
 
 
 def select_root_and_subdomain(site, state, cfg):
-    domains = state['domains']
+    domains = [domain for domain in state['domains'] if domain not in state.get('amp_domains', [])]
     start = domains.index(state['canon']) + 1 if state['canon'] in domains else 0
     used_main = {domain_name(x) for x in [*(site.main_domain_history or []), state['canon'], state.get('prev')]}
     used_children = used_main | set(getattr(site, 'alternate_domain_history', None) or [])
@@ -167,6 +167,8 @@ def select_unused_xdefault(site, state, cfg, target):
     types = getattr(site, 'domain_types', None) or {}
     required_type = 'newreg' if cfg.x_default_use_newreg else 'drop'
     for domain in state['domains']:
+        if domain in state.get('amp_domains', []):
+            continue
         bare = root_name(domain)
         if not bare or any(value == bare or value.endswith('.' + bare) for value in used) or types.get(domain) != required_type:
             continue
@@ -214,6 +216,8 @@ def build_plan(site, state, global_cfg, cfg):
                      else cfg.x_default_newreg_domain if cfg.x_default_use_newreg else cfg.drop_domain)
     if not x_default:
         raise ValueError('Укажите новорег для x-default.' if cfg.x_default_use_newreg else 'Укажите дроп для x-default.')
+    if any(domain in state.get('amp_domains', []) for domain in (target, language_host, x_default)):
+        raise ValueError('AMP-домены не участвуют в автопереклеях, включая альтернейты и x-default.')
     known_type = (getattr(site, 'domain_types', None) or {}).get(x_default)
     if known_type == 'newreg' and not cfg.x_default_use_newreg:
         raise ValueError('Домен x-default отмечен как новорег. Включите разрешение новорега в x-default.')
@@ -342,6 +346,8 @@ def execute(db, run_id):
                     if existing.status == 'confirmed': continue
                     if existing.status == 'failed': raise ValueError(existing.message or 'Ошибка Webdev.')
                     run.status = 'waiting'; run.message = 'Ожидается подтверждение Webdev. Проверяем результат чтением настроек без повторной записи.'; db.commit(); return
+                if any(plan.get(key) in state.get('amp_domains', []) for key in ('new_main', 'language_domain', 'x_default_domain')):
+                    raise ValueError('Домен плана теперь относится к AMP. Переклей остановлен.')
                 expected = plan['new_main'] if action == 'alternates' else plan['old_main']
                 if state['canon'] != expected: raise ValueError('Canonical изменился вне этого запуска. Проверьте сетку.')
                 run.phase = action; db.commit()

@@ -313,3 +313,25 @@ def test_delete_domain_guards_and_terminal_job_failure(env, monkeypatch):
     assert result['operations'][0]['status'] == 'failed'
     assert result['operations'][0]['message'] == 'permission denied'
     assert 'next.test' in result['domains']
+
+
+def test_amp_cache_and_partial_events(env):
+    db, site, remote = env
+    remote.data["settings"].update(amp="mobile.test", prevAmp="previous.test", ampDomains=["mobile.test", "previous.test"], ampList=["mobile.test"])
+    state = network.read_network(db, site)
+    assert state["amp_domains"] == ["mobile.test", "previous.test"]
+    assert site.domain_types["mobile.test"] == "amp"
+    observe_network(site, {"settings": {"canon": "main.test", "domains": ["main.test"]}})
+    assert site.network_state["amp_domains"] == ["mobile.test", "previous.test"]
+    observe_network(site, {"settings": {"ampDomains": [], "amp": "", "prevAmp": ""}})
+    assert site.network_state["amp_domains"] == []
+
+
+def test_amp_cannot_be_reserve_or_reglue(env):
+    db, site, remote = env
+    remote.data["settings"].update(amp="next.test", ampDomains=["next.test"])
+    for action in ["reserve", "reglue"]:
+        state = network.read_network(db, site)
+        with pytest.raises(ValueError, match="AMP"):
+            network.change_network(db, site, network.NetworkChange(request_id=uuid4(), action=action, revision=state["revision"], domain="next.test"), "admin")
+    assert not remote.calls

@@ -44,7 +44,7 @@ def apply_brand_domain_types(site, *, aliases=None, overwrite_drops=False):
             continue
         brand = max(matches)[1]
         old = types.get(domain)
-        if old == "newreg" or old == "drop" and not overwrite_drops:
+        if old in {"newreg", "amp"} or old == "drop" and not overwrite_drops:
             continue
         types[domain] = "newreg"
         changes.append({"project": site.name, "domain": domain, "brand": brand, "before": old, "after": "newreg"})

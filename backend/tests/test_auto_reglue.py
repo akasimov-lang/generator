@@ -461,3 +461,21 @@ def test_once_default_all_mass_projects_personal_excluded_and_no_repeats(monkeyp
         runs = db.scalars(select(models.AutoReglueRun)).all()
         assert {r.site_id for r in runs} == {original.id, second.id}
         assert all(auto.next_scheduled_at(db, site) is None for site in [original, second, personal])
+
+
+def test_amp_excluded_from_next_main_and_fixed_xdefault():
+    site,state,global_cfg,cfg=fixture()
+    state['amp_domains']=['next.clubheavenjax.com']
+    assert auto.build_plan(site,state,global_cfg,cfg)['new_main']=='last.clubheavenjax.com'
+    state['amp_domains'].append('clubheavenjax.com')
+    with pytest.raises(ValueError,match='AMP'):
+        auto.build_plan(site,state,global_cfg,cfg)
+
+
+def test_amp_excluded_from_root_child_and_unused_xdefault():
+    site,state,global_cfg,cfg=fixture()
+    site.domain_types={'amp.test':'drop','clean.test':'drop','last.test':'drop'}
+    state['domains']=[state['canon'],'amp.test','child.amp.test','clean.test','amp.clean.test','child.clean.test','last.test']
+    state['amp_domains']=['amp.test','amp.clean.test']
+    assert auto.select_root_and_subdomain(site,state,cfg)==('clean.test','child.clean.test')
+    assert auto.select_unused_xdefault(site,state,cfg,'next.clubheavenjax.com')=='clean.test'

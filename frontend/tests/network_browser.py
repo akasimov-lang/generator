@@ -16,6 +16,7 @@ with sync_playwright() as p:
   print('FIXTURE',page.evaluate('({fixture:window.fixture,calls:window.calls,html:document.getElementById("root")?.innerHTML})'),flush=True)
   page.screenshot(path=str(artifacts / 'failure.png'),full_page=True)
   raise
+ expect(page.get_by_label('Домен для переклея',exact=True).locator('option[value="mobile.test"]')).to_have_count(0)
  launch=page.get_by_role('button',name='Переклеить на резервный домен',exact=True)
  expect(launch).to_be_disabled()
  page.get_by_label('Домен для переклея',exact=True).select_option('next.test')
@@ -37,6 +38,15 @@ with sync_playwright() as p:
  page.wait_for_timeout(500)
  assert page.locator('.networkTable').evaluate('(e)=>e.getBoundingClientRect().width < e.parentElement.clientWidth')
  assert page.locator('.networkTable tbody tr').first.evaluate('(e)=>e.getBoundingClientRect().height <= 36')
+ expect(page.get_by_role('button',name='Основная сетка',exact=True)).to_have_attribute('aria-pressed','true')
+ expect(page.locator('.networkTable').get_by_text('mobile.test',exact=True)).to_have_count(0)
+ calls_before=page.evaluate('window.calls.length')
+ page.get_by_role('button',name='Ампы',exact=True).click()
+ expect(page.get_by_role('button',name='Ампы',exact=True)).to_have_attribute('aria-pressed','true')
+ expect(page.locator('.networkTable').get_by_text('mobile.test',exact=True)).to_be_visible()
+ expect(page.locator('.networkTable').get_by_text('main.test',exact=True)).to_have_count(0)
+ page.get_by_role('button',name='Основная сетка',exact=True).click()
+ assert page.evaluate('window.calls.length') == calls_before
  domain_type=page.get_by_label('Тип домена main.test',exact=True)
  domain_type.select_option('drop')
  expect(domain_type).to_have_value('drop')

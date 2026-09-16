@@ -26,7 +26,7 @@ def classify_domains(domains, domain_types, main_history=(), canon=""):
         result[domain] = {
             "is_subdomain": parent is not None,
             "parent_domain": parent,
-            "parent_type": kind if kind in {"drop", "newreg"} else None,
+            "parent_type": kind if kind in {"drop", "newreg", "amp"} else None,
             "unused_as_main": bare[domain] not in used,
         }
     return result
@@ -49,8 +49,8 @@ def apply_default_domain_types(site):
         target = role["parent_domain"] if role["is_subdomain"] else domain
         bare = target.removeprefix("www.")
         aliases = (target, bare, "www." + bare)
-        existing = next((types[key] for key in aliases if types.get(key) in {"drop", "newreg"}), None)
-        if types.get(target) in {"drop", "newreg"}:
+        existing = next((types[key] for key in aliases if types.get(key) in {"drop", "newreg", "amp"}), None)
+        if types.get(target) in {"drop", "newreg", "amp"}:
             continue
         kind = existing or default_domain_type(target)
         types[target] = kind
@@ -63,7 +63,7 @@ def apply_default_domain_types(site):
 def backfill_default_domain_types(db):
     from sqlalchemy import select
     from app.models import Site
-    counts = {"projects": 0, "drop": 0, "newreg": 0}
+    counts = {"projects": 0, "drop": 0, "newreg": 0, "amp": 0}
     for site in db.scalars(select(Site).order_by(Site.id).with_for_update()):
         changes = apply_default_domain_types(site)
         counts["projects"] += bool(changes)

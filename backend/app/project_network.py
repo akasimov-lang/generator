@@ -181,6 +181,8 @@ def require_domain(state, value):
     domain = domain_name(value)
     if not domain or domain not in state["domains"]:
         raise ValueError("Выберите резервный домен из текущей сетки.")
+    if domain in state.get("amp_domains", []):
+        raise ValueError("AMP-домены не участвуют в переклеях и не могут быть резервом.")
     if domain == state["canon"]:
         raise ValueError("Текущий Main нельзя выбрать резервом.")
     return domain
@@ -295,9 +297,9 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
             if domain not in state["domains"]:
                 raise ValueError("Домен отсутствует в актуальной сетке проекта.")
             bare = domain.removeprefix("www.")
-            protected = {domain_name(value).removeprefix("www.") for value in [site.name, state["canon"], state["reserve"]]}
+            protected = {domain_name(value).removeprefix("www.") for value in [site.name, state["canon"], state["reserve"], state.get("amp", "")]}
             if bare in protected:
-                raise ValueError("Нельзя удалить домен проекта, текущий Main или резерв. Сначала измените назначение домена.")
+                raise ValueError("Нельзя удалить домен проекта, текущий Main, AMP или резерв. Сначала измените назначение домена.")
             markup = state["alternateMarkup"].replace("{{settings.canon}}", state["canon"])
             if any(link["domain"].removeprefix("www.") == bare for link in alternate_links(markup)):
                 raise ValueError("Домен используется в альтернейтах. Сначала измените разметку.")
@@ -378,6 +380,8 @@ def update_domain_type(db, site, payload):
         known.add(domain_name(site.cache_canon))
     if domain not in known:
         raise ValueError("Домен отсутствует в сохранённой сетке и истории проекта.")
+    if domain in (site.network_state or {}).get("amp_domains", []) or (site.domain_types or {}).get(domain) == "amp":
+        raise ValueError("Тип AMP определяется настройками проекта и не меняется вручную.")
     site.domain_types = {**(site.domain_types or {}), domain: payload.domain_type}
     db.commit()
     return {"domain_types": site.domain_types, "domain_classification": classify_domains(site.cache_domains or [], site.domain_types, site.main_domain_history or [], site.cache_canon or "")}
