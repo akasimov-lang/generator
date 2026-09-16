@@ -797,3 +797,37 @@ def test_mass_status_is_permission_without_project_enabled_or_saved_config():
         assert not auto.schedule_eligible(site, g, cfg)
         with pytest.raises(ValueError, match='Массовые действия'):
             auto.require_eligible(site, g, cfg)
+
+
+def test_explicit_project_launch_ignores_global_rules_and_does_not_enable_schedule(monkeypatch):
+    sessions, old_run_id, calls, state = setup_run(monkeypatch)
+    with sessions() as db:
+        old = db.get(models.AutoReglueRun, old_run_id); old.status = 'cancelled'
+        site = db.get(models.Site, old.site_id); site.project_status = 'working'; db.commit()
+        cfg = auto.config(db, site.id); cfg.enabled = False; cfg.schedule_enabled = False; cfg.scheme_mode = 'preserve'
+        auto.save_config(db, cfg, site.id)
+        g = auto.GlobalConfig(enabled=False, apply_domain_settings=True, scheme_mode='base_only', domain_settings=auto.DomainOptions(domain_layout='root_main', create_subdomains=True))
+        auto.save_config(db, g)
+        plan = auto.preview(db, site, 'project')
+        assert plan['launch_scope'] == 'project' and plan['scope'] == 'personal'
+        assert plan['scheme_mode'] == 'preserve' and plan['domain_layout'] == 'subdomain_main'
+        assert plan['create_subdomain'] is None
+        g.scheme_mode = 'add_auxiliary'; auto.save_config(db, g)
+        assert auto.preview(db, site, 'project')['preview_token'] == plan['preview_token']
+        run, fresh = auto.prepare_run(db, site, uuid4(), plan['preview_token'], 'admin', 'project')
+        assert fresh
+        auto.execute(db, run.id)
+        assert db.get(models.AutoReglueRun, run.id).status == 'completed'
+        assert auto.config(db, site.id) == cfg
+        assert auto.next_scheduled_at(db, site) is None
+    assert calls == ['reserve', 'reglue', 'alternates']
+
+
+def test_project_preview_cannot_be_used_for_mass_launch(monkeypatch):
+    sessions, run_id, _, _ = setup_run(monkeypatch)
+    with sessions() as db:
+        run = db.get(models.AutoReglueRun, run_id); run.status = 'cancelled'; db.commit()
+        site = db.get(models.Site, run.site_id)
+        plan = auto.preview(db, site, 'project')
+        with pytest.raises(auto.project_network.NetworkConflict, match='предпросмотра'):
+            auto.prepare_run(db, site, uuid4(), plan['preview_token'], 'admin', 'mass')

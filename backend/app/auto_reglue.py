@@ -323,9 +323,26 @@ def build_plan(site, state, global_cfg, cfg):
     return plan
 
 
-def preview(db, site):
+def execution_config(db, site_id, launch_scope=None):
+    cfg = config(db, site_id)
+    if launch_scope == 'project':
+        # Explicit project launch uses local rules without enabling its schedule.
+        cfg = cfg.model_copy(update={'scope': 'personal', 'enabled': True})
+    return cfg
+
+
+def launch_plan(db, site, state, launch_scope=None):
+    plan = build_plan(site, state, config(db), execution_config(db, site.id, launch_scope))
+    if launch_scope == 'project':
+        plan['launch_scope'] = 'project'
+        plan.pop('preview_token')
+        plan['preview_token'] = digest(plan)
+    return plan
+
+
+def preview(db, site, launch_scope=None):
     state = project_network.read_network(db, site)
-    return build_plan(site, state, config(db), config(db, site.id))
+    return launch_plan(db, site, state, launch_scope)
 
 
 def active_run(db, site_id):
@@ -344,7 +361,7 @@ def prepare_run(db, site, request_id, token, username, scope=None):
     if existing:
         if existing.site_id != site.id: raise ValueError('Этот запуск принадлежит другому проекту.')
         return existing, False
-    plan = preview(db, site)
+    plan = preview(db, site, 'project') if scope == 'project' else preview(db, site)
     if plan['preview_token'] != token:
         raise project_network.NetworkConflict('Состояние изменилось после предпросмотра. Подготовьте план снова.')
     with project_network.network_lock(db, site.id):
@@ -375,13 +392,13 @@ def execute(db, run_id):
         plan = run.plan
         try:
             if not site: raise ValueError('Проект не найден.')
-            cfg = config(db, site.id)
+            cfg = execution_config(db, site.id, plan.get('launch_scope'))
             if plan.get('scope', 'mass') != cfg.scope: raise ValueError('Режим участия изменился; запуск остановлен.')
             require_eligible(site, config(db), cfg)
             if plan.get('scheduled') and not effective_config(config(db), cfg).schedule_enabled: raise ValueError('Расписание выключено.')
             state = project_network.read_network(db, site)
             if run.phase == 'prepared':
-                current = build_plan(site, state, config(db), config(db, site.id))
+                current = launch_plan(db, site, state, plan.get('launch_scope'))
                 if current['preview_token'] != plan['preview_token']: raise ValueError('Состояние изменилось до начала запуска. Нужен новый предпросмотр.')
                 if not plan.get('create_subdomain') and not plan.get('create_fake_main_path'):
                     verify_pages(plan['required_page_urls'])
@@ -436,7 +453,7 @@ def execute(db, run_id):
                 db.refresh(run)
                 if run.status == 'cancelled': return
                 db.refresh(site)
-                cfg = config(db, site.id)
+                cfg = execution_config(db, site.id, plan.get('launch_scope'))
                 if plan.get('scope', 'mass') != cfg.scope: raise ValueError('Режим участия изменился; запуск остановлен.')
                 require_eligible(site, config(db), cfg)
                 if plan.get('scheduled') and not effective_config(config(db), cfg).schedule_enabled: raise ValueError('Расписание выключено.')

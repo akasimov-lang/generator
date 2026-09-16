@@ -96,8 +96,8 @@ def save_project(site_id: str, payload: auto.ProjectConfig, _: AdminUser, db: Se
 
 
 @router.post('/projects/{site_id}/preview')
-def preview(site_id: str, _: AdminUser, db: Session = Depends(get_db)):
-    return call(auto.preview,db,site_or_404(db,site_id))
+def preview(site_id: str, _: AdminUser, db: Session = Depends(get_db), scope: Literal['mass', 'project'] = 'mass'):
+    return call(auto.preview,db,site_or_404(db,site_id),scope)
 
 
 class StartItem(BaseModel):

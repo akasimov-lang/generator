@@ -110,11 +110,11 @@ function ProjectConfigEditor({ siteId, api }: { siteId: string; api: Api }) {
     next.scope = next.schedule_enabled ? "personal" : "mass";
     setDraft(next); setPlan(null);
   };
-  const baseOnly = (draft.scope === "personal" ? draft.scheme_mode : data.settings.scheme_mode) === "base_only";
+  const baseOnly = draft.scheme_mode === "base_only";
   const template = data.templates.find(t => t.id === draft.profile_id);
   return <div className="autoReglueSettings">{error && <div className="notice" role="alert">{error}</div>}
     <p>GEO проекта: <b>{data.geo || "не задано"}</b>. Допуск: {draft.scope === "personal" ? "Персональные настройки" : data.eligible ? "Массовые действия" : "нужен статус «Массовые действия»"}.</p>
-    {draft.scope !== "personal" && !data.settings.enabled && <p className="notice">Включите общие настройки в разделе «Автопереклей».</p>}
+    {draft.scope !== "personal" && !data.settings.enabled && <p className="notice">Глобальный автопереклей выключен. Запуск из настроек этого проекта доступен отдельно и использует только его собственные правила.</p>}
     <label className="checkboxRow"><input type="checkbox" checked={draft.scope === "personal"} onChange={e => change({ scope: e.target.checked ? "personal" : "mass" })} /> Персональный автопереклей — исключить проект из массовых запусков</label>
     {draft.scope === "personal" && <p className="notice">Персональное расписание имеет приоритет: проект исключён из глобальных запусков. Выключение персонального расписания после сохранения возвращает проект в массовый запуск при статусе «Массовые действия». Собственные настройки сохраняются.</p>}
     {draft.scope === "personal" ? <label className="checkboxRow"><input type="checkbox" checked={draft.enabled} onChange={e => change({ enabled: e.target.checked })} /> Участвует в автопереклеях</label> : <p className="muted">Участие в массовом запуске разрешает статус «Массовые действия». Отдельное разрешение внутри проекта не требуется.</p>}
@@ -157,8 +157,9 @@ function ProjectConfigEditor({ siteId, api }: { siteId: string; api: Api }) {
     <AutomationRules key="personal-rules" value={draft} onChange={change} pool={data.language_pool || []} />
     {data.next_run_at && <p>Следующий запуск: <b>{new Date(data.next_run_at).toLocaleString("ru-RU")}</b></p>}
     {draft.domain_layout !== "root_main" && !draft.create_subdomains && <p className="muted">Берём следующий поддомен после текущего Main по порядку сетки, пропуская все бывшие Main. Дополнительные языки сохраняем, их адреса переносим на новый Main. x-default определяется выбранным режимом: в базовой схеме — неиспользованный домен сетки. Фейковый путь добавляется только в отдельно выбранном режиме; без него используются корневые URL.</p>}
+    <p className="muted">Запуск из настроек проекта выполняет автопереклей по сохранённым правилам этого проекта. Глобальные правила и расписание не применяются; этот запуск не включает расписание.</p>
     <div className="networkActions"><button className="button secondary" disabled={busy || !dirty} onClick={() => void perform(async () => { const saved = await api<Config>(`/auto-reglue/projects/${siteId}`, body("PUT", draft)); setDraft(saved); setPlan(null); await load(); })}>Сохранить настройки</button>
-      <button className="button secondary" disabled={busy || dirty || !(data.eligible || draft.scope === "personal") || (draft.scope === "personal" && !draft.enabled) || (draft.scope !== "personal" && !data.settings.enabled) || pending} onClick={() => void perform(async () => { const next = await api<Plan>(`/auto-reglue/projects/${siteId}/preview`, { method: "POST" }); setPlan({ ...next, requestId: crypto.randomUUID() }); })}>Подготовить переклей</button></div>
+      <button className="button secondary" disabled={busy || dirty || pending} onClick={() => void perform(async () => { const next = await api<Plan>(`/auto-reglue/projects/${siteId}/preview?scope=project`, { method: "POST" }); setPlan({ ...next, requestId: crypto.randomUUID() }); })}>Подготовить переклей</button></div>
     {plan && <><PlanPreview plan={plan} /><button className="button primary" disabled={busy || dirty || pending} onClick={() => void perform(async () => { const result = await api<{ results: { error?: string }[] }>("/auto-reglue/start", body("POST", { scope: "project", items: [{ site_id: siteId, preview_token: plan.preview_token, request_id: plan.requestId }] })); if (result.results[0]?.error) throw new Error(result.results[0].error); setPlan(null); await load(); })}>Запустить автопереклей проекта</button></>}
     <Runs runs={data.runs} api={api} refresh={load} />
   </div>;
