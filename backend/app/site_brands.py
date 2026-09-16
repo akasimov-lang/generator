@@ -9,6 +9,7 @@ BRANDS = {
     "1win": ["1win", "1 win"], "1xBet": ["1xbet", "1x bet"],
     "Mostbet": ["mostbet", "most bet", "мостбет"], "Pin-Up": ["pinup", "pin-up", "pin up", "пин ап", "пинап"],
     "Pinco": ["pinco", "пинко"],
+    "Pelican": ["pelican"],
     "1xslots": ["1xslots", "1x slots"],
     "Qizilbilet": ["qizilbilet", "qızılbilet", "qizil bilet"],
     "BetOnRed": ["betonred", "bet on red", "bet-on-red"],
