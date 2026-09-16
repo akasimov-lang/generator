@@ -44,7 +44,7 @@ def test_exhaustion_does_not_recycle_or_wrap():
     with pytest.raises(ValueError,match='нет неиспользованного'):auto.build_plan(site,state,g,cfg)
 
 
-def setup_run(monkeypatch, unknown_action=None, create=False):
+def setup_run(monkeypatch, unknown_action=None, create=False, fake=False):
     client,sessions=make_client()
     _,state,g,cfg=fixture()
     with sessions() as db:
@@ -53,6 +53,7 @@ def setup_run(monkeypatch, unknown_action=None, create=False):
             cfg.create_subdomains=True; cfg.subdomain_name_style='joined'
             site.brand='Pinco'; site.domain_types={'clubheavenjax.com':'drop'}
             state['domains'].append('clubheavenjax.com'); site.cache_domains=list(state['domains']); db.commit()
+        cfg.create_fake_main=fake
         auto.save_config(db,g);auto.save_config(db,cfg,site.id)
         plan=auto.build_plan(site,state,g,cfg)
         run=models.AutoReglueRun(id=str(uuid4()),site_id=site.id,initiator='admin',plan=plan,status='queued',phase='prepared');db.add(run);db.commit();run_id=run.id
@@ -60,7 +61,9 @@ def setup_run(monkeypatch, unknown_action=None, create=False):
     def read(db,site):return dict(state,revision=state_revision(state))
     def change(db,site,payload,username,**kwargs):
         calls.append(payload.action)
-        if payload.action=='create_subdomains': pass
+        if payload.action=='create_fake_main':
+            state['fake_main_paths']=[payload.fake_main_path];state['fake_main_enabled']=True
+        elif payload.action=='create_subdomains': pass
         elif payload.action=='reserve':state['reserve']=payload.domain
         elif payload.action=='reglue':state['canon']=payload.domain
         else:state['alternateMarkup']=payload.alternate_markup
@@ -613,3 +616,31 @@ def test_global_domain_rules_saved_and_default_opt_out():
         assert saved.domain_settings.parent_kind=='newreg'
         assert saved.domain_settings.create_subdomains
         assert saved.domain_settings.subdomain_name_style=='joined'
+
+
+def test_auto_fake_main_waits_and_never_resends(monkeypatch):
+    sessions,run_id,calls,state=setup_run(monkeypatch,'create_fake_main',fake=True)
+    with sessions() as db:
+        auto.execute(db,run_id);auto.execute(db,run_id)
+        assert calls==['create_fake_main']
+        run=db.get(models.AutoReglueRun,run_id)
+        assert run.status=='waiting'
+        receipt=str(uuid5(UUID(run_id),'create_fake_main'))
+        db.get(models.NetworkOperation,receipt).status='confirmed';db.commit()
+        auto.execute(db,run_id);auto.execute(db,run_id)
+        assert calls==['create_fake_main','reserve','reglue','alternates']
+        assert run.status=='completed'
+
+
+def test_fake_page_then_subdomain_then_reglue(monkeypatch):
+    sessions,run_id,calls,state=setup_run(monkeypatch,'create_subdomains',create=True,fake=True)
+    with sessions() as db:
+        auto.execute(db,run_id); auto.execute(db,run_id)
+        assert calls==['create_fake_main','create_subdomains']
+        run=db.get(models.AutoReglueRun,run_id)
+        state['domains'].append(run.plan['create_subdomain'])
+        receipt=str(uuid5(UUID(run_id),'create_subdomains'))
+        db.get(models.NetworkOperation,receipt).status='confirmed';db.commit()
+        auto.execute(db,run_id)
+        assert calls==['create_fake_main','create_subdomains','reserve','reglue','alternates']
+        assert run.status=='completed'

@@ -14,6 +14,7 @@ from sqlalchemy import select
 
 from app import models, project_network
 from app.subdomain_naming import next_subdomain
+from app.fake_main import normalize_fake_path
 from app.domain_classification import classify_domains
 from app.alternate_templates import template_catalog
 from app.alternate_language_pool import default_language_pool
@@ -27,6 +28,7 @@ class DomainOptions(BaseModel):
     domain_layout: Literal['subdomain_main', 'root_main'] = 'subdomain_main'
     parent_kind: Literal['drop', 'newreg'] = 'drop'
     create_subdomains: bool = False
+    create_fake_main: bool = False
     subdomain_add_casino: bool = False
     subdomain_name_style: Literal['mixed', 'joined', 'hyphen'] = 'mixed'
     x_default_use_newreg: bool = False
@@ -69,6 +71,7 @@ class ProjectConfig(BaseModel):
     x_default_newreg_domain: str = Field(default='', max_length=253)
     parent_kind: Literal['drop', 'newreg'] = 'drop'
     create_subdomains: bool = False
+    create_fake_main: bool = False
     subdomain_add_casino: bool = False
     subdomain_name_style: Literal["mixed", "joined", "hyphen"] = "mixed"
     newreg_domain: str = Field(default='', max_length=253)
@@ -271,6 +274,8 @@ def build_plan(site, state, global_cfg, cfg):
     regional_path = cfg.fake_main_path or (urlsplit(regional_link['href']).path if regional_link else '')
     if not regional_path or regional_path == '/':
         raise ValueError('Укажите путь внутренней копии главной для альтернейта язык-GEO, например /events/.')
+    if cfg.create_fake_main:
+        regional_path = normalize_fake_path(regional_path)
     links[regional.lower()] = {'hreflang': regional, 'href': f'https://{language_host}{regional_path}'}
     if global_cfg.scheme_mode == 'base_only':
         links = {language: links[language], regional.lower(): links[regional.lower()]}
@@ -283,7 +288,7 @@ def build_plan(site, state, global_cfg, cfg):
     links['x-default'] = {'hreflang': 'x-default', 'href': f'https://{x_default}/'}
     markup = '\n'.join(f'<link rel="alternate" hreflang="{escape(x["hreflang"], quote=True)}" href="{escape(x["href"], quote=True)}" />' for x in links.values())
     validate_markup(markup)
-    plan = {'create_subdomain': language_host if cfg.create_subdomains else None, 'site_id': site.id, 'project': site.name, 'geo': geo, 'old_main': state['canon'], 'new_main': target,
+    plan = {'create_fake_main_path': regional_path if cfg.create_fake_main else None, 'create_subdomain': language_host if cfg.create_subdomains else None, 'site_id': site.id, 'project': site.name, 'geo': geo, 'old_main': state['canon'], 'new_main': target,
             'drop_domain': cfg.drop_domain, 'domain_layout': cfg.domain_layout, 'language_domain': language_host, 'x_default_domain': x_default, 'x_default_use_newreg': cfg.x_default_use_newreg, 'parent_kind': cfg.parent_kind, 'scope': cfg.scope, 'scheme_mode': global_cfg.scheme_mode, 'alternateMarkup': markup,
             'required_page_urls': list(dict.fromkeys(x['href'] for x in links.values() if '{{reqPath}}' not in x['href'] and urlsplit(x['href']).path not in {'', '/'})),
             'added_hreflang': added_hreflang, 'pool_exhausted': global_cfg.scheme_mode == 'add_auxiliary' and added_hreflang is None,
@@ -354,9 +359,32 @@ def execute(db, run_id):
             if run.phase == 'prepared':
                 current = build_plan(site, state, config(db), config(db, site.id))
                 if current['preview_token'] != plan['preview_token']: raise ValueError('Состояние изменилось до начала запуска. Нужен новый предпросмотр.')
-                if not plan.get('create_subdomain'):
+                if not plan.get('create_subdomain') and not plan.get('create_fake_main_path'):
                     verify_pages(plan['required_page_urls'])
-            if plan.get('create_subdomain') and run.phase in {'prepared', 'create_subdomains', 'subdomain_ready'}:
+            if plan.get('create_fake_main_path') and run.phase in {'prepared', 'create_fake_main', 'fake_main_ready'}:
+                fake_path = plan['create_fake_main_path']
+                receipt = str(uuid5(UUID(run.id), 'create_fake_main'))
+                existing = db.get(models.NetworkOperation, receipt)
+                if not existing and (fake_path not in state.get('fake_main_paths', []) or not state.get('fake_main_enabled')):
+                    if state['canon'] != plan['old_main']:
+                        raise ValueError('Canonical изменился до создания фейковой страницы.')
+                    run.phase = 'create_fake_main'; run.status = 'running'; db.commit()
+                    payload = project_network.NetworkChange(request_id=UUID(receipt), action='create_fake_main', revision=state['revision'], fake_main_path=fake_path)
+                    project_network.change_network(db, site, payload, run.initiator, auto_run_id=run.id)
+                    existing = db.get(models.NetworkOperation, receipt)
+                if existing:
+                    db.refresh(existing)
+                    if existing.status == 'failed': raise ValueError(existing.message or 'Ошибка создания фейковой страницы.')
+                    if existing.status != 'confirmed':
+                        run.status = 'waiting'; run.message = 'Ждём подтверждения фейковой страницы без повторной отправки.'; db.commit(); return
+                run.phase = 'fake_main_ready'; db.commit()
+                if not plan.get('create_subdomain'):
+                    try:
+                        verify_pages(plan['required_page_urls'])
+                    except (httpx.HTTPError, ValueError):
+                        run.status = 'waiting'; run.message = 'Фейковая страница сохранена. Ждём её доступности до смены Main.'; db.commit(); return
+                state = project_network.read_network(db, site)
+            if plan.get('create_subdomain') and run.phase in {'prepared', 'fake_main_ready', 'create_subdomains', 'subdomain_ready'}:
                 target = plan['create_subdomain']
                 receipt = str(uuid5(UUID(run.id), 'create_subdomains'))
                 existing = db.get(models.NetworkOperation, receipt)

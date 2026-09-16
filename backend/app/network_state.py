@@ -3,6 +3,7 @@ import hashlib
 import json
 import re
 from html.parser import HTMLParser
+from app.fake_main import fake_paths
 from urllib.parse import urlsplit
 
 
@@ -94,7 +95,12 @@ def project_network_state(project: dict) -> dict:
             amp_domains.append(domain)
     amp = domain_name(settings.get("amp"))
     prev_amp = domain_name(settings.get("prevAmp"))
+    alternate = settings.get("alternate") if isinstance(settings.get("alternate"), dict) else {}
     return {
+        "fake_main_settings": alternate,
+        "fake_main_paths": fake_paths(alternate),
+        "fake_main_current": alternate.get("currentFakeMain") or "",
+        "fake_main_enabled": bool(alternate.get("enableDynamicRoutes")),
         "amp": amp, "prev_amp": prev_amp,
         "amp_domains": list(dict.fromkeys([*amp_domains, *filter(None, [amp, prev_amp])])),
         "canon": domain_name(settings.get("canon")),
@@ -112,6 +118,9 @@ def observe_network(site, project: dict) -> dict:
     settings = project.get("settings") if isinstance(project.get("settings"), dict) else {}
     if not any(key in settings for key in ("amp", "prevAmp", "ampDomains", "ampList")):
         for key in ("amp", "prev_amp", "amp_domains"):
+            state[key] = (site.network_state or {}).get(key, state[key])
+    if "alternate" not in settings:
+        for key in ("fake_main_settings", "fake_main_paths", "fake_main_current", "fake_main_enabled"):
             state[key] = (site.network_state or {}).get(key, state[key])
     site.main_domain_history = list(dict.fromkeys(filter(None, [
         *(site.main_domain_history or []), domain_name(site.cache_canon), state["prev"], state["canon"],

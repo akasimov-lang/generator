@@ -270,3 +270,20 @@ subdomain_name_style, x_default_use_newreg. При включении перео
 эти поля массовых проектов в build_plan, включая планирование по расписанию.
 Персональные проекты не наследуют их. Адреса/язык/профиль/путь остаются проектными.
 Настройки проектов в БД не перезаписываются. Общие параметры участвуют в preview hash.
+
+
+## Фейковые главные / внутренние страницы
+Источник: settings.alternate.fakeMain (пути), currentFakeMain,
+enableDynamicRoutes, redirectFakeMainsToCurrent. Это динамические копии главной.
+Создание через POST сервера /projects/update-value:
+{folder: project, alternate: {...existingAlternate, fakeMain: [...existingPaths, "/test1/"], enableDynamicRoutes: true}}.
+currentFakeMain сохраняется; если отсутствует, устанавливается новый путь. Остальные
+поля alternate сохраняются. При редиректе на другой currentFakeMain запись запрещена.
+Проверяется конфликт с data.pages[].slug. Пути нормализуются, URL/параметры запрещены.
+NetworkChange action=create_fake_main, fake_main_path; UUID receipt и revision,
+подтверждение по перечитанным settings.alternate. HTTP200 страницы проверяется отдельно.
+Кеш network_state хранит fake_main_paths/settings/current/enabled; UI выводит список
+под блоком альтернейтов в Сетке/Переклее. Ручное создание не меняет head/canonical.
+ProjectConfig/DomainOptions.create_fake_main defaultfalse. В автоплане сохраняется
+create_fake_main_path из пути альтернейта язык-GEO. Этап до subdomain/reserve,
+UUID5 receipt, ожидание подтверждения без повторного POST, затем HTTP200 страниц.

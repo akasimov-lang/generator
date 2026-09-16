@@ -41,7 +41,7 @@ def env(monkeypatch):
                 if self.fail: raise self.fail
                 if self.delayed: return 200, {"message": "queued"}
                 if path.endswith("update-value"):
-                    self.data["settings"].update({key: payload[key] for key in ("reserve", "reserveOption")})
+                    self.data["settings"].update({key: value for key, value in payload.items() if key != "folder"})
                 elif path.endswith("update-reglue"):
                     self.data["settings"]["prev"] = self.data["settings"]["canon"]
                     self.data["settings"]["canon"] = payload["reserve"]
@@ -334,4 +334,31 @@ def test_amp_cannot_be_reserve_or_reglue(env):
         state = network.read_network(db, site)
         with pytest.raises(ValueError, match="AMP"):
             network.change_network(db, site, network.NetworkChange(request_id=uuid4(), action=action, revision=state["revision"], domain="next.test"), "admin")
+    assert not remote.calls
+
+
+def test_fake_main_creation_preserves_settings_and_receipt(env):
+    db,site,remote=env
+    remote.data['settings']['alternate']['custom']='keep'
+    state=network.read_network(db,site)
+    payload=network.NetworkChange(request_id=uuid4(),action='create_fake_main',revision=state['revision'],fake_main_path='test1')
+    result=network.change_network(db,site,payload,'admin')
+    assert result['operations'][0]['status']=='confirmed'
+    assert result['fake_main_paths']==['/cz/','/test1/']
+    assert result['fake_main_current']=='/cz/' and result['fake_main_enabled']
+    assert remote.calls[0][0:2]==('POST','/projects/update-value')
+    assert remote.calls[0][2]['alternate']['custom']=='keep'
+    assert remote.data['head']['alternateMarkup']==MARKUP
+    network.change_network(db,site,payload,'admin')
+    assert len(remote.calls)==1
+
+
+def test_fake_main_rejects_existing_content_and_unsafe_paths(env):
+    db,site,remote=env
+    remote.data['data']={'pages':[{'slug':'/test1/'}]}
+    state=network.read_network(db,site)
+    with pytest.raises(ValueError,match='обычная страница'):
+        change(env,'create_fake_main',state['revision'],fake_main_path='test1')
+    for path in ['/', '../test1', 'https://example.com/a', 'test?x=1', 'api/test']:
+        with pytest.raises(ValueError):change(env,'create_fake_main',state['revision'],fake_main_path=path)
     assert not remote.calls

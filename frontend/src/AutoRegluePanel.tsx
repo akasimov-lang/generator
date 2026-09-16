@@ -2,24 +2,25 @@ import React from "react";
 
 type Api = <T>(path: string, options?: RequestInit) => Promise<T>;
 type Rules = { schedule_enabled: boolean; interval_days: number; scheme_mode: "preserve" | "add_auxiliary" | "base_only"; auxiliary_hreflangs: string[] };
-type Config = Rules & { create_subdomains: boolean; subdomain_add_casino: boolean; subdomain_name_style: "mixed" | "joined" | "hyphen"; domain_layout: "subdomain_main" | "root_main"; scope: "mass" | "personal"; enabled: boolean; drop_domain: string; x_default_use_newreg: boolean; x_default_newreg_domain: string; parent_kind: "drop" | "newreg"; newreg_domain: string; language: string; profile_id: string; variant: "current" | "provided" | "before" | "after"; fake_main_path: string };
-type DomainOptions = Pick<Config, "domain_layout" | "parent_kind" | "create_subdomains" | "subdomain_add_casino" | "subdomain_name_style" | "x_default_use_newreg">;
-const defaultDomainOptions: DomainOptions = { domain_layout: "subdomain_main", parent_kind: "drop", create_subdomains: false, subdomain_add_casino: false, subdomain_name_style: "mixed", x_default_use_newreg: false };
+type Config = Rules & { create_subdomains: boolean; create_fake_main: boolean; subdomain_add_casino: boolean; subdomain_name_style: "mixed" | "joined" | "hyphen"; domain_layout: "subdomain_main" | "root_main"; scope: "mass" | "personal"; enabled: boolean; drop_domain: string; x_default_use_newreg: boolean; x_default_newreg_domain: string; parent_kind: "drop" | "newreg"; newreg_domain: string; language: string; profile_id: string; variant: "current" | "provided" | "before" | "after"; fake_main_path: string };
+type DomainOptions = Pick<Config, "domain_layout" | "parent_kind" | "create_subdomains" | "create_fake_main" | "subdomain_add_casino" | "subdomain_name_style" | "x_default_use_newreg">;
+const defaultDomainOptions: DomainOptions = { domain_layout: "subdomain_main", parent_kind: "drop", create_subdomains: false, create_fake_main: false, subdomain_add_casino: false, subdomain_name_style: "mixed", x_default_use_newreg: false };
 type GlobalConfig = Rules & { enabled: boolean; max_projects: number; apply_domain_settings?: boolean; domain_settings?: DomainOptions };
 type Template = { id: string; project: string; brand: string; geo: string; variants: Record<string, unknown> };
-type Plan = { create_subdomain?: string | null; site_id: string; project: string; old_main: string; new_main: string; drop_domain: string; x_default_domain?: string; language_domain?: string; alternateMarkup: string; required_page_urls: string[]; added_hreflang?: string | null; pool_exhausted?: boolean; preview_token: string; requestId: string };
+type Plan = { create_fake_main_path?: string | null; create_subdomain?: string | null; site_id: string; project: string; old_main: string; new_main: string; drop_domain: string; x_default_domain?: string; language_domain?: string; alternateMarkup: string; required_page_urls: string[]; added_hreflang?: string | null; pool_exhausted?: boolean; preview_token: string; requestId: string };
 type Run = { id: string; site_id: string; status: string; phase: string; message: string; plan: Plan };
 type ProjectData = { next_run_at?: string | null; language_pool?: string[]; config: Config; settings: GlobalConfig; eligible: boolean; geo: string; templates: Template[]; runs: Run[] };
 const active = ["queued", "running", "waiting", "partial"];
 const labels: Record<string, string> = { queued: "В очереди", running: "Выполняется", waiting: "Ожидает подтверждения", partial: "Нужна проверка результата", completed: "Завершён", failed: "Ошибка", cancelled: "Остановлен" };
-const phases: Record<string, string> = { prepared: "Подготовлен", create_subdomains: "Создание поддомена", subdomain_ready: "Проверка готовности поддомена", reserve: "Сохранение резерва", reglue: "Смена Main", alternates: "Обновление альтернейтов", completed: "Все этапы подтверждены" };
+const phases: Record<string, string> = { prepared: "Подготовлен", create_fake_main: "Создание фейковой главной", fake_main_ready: "Проверка фейковой страницы", create_subdomains: "Создание поддомена", subdomain_ready: "Проверка готовности поддомена", reserve: "Сохранение резерва", reglue: "Смена Main", alternates: "Обновление альтернейтов", completed: "Все этапы подтверждены" };
 const errorText = (e: unknown) => e instanceof Error ? e.message : "Не удалось выполнить запрос";
 const body = (method: string, value: unknown): RequestInit => ({ method, body: JSON.stringify(value) });
 
 function PlanPreview({ plan }: { plan: Plan }) {
   return <div className="autoRegluePlan"><strong>{plan.project}</strong><p>{plan.old_main} → <b>{plan.new_main}</b></p><p>x-default: <b>{plan.x_default_domain || plan.drop_domain}</b></p>
+    {plan.create_fake_main_path && <p>Создать фейковую главную для схемы: <b>{plan.create_fake_main_path}</b>. Существующая страница будет использована повторно.</p>}
     {plan.create_subdomain && <p>Будет создан один поддомен: <b>{plan.create_subdomain}</b>. Смена Main начнётся после готовности HTTPS и страниц схемы.</p>}
-    {plan.language_domain && <p>Домен языковых альтернейтов: <b>{plan.language_domain}</b></p>}{plan.added_hreflang && <p>Новый фейковый альтернейт: <b>{plan.added_hreflang}</b></p>}{plan.pool_exhausted && <p>Список языков исчерпан: схема сохраняется.</p>}<pre>{plan.alternateMarkup}</pre>{plan.required_page_urls.length > 0 && <p className="muted">Перед сменой Main будут проверены страницы: {plan.required_page_urls.join(", ")}. Содержимое этих страниц нужно подготовить в проекте заранее.</p>}</div>;
+    {plan.language_domain && <p>Домен языковых альтернейтов: <b>{plan.language_domain}</b></p>}{plan.added_hreflang && <p>Новый фейковый альтернейт: <b>{plan.added_hreflang}</b></p>}{plan.pool_exhausted && <p>Список языков исчерпан: схема сохраняется.</p>}<pre>{plan.alternateMarkup}</pre>{plan.required_page_urls.length > 0 && <p className="muted">Перед сменой Main будут проверены страницы: {plan.required_page_urls.join(", ")}. {plan.create_fake_main_path ? "Копия главной для языка-GEO будет создана автоматически; остальные страницы схемы должны существовать." : "Содержимое этих страниц нужно подготовить в проекте заранее."}</p>}</div>;
 }
 
 function AutomationRules({ value, onChange, pool }: { value: Rules; onChange: (patch: Partial<Rules>) => void; pool: string[] }) {
@@ -56,6 +57,8 @@ function CommonDomainSettings({ value, change }: { value: GlobalConfig; change: 
     <fieldset disabled={!value.apply_domain_settings} className="autoReglueDomainOptions"><legend>Схема доменов</legend>
       <label className="checkboxRow"><input type="radio" name="global-domain-layout" checked={rules.domain_layout === "subdomain_main"} onChange={() => patch({ domain_layout: "subdomain_main" })} /> Canonical = языковые альтернейты; x-default отдельно</label>
       <label className="checkboxRow"><input type="radio" name="global-domain-layout" checked={rules.domain_layout === "root_main"} onChange={() => patch({ domain_layout: "root_main", x_default_use_newreg: rules.parent_kind === "newreg" })} /> Canonical = x-default; языковые альтернейты на поддомене</label>
+      <label className="checkboxRow"><input type="checkbox" checked={!!rules.create_fake_main} onChange={e => patch({ create_fake_main: e.target.checked })} /> Создавать фейковый внутряк для схемы альтернейтов</label>
+      <p className="muted">Путь берётся из настроек или схемы каждого проекта. Существующая фейковая страница используется повторно; обычные страницы не перезаписываются.</p>
       <h4>Источник поддомена</h4>
       <label className="checkboxRow"><input type="checkbox" checked={!rules.create_subdomains && rules.parent_kind === "drop"} onChange={() => selectParent("drop", false)} /> Использовать существующий поддомен дропа</label>
       <label className="checkboxRow"><input type="checkbox" checked={!rules.create_subdomains && rules.parent_kind === "newreg"} onChange={() => selectParent("newreg", false)} /> Использовать существующий поддомен новорега</label>
@@ -135,6 +138,7 @@ function ProjectConfigEditor({ siteId, api }: { siteId: string; api: Api }) {
       {draft.domain_layout !== "root_main" && draft.parent_kind === "newreg" && <label>Родительский новорег<input value={draft.newreg_domain} placeholder="new-domain.com" onChange={e => change({ newreg_domain: e.target.value })} /></label>}
       <label>Схема альтернейтов<select value={draft.profile_id} onChange={e => { const t = data.templates.find(x => x.id === e.target.value); change({ profile_id: e.target.value, variant: (t ? Object.keys(t.variants).includes("after") ? "after" : Object.keys(t.variants)[0] : "current") as Config["variant"] }); }}><option value="">Текущая схема проекта</option>{data.templates.map(t => <option key={t.id} value={t.id}>{t.brand} · {t.geo} · {t.project}</option>)}</select></label>
       {template && <label>Версия схемы<select value={draft.variant} onChange={e => change({ variant: e.target.value as Config["variant"] })}>{Object.keys(template.variants).map(v => <option key={v} value={v}>{v === "after" ? "Схема стала" : v === "before" ? "Схема была" : "Предоставленная схема"}</option>)}</select></label>}
+      <label className="checkboxRow"><input type="checkbox" checked={!!draft.create_fake_main} onChange={e => change({ create_fake_main: e.target.checked })} /> Создавать фейковый внутряк для схемы альтернейтов</label>
       <label>Путь копии главной для языка и GEO<input value={draft.fake_main_path} placeholder="/events/" onChange={e => change({ fake_main_path: e.target.value })} /></label>
     </div>
     {draft.scope === "personal" && <AutomationRules key="personal-rules" value={draft} onChange={change} pool={data.language_pool || []} />}
