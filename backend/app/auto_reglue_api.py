@@ -52,11 +52,28 @@ def kick_due_schedule(db):
         pass
 
 
+def schedule_task(db, site):
+    row = db.get(models.AutoReglueSchedule, site.id)
+    if not row:
+        return None
+    done = row.interval_days == 0 and row.last_scheduled_at is not None
+    return {'site_id': site.id, 'project': site.name, 'enabled': row.enabled,
+            'scope': auto.config(db, site.id).scope, 'interval_days': row.interval_days,
+            'status': 'disabled' if not row.enabled else 'completed' if done else 'scheduled',
+            'next_run_at': auto.next_scheduled_at(db, site),
+            'url': f'/auto-reglue?project_id={site.id}#auto-task-{site.id}'}
+
+
 @router.get('')
-def overview(_: AdminUser, db: Session = Depends(get_db)):
+def overview(_: AdminUser, db: Session = Depends(get_db), project_id: str | None = None):
     sites = db.scalars(select(models.Site).where(models.Site.project_status == 'mass_actions').order_by(models.Site.name)).all()
-    runs = db.scalars(select(models.AutoReglueRun).order_by(models.AutoReglueRun.created_at.desc()).limit(100)).all()
-    return {'settings': auto.config(db).model_dump(),
+    query = select(models.AutoReglueRun)
+    if project_id:
+        site_or_404(db, project_id)
+        query = query.where(models.AutoReglueRun.site_id == project_id)
+    runs = db.scalars(query.order_by(models.AutoReglueRun.created_at.desc()).limit(100)).all()
+    task_sites = db.scalars(select(models.Site).join(models.AutoReglueSchedule, models.AutoReglueSchedule.site_id == models.Site.id).order_by(models.Site.name)).all()
+    return {'tasks': [schedule_task(db, s) for s in task_sites if not project_id or s.id == project_id], 'settings': auto.config(db).model_dump(),
             'projects': [{'id':s.id,'name':s.name,'geo':s.cache_geo,'next_run_at':auto.next_scheduled_at(db,s),'config':auto.config(db,s.id).model_dump()} for s in sites if auto.config(db,s.id).scope != 'personal'],
             'language_pool': auto.default_language_pool(), 'templates': template_catalog(), 'runs': [auto.serialize(r) for r in runs]}
 
@@ -72,7 +89,7 @@ def settings(payload: auto.GlobalConfig, _: AdminUser, db: Session = Depends(get
 def project_settings(site_id: str, _: AdminUser, db: Session = Depends(get_db)):
     site = site_or_404(db, site_id)
     runs = db.scalars(select(models.AutoReglueRun).where(models.AutoReglueRun.site_id==site.id).order_by(models.AutoReglueRun.created_at.desc()).limit(20)).all()
-    return {'config':auto.config(db,site.id).model_dump(), 'settings':auto.config(db).model_dump(),
+    return {'task': schedule_task(db, site), 'config':auto.config(db,site.id).model_dump(), 'settings':auto.config(db).model_dump(),
             'eligible':site.project_status=='mass_actions' or auto.config(db,site.id).scope=='personal', 'geo':site.cache_geo, 'next_run_at':auto.next_scheduled_at(db,site),
             'language_pool':auto.default_language_pool(), 'templates':[p for p in template_catalog() if auto.domain_name(p['project'])==auto.domain_name(site.name)],
             'runs':[auto.serialize(r) for r in runs]}

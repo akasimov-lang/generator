@@ -148,7 +148,7 @@ def test_timeout_persists_receipt_and_prevents_duplicate(env):
     with pytest.raises(network.NetworkConflict, match="не подтверждена"):
         change(env, "reglue", after["revision"], domain="reserve.test")
     remote.data["settings"]["canon"] = "reserve.test"
-    assert network.read_network(db, site)["operations"][0]["status"] == "confirmed"
+    assert next(op for op in network.read_network(db, site)["operations"] if op["id"] == str(payload.request_id))["status"] == "confirmed"
 
 
 def test_delayed_operation_confirmed_only_by_readback(env):

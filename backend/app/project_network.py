@@ -159,22 +159,29 @@ def observe(db, site, project):
         if operation_matches(operation, state):
             operation.status = "confirmed"
             operation.message = ("Поддомены появились в сетке. Завершение настройки HTTPS проверяйте отдельно." if operation.action == "create_subdomains" else "Изменение подтверждено чтением настроек проекта.")
+    from app.network_indexing import confirm_manual_indexing
+    db.flush()
+    confirm_manual_indexing(db, site, {**state, "head_verified": isinstance(project.get("head"), dict) and "alternateMarkup" in project["head"]})
     db.commit()
     return state
 
 
-def result(db, site, state):
+def operation_history(db, site):
     operations = db.scalars(select(models.NetworkOperation).where(models.NetworkOperation.site_id == site.id)
                            .order_by(models.NetworkOperation.created_at.desc()).limit(20)).all()
+    return [{"id": op.id, "action": op.action, "status": op.status, "message": op.message,
+                        "initiator": op.initiator, "created_at": op.created_at,
+                        "domain": op.request_payload.get("reserve") or ((op.request_payload.get("domains") or [None])[0] if op.action == "delete_domain" else None), "domains": [item["domain"] if isinstance(item, dict) else item for item in op.request_payload.get("domains", [])], "response_status": op.response_status, "task_id": op.request_payload.get("task_id")}
+                       for op in operations]
+
+
+def result(db, site, state):
     return {
         **state, "domain_classification": classify_domains(state["domains"], site.domain_types or {}, site.main_domain_history or [], state["canon"]), "domain_types": site.domain_types or {}, "revision": state_revision(state), "main_history": site.main_domain_history or [],
         "x_default_history": site.x_default_history or [],
         "alternate_history": site.alternate_domain_history or [],
         "alternates": alternate_links(state["alternateMarkup"]),
-        "operations": [{"id": op.id, "action": op.action, "status": op.status, "message": op.message,
-                        "initiator": op.initiator, "created_at": op.created_at,
-                        "domain": op.request_payload.get("reserve") or ((op.request_payload.get("domains") or [None])[0] if op.action == "delete_domain" else None), "domains": [item["domain"] if isinstance(item, dict) else item for item in op.request_payload.get("domains", [])], "response_status": op.response_status}
-                       for op in operations],
+        "operations": operation_history(db, site),
     }
 
 
@@ -196,7 +203,8 @@ def require_domain(state, value):
 
 def read_network(db, site):
     with network_lock(db, site.id), Remote(db, site) as remote:
-        state = observe(db, site, remote.project())
+        project = remote.project()
+        state = observe(db, site, project)
         for operation in db.scalars(select(models.NetworkOperation).where(
             models.NetworkOperation.site_id == site.id,
             models.NetworkOperation.action.in_(["delete_domain", "create_subdomains"]),
@@ -215,7 +223,7 @@ def read_network(db, site):
                     operation.status = "failed"
                     operation.message = str(job.get("error") or (failures[0].get("logs") if failures else None) or "Задача Webdev завершилась ошибкой.")[:2000]
         db.commit()
-        return result(db, site, state)
+        return {**result(db, site, state), "head_verified": isinstance(project.get("head"), dict) and "alternateMarkup" in project["head"]}
 
 
 def check_domain(db, site, payload):
@@ -341,7 +349,7 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
             method, path = "PATCH", "/projects/update-head"
             request.update(alternateMarkup=payload.alternate_markup, enableAlternates=payload.enable_alternates)
         operation = models.NetworkOperation(id=str(payload.request_id), site_id=site.id, action=payload.action,
-                                            initiator=username, request_payload=request, status="pending")
+                                            initiator=username, request_payload={**request, **({"indexing_pending": True, "_indexing": {"canon": domain, "alternateMarkup": state["alternateMarkup"], "enableAlternates": state["enableAlternates"]}} if payload.action == "reglue" and auto_run_id is None else {})}, status="pending")
         db.add(operation)
         db.commit()  # Receipt exists even if the connection or process stops after sending.
         try:

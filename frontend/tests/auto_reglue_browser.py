@@ -17,6 +17,7 @@ with sync_playwright() as p:
  def route(r):
   path=r.request.url.split('/api')[-1].split('?')[0];method=r.request.method
   calls.append((method,path))
+  task={'site_id':'preview','project':site['name'],'enabled':True,'scope':'personal','interval_days':cfg.get('interval_days',0),'status':'scheduled','url':'/auto-reglue?project_id=preview#auto-task-preview'} if cfg.get('schedule_enabled') and cfg.get('enabled') else None
   data=[]
   if path=='/auth/me':data={'id':'admin','username':'admin','is_admin':True,'is_active':True}
   elif path in ['/sites','/sites/cache/projects']:data=[site]
@@ -25,12 +26,12 @@ with sync_playwright() as p:
   elif '/menu-capabilities' in path:data=caps
   elif path.endswith('/network'):data=network
   elif path.endswith('/overview'):data={'site':site,'stats':{},'recent_content':[]}
-  elif path=='/auto-reglue':data={'settings':global_cfg,'projects':[{'id':'preview','name':site['name'],'geo':'AZ','config':cfg}],'runs':[]}
+  elif path=='/auto-reglue':data={'tasks':[task] if task else [],'settings':global_cfg,'projects':[{'id':'preview','name':site['name'],'geo':'AZ','config':cfg}],'runs':[]}
   elif path=='/auto-reglue/settings':
    global_cfg.update(r.request.post_data_json);data=global_cfg
   elif path=='/auto-reglue/projects/preview':
    if method=='PUT':cfg.update(r.request.post_data_json);data=cfg
-   else:data={'config':cfg,'settings':global_cfg,'eligible':True,'geo':'AZ','templates':[],'runs':[]}
+   else:data={'task':task,'config':cfg,'settings':global_cfg,'eligible':True,'geo':'AZ','templates':[],'runs':[]}
   elif path.endswith('/preview'):data=plan
   elif path=='/auto-reglue/start':data={'results':[{'site_id':'preview','run':{'status':'queued'}}]}
   r.fulfill(status=200,content_type='application/json',body=json.dumps(data))
@@ -158,6 +159,14 @@ with sync_playwright() as p:
  assert cfg['create_subdomains'] and cfg['parent_kind']=='newreg'
  assert cfg['subdomain_name_style']=='hyphen' and cfg['subdomain_add_casino']
 
+ link=page.get_by_role('link',name='Открыть задачу автопереклея →',exact=True)
+ expect(link).to_be_visible()
+ expect(link).to_have_attribute('href','/auto-reglue?project_id=preview#auto-task-preview')
+ toggle=page.get_by_role('button',name='Свернуть настройки',exact=True)
+ expect(toggle).to_have_attribute('aria-expanded','true')
+ assert page.locator('.autoReglueExpandedPanel').bounding_box()['y'] > toggle.bounding_box()['y']
+ link.click()
+ expect(page.locator('#auto-task-preview')).to_be_visible()
  page.set_viewport_size({'width':390,'height':844})
  assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
  assert not errors,errors

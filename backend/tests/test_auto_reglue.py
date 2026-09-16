@@ -831,3 +831,36 @@ def test_project_preview_cannot_be_used_for_mass_launch(monkeypatch):
         plan = auto.preview(db, site, 'project')
         with pytest.raises(auto.project_network.NetworkConflict, match='предпросмотра'):
             auto.prepare_run(db, site, uuid4(), plan['preview_token'], 'admin', 'mass')
+
+
+def test_auto_indexing_only_after_alternates_confirmed_and_once(monkeypatch):
+    sessions, run_id, calls, state = setup_run(monkeypatch, 'alternates')
+    with sessions() as db:
+        auto.execute(db, run_id)
+        assert not db.scalars(select(models.NetworkOperation).where(models.NetworkOperation.action == 'indexing')).all()
+        operation = db.scalar(select(models.NetworkOperation).where(models.NetworkOperation.action == 'alternates'))
+        operation.status = 'confirmed'; db.commit()
+        state['amp_domains'] = ['mobile.test']; state['domains'].append('mobile.test')
+        auto.execute(db, run_id); auto.execute(db, run_id)
+        queued = db.scalars(select(models.NetworkOperation).where(models.NetworkOperation.action == 'indexing')).all()
+        assert len(queued) == 1
+        assert 'https://mobile.test/' not in queued[0].request_payload['domains']
+        assert queued[0].status == 'index_queued'
+        assert db.get(models.AutoReglueRun, run_id).status == 'completed'
+
+
+def test_saved_schedule_exposes_task_link_and_personal_task_in_global_view(monkeypatch):
+    from app import auto_reglue_api
+    monkeypatch.setattr(auto_reglue_api, 'kick_due_schedule', lambda db: None)
+    client, sessions = make_client(); client.app.include_router(auto_reglue_api.router, prefix='/api')
+    with sessions() as db:
+        site = db.scalar(select(models.Site)); site_id = site.id
+    assert client.get(f'/api/auto-reglue/projects/{site_id}').json()['task'] is None
+    saved = client.put(f'/api/auto-reglue/projects/{site_id}', json=auto.ProjectConfig(enabled=True, schedule_enabled=True, drop_domain='drop.test', language='az').model_dump())
+    assert saved.status_code == 200
+    task = client.get(f'/api/auto-reglue/projects/{site_id}').json()['task']
+    assert task['scope'] == 'personal' and task['enabled']
+    assert task['url'] == f'/auto-reglue?project_id={site_id}#auto-task-{site_id}'
+    overview = client.get(f'/api/auto-reglue?project_id={site_id}').json()
+    assert overview['tasks'] == [task]
+    assert overview['projects'] == []  # Listing a task never admits it to mass runs.

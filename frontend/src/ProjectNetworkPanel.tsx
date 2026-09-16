@@ -1,7 +1,7 @@
 import React from "react";
 import { Trash2 } from "lucide-react";
 
-type NetworkOperation = { id: string; action: "reserve" | "reglue" | "alternates" | "create_subdomains" | "delete_domain" | "create_fake_main"; status: string; message: string | null; domain: string | null; initiator: string; created_at: string };
+type NetworkOperation = { id: string; action: "reserve" | "reglue" | "alternates" | "create_subdomains" | "delete_domain" | "create_fake_main" | "indexing"; task_id?: string; domains?: string[]; status: string; message: string | null; domain: string | null; initiator: string; created_at: string };
 type DomainClassification = { is_subdomain: boolean; parent_domain: string | null; parent_type: "drop" | "newreg" | null; unused_as_main: boolean };
 type Network = {
   fake_main_paths?: string[]; fake_main_current?: string; fake_main_enabled?: boolean;
@@ -19,8 +19,8 @@ type Props = {
   api: <T>(path: string, options?: RequestInit) => Promise<T>; onChanged: () => void;
 };
 type Draft = { markup: string; enabled: boolean; originalMarkup: string; originalEnabled: boolean };
-const actionLabels = { create_fake_main: "Создание фейковой главной", delete_domain: "Удаление домена", create_subdomains: "Создание поддоменов", reserve: "Сохранение резерва", reglue: "Переклей", alternates: "Альтернейты" };
-const statusLabels: Record<string, string> = { confirmed: "Подтверждено", pending: "Ожидает подтверждения", unknown: "Результат пока неизвестен", failed: "Ошибка" };
+const actionLabels = { indexing: "Индексация проекта", create_fake_main: "Создание фейковой главной", delete_domain: "Удаление домена", create_subdomains: "Создание поддоменов", reserve: "Сохранение резерва", reglue: "Переклей", alternates: "Альтернейты" };
+const statusLabels: Record<string, string> = { index_queued: "В очереди", index_submitting: "Отправляется", index_submitted: "Задача создана", index_unknown: "Отправка не подтверждена", confirmed: "Подтверждено", pending: "Ожидает подтверждения", unknown: "Результат пока неизвестен", failed: "Ошибка" };
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Не удалось выполнить запрос";
 
 export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Props) {
@@ -85,6 +85,25 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
     return () => window.clearInterval(timer);
   }, [uncertain]);
 
+  const indexingPending = data?.operations.some(op => ["index_queued", "index_submitting"].includes(op.status));
+  React.useEffect(() => {
+    if (!indexingPending) return;
+    let alive = true, fetching = false;
+    const timer = window.setInterval(async () => {
+      if (fetching) return;
+      fetching = true;
+      try {
+        const operations = await api<NetworkOperation[]>(`/sites/${site.id}/network/operations`);
+        if (alive && mounted.current && dataRef.current) {
+          const next = { ...dataRef.current, operations };
+          dataRef.current = next; setData(next);
+        }
+      } catch { /* Keep the saved history; retry only the local database read. */ }
+      finally { fetching = false; }
+    }, 5000);
+    return () => { alive = false; window.clearInterval(timer); };
+  }, [indexingPending, site.id, api]);
+
   const subdomains = [...new Set(subdomainsInput.toLowerCase().split(/[\s,;]+/).map((value) => value.trim().replace(/\.$/, "")).filter(Boolean))];
   const subdomainErrors = subdomains.flatMap((domain) => {
     if (domain.length > 253 || !domain.split(".").every((label) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) return [domain + ": некорректное имя"];
@@ -92,7 +111,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
     if (!data?.domains.some((parent) => domain.endsWith("." + parent.replace(/^www\./, "")) && domain !== "www." + parent.replace(/^www\./, ""))) return [domain + ": родительского домена нет в сетке"];
     return [];
   });
-  async function mutate(action: NetworkOperation["action"], targetDomain?: string) {
+  async function mutate(action: Exclude<NetworkOperation["action"], "indexing">, targetDomain?: string) {
     if (!data || !draft || busyRef.current) return;
     busyRef.current = true; setBusy(action); setError(""); setMessage("");
     const payload = { action, fake_main_path: fakeMainInput, revision: data.revision, domain: targetDomain || reserve, alternate_markup: draft.markup, enable_alternates: draft.enabled, ...(action === "create_subdomains" ? { domains: subdomains } : {}) };
@@ -238,6 +257,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
         {!!data.operations.length && <div className="networkSection"><h3>История операций</h3><ul className="networkOperations">{data.operations.map((operation) => <li key={operation.id}>
           <strong>{actionLabels[operation.action]}{operation.domain ? `: ${operation.domain}` : ""}</strong> — {statusLabels[operation.status] || operation.status}
           <small>{new Date(operation.created_at).toLocaleString("ru-RU")} · {operation.initiator}</small><p>{operation.message}</p>
+          {operation.action === "indexing" && <>{operation.task_id && <p>Номер задачи: <strong>{operation.task_id}</strong></p>}<details><summary>Домены для индексации ({operation.domains?.length || 0})</summary><ul>{operation.domains?.map(domain => <li key={domain}>{domain}</li>)}</ul></details></>}
         </li>)}</ul></div>}
       </>}
     </div>

@@ -613,6 +613,11 @@ def get_site_network(site_id: str, _: AuthUser, db: Session = Depends(get_db)):
     return _network_call(project_network.read_network, db, _get_site_or_404(db, site_id))
 
 
+@router.get("/sites/{site_id}/network/operations")
+def get_network_operations(site_id: str, _: AuthUser, db: Session = Depends(get_db)):
+    return project_network.operation_history(db, _get_site_or_404(db, site_id))
+
+
 @router.patch("/sites/{site_id}/network/domain-type")
 def update_network_domain_type(site_id: str, payload: project_network.DomainTypeUpdate, _: AuthUser, db: Session = Depends(get_db)):
     return _network_call(project_network.update_domain_type, db, _get_site_or_404(db, site_id), payload)

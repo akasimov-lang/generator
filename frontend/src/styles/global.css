@@ -9404,3 +9404,13 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 
 .autoReglueDomainOptions { min-width: 0; margin: 12px 0; padding: 14px; border: 1px solid var(--border, #cbd5e1); border-radius: 8px; }
 .autoReglueDomainOptions:disabled { opacity: .65; }
+
+.projectAutoReglueCard { display: grid; gap: 10px; }
+.autoReglueSettingsButton .newGenerationTaskCopy { flex: 1; min-width: 0; }
+.autoReglueSettingsBadge { position: absolute; right: -3px; bottom: -3px; box-sizing: content-box; padding: 3px; border: 2px solid var(--surface, #fff); border-radius: 7px; background: #285f9f; color: #fff; }
+.autoReglueExpandIcon { flex-shrink: 0; transition: transform 150ms ease; }
+.autoReglueSettingsButton[aria-expanded="true"] .autoReglueExpandIcon { transform: rotate(180deg); }
+.autoReglueSettingsButton[aria-expanded="true"] { border-color: var(--primary); }
+.autoReglueTaskNotice a { font-weight: 700; color: var(--primary); }
+.autoReglueScheduleTask { scroll-margin-top: 24px; }
+.autoReglueScheduleTask:target { outline: 2px solid var(--primary); outline-offset: 2px; }

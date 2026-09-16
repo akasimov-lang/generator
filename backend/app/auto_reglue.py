@@ -476,6 +476,11 @@ def execute(db, run_id):
                 if operation.status == 'failed': raise ValueError(operation.message or 'Ошибка Webdev.')
                 if operation.status != 'confirmed':
                     run.status = 'waiting'; run.message = operation.message; db.commit(); return
+            from app.network_indexing import verified, queue_indexing
+            state = project_network.read_network(db, site)
+            if not verified(state, {'canon': plan['new_main'], 'alternateMarkup': plan['alternateMarkup'], 'enableAlternates': True}):
+                run.status = 'waiting'; run.message = 'Ждём подтверждения canonical и альтернейтов перед индексацией.'; db.commit(); return
+            queue_indexing(db, site, state, run.id, run.initiator)
             run.status = 'completed'; run.phase = 'completed'; run.message = 'Новый Main и альтернейты подтверждены.'; db.commit()
         except Exception as error:
             db.rollback(); run = db.get(models.AutoReglueRun, run_id)

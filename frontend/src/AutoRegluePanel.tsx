@@ -1,4 +1,5 @@
 import React from "react";
+import { RefreshCw, Settings2, ChevronDown } from "lucide-react";
 
 type Api = <T>(path: string, options?: RequestInit) => Promise<T>;
 type Rules = { schedule_enabled: boolean; interval_days: number; scheme_mode: "preserve" | "add_auxiliary" | "base_only"; auxiliary_hreflangs: string[] };
@@ -9,7 +10,8 @@ type GlobalConfig = Rules & { enabled: boolean; max_projects: number; apply_doma
 type Template = { id: string; project: string; brand: string; geo: string; variants: Record<string, unknown> };
 type Plan = { create_fake_main_path?: string | null; create_subdomain?: string | null; site_id: string; project: string; old_main: string; new_main: string; drop_domain: string; x_default_domain?: string; language_domain?: string; alternateMarkup: string; required_page_urls: string[]; added_hreflang?: string | null; pool_exhausted?: boolean; preview_token: string; requestId: string };
 type Run = { id: string; site_id: string; status: string; phase: string; message: string; plan: Plan };
-type ProjectData = { next_run_at?: string | null; language_pool?: string[]; config: Config; settings: GlobalConfig; eligible: boolean; geo: string; templates: Template[]; runs: Run[] };
+type ScheduleTask = { site_id: string; project: string; enabled: boolean; scope: string; interval_days: number; status: string; next_run_at?: string | null; url: string };
+type ProjectData = { task?: ScheduleTask | null; next_run_at?: string | null; language_pool?: string[]; config: Config; settings: GlobalConfig; eligible: boolean; geo: string; templates: Template[]; runs: Run[] };
 const active = ["queued", "running", "waiting", "partial"];
 const labels: Record<string, string> = { queued: "В очереди", running: "Выполняется", waiting: "Ожидает подтверждения", partial: "Нужна проверка результата", completed: "Завершён", failed: "Ошибка", cancelled: "Остановлен" };
 const phases: Record<string, string> = { prepared: "Подготовлен", create_fake_main: "Создание фейковой главной", fake_main_ready: "Проверка фейковой страницы", create_subdomains: "Создание поддомена", subdomain_ready: "Проверка готовности поддомена", reserve: "Сохранение резерва", reglue: "Смена Main", alternates: "Обновление альтернейтов", completed: "Все этапы подтверждены" };
@@ -94,10 +96,10 @@ function Runs({ runs, api, refresh }: { runs: Run[]; api: Api; refresh: () => Pr
     </div>)}{runs.some(r => active.includes(r.status)) && <p className="muted">Остановка не отменяет уже подтверждённую смену Main. При неизвестном результате повторная запись не отправляется.</p>}</section>;
 }
 
-function ProjectConfigEditor({ siteId, api }: { siteId: string; api: Api }) {
+function ProjectConfigEditor({ siteId, api, onTask }: { siteId: string; api: Api; onTask: (task: ScheduleTask | null) => void }) {
   const [data, setData] = React.useState<ProjectData | null>(null); const [draft, setDraft] = React.useState<Config | null>(null);
   const [plan, setPlan] = React.useState<Plan | null>(null); const [busy, setBusy] = React.useState(false); const [error, setError] = React.useState("");
-  const load = React.useCallback(async () => { const next = await api<ProjectData>(`/auto-reglue/projects/${siteId}`); setData(next); setDraft(old => old || next.config); }, [api, siteId]);
+  const load = React.useCallback(async () => { const next = await api<ProjectData>(`/auto-reglue/projects/${siteId}`); setData(next); setDraft(old => old || next.config); onTask(next.task || null); }, [api, siteId, onTask]);
   React.useEffect(() => { void load().catch(e => setError(errorText(e))); }, [load]);
   const pending = data?.runs.some(r => active.includes(r.status));
   React.useEffect(() => { if (!pending) return; const timer = setInterval(() => void load().catch(e => setError(errorText(e))), 5000); return () => clearInterval(timer); }, [load, pending]);
@@ -167,23 +169,39 @@ function ProjectConfigEditor({ siteId, api }: { siteId: string; api: Api }) {
 
 export function ProjectAutoReglue({ siteId, api }: { siteId: string; api: Api }) {
   const [expanded, setExpanded] = React.useState(false);
-  return <section className="dataPanel"><div className="dataPanelHeader"><h2>Автопереклей проекта</h2><button className="button secondary compact" aria-expanded={expanded} onClick={() => setExpanded(v => !v)}>{expanded ? "Свернуть настройки" : "Настроить автопереклей"}</button></div>{expanded && <div className="dataPanelBody"><ProjectConfigEditor key={siteId} siteId={siteId} api={api} /></div>}</section>;
+  const [task, setTask] = React.useState<ScheduleTask | null>(null);
+  const panelId = `auto-reglue-settings-${siteId}`;
+  return <section className="projectAutoReglueCard">
+    {task && <div className="notice autoReglueTaskNotice" role="status">Задача автопереклея проекта сохранена. <a href={task.url}>Открыть задачу автопереклея →</a></div>}
+    <button type="button" className="newGenerationTaskButton menuStructureGenerationButton autoReglueSettingsButton" aria-label={expanded ? "Свернуть настройки" : "Настроить автопереклей"} aria-expanded={expanded} aria-controls={panelId} onClick={() => setExpanded(v => !v)}>
+      <span className="newGenerationTaskIcon" aria-hidden="true"><RefreshCw size={27} strokeWidth={2} /><Settings2 className="autoReglueSettingsBadge" size={16} strokeWidth={2.2} /></span>
+      <span className="newGenerationTaskCopy"><strong>Автопереклей проекта</strong><small>Настроить схему, домены и расписание для этого проекта</small></span>
+      <ChevronDown className="autoReglueExpandIcon" size={20} aria-hidden="true" />
+    </button>
+    {expanded && <div className="dataPanel autoReglueExpandedPanel" id={panelId}><div className="dataPanelBody"><ProjectConfigEditor key={siteId} siteId={siteId} api={api} onTask={setTask} /></div></div>}
+  </section>;
 }
 
-type Overview = { language_pool?: string[]; settings: GlobalConfig; projects: { id: string; name: string; geo: string; next_run_at?: string | null; config: Config }[]; runs: Run[] };
+type Overview = { tasks?: ScheduleTask[]; language_pool?: string[]; settings: GlobalConfig; projects: { id: string; name: string; geo: string; next_run_at?: string | null; config: Config }[]; runs: Run[] };
 export function AutoReglueView({ api }: { api: Api }) {
   const [data, setData] = React.useState<Overview | null>(null); const [draft, setDraft] = React.useState<GlobalConfig | null>(null);
   const [selected, setSelected] = React.useState<string[]>([]); const [plans, setPlans] = React.useState<Plan[]>([]);
   const [busy, setBusy] = React.useState(false); const [error, setError] = React.useState("");
-  const load = React.useCallback(async () => { const next = await api<Overview>("/auto-reglue"); setData(next); setDraft(old => old || next.settings); }, [api]);
+  const load = React.useCallback(async () => { const projectId = new URLSearchParams(window.location.search).get("project_id"); const next = await api<Overview>(`/auto-reglue${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`); setData(next); setDraft(old => old || next.settings); }, [api]);
   React.useEffect(() => { void load().catch(e => setError(errorText(e))); }, [load]);
   const pending = data?.runs.some(r => active.includes(r.status));
   React.useEffect(() => { if (!pending) return; const timer = setInterval(() => void load().catch(e => setError(errorText(e))), 5000); return () => clearInterval(timer); }, [load, pending]);
+  const taskFocused = React.useRef(false);
+  React.useEffect(() => {
+    if (taskFocused.current || !data?.tasks?.length) return;
+    const target = document.getElementById(window.location.hash.slice(1));
+    if (target) { target.scrollIntoView({ block: "start" }); taskFocused.current = true; }
+  }, [data?.tasks]);
   async function perform(fn: () => Promise<void>) { setBusy(true); setError(""); try { await fn(); } catch (e) { setError(errorText(e)); } finally { setBusy(false); } }
   if (!data || !draft) return <p>{error || "Загружаем настройки…"}</p>;
   const value = draft;
   const dirty = JSON.stringify(value) !== JSON.stringify(data.settings);
-  return <section className="viewStack"><section className="dataPanel"><div className="dataPanelHeader"><h2>Автопереклей — общие настройки</h2></div><div className="dataPanelBody autoReglueSettings">
+  return <section className="viewStack">{!!data.tasks?.length && <section className="dataPanel"><div className="dataPanelBody"><h2>Задачи автопереклея</h2>{data.tasks.map(task => <article className="autoReglueRun autoReglueScheduleTask" id={`auto-task-${task.site_id}`} key={task.site_id}><strong>{task.project}</strong><p>{task.scope === "personal" ? "Персональное расписание" : "Глобальное расписание"} · {task.interval_days === 0 ? "Однократно" : `Раз в ${task.interval_days} дней`}</p><p>{task.status === "disabled" ? "Расписание выключено" : task.status === "completed" ? "Однократный запуск обработан — результат ниже в истории запусков" : "Задача сохранена"}{task.next_run_at ? ` · Следующий запуск: ${new Date(task.next_run_at).toLocaleString("ru-RU")}` : ""}</p><a href={`/project-redirects/${encodeURIComponent(task.project)}/`}>Открыть настройки проекта</a></article>)}</div></section>}<section className="dataPanel"><div className="dataPanelHeader"><h2>Автопереклей — общие настройки</h2></div><div className="dataPanelBody autoReglueSettings">
     {error && <div className="notice" role="alert">{error}</div>}
     <p>Один запуск — один следующий неиспользованный Main для каждого выбранного проекта. Участвуют только проекты со статусом «Массовые действия» и сохранёнными настройками.</p>
     <label className="checkboxRow"><input type="checkbox" checked={draft.enabled} onChange={e => { setDraft({ ...draft, enabled: e.target.checked }); setPlans([]); }} /> Разрешить запуск автопереклеев</label>

@@ -29,6 +29,10 @@ with sync_playwright() as p:
  page.get_by_role('button',name='Сохранить альтернейты',exact=True).click()
  expect(launch).to_be_enabled();launch.click()
  expect(page.get_by_text('Переклей: подтверждено.',exact=True)).to_be_visible()
+ expect(page.get_by_text('Индексация проекта',exact=True)).to_be_visible()
+ expect(page.get_by_text('task-123',exact=True)).to_be_visible()
+ page.get_by_text('Домены для индексации (2)',exact=True).click()
+ expect(page.locator('.networkOperations').get_by_text('https://next.test/',exact=True)).to_be_visible()
  actions=page.evaluate('window.calls.filter(c=>c.path.endsWith("/operations")).map(c=>c.payload.action)')
  assert actions==['reserve','alternates','reglue'],actions
  assert not page.evaluate('window.calls.some(c=>c.path.includes("check-domain") || c.path.includes("auto-reglue"))')

@@ -20,6 +20,7 @@ celery_app.conf.update(
     worker_concurrency=4,
 )
 celery_app.conf.beat_schedule = {
+    "post-reglue-indexing": {"task": "app.worker.network_indexing", "schedule": 30.0},
     "scheduled-auto-reglue": {"task": "app.worker.schedule_auto_reglue", "schedule": 60.0},
     "publish-due-items-every-minute": {
         "task": "app.worker.publish_due_items",
@@ -412,3 +413,10 @@ def schedule_auto_reglue_job():
     from app.auto_reglue import schedule_tick
     with SessionLocal() as db:
         return schedule_tick(db, lambda run_id: auto_reglue_job.delay(run_id))
+
+
+@celery_app.task(name="app.worker.network_indexing")
+def network_indexing_job():
+    from app.network_indexing import process_network_indexing
+    with SessionLocal() as db:
+        return process_network_indexing(db)
