@@ -44,7 +44,7 @@ def recover_legacy_generation(db, item_ids, *, before, verify_idle):
     for item in items:
         result.append({"id": item.id, "task_id": item.task_id,
                        "previous_status": item.status, "previous_updated_at": str(item.updated_at)})
-        item.status = "generation_failed"
+        item.status = "system_stopped"
         item.generation_error = (
             "Прерванная историческая генерация: выполнение отсутствует в очереди и у workers. "
             "Содержимое сохранено. Автоматический повтор не выполнялся; можно повторить вручную."
@@ -57,6 +57,6 @@ def recover_legacy_generation(db, item_ids, *, before, verify_idle):
         if task and task.status == "generating" and not any(
             status in {"generating", "generation_queued"} for status in statuses
         ):
-            task.status = "generation_failed"
+            task.status = "system_stopped"
     db.commit()
     return result

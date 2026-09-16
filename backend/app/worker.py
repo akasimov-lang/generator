@@ -208,6 +208,8 @@ def _refresh_parallel_task_status(db, task_id: str) -> None:
         task.status = "generating"
     elif any(status == "generation_failed" for status in statuses):
         task.status = "generation_failed"
+    elif any(status == "system_stopped" for status in statuses):
+        task.status = "system_stopped"
     elif task.auto_publish and any(status == "publication_failed" for status in statuses):
         task.status = "publication_failed"
     elif task.auto_publish and any(status in {"approved", "publishing", "publication_pending_confirmation"} for status in statuses):
@@ -309,6 +311,8 @@ def generate_content_item_job(content_item_id: str) -> dict:
         item = db.get(models.ContentItem, content_item_id)
         if not item:
             return {"status": "missing", "content_item_id": content_item_id}
+        if item.status == "system_stopped":
+            return {"status": "skipped", "content_item_id": content_item_id}
         generate_content_item(db, item)
         return {"status": "complete", "content_item_id": content_item_id}
     finally:

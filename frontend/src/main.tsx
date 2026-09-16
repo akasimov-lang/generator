@@ -7460,6 +7460,8 @@ function GenerationProgressCell({ item, compact = false }: { item: ContentItem; 
       ? "В очереди"
       : item.status === "generating"
         ? "Gemini генерирует текст"
+        : item.status === "system_stopped"
+          ? "Остановлено системой"
         : item.status === "generation_failed"
           ? "Ошибка генерации"
           : complete
@@ -8545,7 +8547,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
   React.useEffect(() => {
     cacheViewMounted.current = true;
     const saved = localStorage.getItem("pagepilot-cache-sync-job");
-    if (saved && !favoritesOnly) {
+    if (saved && !favoritesOnly && !readOnly) {
       try { const job = JSON.parse(saved); void syncCache(job.names || [], job.id); } catch { /* Invalid local pointer; no remote action. */ }
     }
     return () => { cacheViewMounted.current = false; };
@@ -8830,6 +8832,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
             <button className={summaryFilter === "duplicate" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("duplicate")} aria-pressed={summaryFilter === "duplicate"}><span>Дубликаты</span><strong>{formatNumber(duplicateCount)}</strong></button>
             <button className={summaryFilter === "all" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("all")} aria-pressed={summaryFilter === "all"}><span>Всего сайтов</span><strong>{formatNumber(managedSites.length)}</strong></button>
           </div>
+          <div className="siteCacheActions">
           {!favoritesOnly && <button className="button primary siteCacheSyncButton" type="button" onClick={() => void loadManagedSites()} disabled={syncing}>
             <RefreshCcw size={18} className={syncing ? "spin" : ""} />{syncing ? "Обновляем…" : "Обновить проекты"}
           </button>}
@@ -8847,6 +8850,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
               </button>
             </>
           ) : null}
+          </div>
         </div>
         <div className="siteCacheUpdatedAt">
           <CalendarClock size={17} />
@@ -10898,6 +10902,7 @@ function StatusBadge({ status }: { status: string }) {
     scheduled: "Запланировано",
     serp_collected: "Выдача собрана",
     stopped: "Остановлено",
+    system_stopped: "Остановлено системой",
     synced: "Синхронизировано",
     unchecked: "Не проверено",
     valid: "Готово"

@@ -517,3 +517,43 @@ def test_regular_user_can_create_and_manage_generation_tasks() -> None:
     assert client.get("/api/publication-campaigns").status_code == 200
     assert client.get("/api/publication-logs").status_code == 200
     assert client.post("/api/content/missing/publish-now").status_code == 404
+
+
+def test_only_admin_can_start_shared_webdev_sync(monkeypatch):
+    client, factory = make_client()
+    monkeypatch.setattr(api_module, "fetch_project_cache", lambda names: [])
+    monkeypatch.setattr(api_module, "sync_project_cache",
+                        lambda db, projects: {"cache_count": 0, "created_count": 0, "updated_count": 0, "synced_names": []})
+    client.app.dependency_overrides[require_auth] = lambda: {
+        "id": "regular-user-id", "username": "regular", "is_admin": False, "is_active": True}
+    for route in ("/api/sites/cache/sync-jobs", "/api/sites/cache/sync"):
+        assert client.post(route, json={"names": []}).status_code == 403
+    with factory() as db:
+        assert db.scalars(select(models.BackgroundJob)).all() == []
+    client.app.dependency_overrides[require_auth] = lambda: {
+        "id": "admin-id", "username": "admin", "is_admin": True, "is_active": True}
+    assert client.post("/api/sites/cache/sync-jobs", json={"names": []}).status_code == 200
+
+
+@pytest.mark.parametrize("whole_task", [False, True])
+def test_system_stopped_generation_can_be_restarted_manually(monkeypatch, whole_task):
+    client, factory = make_client()
+    with factory() as db:
+        task = models.GenerationTask(title="Stopped", geo="AZ", language="az", status="system_stopped")
+        db.add(task); db.flush()
+        item = models.ContentItem(task_id=task.id, topic="Keep", slug="keep",
+            generated_json={"text": "Keep"}, status="system_stopped",
+            generation_error="Остановлено системой", idempotency_key="stopped")
+        db.add(item); db.commit()
+        task_id, item_id = task.id, item.id
+    sent = []
+    monkeypatch.setattr(api_module.generate_content_item_job, "delay", lambda value: sent.append(value))
+    monkeypatch.setattr(api_module.generate_task_content_job, "delay", lambda value: sent.append(value))
+    route = f"/api/tasks/{task_id}/generate" if whole_task else f"/api/content/{item_id}/generate"
+    assert client.post(route).status_code == 200
+    assert sent == [task_id if whole_task else item_id]
+    with factory() as db:
+        item = db.get(models.ContentItem, item_id)
+        assert item.status == "generation_queued"
+        assert item.generation_error is None
+        assert item.generated_json == {"text": "Keep"}

@@ -23,7 +23,7 @@ def test_recovery_preserves_content_and_excludes_recent_or_completed(env):
         before=datetime.now(timezone.utc) - timedelta(days=20), verify_idle=verify)
     assert len(result) == 2
     assert verify.call_count == 2
-    assert [i.status for i in items] == ["generation_failed", "generation_failed", "generating", "published"]
+    assert [i.status for i in items] == ["system_stopped", "system_stopped", "generating", "published"]
     assert all(i.generated_json == {"text": "Preserve"} for i in items)
     assert recover_legacy_generation(db, [i.id for i in items],
         before=datetime.now(timezone.utc) - timedelta(days=20), verify_idle=verify) == []

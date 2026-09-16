@@ -2749,15 +2749,17 @@ h2 {
 .siteCacheToolbar {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: 18px;
   justify-content: space-between;
 }
 
 .siteCacheStats {
   display: grid;
-  flex: 1;
+  flex: 1 1 680px;
+  min-width: 0;
   gap: 10px;
-  grid-template-columns: repeat(6, minmax(105px, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 .siteCacheStats > button {
@@ -2953,8 +2955,29 @@ h2 {
   width: 28px;
 }
 
+.siteCacheActions {
+  display: flex;
+  flex: 1 1 290px;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+}
+.siteCacheActions:empty {
+  display: none;
+}
 .siteCacheSyncButton {
-  flex: 0 0 auto;
+  flex: 1 1 260px;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 1100px) {
+  .siteCacheToolbar .siteCacheStats,
+  .siteCacheToolbar .siteCacheActions {
+    flex-basis: auto;
+  }
 }
 
 .siteCacheSyncButton.primary {
@@ -7462,6 +7485,7 @@ td {
 .status-publishing,
 .status-publication-pending-confirmation,
 .status-retry-scheduled,
+.status-system-stopped,
 .status-paused,
 .status-publication-paused,
 .status-unchecked,

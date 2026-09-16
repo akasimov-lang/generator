@@ -3846,7 +3846,8 @@ def generate_content_item(db: Session, item: models.ContentItem) -> models.Conte
         item.generation_progress = 100
         active_items = [task_item for task_item in task.items if task_item.id != item.id and task_item.status in {"generation_queued", "generating"}]
         failed_items = [task_item for task_item in task.items if task_item.id != item.id and task_item.status == "generation_failed"]
-        task.status = "generating" if active_items else "generation_failed" if failed_items else "generated"
+        stopped_items = [task_item for task_item in task.items if task_item.status == "system_stopped"]
+        task.status = "generating" if active_items else "generation_failed" if failed_items else "system_stopped" if stopped_items else "generated"
         db.commit()
         db.refresh(item)
         return item
