@@ -28,7 +28,7 @@ function FakeMainOptions({ value, change }: { value: { create_fake_main?: boolea
     <label className="checkboxRow"><input type="checkbox" checked={!value.create_fake_main && !value.use_current_fake_main} onChange={() => change({ create_fake_main: false, use_current_fake_main: false })} /> Без фейковых страниц — только URL домена или поддомена</label>
     <label className="checkboxRow"><input type="checkbox" checked={!!value.create_fake_main} onChange={e => change({ create_fake_main: e.target.checked, use_current_fake_main: false })} /> Создавать новый фейковый внутряк при каждом автопереклее</label>
     <label className="checkboxRow"><input type="checkbox" checked={!!value.use_current_fake_main} onChange={e => change({ create_fake_main: false, use_current_fake_main: e.target.checked })} /> Использовать текущий фейковый внутряк при всех автопереклеях</label>
-    <p className="muted">Выберите один режим. Без фейковых страниц язык и язык-GEO ведут на одинаковый корневой URL. Новая страница: свободный путь на основе настройки проекта, например /page/, /page-1/, /page-2/. Текущая: используем currentFakeMain из кеша проекта без создания новой страницы.</p>
+    <p className="muted">Выберите один режим. Без фейковых страниц язык и язык-GEO ведут на одинаковый корневой URL. Новая страница: первый свободный путь /geo/, /geo1/…/geo10/, /geo-lang/. Для брендовых проектов также /бренд-geo/, /бренд-lang/, /бренд-casino-geo/, /бренд-casino-lang/. GEO, язык и бренд берутся из проекта; занятые фейковые и обычные страницы пропускаются. Текущая: используем currentFakeMain из кеша проекта без создания новой страницы.</p>
   </div>;
 }
 
@@ -147,8 +147,6 @@ function ProjectConfigEditor({ siteId, api }: { siteId: string; api: Api }) {
       <label>Схема альтернейтов<select value={draft.profile_id} onChange={e => { const t = data.templates.find(x => x.id === e.target.value); change({ profile_id: e.target.value, variant: (t ? Object.keys(t.variants).includes("after") ? "after" : Object.keys(t.variants)[0] : "current") as Config["variant"] }); }}><option value="">Текущая схема проекта</option>{data.templates.map(t => <option key={t.id} value={t.id}>{t.brand} · {t.geo} · {t.project}</option>)}</select></label>
       {template && <label>Версия схемы<select value={draft.variant} onChange={e => change({ variant: e.target.value as Config["variant"] })}>{Object.keys(template.variants).map(v => <option key={v} value={v}>{v === "after" ? "Схема стала" : v === "before" ? "Схема была" : "Предоставленная схема"}</option>)}</select></label>}
       <FakeMainOptions value={draft} change={change} />
-      <label>Основа пути новой фейковой страницы<input value={draft.fake_main_path} placeholder="/page/" onChange={e => change({ fake_main_path: e.target.value })} /></label>
-      <p className="muted">Необязательно. По умолчанию /page/. Если путь занят, добавляется следующий свободный номер. В режиме «текущий» и без фейковых страниц это поле не используется.</p>
     </div>
     {draft.scope === "personal" && <AutomationRules key="personal-rules" value={draft} onChange={change} pool={data.language_pool || []} />}
     {data.next_run_at && <p>Следующий запуск: <b>{new Date(data.next_run_at).toLocaleString("ru-RU")}</b></p>}

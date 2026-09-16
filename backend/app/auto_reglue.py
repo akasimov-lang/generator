@@ -287,7 +287,7 @@ def build_plan(site, state, global_cfg, cfg):
     regional = f'{language}-{geo}'
     regional_path = '/'
     if cfg.create_fake_main:
-        regional_path = next_fake_path(state, cfg.fake_main_path or '/page/')
+        regional_path = next_fake_path(site, state, cfg)
     elif cfg.use_current_fake_main:
         current = state.get('fake_main_current')
         if not current or not state.get('fake_main_enabled'):

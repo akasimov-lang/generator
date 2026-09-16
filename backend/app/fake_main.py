@@ -44,13 +44,27 @@ def create_fake_settings(project, value):
     return alternate
 
 
-def next_fake_path(state, base):
-    base = normalize_fake_path(base)
-    occupied = set(state.get('fake_main_paths', [])) | set(state.get('content_page_paths', []))
-    if state.get('fake_main_current'):
-        occupied.add(normalize_fake_path(state['fake_main_current']))
-    for index in range(10000):
-        candidate = base if index == 0 else base.rstrip('/') + '-' + str(index) + '/'
+def next_fake_path(site, state, cfg):
+    from app.site_brands import GENERAL
+
+    geo = (getattr(site, 'cache_geo', None) or '').lower()
+    language = (getattr(site, 'cache_language', None) or cfg.language).lower().replace('_', '-').split('-')[0]
+    brand = (getattr(site, 'brand', None) or '').strip()
+    generic = not brand or brand == GENERAL
+    brand = re.sub(r'[^a-z0-9]', '', brand.lower())
+    if not re.fullmatch('[a-z]{2}', geo) or not re.fullmatch('[a-z]{2,3}', language) or (not generic and not brand):
+        raise ValueError('Для имени фейковой страницы нужны GEO, язык проекта и бренд латиницей (кроме общих ключей).')
+    names = [geo, *(geo + str(i) for i in range(1, 11)), geo + '-' + language]
+    if not generic:
+        names.extend([brand + '-' + geo, brand + '-' + language])
+        if 'casino' not in brand:
+            names.extend([brand + '-casino-' + geo, brand + '-casino-' + language])
+    occupied = set()
+    for value in [*state.get('fake_main_paths', []), *state.get('content_page_paths', []), state.get('fake_main_current')]:
+        if value:
+            occupied.add(normalize_fake_path(value))
+    for name in dict.fromkeys(names):
+        candidate = normalize_fake_path(name)
         if candidate not in occupied:
-            return normalize_fake_path(candidate)
-    raise ValueError('Свободные имена фейковых страниц закончились. Измените основу пути.')
+            return candidate
+    raise ValueError('Все варианты имён фейковых страниц для GEO, языка и бренда заняты.')

@@ -292,8 +292,12 @@ UUID5 receipt, ожидание подтверждения без повторн
 Режимы фейковых страниц (уточнение): create_fake_main и use_current_fake_main
 в ProjectConfig/DomainOptions взаимоисключающие. Оба false (default) — все языковые
 URL только корневые, язык и язык-GEO совпадают; путь из прежней схемы игнорируется.
-create_fake_main=true — один НОВЫЙ путь за запуск: основа fake_main_path или /page/,
-затем -1, -2 и далее; исключаются fakeMain/currentFakeMain и data.pages[].slug.
+create_fake_main=true — один НОВЫЙ путь за запуск: geo, geo1…geo10, geo-lang;
+для известных брендов затем brand-geo, brand-lang, brand-casino-geo, brand-casino-lang.
+Бренд нормализуется в латинские буквы и цифры; casino не дублируется.
+Для Общих ключей — только варианты GEO/языка. Исключаются fakeMain/currentFakeMain
+и data.pages[].slug. Исчерпание вариантов останавливает запуск; старое поле
+fake_main_path сохранено для совместимости данных, но не управляет новыми именами.
 Путь фиксируется в плане; повтор доставки не выбирает следующий. current=true —
 нормализованный currentFakeMain из кеша, только при enableDynamicRoutes=true и
 наличии пути в fakeMain. Новых страниц не создаёт. Существующий переключатель

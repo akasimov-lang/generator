@@ -664,12 +664,12 @@ def test_fake_disabled_uses_only_root_urls_even_with_old_template_paths(scheme):
 def test_new_fake_chooses_unused_path_each_iteration_and_current_stays_fixed():
     site,state,g,cfg=fixture()
     cfg.use_current_fake_main=False;cfg.create_fake_main=True
-    state['content_page_paths']=['/events-1/']
+    state['content_page_paths']=['/az/','/az1/']
     first=auto.build_plan(site,state,g,cfg)
-    assert first['create_fake_main_path']=='/events-2/'
-    state['fake_main_paths'].append('/events-2/')
+    assert first['create_fake_main_path']=='/az2/'
+    state['fake_main_paths'].append('/az2/')
     second=auto.build_plan(site,state,g,cfg)
-    assert second['create_fake_main_path']=='/events-3/'
+    assert second['create_fake_main_path']=='/az3/'
     cfg.create_fake_main=False;cfg.use_current_fake_main=True;cfg.fake_main_path='/ignored/'
     current=auto.build_plan(site,state,g,cfg)
     assert current['create_fake_main_path'] is None
@@ -683,3 +683,32 @@ def test_fake_modes_mutually_exclusive():
     for cls in (auto.ProjectConfig,auto.DomainOptions):
         with pytest.raises(ValueError,match='один режим'):
             cls(create_fake_main=True,use_current_fake_main=True)
+
+
+@pytest.mark.parametrize('brand', ['', 'Общие ключи', 'Pin-Up', 'Casino'])
+def test_fake_path_templates_exhaustion_and_brand(brand):
+    from app.fake_main import next_fake_path
+    site, state, _, cfg = fixture()
+    site.brand = brand; site.cache_geo = 'CZ'; site.cache_language = 'cs-CZ'
+    state['fake_main_paths'] = []; state['content_page_paths'] = []; state['fake_main_current'] = ''
+    expected = ['/cz/', *[f'/cz{i}/' for i in range(1, 11)], '/cz-cs/']
+    if brand == 'Pin-Up':
+        expected += ['/pinup-cz/', '/pinup-cs/', '/pinup-casino-cz/', '/pinup-casino-cs/']
+    elif brand == 'Casino':
+        expected += ['/casino-cz/', '/casino-cs/']
+    for path in expected:
+        assert next_fake_path(site, state, cfg) == path
+        state['fake_main_paths'].append(path)
+    with pytest.raises(ValueError, match='заняты'):
+        next_fake_path(site, state, cfg)
+
+
+def test_fake_path_skips_normalized_content_and_current_and_validates_metadata():
+    from app.fake_main import next_fake_path
+    site, state, _, cfg = fixture()
+    state['content_page_paths'] = ['az', '/az1']
+    state['fake_main_current'] = 'az2/'
+    assert next_fake_path(site, state, cfg) == '/az3/'
+    site.cache_geo = ''
+    with pytest.raises(ValueError, match='GEO'):
+        next_fake_path(site, state, cfg)
