@@ -1,7 +1,7 @@
 import React from "react";
 
 type Api = <T>(path: string, options?: RequestInit) => Promise<T>;
-type Rules = { schedule_enabled: boolean; interval_days: number; scheme_mode: "preserve" | "add_auxiliary"; auxiliary_hreflangs: string[] };
+type Rules = { schedule_enabled: boolean; interval_days: number; scheme_mode: "preserve" | "add_auxiliary" | "base_only"; auxiliary_hreflangs: string[] };
 type Config = Rules & { domain_layout: "subdomain_main" | "root_main"; scope: "mass" | "personal"; enabled: boolean; drop_domain: string; x_default_use_newreg: boolean; x_default_newreg_domain: string; parent_kind: "drop" | "newreg"; newreg_domain: string; language: string; profile_id: string; variant: "current" | "provided" | "before" | "after"; fake_main_path: string };
 type GlobalConfig = Rules & { enabled: boolean; max_projects: number };
 type Template = { id: string; project: string; brand: string; geo: string; variants: Record<string, unknown> };
@@ -27,9 +27,19 @@ function AutomationRules({ value, onChange, pool }: { value: Rules; onChange: (p
     <p className="muted">Первый запуск — через выбранный интервал после включения. Далее отсчёт идёт от завершения последнего запуска, включая ручной. Изменение периода начинает отсчёт заново. Незавершённый переклей блокирует следующий.</p>
     <label className="checkboxRow"><input type="checkbox" checked={value.scheme_mode === "add_auxiliary"} onChange={() => onChange({ scheme_mode: "add_auxiliary" })} /> Добавлять новый фейковый альтернейт при каждом переклее</label>
     <label className="checkboxRow"><input type="checkbox" checked={!value.scheme_mode || value.scheme_mode === "preserve"} onChange={() => onChange({ scheme_mode: "preserve" })} /> Сохранять схему: обновлять адреса и дроп в x-default</label>
-    <label>Языки для новых фейковых альтернейтов<textarea rows={3} value={languages} onChange={e => { setLanguages(e.target.value); onChange({ auxiliary_hreflangs: e.target.value.split(/[\s,;]+/).filter(Boolean) }); }} /></label>
+    <label className="checkboxRow"><input type="checkbox" checked={value.scheme_mode === "base_only"} onChange={() => onChange({ scheme_mode: "base_only" })} /> Только базовые альтернейты — без фейковых языков и GEO</label>
+    {value.scheme_mode === "base_only" && <div className="autoRegluePlan">
+      <p>При переклее сохраняются ровно три ссылки. Остальные языковые альтернейты удаляются из разметки.</p>
+      <ul><li><b>Язык проекта</b>, без GEO (например az) — главная страница языкового домена или поддомена.</li>
+        <li><b>Язык-GEO</b> (например az-AZ) — внутренняя страница; путь берётся из настроек или схемы проекта.</li>
+        <li><b>x-default</b> — корневой дроп. Новорег разрешается отдельным чекбоксом «Использовать новорег в x-default» внутри проекта.</li></ul>
+      <p>Пример для языка az, GEO AZ и пути /events/:</p>
+      <pre>{'<link rel="alternate" hreflang="az" href="https://pinup-casino-az.clubheavenjax.com/" />\n<link rel="alternate" hreflang="az-AZ" href="https://pinup-casino-az.clubheavenjax.com/events/" />\n<link rel="alternate" hreflang="x-default" href="https://clubheavenjax.com/" />'}</pre>
+      <p className="muted">Адреса в примере иллюстративные. Для запуска подставляются язык, GEO, выбранные домены и путь конкретного проекта.</p>
+    </div>}
+    {value.scheme_mode !== "base_only" && <><label>Языки для новых фейковых альтернейтов<textarea rows={3} value={languages} onChange={e => { setLanguages(e.target.value); onChange({ auxiliary_hreflangs: e.target.value.split(/[\s,;]+/).filter(Boolean) }); }} /></label>
     <button type="button" className="button secondary compact" onClick={() => { setLanguages(pool.join(", ")); onChange({ auxiliary_hreflangs: pool }); }}>Заполнить языками ЕС и СНГ</button>
-    <p className="muted">В режиме добавления берём один следующий неиспользованный код. При исчерпании списка сохраняем схему. Адреса ведут на новый Main, пути сохраняются, x-default — на выбранный корневой домен.</p>
+    <p className="muted">В режиме добавления берём один следующий неиспользованный код. При исчерпании списка сохраняем схему. Адреса ведут на новый Main, пути сохраняются, x-default — на выбранный корневой домен.</p></>}
   </div>;
 }
 

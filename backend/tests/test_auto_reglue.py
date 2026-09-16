@@ -321,3 +321,34 @@ def test_missing_child_blocks_root_change_before_any_write():
     state.update(canon='old.test', domains=['old.test','next.test'])
     with pytest.raises(ValueError, match='нет неиспользованного поддомена'):
         auto.build_plan(site, state, g, cfg)
+
+
+@pytest.mark.parametrize('personal', [False, True])
+@pytest.mark.parametrize('newreg', [False, True])
+def test_base_only_keeps_exactly_three_links_despite_template_and_existing_extras(personal, newreg):
+    from app.network_state import alternate_links
+    site, state, g, cfg = fixture()
+    g.scheme_mode = 'base_only'
+    cfg.scheme_mode = 'base_only' if personal else 'add_auxiliary'
+    cfg.scope = 'personal' if personal else 'mass'
+    cfg.x_default_use_newreg = newreg
+    cfg.x_default_newreg_domain = 'newreg.test'
+    plan = auto.build_plan(site, state, g, cfg)
+    links = alternate_links(plan['alternateMarkup'])
+    assert [x['hreflang'] for x in links] == ['az', 'az-AZ', 'x-default']
+    assert links[0]['href'] == 'https://next.clubheavenjax.com/'
+    assert links[1]['href'] == 'https://next.clubheavenjax.com/events/'
+    assert links[2]['href'] == ('https://newreg.test/' if newreg else 'https://clubheavenjax.com/')
+    assert plan['added_hreflang'] is None and not plan['pool_exhausted']
+
+
+@pytest.mark.parametrize('language,geo', [('de','DE'), ('pl','PL'), ('en','CA')])
+def test_base_only_uses_each_projects_language_and_geo(language, geo):
+    from app.network_state import alternate_links
+    site, state, g, cfg = fixture()
+    site.cache_language = language
+    site.cache_geo = geo
+    cfg.profile_id = ''
+    g.scheme_mode = 'base_only'
+    plan = auto.build_plan(site, state, g, cfg)
+    assert [x['hreflang'] for x in alternate_links(plan['alternateMarkup'])] == [language, f'{language}-{geo}', 'x-default']

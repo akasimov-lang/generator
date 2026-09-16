@@ -87,6 +87,14 @@ with sync_playwright() as p:
  page.get_by_role('button',name='Сохранить настройки',exact=True).click()
  expect(page.get_by_role('button',name='Сохранить настройки',exact=True)).to_be_disabled()
  assert cfg['domain_layout']=='root_main'
+ page.get_by_label('Только базовые альтернейты — без фейковых языков и GEO').check()
+ expect(page.get_by_label('Сохранять схему: обновлять адреса и дроп в x-default')).not_to_be_checked()
+ expect(page.get_by_label('Добавлять новый фейковый альтернейт при каждом переклее')).not_to_be_checked()
+ expect(page.get_by_text('При переклее сохраняются ровно три ссылки. Остальные языковые альтернейты удаляются из разметки.',exact=True)).to_be_visible()
+ expect(page.get_by_label('Языки для новых фейковых альтернейтов')).to_have_count(0)
+ page.get_by_role('button',name='Сохранить настройки',exact=True).click()
+ expect(page.get_by_role('button',name='Сохранить настройки',exact=True)).to_be_disabled()
+ assert cfg['scheme_mode']=='base_only'
  page.set_viewport_size({'width':390,'height':844})
  assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
  assert not errors,errors

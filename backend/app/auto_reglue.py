@@ -25,7 +25,7 @@ class GlobalConfig(BaseModel):
     enabled: bool = False
     schedule_enabled: bool = False
     interval_days: Literal[3, 4, 5, 7, 14] = 7
-    scheme_mode: Literal["preserve", "add_auxiliary"] = "preserve"
+    scheme_mode: Literal["preserve", "add_auxiliary", "base_only"] = "preserve"
     auxiliary_hreflangs: list[str] = Field(default_factory=default_language_pool, max_length=200)
     max_projects: int = Field(default=20, ge=1, le=100)
 
@@ -43,7 +43,7 @@ class ProjectConfig(BaseModel):
     domain_layout: Literal['subdomain_main', 'root_main'] = 'subdomain_main'
     schedule_enabled: bool = False
     interval_days: Literal[3, 4, 5, 7, 14] = 7
-    scheme_mode: Literal["preserve", "add_auxiliary"] = "preserve"
+    scheme_mode: Literal["preserve", "add_auxiliary", "base_only"] = "preserve"
     auxiliary_hreflangs: list[str] = Field(default_factory=default_language_pool, max_length=200)
 
     @field_validator('auxiliary_hreflangs')
@@ -215,6 +215,8 @@ def build_plan(site, state, global_cfg, cfg):
     if not regional_path or regional_path == '/':
         raise ValueError('Укажите путь внутренней копии главной для альтернейта язык-GEO, например /events/.')
     links[regional.lower()] = {'hreflang': regional, 'href': f'https://{language_host}{regional_path}'}
+    if global_cfg.scheme_mode == 'base_only':
+        links = {language: links[language], regional.lower(): links[regional.lower()]}
     added_hreflang = None
     if global_cfg.scheme_mode == 'add_auxiliary':
         lang = next((lang for lang in global_cfg.auxiliary_hreflangs if lang.lower() not in links and lang.lower() != language and lang.split('-')[-1].upper() != geo), None)
