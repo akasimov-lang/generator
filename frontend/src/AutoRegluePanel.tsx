@@ -52,7 +52,7 @@ function AutomationRules({ value, onChange, pool }: { value: Rules; onChange: (p
     </div>}
     {value.scheme_mode !== "base_only" && <><label>Языки для новых фейковых альтернейтов<textarea rows={3} value={languages} onChange={e => { setLanguages(e.target.value); onChange({ auxiliary_hreflangs: e.target.value.split(/[\s,;]+/).filter(Boolean) }); }} /></label>
     <button type="button" className="button secondary compact" onClick={() => { setLanguages(pool.join(", ")); onChange({ auxiliary_hreflangs: pool }); }}>Заполнить языками ЕС и СНГ</button>
-    <p className="muted">В режиме добавления берём один следующий неиспользованный код. При исчерпании списка сохраняем схему. Адреса ведут на новый Main, пути сохраняются, x-default — на выбранный корневой домен.</p></>}
+    <p className="muted">В режиме добавления берём один следующий неиспользованный код. При исчерпании списка сохраняем схему. Адреса ведут на языковой домен выбранной схемы, x-default — на выбранный корневой домен. Без фейковых страниц используются только корневые URL.</p></>}
   </div>;
 }
 
@@ -152,7 +152,7 @@ function ProjectConfigEditor({ siteId, api }: { siteId: string; api: Api }) {
     </div>
     {draft.scope === "personal" && <AutomationRules key="personal-rules" value={draft} onChange={change} pool={data.language_pool || []} />}
     {data.next_run_at && <p>Следующий запуск: <b>{new Date(data.next_run_at).toLocaleString("ru-RU")}</b></p>}
-    {draft.domain_layout !== "root_main" && !draft.create_subdomains && <p className="muted">Берём следующий поддомен после текущего Main по порядку сетки, пропуская все бывшие Main. Дополнительные языки сохраняем, их адреса переносим на новый Main. x-default определяется выбранным режимом: в базовой схеме — неиспользованный домен сетки. Пустой путь сохраняет путь выбранного шаблона.</p>}
+    {draft.domain_layout !== "root_main" && !draft.create_subdomains && <p className="muted">Берём следующий поддомен после текущего Main по порядку сетки, пропуская все бывшие Main. Дополнительные языки сохраняем, их адреса переносим на новый Main. x-default определяется выбранным режимом: в базовой схеме — неиспользованный домен сетки. Фейковый путь добавляется только в отдельно выбранном режиме; без него используются корневые URL.</p>}
     <div className="networkActions"><button className="button secondary" disabled={busy || !dirty} onClick={() => void perform(async () => { const saved = await api<Config>(`/auto-reglue/projects/${siteId}`, body("PUT", draft)); setDraft(saved); setPlan(null); await load(); })}>Сохранить настройки</button>
       <button className="button secondary" disabled={busy || dirty || !(data.eligible || draft.scope === "personal") || !draft.enabled || (draft.scope !== "personal" && !data.settings.enabled) || pending} onClick={() => void perform(async () => { const next = await api<Plan>(`/auto-reglue/projects/${siteId}/preview`, { method: "POST" }); setPlan({ ...next, requestId: crypto.randomUUID() }); })}>Подготовить переклей</button></div>
     {plan && <><PlanPreview plan={plan} /><button className="button primary" disabled={busy || dirty || pending} onClick={() => void perform(async () => { const result = await api<{ results: { error?: string }[] }>("/auto-reglue/start", body("POST", { scope: "project", items: [{ site_id: siteId, preview_token: plan.preview_token, request_id: plan.requestId }] })); if (result.results[0]?.error) throw new Error(result.results[0].error); setPlan(null); await load(); })}>Запустить автопереклей проекта</button></>}
