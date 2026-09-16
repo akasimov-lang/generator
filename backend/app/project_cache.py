@@ -1040,6 +1040,8 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
         site.internal_pages_count = internal_pages_count
         site.domains_count = domains_count
         site.cache_domains = domains
+        from app.branded_domains import apply_brand_domain_types
+        apply_brand_domain_types(site)
         if default_prompt and not site.default_prompt_template_id:
             site.default_prompt_template_id = default_prompt.id
         if is_duplicate:
