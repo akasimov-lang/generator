@@ -141,6 +141,10 @@ def observe(db, site, project):
     if state["canon"]:
         site.base_url = "https://" + state["canon"]
     site.cache_domains = state["domains"]
+    from app.branded_domains import apply_brand_domain_types
+    from app.domain_classification import apply_default_domain_types
+    apply_brand_domain_types(site)
+    apply_default_domain_types(site)
     site.domains_count = len(state["domains"])
     for operation in db.scalars(select(models.NetworkOperation).where(
         models.NetworkOperation.site_id == site.id,

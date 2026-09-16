@@ -230,11 +230,11 @@ def test_domain_types_persist_across_network_refresh_without_remote_write(env):
     db, site, remote = env
     network.read_network(db, site)
     saved = network.update_domain_type(db, site, network.DomainTypeUpdate(domain="main.test", domain_type="drop"))
-    assert saved["domain_types"] == {"main.test": "drop"}
+    assert saved["domain_types"] == {"main.test": "drop", "reserve.test": "drop", "next.test": "drop"}
     network.update_domain_type(db, site, network.DomainTypeUpdate(domain="reserve.test", domain_type="newreg"))
     remote.data["settings"]["domains"].remove("main.test")
     result = network.read_network(db, site)
-    assert result["domain_types"] == {"main.test": "drop", "reserve.test": "newreg"}
+    assert result["domain_types"] == {"main.test": "drop", "reserve.test": "newreg", "next.test": "drop"}
     db.expire_all()
     assert db.get(models.Site, site.id).domain_types == result["domain_types"]
     assert not remote.calls

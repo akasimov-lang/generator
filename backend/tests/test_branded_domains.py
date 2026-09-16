@@ -29,3 +29,20 @@ def test_incremental_sync_preserves_explicit_drop_and_missing_parent_child():
     child=classify_domains(site.cache_domains, site.domain_types)['pelican.missingparent.com']
     assert child['is_subdomain'] and child['parent_domain']=='missingparent.com'
     assert child['parent_type'] is None
+
+
+def test_default_types_persist_missing_parents_and_preserve_existing():
+    from app.domain_classification import apply_default_domain_types, NEWREG_ZONES
+    roots = ["example." + zone for zone in NEWREG_ZONES]
+    site = SimpleNamespace(cache_domains=["pinco.unknown.com", "www.explicit.site", "ordinary.org", *["child." + root for root in roots]], domain_types={"explicit.site": "drop"})
+    apply_default_domain_types(site)
+    assert site.domain_types["unknown.com"] == "drop"
+    assert site.domain_types["ordinary.org"] == "drop"
+    assert site.domain_types["www.explicit.site"] == "drop"
+    roles = classify_domains(site.cache_domains, site.domain_types)
+    for root in roots:
+        assert site.domain_types[root] == "newreg"
+        assert roles["child." + root]["parent_domain"] == root
+        assert roles["child." + root]["parent_type"] == "newreg"
+    assert "pinco.unknown.com" not in site.domain_types
+    assert apply_default_domain_types(site) == []
