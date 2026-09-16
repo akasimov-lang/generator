@@ -17,7 +17,6 @@ type Draft = { markup: string; enabled: boolean; originalMarkup: string; origina
 const actionLabels = { create_subdomains: "Создание поддоменов", reserve: "Сохранение резерва", reglue: "Переклей", alternates: "Альтернейты" };
 const statusLabels: Record<string, string> = { confirmed: "Подтверждено", pending: "Ожидает подтверждения", unknown: "Результат пока неизвестен", failed: "Ошибка" };
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Не удалось выполнить запрос";
-const escapeAttribute = (value: string) => value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 
 export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Props) {
   const draftKey = `network-alternates:${username}:${site.id}`;
@@ -36,10 +35,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
   const busyRef = React.useRef(false);
   const [error, setError] = React.useState("");
   const [message, setMessage] = React.useState("");
-  const [newLang, setNewLang] = React.useState("x-default");
-  const [newUrl, setNewUrl] = React.useState("");
   const [subdomainsInput, setSubdomainsInput] = React.useState("");
-  const [formerMain, setFormerMain] = React.useState("");
   const mounted = React.useRef(true);
   const uncertain = data?.operations.some((op) => ["pending", "unknown"].includes(op.status)) || false;
   const dirty = Boolean(draft && (draft.markup !== draft.originalMarkup || draft.enabled !== draft.originalEnabled));
@@ -138,19 +134,6 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
     } catch (err) { if (mounted.current) setError(errorText(err)); }
     finally { busyRef.current = false; if (mounted.current) setBusy(""); }
   }
-  function addAlternate() {
-    if (!draft) return;
-    try {
-      const url = new URL(newUrl.trim());
-      if (!["https:", "http:"].includes(url.protocol) || url.username || url.password || !/^[A-Za-z0-9-]+$/.test(newLang.trim())) throw new Error("Укажите hreflang и полный HTTP(S)-адрес.");
-      const parsed = new DOMParser().parseFromString(draft.markup, "text/html");
-      if ([...parsed.querySelectorAll('link[hreflang]')].some((link) => link.getAttribute("hreflang")?.toLowerCase() === newLang.trim().toLowerCase())) throw new Error("Этот hreflang уже есть. Измените его адрес в поле «Альтернейты».");
-      const line = `<link rel="alternate" hreflang="${escapeAttribute(newLang.trim())}" href="${escapeAttribute(url.href)}" />`;
-      setDraft({ ...draft, markup: `${draft.markup}${draft.markup.endsWith("\n") || !draft.markup ? "" : "\n"}${line}` });
-      setNewUrl(""); setError("");
-    } catch (err) { setError(errorText(err)); }
-  }
-
   const known = data ? [...new Set([...data.domains, data.canon, ...data.main_history, ...data.alternate_history])].filter(Boolean) : [];
   const disabled = Boolean(busy) || uncertain;
   const reserveValid = Boolean(data && reserve && reserve !== data.canon && data.domains.includes(reserve));
@@ -205,12 +188,13 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
           <label>Альтернейты<textarea aria-label="Альтернейты" className="networkMarkup" rows={8} spellCheck={false} value={draft.markup} disabled={disabled || !data.has_head} onChange={(event) => setDraft({ ...draft, markup: event.target.value })} placeholder={'<link rel="alternate" hreflang="x-default" href="https://example.com/" />'} /></label>
           {!data.has_head && <p>Настройки head не получены. Редактирование недоступно.</p>}
           {conflict && <div className="notice">Разметка в Webdev изменилась, пока вы редактировали её. Скопируйте нужные правки и загрузите актуальный вариант кнопкой ниже.</div>}
-          <details><summary>Добавить ссылку в альтернейты</summary><div className="networkAlternateBuilder">
-            <label>Бывший Main<select value={formerMain} onChange={(event) => { setFormerMain(event.target.value); if (event.target.value) setNewUrl(`https://${event.target.value}/`); }}><option value="">Выбрать из истории</option>{data.main_history.filter((domain) => domain !== data.canon).map((domain) => <option key={domain}>{domain}</option>)}</select></label>
-            <label>hreflang<input value={newLang} onChange={(event) => setNewLang(event.target.value)} placeholder="x-default" /></label>
-            <label>Адрес<input type="url" value={newUrl} onChange={(event) => setNewUrl(event.target.value)} placeholder="https://example.com/" /></label>
-            <button className="button secondary" type="button" disabled={disabled || !data.has_head} onClick={addAlternate}>Добавить в разметку</button>
-          </div></details>
+          <p role="status" className={dirty ? "notice" : "muted"}>
+            {busy === "alternates" ? "Отправляем альтернейты на сервер проекта…"
+              : data.operations.some((op) => op.action === "alternates" && ["pending", "unknown"].includes(op.status))
+                ? "Запрос отправлен. Ожидаем подтверждения синхронизации с сервером проекта."
+              : dirty ? "Изменения не синхронизированы. Нажмите «Сохранить альтернейты», чтобы отправить данные на сервер проекта."
+              : "Локальных изменений нет. Разметка соответствует последним полученным данным проекта."}
+          </p>
           <div className="networkActions">
             <button type="button" className="button" disabled={disabled || !dirty || conflict || !data.has_head} onClick={() => void mutate("alternates")}>{busy === "alternates" ? "Сохраняем…" : "Сохранить альтернейты"}</button>
             <button type="button" className="button secondary" disabled={Boolean(busy) || !dirty} onClick={() => setDraft({ markup: data.alternateMarkup, enabled: data.enableAlternates, originalMarkup: data.alternateMarkup, originalEnabled: data.enableAlternates })}>Загрузить актуальную разметку</button>

@@ -37,6 +37,20 @@ def dispatch(db, run):
         run.status = 'waiting'; run.message = 'Очередь недоступна. Повторите продолжение запуска.'; db.commit()
 
 
+def kick_due_schedule(db):
+    from datetime import datetime, timezone
+    if not db.scalar(select(models.AutoReglueSchedule.site_id).where(
+        models.AutoReglueSchedule.enabled.is_(True),
+        models.AutoReglueSchedule.next_run_at <= datetime.now(timezone.utc)).limit(1)):
+        return
+    from app.worker import schedule_auto_reglue_job
+    try:
+        schedule_auto_reglue_job.delay()
+    except Exception:
+        # Durable due date is already saved; Beat retries within a minute.
+        pass
+
+
 @router.get('')
 def overview(_: AdminUser, db: Session = Depends(get_db)):
     sites = db.scalars(select(models.Site).where(models.Site.project_status == 'mass_actions').order_by(models.Site.name)).all()
@@ -48,7 +62,9 @@ def overview(_: AdminUser, db: Session = Depends(get_db)):
 
 @router.put('/settings')
 def settings(payload: auto.GlobalConfig, _: AdminUser, db: Session = Depends(get_db)):
-    return auto.save_config(db, payload)
+    saved = call(auto.save_config, db, payload)
+    kick_due_schedule(db)
+    return saved
 
 
 @router.get('/projects/{site_id}')
@@ -64,9 +80,16 @@ def project_settings(site_id: str, _: AdminUser, db: Session = Depends(get_db)):
 @router.put('/projects/{site_id}')
 def save_project(site_id: str, payload: auto.ProjectConfig, _: AdminUser, db: Session = Depends(get_db)):
     site_or_404(db,site_id)
-    if payload.enabled and payload.domain_layout != 'root_main' and ((not payload.drop_domain and (not payload.x_default_use_newreg or payload.parent_kind=='drop')) or (payload.x_default_use_newreg and not payload.x_default_newreg_domain) or payload.parent_kind=='newreg' and not payload.newreg_domain):
-        raise HTTPException(400,'Для включения укажите дроп, язык и родительский домен.')
-    return auto.save_config(db,payload,site_id)
+    if payload.enabled and payload.domain_layout != 'root_main':
+        base_only = auto.effective_config(auto.config(db), payload).scheme_mode == 'base_only'
+        if (payload.parent_kind == 'drop' and not payload.drop_domain
+            or payload.parent_kind == 'newreg' and not payload.newreg_domain
+            or not base_only and (payload.x_default_use_newreg and not payload.x_default_newreg_domain
+                                  or not payload.x_default_use_newreg and not payload.drop_domain)):
+            raise HTTPException(400,'Укажите родительский домен и настройки x-default.')
+    saved = call(auto.save_config, db, payload, site_id)
+    kick_due_schedule(db)
+    return saved
 
 
 @router.post('/projects/{site_id}/preview')

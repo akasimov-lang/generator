@@ -24,6 +24,8 @@ with sync_playwright() as p:
  expect(launch).to_be_enabled()
  editor.fill('<link rel="alternate" hreflang="x-default" href="https://next.test/" />')
  expect(launch).to_be_disabled()
+ expect(page.get_by_text('Изменения не синхронизированы.', exact=False)).to_be_visible()
+ expect(page.get_by_text('Добавить ссылку в альтернейты', exact=True)).to_have_count(0)
  page.get_by_role('button',name='Сохранить альтернейты',exact=True).click()
  page.get_by_role('button',name='Проверить домен',exact=True).click()
  expect(launch).to_be_enabled();launch.click()

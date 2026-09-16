@@ -188,22 +188,17 @@ def test_schedule_due_time_personal_priority_and_mass_exclusion(monkeypatch):
         site = db.scalar(select(models.Site))
         g = auto.GlobalConfig(enabled=True, schedule_enabled=True, interval_days=3)
         cfg = auto.ProjectConfig(enabled=True, drop_domain='drop.test', language='az',fake_main_path='/events/')
-        auto.save_config(db, g); auto.save_config(db, cfg, site.id)
         site.project_status = 'mass_actions'; db.commit()
-        anchor = datetime(2026, 1, 1, tzinfo=timezone.utc)
-        for key in ('global', site.id):
-            row = db.get(models.AutoReglueConfig, key)
-            row.value = {**row.value, '_schedule_since': anchor.isoformat()}
-        db.commit()
-        assert auto.next_scheduled_at(db, site) == anchor + timedelta(days=3)
-        assert auto.schedule_tick(db, lambda _: pytest.fail('not due'), anchor + timedelta(days=2)) == []
+        auto.save_config(db, g); auto.save_config(db, cfg, site.id)
+        initial = auto.next_scheduled_at(db, site)
+        assert abs((initial - datetime.now(timezone.utc)).total_seconds()) < 5
+        auto.save_config(db, cfg, site.id)
+        assert auto.next_scheduled_at(db, site) == initial
         cfg.scope = 'personal'; cfg.interval_days = 14; cfg.schedule_enabled = True
         auto.save_config(db, cfg, site.id)
-        row = db.get(models.AutoReglueConfig, site.id)
-        row.value = {**row.value, '_schedule_since': anchor.isoformat()}; db.commit()
         g.enabled = False; auto.save_config(db, g)
         site.project_status = 'working'; db.commit()
-        assert auto.next_scheduled_at(db, site) == anchor + timedelta(days=14)
+        assert auto.next_scheduled_at(db, site) == initial
         with pytest.raises(ValueError, match='персональные'):
             auto.prepare_run(db, site, uuid4(), 'irrelevant', 'admin', 'mass')
         cfg.schedule_enabled = False; auto.save_config(db, cfg, site.id)
@@ -221,10 +216,9 @@ def test_schedule_queues_once_blocks_overlap_and_records_preflight_error(monkeyp
         site.name = 'clubheavenjax.com'; site.cache_geo = 'AZ'; site.project_status = 'mass_actions'
         db.commit()
         auto.save_config(db, g); auto.save_config(db, cfg, site.id)
-        anchor = datetime.now(timezone.utc) - timedelta(days=4)
-        for key in ('global', site.id):
-            row = db.get(models.AutoReglueConfig, key)
-            row.value = {**row.value, '_schedule_since': anchor.isoformat()}
+        anchor = datetime.now(timezone.utc)
+        schedule = db.get(models.AutoReglueSchedule, site.id)
+        schedule.next_run_at = anchor
         db.commit()
         queued = []
         ids = auto.schedule_tick(db, queued.append)
@@ -238,9 +232,10 @@ def test_schedule_queues_once_blocks_overlap_and_records_preflight_error(monkeyp
         run.updated_at = anchor + timedelta(hours=1); db.commit()
         def fail(*_): raise ValueError('no candidate')
         monkeypatch.setattr(auto, 'preview', fail)
-        failed_ids = auto.schedule_tick(db, queued.append)
+        failed_ids = auto.schedule_tick(db, queued.append, anchor + timedelta(days=3, seconds=1))
         assert len(failed_ids) == 1 and len(queued) == 1
         assert db.get(models.AutoReglueRun, failed_ids[0]).status == 'failed'
+        assert auto.schedule_tick(db, queued.append, anchor + timedelta(days=3, seconds=2)) == []
 
 
 def test_supported_intervals_and_language_pool():
@@ -329,6 +324,8 @@ def test_base_only_keeps_exactly_three_links_despite_template_and_existing_extra
     from app.network_state import alternate_links
     site, state, g, cfg = fixture()
     g.scheme_mode = 'base_only'
+    state['domains'].extend(['fresh-drop.test', 'newreg.test'])
+    site.domain_types = {'fresh-drop.test': 'drop', 'newreg.test': 'newreg'}
     cfg.scheme_mode = 'base_only' if personal else 'add_auxiliary'
     cfg.scope = 'personal' if personal else 'mass'
     cfg.x_default_use_newreg = newreg
@@ -338,7 +335,7 @@ def test_base_only_keeps_exactly_three_links_despite_template_and_existing_extra
     assert [x['hreflang'] for x in links] == ['az', 'az-AZ', 'x-default']
     assert links[0]['href'] == 'https://next.clubheavenjax.com/'
     assert links[1]['href'] == 'https://next.clubheavenjax.com/events/'
-    assert links[2]['href'] == ('https://newreg.test/' if newreg else 'https://clubheavenjax.com/')
+    assert links[2]['href'] == ('https://newreg.test/' if newreg else 'https://fresh-drop.test/')
     assert plan['added_hreflang'] is None and not plan['pool_exhausted']
 
 
@@ -350,5 +347,79 @@ def test_base_only_uses_each_projects_language_and_geo(language, geo):
     site.cache_geo = geo
     cfg.profile_id = ''
     g.scheme_mode = 'base_only'
+    state['domains'].extend(['fresh-drop.test', 'newreg.test'])
+    site.domain_types = {'fresh-drop.test': 'drop', 'newreg.test': 'newreg'}
     plan = auto.build_plan(site, state, g, cfg)
     assert [x['hreflang'] for x in alternate_links(plan['alternateMarkup'])] == [language, f'{language}-{geo}', 'x-default']
+
+
+def test_unused_xdefault_excludes_all_history_current_markup_aliases_and_main_parent():
+    site, state, g, cfg = fixture()
+    g.scheme_mode = 'base_only'
+    candidates = ['clubheavenjax.com', 'former-main.test', 'www.former-default.test', 'former-alternate.test', 'current-default.test', 'untyped.test', 'newreg.test', 'fresh-drop.test']
+    state['domains'].extend(candidates)
+    site.domain_types = {d: 'drop' for d in candidates if d != 'untyped.test'}
+    site.domain_types['newreg.test'] = 'newreg'
+    site.main_domain_history.append('former-main.test')
+    site.x_default_history = ['former-default.test']
+    site.alternate_domain_history = ['former-alternate.test']
+    state['alternateMarkup'] += '\n<link rel="alternate" hreflang="x-default" href="https://current-default.test/" />'
+    plan = auto.build_plan(site, state, g, cfg)
+    assert plan['x_default_domain'] == 'fresh-drop.test'
+    assert plan['new_main'] == plan['language_domain']
+    assert plan['x_default_domain'] != plan['new_main']
+    site.x_default_history.append('fresh-drop.test')
+    with pytest.raises(ValueError, match='нет неиспользованного дропа'):
+        auto.build_plan(site, state, g, cfg)
+
+
+def test_schedule_recovers_queue_failure_and_keeps_calendar(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    _, sessions = make_client()
+    _, state, g, cfg = fixture()
+    g.schedule_enabled = True; g.interval_days = 3
+    monkeypatch.setattr(auto.project_network, 'read_network', lambda db, site: dict(state, revision=state_revision(state)))
+    anchor = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    with sessions() as db:
+        site = db.scalar(select(models.Site))
+        site.name = 'clubheavenjax.com'; site.cache_geo = 'AZ'; site.project_status = 'mass_actions'
+        db.commit()
+        auto.save_config(db, g); auto.save_config(db, cfg, site.id)
+        schedule = db.get(models.AutoReglueSchedule, site.id)
+        schedule.anchor_at = anchor; schedule.next_run_at = anchor; db.commit()
+        def unavailable(_): raise RuntimeError('queue unavailable')
+        with pytest.raises(RuntimeError):
+            auto.schedule_tick(db, unavailable, anchor + timedelta(days=10))
+        run = db.scalar(select(models.AutoReglueRun))
+        receipt = run.id
+        assert run.status == 'queued'
+        assert auto.next_scheduled_at(db, site) == anchor + timedelta(days=12)
+    with sessions() as db:
+        site = db.scalar(select(models.Site))
+        queued = []
+        assert auto.schedule_tick(db, queued.append, anchor + timedelta(days=10)) == [receipt]
+        assert queued == [receipt]
+        assert len(db.scalars(select(models.AutoReglueRun)).all()) == 1
+        run = db.get(models.AutoReglueRun, receipt)
+        run.status = 'completed'; db.commit()
+        auto.save_config(db, cfg, site.id)
+        assert auto.next_scheduled_at(db, site) == anchor + timedelta(days=12)
+        g.schedule_enabled = False; auto.save_config(db, g)
+        assert auto.next_scheduled_at(db, site) is None
+        g.schedule_enabled = True; auto.save_config(db, g)
+        assert auto.next_scheduled_at(db, site) == anchor + timedelta(days=12)
+        g.interval_days = 14; auto.save_config(db, g)
+        assert auto.next_scheduled_at(db, site) == anchor + timedelta(days=14)
+
+
+def test_legacy_schedule_keeps_due_date_on_upgrade():
+    from datetime import datetime, timedelta, timezone
+    _, sessions = make_client()
+    anchor = datetime(2026, 9, 15, tzinfo=timezone.utc)
+    with sessions() as db:
+        site = db.scalar(select(models.Site)); site.project_status = 'mass_actions'
+        db.add(models.AutoReglueConfig(key='global', value={**auto.GlobalConfig(enabled=True, schedule_enabled=True, interval_days=3).model_dump(), '_schedule_since': anchor.isoformat()}))
+        db.add(models.AutoReglueConfig(key=site.id, value={**auto.ProjectConfig(enabled=True).model_dump(), '_schedule_since': anchor.isoformat()}))
+        db.commit()
+        auto.sync_schedules(db, anchor + timedelta(days=1)); db.commit()
+        assert auto.next_scheduled_at(db, site) == anchor + timedelta(days=3)

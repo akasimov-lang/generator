@@ -7,6 +7,7 @@ import { matchesProjectSearch, projectSearchKeywords } from "./projectSearch";
 import { TechnicalPagesForm } from "./TechnicalPagesForm";
 import { workspaceRequestCache } from "./workspaceRequestCache";
 import { ProjectNetworkPanel } from "./ProjectNetworkPanel";
+import { AutoReglueGuide } from "./AutoReglueGuide";
 import { AutoReglueView, ProjectAutoReglue } from "./AutoRegluePanel";
 import {
   Activity,
@@ -535,7 +536,7 @@ type PublicationCampaignQueue = {
 
 type ThemeMode = "light" | "dark";
 type InputStyle = "balanced" | "classic" | "soft" | "inset" | "underline" | "emerald" | "graphite" | "rounded" | "contrast" | "glass";
-type AppView = "autoReglue" | "published" | "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "favorites" | "guide" | "settings";
+type AppView = "autoReglueGuide" | "autoReglue" | "published" | "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "favorites" | "guide" | "settings";
 type WorkspaceTab = "overview" | "topics" | "content" | "publication" | "menu" | "network" | "redirects";
 
 type WorkspaceAccordionContextValue = {
@@ -663,6 +664,7 @@ function generateSecurePassword(length = 10): string {
 
 const MAIN_VIEW_PATHS: Record<Exclude<AppView, "workspace">, string> = {
   autoReglue: "/auto-reglue",
+  autoReglueGuide: "/auto-reglue/guide",
   dashboard: "/dashboard",
   prompts: "/prompts",
   tasks: "/tasks",
@@ -740,7 +742,7 @@ function pathForRoute(view: AppView, workspaceTab: WorkspaceTab = DEFAULT_WORKSP
 }
 
 function isAdminOnlyView(view: AppView) {
-  return ["dashboard", "providers", "published", "autoReglue"].includes(view);
+  return ["dashboard", "providers", "published", "autoReglue", "autoReglueGuide"].includes(view);
 }
 
 const DEFAULT_PROMPT_DRAFT = `Рабочий промпт для конкретной задачи.
@@ -1186,6 +1188,7 @@ function App() {
             <h1>{viewTitle(activeView, workspaceTab)}</h1>
           </div>
           <div className="topbarActions">
+            {isAdmin && activeView === "autoReglue" && <a className="button primary autoReglueGuideButton" href={pathForRoute("autoReglueGuide")} onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("autoReglueGuide"); } }}><BookOpen size={18} /> Инструкция по автопереклеям</a>}
             {currentUser.is_admin ? (
               <button
                 className={`button secondary adminViewModeButton ${viewAsUser ? "active" : ""}`}
@@ -1266,6 +1269,7 @@ function App() {
         {activeView === "favorites" && <SitesView api={api} sites={sites} currentUsername={currentUser.username} favoritesOnly readOnly={!isAdmin} onChanged={loadAll} />}
         {activeView === "guide" && <UserGuideView />}
         {isAdmin && activeView === "autoReglue" && <AutoReglueView api={api} />}
+        {isAdmin && activeView === "autoReglueGuide" && <AutoReglueGuide onBack={() => navigateTo("autoReglue")} />}
         {activeView === "settings" && <SettingsView api={api} currentUser={currentUser} users={users} designVersion={designVersion} onDesignVersionChange={setDesignVersion} inputStyle={inputStyle} onInputStyleChange={setInputStyle} onChanged={loadAll} />}
       </main>
       {notificationPromptVisible ? (
@@ -10782,6 +10786,7 @@ function viewTitle(view: AppView, _workspaceTab: WorkspaceTab) {
     favorites: "Избранное",
     guide: "Инструкция по работе",
     autoReglue: "Автопереклей",
+    autoReglueGuide: "Инструкция по автопереклеям",
     settings: "Настройки"
   };
   return titles[view];

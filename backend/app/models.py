@@ -347,6 +347,17 @@ class AutoReglueConfig(Base, TimestampMixin):
     value: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
+class AutoReglueSchedule(Base, TimestampMixin):
+    __tablename__ = "auto_reglue_schedules"
+
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    interval_days: Mapped[int] = mapped_column(Integer)
+    anchor_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    next_run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    last_scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class AutoReglueRun(Base, TimestampMixin):
     __tablename__ = "auto_reglue_runs"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)

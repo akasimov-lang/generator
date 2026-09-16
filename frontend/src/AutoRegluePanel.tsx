@@ -24,7 +24,7 @@ function AutomationRules({ value, onChange, pool }: { value: Rules; onChange: (p
   return <div className="networkSection">
     <label className="checkboxRow"><input type="checkbox" checked={!!value.schedule_enabled} onChange={e => onChange({ schedule_enabled: e.target.checked })} /> Включить расписание автопереклеев</label>
     <label>Периодичность автопереклея<select value={value.interval_days || 7} onChange={e => onChange({ interval_days: Number(e.target.value) })}>{[3, 4, 5, 7, 14].map(days => <option key={days} value={days}>Раз в {days} {days < 5 ? "дня" : "дней"}</option>)}</select></label>
-    <p className="muted">Первый запуск — через выбранный интервал после включения. Далее отсчёт идёт от завершения последнего запуска, включая ручной. Изменение периода начинает отсчёт заново. Незавершённый переклей блокирует следующий.</p>
+    <p className="muted">Сохранение включённого расписания создаёт задачу и сразу ставит первый переклей в очередь. Дальше запуски идут по сохранённому графику. Обновление страницы, перезапуск сервера и повторное сохранение не сбрасывают отсчёт. Изменение периода считается от последнего планового запуска. Незавершённый переклей блокирует следующий.</p>
     <label className="checkboxRow"><input type="checkbox" checked={value.scheme_mode === "add_auxiliary"} onChange={() => onChange({ scheme_mode: "add_auxiliary" })} /> Добавлять новый фейковый альтернейт при каждом переклее</label>
     <label className="checkboxRow"><input type="checkbox" checked={!value.scheme_mode || value.scheme_mode === "preserve"} onChange={() => onChange({ scheme_mode: "preserve" })} /> Сохранять схему: обновлять адреса и дроп в x-default</label>
     <label className="checkboxRow"><input type="checkbox" checked={value.scheme_mode === "base_only"} onChange={() => onChange({ scheme_mode: "base_only" })} /> Только базовые альтернейты — без фейковых языков и GEO</label>
@@ -32,7 +32,7 @@ function AutomationRules({ value, onChange, pool }: { value: Rules; onChange: (p
       <p>При переклее сохраняются ровно три ссылки. Остальные языковые альтернейты удаляются из разметки.</p>
       <ul><li><b>Язык проекта</b>, без GEO (например az) — главная страница языкового домена или поддомена.</li>
         <li><b>Язык-GEO</b> (например az-AZ) — внутренняя страница; путь берётся из настроек или схемы проекта.</li>
-        <li><b>x-default</b> — корневой дроп. Новорег разрешается отдельным чекбоксом «Использовать новорег в x-default» внутри проекта.</li></ul>
+        <li><b>x-default</b> — корневой дроп. При canonical на языковом домене выбирается неиспользованный дроп сетки; при canonical = x-default используется новый корневой Main. Новорег разрешается отдельным чекбоксом «Использовать новорег в x-default» внутри проекта.</li></ul>
       <p>Пример для языка az, GEO AZ и пути /events/:</p>
       <pre>{'<link rel="alternate" hreflang="az" href="https://pinup-casino-az.clubheavenjax.com/" />\n<link rel="alternate" hreflang="az-AZ" href="https://pinup-casino-az.clubheavenjax.com/events/" />\n<link rel="alternate" hreflang="x-default" href="https://clubheavenjax.com/" />'}</pre>
       <p className="muted">Адреса в примере иллюстративные. Для запуска подставляются язык, GEO, выбранные домены и путь конкретного проекта.</p>
@@ -67,6 +67,7 @@ function ProjectConfigEditor({ siteId, api }: { siteId: string; api: Api }) {
   if (!draft || !data) return <p>{error || "Загружаем настройки…"}</p>;
   const dirty = JSON.stringify(draft) !== JSON.stringify(data.config);
   const change = (patch: Partial<Config>) => { setDraft({ ...draft, ...patch }); setPlan(null); };
+  const baseOnly = (draft.scope === "personal" ? draft.scheme_mode : data.settings.scheme_mode) === "base_only";
   const template = data.templates.find(t => t.id === draft.profile_id);
   return <div className="autoReglueSettings">{error && <div className="notice" role="alert">{error}</div>}
     <p>GEO проекта: <b>{data.geo || "не задано"}</b>. Допуск: {draft.scope === "personal" ? "Персональные настройки" : data.eligible ? "Массовые действия" : "нужен статус «Массовые действия»"}.</p>
@@ -74,12 +75,15 @@ function ProjectConfigEditor({ siteId, api }: { siteId: string; api: Api }) {
     <label className="checkboxRow"><input type="checkbox" checked={draft.scope === "personal"} onChange={e => change({ scope: e.target.checked ? "personal" : "mass" })} /> Персональный автопереклей — исключить проект из массовых запусков</label>
     {draft.scope === "personal" && <p className="notice">Используются только настройки этого проекта, независимо от статуса и глобальных правил массового автопереклея.</p>}
     <label className="checkboxRow"><input type="checkbox" checked={draft.enabled} onChange={e => change({ enabled: e.target.checked })} /> Участвует в автопереклеях</label>
-    <label className="checkboxRow"><input type="checkbox" checked={draft.domain_layout === "root_main"} onChange={e => change({ domain_layout: e.target.checked ? "root_main" : "subdomain_main" })} /> Canonical и x-default на одном корневом домене, альтернейты на поддомене</label>
+    <h3>Соотношение canonical и альтернейтов</h3>
+    <label className="checkboxRow"><input type="radio" name={`domain-layout-${siteId}`} checked={draft.domain_layout === "root_main"} onChange={() => change({ domain_layout: "root_main" })} /> Canonical = x-default; языковые альтернейты на поддомене</label>
+    <label className="checkboxRow"><input type="radio" name={`domain-layout-${siteId}`} checked={draft.domain_layout !== "root_main"} onChange={() => change({ domain_layout: "subdomain_main" })} /> Canonical = домен языковых альтернейтов; x-default отдельно</label>
+    {baseOnly && draft.domain_layout !== "root_main" && <p className="notice">x-default выбирается по порядку из неиспользованных дропов сетки. Исключаем историю Main, x-default и остальных альтернейтов. Тип домена задаётся во вкладке «Сетка». При разрешении новорега выбираем неиспользованный новорег. Если кандидата нет, переклей не запускается.</p>}
     {draft.domain_layout === "root_main" && <p className="notice">При каждом запуске меняем корневой Main. Берём следующий домен типа «Дроп» (или «Новорег» при включённом чекбоксе ниже), который не был Main, и его неиспользованный поддомен из сетки. Типы задаются во вкладке «Сетка».</p>}
     <label className="checkboxRow"><input type="checkbox" checked={!!draft.x_default_use_newreg} onChange={e => change({ x_default_use_newreg: e.target.checked })} /> Использовать новорег в x-default</label>
     <div className="autoReglueFields">
-      {draft.x_default_use_newreg && draft.domain_layout !== "root_main" && <label>Новорег для x-default<input value={draft.x_default_newreg_domain || ""} onChange={e => change({ x_default_newreg_domain: e.target.value })} placeholder="new-domain.com" /></label>}
-      {draft.domain_layout !== "root_main" && <label>Дроп для x-default<input value={draft.drop_domain} placeholder="example.com" onChange={e => change({ drop_domain: e.target.value })} /></label>}
+      {!baseOnly && draft.x_default_use_newreg && draft.domain_layout !== "root_main" && <label>Новорег для x-default<input value={draft.x_default_newreg_domain || ""} onChange={e => change({ x_default_newreg_domain: e.target.value })} placeholder="new-domain.com" /></label>}
+      {draft.domain_layout !== "root_main" && (!baseOnly || draft.parent_kind === "drop") && <label>{baseOnly ? "Родительский дроп для Main" : "Дроп для x-default"}<input value={draft.drop_domain} placeholder="example.com" onChange={e => change({ drop_domain: e.target.value })} /></label>}
       <label>Язык проекта (если не задан в кэше)<input value={draft.language} placeholder="az" onChange={e => change({ language: e.target.value })} /></label>
       {draft.domain_layout !== "root_main" && <label>Поддомены для нового Main<select value={draft.parent_kind} onChange={e => change({ parent_kind: e.target.value as Config["parent_kind"] })}><option value="drop">Поддомены дропа</option><option value="newreg">Поддомены новорега</option></select></label>}
       {draft.domain_layout !== "root_main" && draft.parent_kind === "newreg" && <label>Родительский новорег<input value={draft.newreg_domain} placeholder="new-domain.com" onChange={e => change({ newreg_domain: e.target.value })} /></label>}
@@ -89,7 +93,7 @@ function ProjectConfigEditor({ siteId, api }: { siteId: string; api: Api }) {
     </div>
     {draft.scope === "personal" && <AutomationRules key="personal-rules" value={draft} onChange={change} pool={data.language_pool || []} />}
     {data.next_run_at && <p>Следующий запуск: <b>{new Date(data.next_run_at).toLocaleString("ru-RU")}</b></p>}
-    {draft.domain_layout !== "root_main" && <p className="muted">Берём следующий поддомен после текущего Main по порядку сетки, пропуская все бывшие Main. Дополнительные языки сохраняем, их адреса переносим на новый Main. x-default ведёт на дроп или явно выбранный новорег. Пустой путь сохраняет путь выбранного шаблона.</p>}
+    {draft.domain_layout !== "root_main" && <p className="muted">Берём следующий поддомен после текущего Main по порядку сетки, пропуская все бывшие Main. Дополнительные языки сохраняем, их адреса переносим на новый Main. x-default определяется выбранным режимом: в базовой схеме — неиспользованный домен сетки. Пустой путь сохраняет путь выбранного шаблона.</p>}
     <div className="networkActions"><button className="button secondary" disabled={busy || !dirty} onClick={() => void perform(async () => { const saved = await api<Config>(`/auto-reglue/projects/${siteId}`, body("PUT", draft)); setDraft(saved); setPlan(null); await load(); })}>Сохранить настройки</button>
       <button className="button secondary" disabled={busy || dirty || !(data.eligible || draft.scope === "personal") || !draft.enabled || (draft.scope !== "personal" && !data.settings.enabled) || pending} onClick={() => void perform(async () => { const next = await api<Plan>(`/auto-reglue/projects/${siteId}/preview`, { method: "POST" }); setPlan({ ...next, requestId: crypto.randomUUID() }); })}>Подготовить переклей</button></div>
     {plan && <><PlanPreview plan={plan} /><button className="button primary" disabled={busy || dirty || pending} onClick={() => void perform(async () => { const result = await api<{ results: { error?: string }[] }>("/auto-reglue/start", body("POST", { scope: "project", items: [{ site_id: siteId, preview_token: plan.preview_token, request_id: plan.requestId }] })); if (result.results[0]?.error) throw new Error(result.results[0].error); setPlan(null); await load(); })}>Запустить автопереклей проекта</button></>}

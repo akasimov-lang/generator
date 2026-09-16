@@ -39,6 +39,21 @@ with sync_playwright() as p:
  page.goto(base);page.evaluate('localStorage.setItem("admin_token","mock");sessionStorage.setItem("popup_permission_prompt_closed","true")')
  page.goto(base+'/auto-reglue')
  expect(page.get_by_role('heading',name='Автопереклей — общие настройки')).to_be_visible()
+ guide=page.get_by_role('link',name='Инструкция по автопереклеям',exact=True)
+ expect(guide).to_be_visible()
+ assert guide.evaluate('(e)=>getComputedStyle(e).color') == 'rgb(255, 255, 255)'
+ before_guide=list(calls)
+ guide.click()
+ expect(page).to_have_url(base+'/auto-reglue/guide')
+ expect(page.get_by_role('heading',name='Инструкция по автопереклеям',exact=True)).to_be_visible()
+ expect(page.get_by_role('navigation',name='Содержание инструкции')).to_be_visible()
+ expect(page.get_by_role('link',name='Инструкция по автопереклеям',exact=True)).to_have_count(0)
+ assert calls==before_guide, calls[len(before_guide):]
+ page.set_viewport_size({'width':390,'height':844})
+ assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+ page.get_by_role('button',name='Вернуться к автопереклею',exact=True).click()
+ expect(page.get_by_role('heading',name='Автопереклей — общие настройки')).to_be_visible()
+ page.set_viewport_size({'width':1440,'height':1000})
  page.get_by_label('Разрешить запуск автопереклеев').check()
  page.get_by_label('Языки для новых фейковых альтернейтов').fill('en, tr')
  page.get_by_label('Включить расписание автопереклеев').check()
@@ -51,6 +66,7 @@ with sync_playwright() as p:
  assert global_cfg['scheme_mode']=='add_auxiliary'
  page.goto(base+'/project-redirects/betonredczech.com/')
  expect(page.get_by_role('button',name='Настроить автопереклей')).to_be_visible()
+ expect(page.get_by_role('link',name='Инструкция по автопереклеям',exact=True)).to_have_count(0)
  assert not [c for c in calls if c[1]=='/auto-reglue/projects/preview']
  page.get_by_role('button',name='Настроить автопереклей').click()
  page.get_by_label('Дроп для x-default',exact=True).fill('drop.test')
@@ -82,7 +98,7 @@ with sync_playwright() as p:
  expect(page.get_by_role('button',name='Сохранить настройки',exact=True)).to_be_disabled()
  assert cfg['scope']=='personal' and cfg['interval_days']==14
  assert cfg['x_default_use_newreg'] and cfg['x_default_newreg_domain']=='newreg.test'
- page.get_by_label('Canonical и x-default на одном корневом домене, альтернейты на поддомене').check()
+ page.get_by_label('Canonical = x-default; языковые альтернейты на поддомене').check()
  expect(page.get_by_label('Новорег для x-default',exact=True)).to_have_count(0)
  page.get_by_role('button',name='Сохранить настройки',exact=True).click()
  expect(page.get_by_role('button',name='Сохранить настройки',exact=True)).to_be_disabled()
@@ -95,6 +111,12 @@ with sync_playwright() as p:
  page.get_by_role('button',name='Сохранить настройки',exact=True).click()
  expect(page.get_by_role('button',name='Сохранить настройки',exact=True)).to_be_disabled()
  assert cfg['scheme_mode']=='base_only'
+ page.get_by_label('Canonical = домен языковых альтернейтов; x-default отдельно',exact=True).check()
+ expect(page.get_by_text('x-default выбирается по порядку из неиспользованных дропов сетки.',exact=False)).to_be_visible()
+ expect(page.get_by_label('Новорег для x-default',exact=True)).to_have_count(0)
+ page.get_by_role('button',name='Сохранить настройки',exact=True).click()
+ expect(page.get_by_role('button',name='Сохранить настройки',exact=True)).to_be_disabled()
+ assert cfg['domain_layout']=='subdomain_main'
  page.set_viewport_size({'width':390,'height':844})
  assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
  assert not errors,errors

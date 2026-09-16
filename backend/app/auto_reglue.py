@@ -91,25 +91,26 @@ def config(db, site_id=None):
 
 
 def save_config(db, value, site_id=None):
-    key = site_id or 'global'
-    row = db.get(models.AutoReglueConfig, key)
-    previous = row.value if row else {}
-    saved = value.model_dump()
-    reset_clock = not previous.get('enabled') and value.enabled
-    if not site_id or value.scope == "personal":
-        reset_clock = reset_clock or (
-            value.schedule_enabled and (
-                not previous.get('schedule_enabled')
-                or previous.get('scope', 'mass') != getattr(value, 'scope', 'mass')
-                or previous.get('interval_days', 7) != value.interval_days
-            )
-        )
-    saved['_schedule_since'] = datetime.now(timezone.utc).isoformat() if reset_clock else previous.get('_schedule_since')
-    if row is None:
-        row = models.AutoReglueConfig(key=key, value=saved)
-        db.add(row)
-    else: row.value = saved
-    db.commit()
+    # Same lock as the scheduler: saving rules cannot race a due-slot claim.
+    with project_network.network_lock(db, 'auto-schedule'):
+        key = site_id or 'global'
+        row = db.get(models.AutoReglueConfig, key)
+        previous = row.value if row else {}
+        saved = value.model_dump()
+        # Kept only for upgrading existing schedules without resetting their old due date.
+        if previous.get('_schedule_since'):
+            saved['_schedule_since'] = previous['_schedule_since']
+        new_activation = not previous.get('enabled') and value.enabled
+        if not site_id or value.scope == 'personal':
+            new_activation = new_activation or (value.schedule_enabled and not previous.get('schedule_enabled'))
+        if row is None:
+            row = models.AutoReglueConfig(key=key, value=saved)
+            db.add(row)
+        else:
+            row.value = saved
+        db.flush()
+        sync_schedules(db, datetime.now(timezone.utc), immediate=(key if new_activation else None))
+        db.commit()
     return value.model_dump()
 
 
@@ -151,6 +152,30 @@ def select_root_and_subdomain(site, state, cfg):
     raise ValueError('Нет следующего корневого домена нужного типа, который ещё не был Main. Укажите типы доменов в Сетке.')
 
 
+def select_unused_xdefault(site, state, cfg, target):
+    def root_name(value):
+        return domain_name(value).removeprefix('www.')
+    observed = alternate_links(state['alternateMarkup'].replace('{{settings.canon}}', state['canon']).replace('{{reqPath}}', '/'))
+    used = {root_name(value) for value in [
+        *(site.main_domain_history or []),
+        *(getattr(site, 'x_default_history', None) or []),
+        *(getattr(site, 'alternate_domain_history', None) or []),
+        state['canon'], state.get('prev'), target,
+        *(link['domain'] for link in observed),
+    ]}
+    types = getattr(site, 'domain_types', None) or {}
+    required_type = 'newreg' if cfg.x_default_use_newreg else 'drop'
+    for domain in state['domains']:
+        bare = root_name(domain)
+        if not bare or any(value == bare or value.endswith('.' + bare) for value in used) or types.get(domain) != required_type:
+            continue
+        if any(bare.endswith('.' + root_name(parent)) for parent in state['domains'] if root_name(parent) != bare):
+            continue
+        return domain
+    label = 'новорега' if cfg.x_default_use_newreg else 'дропа'
+    raise ValueError(f'В сетке нет неиспользованного {label} для x-default. Проверьте типы доменов и историю использования.')
+
+
 def effective_config(global_cfg, cfg):
     if cfg.scope == 'personal':
         return GlobalConfig(enabled=cfg.enabled, schedule_enabled=cfg.schedule_enabled,
@@ -184,7 +209,8 @@ def build_plan(site, state, global_cfg, cfg):
     else:
         target = select_next_domain(site, state, cfg)
         language_host = target
-        x_default = cfg.x_default_newreg_domain if cfg.x_default_use_newreg else cfg.drop_domain
+        x_default = (select_unused_xdefault(site, state, cfg, target) if global_cfg.scheme_mode == 'base_only'
+                     else cfg.x_default_newreg_domain if cfg.x_default_use_newreg else cfg.drop_domain)
     if not x_default:
         raise ValueError('Укажите новорег для x-default.' if cfg.x_default_use_newreg else 'Укажите дроп для x-default.')
     known_type = (getattr(site, 'domain_types', None) or {}).get(x_default)
@@ -334,64 +360,111 @@ def utc(value):
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 
 
-def next_scheduled_at(db, site):
-    project_cfg = config(db, site.id)
-    global_cfg = effective_config(config(db), project_cfg)
-    if (project_cfg.scope != 'personal' and site.project_status != 'mass_actions') or not global_cfg.enabled or not global_cfg.schedule_enabled or not project_cfg.enabled:
-        return None
-    if active_run(db, site.id):
-        return None
+def schedule_eligible(site, global_cfg, cfg):
+    rules = effective_config(global_cfg, cfg)
+    return bool(cfg.enabled and rules.enabled and rules.schedule_enabled
+                and (cfg.scope == 'personal' or site.project_status == 'mass_actions'))
+
+
+def legacy_due(db, site, cfg, rules):
     anchors = []
-    for key in ((site.id,) if project_cfg.scope == 'personal' else ('global', site.id)):
+    for key in ((site.id,) if cfg.scope == 'personal' else ('global', site.id)):
         row = db.get(models.AutoReglueConfig, key)
-        if row:
-            saved = row.value.get('_schedule_since')
-            anchors.append(utc(datetime.fromisoformat(saved)) if saved else utc(row.updated_at))
-    last = db.scalar(select(models.AutoReglueRun).where(models.AutoReglueRun.site_id == site.id).order_by(models.AutoReglueRun.updated_at.desc()).limit(1))
+        if row and row.value.get('_schedule_since'):
+            anchors.append(utc(datetime.fromisoformat(row.value['_schedule_since'])))
+    if not anchors:
+        return None
+    last = db.scalar(select(models.AutoReglueRun).where(models.AutoReglueRun.site_id == site.id)
+                     .order_by(models.AutoReglueRun.updated_at.desc()).limit(1))
     if last:
         anchors.append(utc(last.updated_at))
-    return max(anchors) + timedelta(days=global_cfg.interval_days) if anchors else None
+    return max(anchors) + timedelta(days=rules.interval_days)
+
+
+def sync_schedules(db, now, immediate=None):
+    global_cfg = config(db)
+    sites = db.scalars(select(models.Site).join(models.AutoReglueConfig, models.AutoReglueConfig.key == models.Site.id)).all()
+    for site in sites:
+        cfg = config(db, site.id)
+        rules = effective_config(global_cfg, cfg)
+        enabled = schedule_eligible(site, global_cfg, cfg)
+        row = db.get(models.AutoReglueSchedule, site.id)
+        if row is None and enabled:
+            first = None if immediate == site.id or immediate == 'global' and cfg.scope == 'mass' else legacy_due(db, site, cfg, rules)
+            first = first or now
+            row = models.AutoReglueSchedule(site_id=site.id, enabled=True, interval_days=rules.interval_days,
+                anchor_at=first, next_run_at=first)
+            db.add(row)
+        elif row is not None:
+            row.enabled = enabled
+            if row.interval_days != rules.interval_days:
+                row.interval_days = rules.interval_days
+                # Period changes are measured from the last scheduled slot, never from a save.
+                if row.last_scheduled_at:
+                    row.next_run_at = utc(row.last_scheduled_at) + timedelta(days=rules.interval_days)
+    db.flush()
+
+
+def next_scheduled_at(db, site):
+    cfg = config(db, site.id)
+    if not schedule_eligible(site, config(db), cfg):
+        return None
+    row = db.get(models.AutoReglueSchedule, site.id)
+    return utc(row.next_run_at) if row and row.enabled else None
+
+
+def advance_schedule(row, due, now):
+    interval = timedelta(days=row.interval_days)
+    row.last_scheduled_at = due
+    # Keep the calendar anchored; collapse missed slots to one run after downtime.
+    row.next_run_at = due + interval * (max(0, (now - due) // interval) + 1)
 
 
 def schedule_tick(db, enqueue, now=None):
     now = utc(now or datetime.now(timezone.utc))
-    settings = config(db)
     started = []
-    # Only one scheduler may prepare a batch at a time across workers.
     with project_network.network_lock(db, 'auto-schedule'):
-        sites = db.scalars(select(models.Site).join(models.AutoReglueConfig, models.AutoReglueConfig.key == models.Site.id).order_by(models.Site.name)).all()
-        for site in sites:
+        sync_schedules(db, now)
+        db.commit()
+        settings = config(db)
+        schedules = db.scalars(select(models.AutoReglueSchedule).where(models.AutoReglueSchedule.enabled.is_(True))
+                               .order_by(models.AutoReglueSchedule.next_run_at, models.AutoReglueSchedule.site_id)).all()
+        for schedule in schedules:
             if len(started) >= settings.max_projects:
                 break
-            # Recover a queued run if the process stopped between commit and enqueue.
+            site = db.get(models.Site, schedule.site_id)
             pending = active_run(db, site.id)
             if pending:
-                if pending.status == 'queued' and pending.plan.get('scheduled') and config(db, site.id).enabled and effective_config(settings, config(db, site.id)).enabled and effective_config(settings, config(db, site.id)).schedule_enabled:
-                    enqueue(pending.id)
+                if pending.status == 'queued' and pending.plan.get('scheduled'):
+                    enqueue(pending.id)  # Recover commit -> queue failures using the same receipt.
                     started.append(pending.id)
                 continue
-            due = next_scheduled_at(db, site)
-            if due is None or due > now:
+            due = utc(schedule.next_run_at)
+            if due > now:
                 continue
-            request_id = uuid5(NAMESPACE_URL, f'auto-reglue:{site.id}:{due.isoformat()}')
-            if db.get(models.AutoReglueRun, str(request_id)):
-                continue
+            request_id = str(uuid5(NAMESPACE_URL, f'auto-reglue:{site.id}:{due.isoformat()}'))
             try:
                 plan = preview(db, site)
-                run, fresh = prepare_run(db, site, request_id, plan['preview_token'], 'scheduler')
-                if fresh:
-                    run.plan = {**run.plan, 'scheduled': True}
-                    db.commit()
+                status, message = 'queued', None
             except (ValueError, httpx.HTTPError, ProjectCacheError) as error:
                 db.rollback()
-                run = models.AutoReglueRun(id=str(request_id), site_id=site.id, initiator='scheduler',
-                    status='failed', phase='prepared', plan={'project': site.name, 'scheduled': True},
-                    message=str(error)[:2000])
-                db.add(run)
+                plan, status, message = {'project': site.name}, 'failed', str(error)[:2000]
+            # Atomic durable receipt + advancement; crash/retry cannot consume the same slot twice.
+            with project_network.network_lock(db, site.id):
+                db.refresh(schedule, with_for_update=True)
+                if active_run(db, site.id):
+                    continue
+                existing = db.get(models.AutoReglueRun, request_id)
+                if existing is None:
+                    run = models.AutoReglueRun(id=request_id, site_id=site.id, initiator='scheduler',
+                        status=status, phase='prepared', plan={**plan, 'scheduled': True, 'scheduled_for': due.isoformat()},
+                        message=message)
+                    db.add(run)
+                else:
+                    run = existing
+                advance_schedule(schedule, due, now)
                 db.commit()
-                started.append(run.id)
-                continue
             started.append(run.id)
-            # If enqueue fails the queued receipt survives and is retried next tick.
-            enqueue(run.id)
+            if run.status == 'queued':
+                enqueue(run.id)
     return started
