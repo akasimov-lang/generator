@@ -15,6 +15,8 @@ async function api(path,options={}) {
  if(path.endsWith('/operations') && !payload)return structuredClone(window.fixture.operations);
  if(path.endsWith('/check-domain'))return {domain:payload.domain,reachable:true,reason:''};
  if(payload) {
+  const sourceDomain = window.fixture.canon;
+  const alternatesBefore = {markup:window.fixture.alternateMarkup,enabled:window.fixture.enableAlternates};
   if(payload.action==='select_fake_main'){window.fixture.fake_main_current=payload.fake_main_path;}
   if(payload.action==='create_fake_main'){window.fixture.fake_main_paths=['/cz/','/'+payload.fake_main_path.replace(/^\/+|\/+$/g,'')+'/'];window.fixture.fake_main_enabled=true;}
   if(payload.action==='delete_domain')window.fixture.domains=window.fixture.domains.filter(d=>d!==payload.domain);
@@ -22,7 +24,7 @@ async function api(path,options={}) {
   if(payload.action==='reserve')window.fixture.reserve=payload.domain;
   if(payload.action==='reglue'){window.fixture.canon=payload.domain;window.fixture.operations.unshift({id:'index-task',action:'indexing',status:'index_submitted',task_id:'task-123',domains:['https://main.test/','https://next.test/'],message:'Задача создана',created_at:new Date().toISOString(),initiator:'test'});}
   if(payload.action==='alternates'){window.fixture.alternateMarkup=payload.alternate_markup;window.fixture.enableAlternates=payload.enable_alternates;}
-  window.fixture.revision+='x';window.fixture.operations.unshift({id:payload.request_id,action:payload.action,status:'confirmed',message:'Подтверждено',domain:payload.domain,created_at:new Date().toISOString(),initiator:'test'});
+  window.fixture.revision+='x';window.fixture.operations.unshift({id:payload.request_id,action:payload.action,source_domain:payload.action==='reglue'?sourceDomain:null,alternates_before:payload.action==='alternates'?alternatesBefore:null,alternates_after:payload.action==='alternates'?{markup:payload.alternate_markup,enabled:payload.enable_alternates}:null,status:'confirmed',message:'Подтверждено',domain:payload.domain,created_at:new Date().toISOString(),initiator:'test'});
  }
  return structuredClone(window.fixture);
 }

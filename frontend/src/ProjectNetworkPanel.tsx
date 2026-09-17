@@ -1,7 +1,8 @@
 import React from "react";
 import { Trash2 } from "lucide-react";
 
-type NetworkOperation = { id: string; action: "reserve" | "reglue" | "alternates" | "create_subdomains" | "delete_domain" | "create_fake_main" | "select_fake_main" | "indexing"; task_id?: string; domains?: string[]; status: string; message: string | null; domain: string | null; initiator: string; created_at: string };
+type AlternatesSnapshot = { markup: string; enabled: boolean };
+type NetworkOperation = { id: string; action: "reserve" | "reglue" | "alternates" | "create_subdomains" | "delete_domain" | "create_fake_main" | "select_fake_main" | "indexing"; task_id?: string; domains?: string[]; status: string; message: string | null; domain: string | null; source_domain?: string | null; alternates_before?: AlternatesSnapshot | null; alternates_after?: AlternatesSnapshot | null; initiator: string; created_at: string };
 type DomainClassification = { is_subdomain: boolean; parent_domain: string | null; parent_type: "drop" | "newreg" | null; unused_as_main: boolean };
 type Network = {
   fake_main_paths?: string[]; fake_main_current?: string; fake_main_enabled?: boolean;
@@ -200,14 +201,14 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
             </tr>)}</tbody>
           </table></div>
           {!visibleDomains.length && <p>{networkView === "amp" ? "В кеше проекта AMP-домены не указаны." : "В основной сетке нет доменов."}</p>}
-          {networkView === "main" && <div className="networkSection">
+          {networkView === "main" && <div className="networkSection networkSubdomains">
             <h3>Создание поддоменов</h3>
             <p>Укажите полные имена через запятую, пробел или новую строку. Родительский домен должен быть в сохранённой сетке проекта.</p>
-            <label>Поддомены<textarea aria-label="Поддомены" rows={3} value={subdomainsInput} disabled={disabled} placeholder="test1.example.com, test2.example.com" onChange={(event) => setSubdomainsInput(event.target.value)} /></label>
+            <label className="networkSubdomainsField">Поддомены<textarea aria-label="Поддомены" rows={2} value={subdomainsInput} disabled={disabled} placeholder="test1.example.com, test2.example.com" onChange={(event) => setSubdomainsInput(event.target.value)} /></label>
             {subdomains.length > 0 && <><p>Будет создано: {subdomains.length}</p><ul>{subdomains.map((domain) => <li key={domain}>{domain}</li>)}</ul></>}
             {!!subdomainErrors.length && <div className="notice" role="alert">{subdomainErrors.map((text) => <p key={text}>{text}</p>)}</div>}
             {subdomains.length > 100 && <p role="alert">За один запуск можно создать до 100 поддоменов.</p>}
-            <button type="button" className="button" disabled={disabled || !subdomains.length || subdomains.length > 100 || !!subdomainErrors.length} onClick={() => void mutate("create_subdomains")}>{busy === "create_subdomains" ? "Запускаем создание…" : "Создать конфиги"}</button>
+            <div className="networkActions"><button type="button" className="button compact" disabled={disabled || !subdomains.length || subdomains.length > 100 || !!subdomainErrors.length} onClick={() => void mutate("create_subdomains")}>{busy === "create_subdomains" ? "Запускаем создание…" : "Создать конфиги"}</button></div>
             <p className="muted">Перед запуском сервер проверит домены по нашей базе и актуальной сетке Webdev. Поддомены добавятся в сетку автоматически; появление в списке ещё не подтверждает готовность HTTPS.</p>
           </div>}
         </>}
@@ -262,8 +263,21 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
           <div className="networkActions"><button type="button" className="button compact secondary" disabled={disabled || !fakeMainInput.trim() || !!data.fake_main_paths?.includes("/" + fakeMainInput.trim().replace(/^\/+|\/+$/g, "") + "/")} onClick={() => void mutate("create_fake_main")}>{busy === "create_fake_main" ? "Создаём…" : "Создать фейковую главную"}</button></div>
         </div>}
         {!!data.operations.length && <div className="networkSection"><h3>История операций</h3><ul className="networkOperations">{data.operations.map((operation) => <li key={operation.id}>
-          <strong>{actionLabels[operation.action]}{operation.domain ? `: ${operation.domain}` : ""}</strong> — {statusLabels[operation.status] || operation.status}
+          <strong>{actionLabels[operation.action]}{operation.action === "reglue" && operation.domain ? `: ${operation.source_domain || "Исходный домен не сохранён"} -> ${operation.domain}` : operation.domain ? `: ${operation.domain}` : ""}</strong> — {statusLabels[operation.status] || operation.status}
           <small>{new Date(operation.created_at).toLocaleString("ru-RU")} · {operation.initiator}</small><p>{operation.message}</p>
+          {operation.action === "alternates" && <details className="networkAlternatesHistory">
+            <summary>Альтернейты: было / {operation.status === "confirmed" ? "стало" : "запрошено"}</summary>
+            <div className="networkAlternatesComparison">
+              <div><strong>Было</strong>{operation.alternates_before ? <>
+                <p>{operation.alternates_before.enabled ? "Включены" : "Выключены"}</p>
+                <pre>{operation.alternates_before.markup || "Разметка пустая"}</pre>
+              </> : <p className="muted">Исходные альтернейты не сохранены.</p>}</div>
+              <div><strong>{operation.status === "confirmed" ? "Стало" : "Запрошено"}</strong>{operation.alternates_after ? <>
+                <p>{operation.alternates_after.enabled ? "Включены" : "Выключены"}</p>
+                <pre>{operation.alternates_after.markup || "Разметка пустая"}</pre>
+              </> : <p className="muted">Данные не сохранены.</p>}</div>
+            </div>
+          </details>}
           {operation.action === "indexing" && <>{operation.task_id && <p>Номер задачи: <strong>{operation.task_id}</strong></p>}<details><summary>Домены для индексации ({operation.domains?.length || 0})</summary><ul>{operation.domains?.map(domain => <li key={domain}>{domain}</li>)}</ul></details></>}
         </li>)}</ul></div>}
       </>}

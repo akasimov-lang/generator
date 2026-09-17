@@ -171,6 +171,9 @@ def operation_history(db, site):
                            .order_by(models.NetworkOperation.created_at.desc()).limit(20)).all()
     return [{"id": op.id, "action": op.action, "status": op.status, "message": op.message,
                         "initiator": op.initiator, "created_at": op.created_at,
+                        "source_domain": op.request_payload.get("source_domain") if op.action == "reglue" else None,
+                        "alternates_before": op.request_payload.get("alternates_before") if op.action == "alternates" else None,
+                        "alternates_after": {"markup": op.request_payload.get("alternateMarkup", ""), "enabled": op.request_payload.get("enableAlternates", False)} if op.action == "alternates" else None,
                         "domain": op.request_payload.get("reserve") or ((op.request_payload.get("domains") or [None])[0] if op.action == "delete_domain" else None), "domains": [item["domain"] if isinstance(item, dict) else item for item in op.request_payload.get("domains", [])], "response_status": op.response_status, "task_id": op.request_payload.get("task_id")}
                        for op in operations]
 
@@ -349,8 +352,20 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
             validate_markup(payload.alternate_markup)
             method, path = "PATCH", "/projects/update-head"
             request.update(alternateMarkup=payload.alternate_markup, enableAlternates=payload.enable_alternates)
+        stored_request = dict(request)
+        if payload.action == "reglue":
+            stored_request["source_domain"] = state["canon"]
+            if auto_run_id is None:
+                stored_request.update(indexing_pending=True, _indexing={
+                    "canon": domain, "alternateMarkup": state["alternateMarkup"],
+                    "enableAlternates": state["enableAlternates"],
+                })
+        elif payload.action == "alternates":
+            stored_request["alternates_before"] = {
+                "markup": state["alternateMarkup"], "enabled": state["enableAlternates"],
+            }
         operation = models.NetworkOperation(id=str(payload.request_id), site_id=site.id, action=payload.action,
-                                            initiator=username, request_payload={**request, **({"indexing_pending": True, "_indexing": {"canon": domain, "alternateMarkup": state["alternateMarkup"], "enableAlternates": state["enableAlternates"]}} if payload.action == "reglue" and auto_run_id is None else {})}, status="pending")
+                                            initiator=username, request_payload=stored_request, status="pending")
         db.add(operation)
         db.commit()  # Receipt exists even if the connection or process stops after sending.
         try:

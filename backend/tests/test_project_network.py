@@ -92,6 +92,12 @@ def test_reserve_then_reglue_exact_contract(env):
     assert not any(path.endswith("check-domain") for _, path, _ in remote.calls)
     assert remote.calls[-1] == ("POST", "/projects/update-reglue", {"folder": "project.test", "reserve": "next.test", "trigger": "webdev:settings", "initiator": "anton"})
     assert after["canon"] == "next.test"
+    operation = next(op for op in after["operations"] if op["action"] == "reglue")
+    assert operation["source_domain"] == "main.test"
+    assert operation["domain"] == "next.test"
+    remote.data["settings"]["canon"] = "reserve.test"
+    reread = network.read_network(db, site)
+    assert next(op for op in reread["operations"] if op["action"] == "reglue")["source_domain"] == "main.test"
     assert "main.test" in after["main_history"]
     assert after["alternateMarkup"] == MARKUP
 
@@ -107,6 +113,50 @@ def test_alternates_preserve_settings_and_other_head_fields(env):
     assert remote.data["head"]["canonicalDefaultMarkup"] == "untouched"
     assert remote.data["head"]["customHeaders"] == [{"key": "X-Test", "value": "keep"}]
     assert after["x_default_history"] == ["old.test", "next.test"]
+    operation = next(op for op in after["operations"] if op["action"] == "alternates")
+    assert operation["alternates_before"] == {"markup": MARKUP, "enabled": True}
+    assert operation["alternates_after"] == {"markup": markup, "enabled": False}
+    remote.data["head"]["alternateMarkup"] = ""
+    remote.data["head"]["enableAlternates"] = True
+    reread = network.read_network(db, site)
+    assert next(op for op in reread["operations"] if op["id"] == operation["id"])["alternates_after"] == operation["alternates_after"]
+
+
+def test_legacy_operation_history_does_not_invent_previous_values(env):
+    db, site, remote = env
+    db.add_all([
+        models.NetworkOperation(site_id=site.id, action="reglue", status="confirmed", initiator="anton", request_payload={"reserve": "next.test"}),
+        models.NetworkOperation(site_id=site.id, action="alternates", status="confirmed", initiator="anton", request_payload={"alternateMarkup": MARKUP, "enableAlternates": False}),
+    ])
+    # Historical receipts have explicit IDs and no snapshots of previous state.
+    for op in db.new:
+        op.id = str(uuid4())
+    db.commit()
+    history = network.operation_history(db, site)
+    reglue = next(op for op in history if op["action"] == "reglue")
+    assert reglue["source_domain"] is None
+    assert reglue["domain"] == "next.test"
+    alternates = next(op for op in history if op["action"] == "alternates")
+    assert alternates["alternates_before"] is None
+    assert alternates["alternates_after"] == {"markup": MARKUP, "enabled": False}
+
+
+def test_pending_alternates_keeps_before_snapshot_on_retry(env):
+    db, site, remote = env
+    before = network.read_network(db, site)
+    remote.delayed = True
+    payload = network.NetworkChange(request_id=uuid4(), action="alternates", revision=before["revision"], alternate_markup="", enable_alternates=False)
+    after = network.change_network(db, site, payload, "anton")
+    operation = next(op for op in after["operations"] if op["id"] == str(payload.request_id))
+    assert operation["status"] == "pending"
+    assert operation["alternates_before"] == {"markup": MARKUP, "enabled": True}
+    assert operation["alternates_after"] == {"markup": "", "enabled": False}
+    remote.data["head"].update(alternateMarkup="", enableAlternates=False)
+    retried = network.change_network(db, site, payload, "anton")
+    receipt = next(op for op in retried["operations"] if op["id"] == str(payload.request_id))
+    assert receipt["status"] == "confirmed"
+    assert receipt["alternates_before"] == operation["alternates_before"]
+    assert len(remote.calls) == 1
 
 
 def test_stale_revision_blocks_writes(env):

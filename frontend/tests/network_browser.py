@@ -29,6 +29,12 @@ with sync_playwright() as p:
  page.get_by_role('button',name='Сохранить альтернейты',exact=True).click()
  expect(launch).to_be_enabled();launch.click()
  expect(page.get_by_text('Переклей: подтверждено.',exact=True)).to_be_visible()
+ expect(page.get_by_text('Переклей: main.test -> next.test',exact=True)).to_be_visible()
+ page.get_by_text('Альтернейты: было / стало',exact=True).click()
+ snapshots=page.locator('.networkAlternatesComparison pre')
+ expect(snapshots.nth(0)).to_contain_text('https://old.test/')
+ expect(snapshots.nth(1)).to_contain_text('https://next.test/')
+ assert page.locator('.networkAlternatesComparison link').count() == 0
  expect(page.get_by_text('Индексация проекта',exact=True)).to_be_visible()
  expect(page.get_by_text('task-123',exact=True)).to_be_visible()
  page.get_by_text('Домены для индексации (2)',exact=True).click()
