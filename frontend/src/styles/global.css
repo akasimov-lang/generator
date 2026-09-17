@@ -2523,13 +2523,29 @@ h2 {
 
 @media (max-width: 900px) {
   .projectWorkspaceView > .workspaceTabs {
-    flex-wrap: nowrap;
-    overflow-x: auto;
+    flex-wrap: wrap;
+    overflow: visible;
+    gap: 6px;
     padding: 8px 10px;
   }
   .projectWorkspaceView > .workspaceTabs > * {
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-size: 12px;
+    min-height: 36px;
+    padding: 5px 7px;
+    gap: 5px;
+  }
+  .projectWorkspaceView > .workspaceTabs > * > svg {
     flex-shrink: 0;
-    white-space: nowrap;
+  }
+  .projectWorkspaceView > .workspaceTabs .tabButtonIcon {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
   }
 }
 
@@ -9716,4 +9732,20 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
   }
   .projectWorkspaceView .projectCanonActions svg { width: 20px; height: 20px; }
   .projectWorkspaceView .projectWebDevButton .projectWebDevLabel { font-size: 10px; line-height: 1; }
+}
+
+@media (max-width: 640px) {
+  .projectUpdatedAt { margin-top: 8px; gap: 4px 6px; font-size: 11px; }
+  .projectUpdatedAt > svg { width: 15px; height: 15px; flex-shrink: 0; }
+  .projectUpdatedAt > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .projectUpdatedAt > strong { font-size: 11px; }
+  .projectUpdatedAt > b { margin-left: 0; padding: 2px 5px; font-size: 9px; }
 }

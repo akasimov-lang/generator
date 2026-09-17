@@ -30,6 +30,13 @@ with sync_playwright() as p:
   page.set_viewport_size(dict(width=width,height=900))
   title=table.locator('.contentTopicWithRating > span:first-child');expect(title).to_have_text(topic)
   if width<=640:
+   tabs=page.get_by_role('navigation',name='Вкладки проекта')
+   assert tabs.evaluate('(e)=>e.scrollWidth<=e.clientWidth+1'), 'Tabs must not scroll horizontally'
+   for e in tabs.locator(':scope > *').all():
+    expect(e).to_be_visible()
+    box=e.bounding_box(); assert box['x']>=0 and box['x']+box['width']<=width+1
+    assert e.evaluate('(e)=>e.scrollWidth<=e.clientWidth+1'), 'Tab label clipped'
+   updated=page.locator('.projectUpdatedAt'); assert updated.bounding_box()['height']<=40
    header=page.locator('.projectHeader').first
    refresh=header.locator('.projectRefreshButton'); expect(refresh).to_be_visible()
    assert refresh.bounding_box()['y'] < header.locator('.projectMeta').bounding_box()['y']
