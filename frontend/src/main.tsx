@@ -921,6 +921,9 @@ function projectGeoCode(site?: Site): string {
 
 function App() {
   const { designVersion, setDesignVersion } = useDesign();
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const [compactNavigation, setCompactNavigation] = React.useState(() => window.matchMedia("(max-width: 900px)").matches);
+  const mobileMenuButton = React.useRef<HTMLButtonElement>(null);
   const initialRoute = React.useMemo(() => routeFromPath(window.location.pathname), []);
   const [token, setToken] = React.useState(() => localStorage.getItem("admin_token") || "");
   const [theme, setTheme] = React.useState<ThemeMode>(() => (localStorage.getItem("theme_mode") === "dark" ? "dark" : "light"));
@@ -970,6 +973,7 @@ function App() {
   const navigateTo = React.useCallback((view: AppView, nextWorkspaceTab: WorkspaceTab = workspaceTab, replace = false, projectName?: string | null) => {
     const normalizedWorkspaceTab = view === "workspace" ? nextWorkspaceTab : workspaceTab;
     const nextPath = pathForRoute(view, normalizedWorkspaceTab, projectName);
+    setMobileMenuOpen(false);
     setActiveView(view);
     if (view === "workspace") {
       setWorkspaceTab(normalizedWorkspaceTab);
@@ -1136,6 +1140,24 @@ function App() {
     return () => { cancelled = true; userRef.current = null; };
   }, [api, token]);
 
+  React.useEffect(() => {
+    const breakpoint = window.matchMedia("(max-width: 900px)");
+    const reset = () => { setMobileMenuOpen(false); setCompactNavigation(breakpoint.matches); };
+    breakpoint.addEventListener("change", reset);
+    return () => breakpoint.removeEventListener("change", reset);
+  }, []);
+  React.useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMobileMenuOpen(false);
+        mobileMenuButton.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", close);
+    return () => document.removeEventListener("keydown", close);
+  }, [mobileMenuOpen]);
+
   const workspaceRouteName = workspaceProjectNameFromPath(window.location.pathname);
   React.useEffect(() => {
     if (!currentUser) return;
@@ -1159,6 +1181,7 @@ function App() {
 
   React.useEffect(() => {
     const handlePopState = () => {
+      setMobileMenuOpen(false);
       const nextRoute = routeFromPath(window.location.pathname);
       setActiveView(nextRoute.view);
       setWorkspaceTab(nextRoute.workspaceTab);
@@ -1225,9 +1248,63 @@ function App() {
     );
   }
 
+  const accountActions = (
+          <div className="topbarActions">
+            {isAdmin && activeView === "autoReglue" && <a className="button primary autoReglueGuideButton" href={pathForRoute("autoReglueGuide")} onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("autoReglueGuide"); } }}><BookOpen size={18} /> Инструкция по автопереклеям</a>}
+            {currentUser.is_admin ? (
+              <button
+                className={`button secondary adminViewModeButton ${viewAsUser ? "active" : ""}`}
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  const nextValue = !viewAsUser;
+                  setViewAsUser(nextValue);
+                  localStorage.setItem(`admin_view_mode:${currentUser.username}`, nextValue ? "user" : "admin");
+                  if (nextValue && isAdminOnlyView(activeView)) navigateTo("workspace", DEFAULT_WORKSPACE_TAB);
+                }}
+                title={viewAsUser ? "Вернуться к полному интерфейсу администратора" : "Показать интерфейс обычного пользователя"}
+              >
+                {viewAsUser ? <ShieldCheck size={17} /> : <Eye size={17} />}
+                {viewAsUser ? "Режим администратора" : "Посмотреть как пользователь"}
+              </button>
+            ) : null}
+            {currentUser ? (
+              <div className="userPill">
+                <span>{viewAsUser ? "Просмотр как пользователь" : currentUser.is_admin ? "Администратор" : "Пользователь"}</span>
+                <strong>{currentUser.username}</strong>
+              </div>
+            ) : null}
+            <button className="button secondary" onClick={() => { setMobileMenuOpen(false); void loadAll(); }} title="Обновить данные">
+              <RefreshCcw size={18} />
+              Обновить
+            </button>
+            <button
+              className="iconButton"
+              onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+              title={theme === "dark" ? "Включить светлую тему" : "Включить темную тему"}
+            >
+              {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+            <button
+              className="iconButton"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                localStorage.removeItem("admin_token");
+                setToken("");
+                setCurrentUser(null);
+                setUsers([]);
+                setArchivedTasks([]);
+              }}
+              title="Выйти"
+            >
+              <LogOut size={18} />
+            </button>
+          </div>
+  );
+
   return (
     <div className="appShell">
-      <aside className="sidebar">
+      <aside className={`sidebar ${mobileMenuOpen ? "mobileMenuOpen" : ""}`}>
         <div className="sidebarDigitalRain" aria-hidden="true">
           {Array.from({ length: 12 }, (_, index) => (
             <span key={index} style={{ "--rain-column": index, "--rain-delay": `${-(index * 0.73) % 7}s` } as React.CSSProperties}>
@@ -1235,6 +1312,7 @@ function App() {
             </span>
           ))}
         </div>
+        <div className="sidebarHeader">
         <div className="brand">
           <div className="brandMark logoMark"><BrandLogo /></div>
           <div>
@@ -1242,7 +1320,14 @@ function App() {
             <BrandTagline />
           </div>
         </div>
-        <nav className="nav">
+        <button ref={mobileMenuButton} className="mobileMenuToggle" type="button"
+          aria-label={mobileMenuOpen ? "Закрыть основное меню" : "Открыть основное меню"}
+          aria-expanded={mobileMenuOpen} aria-controls="main-navigation mobile-account-actions"
+          onClick={() => setMobileMenuOpen(open => !open)}>
+          {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+        </button>
+        </div>
+        <nav id="main-navigation" className="nav" aria-label="Основное меню">
           {isAdmin ? (
             <>
               <NavButton href={pathForRoute("dashboard")} icon={<LayoutDashboard />} label="Dashboard" active={activeView === "dashboard"} onClick={() => navigateTo("dashboard")} />
@@ -1269,6 +1354,7 @@ function App() {
           {isAdmin ? <NavButton href={pathForRoute("published")} icon={<CheckCircle2 />} label="Опубликовано" active={activeView === "published"} onClick={() => navigateTo("published")} /> : null}
           <NavButton href={pathForRoute("guide")} icon={<BookOpen />} label="Инструкции" active={activeView === "guide" || activeView === "autoReglueGuide"} onClick={() => navigateTo("guide")} />
         </nav>
+        {compactNavigation && <div id="mobile-account-actions" className="mobileAccountActions" hidden={!mobileMenuOpen}>{accountActions}</div>}
       </aside>
 
       <main className="main">
@@ -1277,55 +1363,7 @@ function App() {
             <p className="eyebrow">Рабочая панель</p>
             <h1>{viewTitle(activeView, workspaceTab)}</h1>
           </div>
-          <div className="topbarActions">
-            {isAdmin && activeView === "autoReglue" && <a className="button primary autoReglueGuideButton" href={pathForRoute("autoReglueGuide")} onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("autoReglueGuide"); } }}><BookOpen size={18} /> Инструкция по автопереклеям</a>}
-            {currentUser.is_admin ? (
-              <button
-                className={`button secondary adminViewModeButton ${viewAsUser ? "active" : ""}`}
-                type="button"
-                onClick={() => {
-                  const nextValue = !viewAsUser;
-                  setViewAsUser(nextValue);
-                  localStorage.setItem(`admin_view_mode:${currentUser.username}`, nextValue ? "user" : "admin");
-                  if (nextValue && isAdminOnlyView(activeView)) navigateTo("workspace", DEFAULT_WORKSPACE_TAB);
-                }}
-                title={viewAsUser ? "Вернуться к полному интерфейсу администратора" : "Показать интерфейс обычного пользователя"}
-              >
-                {viewAsUser ? <ShieldCheck size={17} /> : <Eye size={17} />}
-                {viewAsUser ? "Режим администратора" : "Посмотреть как пользователь"}
-              </button>
-            ) : null}
-            {currentUser ? (
-              <div className="userPill">
-                <span>{viewAsUser ? "Просмотр как пользователь" : currentUser.is_admin ? "Администратор" : "Пользователь"}</span>
-                <strong>{currentUser.username}</strong>
-              </div>
-            ) : null}
-            <button className="button secondary" onClick={() => loadAll()} title="Обновить данные">
-              <RefreshCcw size={18} />
-              Обновить
-            </button>
-            <button
-              className="iconButton"
-              onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
-              title={theme === "dark" ? "Включить светлую тему" : "Включить темную тему"}
-            >
-              {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-            </button>
-            <button
-              className="iconButton"
-              onClick={() => {
-                localStorage.removeItem("admin_token");
-                setToken("");
-                setCurrentUser(null);
-                setUsers([]);
-                setArchivedTasks([]);
-              }}
-              title="Выйти"
-            >
-              <LogOut size={18} />
-            </button>
-          </div>
+          {!compactNavigation && accountActions}
         </header>
 
         {message ? <div className="notice">{message}</div> : null}

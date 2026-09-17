@@ -6265,6 +6265,7 @@ td {
   width: 495px;
 }
 
+
 .publishedIndexingCell {
   align-items: flex-start;
   display: inline-flex;
@@ -9555,4 +9556,95 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .networkFakeCurrent > .button {
   max-width: 100%;
   white-space: normal;
+}
+
+.sidebarHeader { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sidebarHeader .brand { min-width: 0; }
+.mobileMenuToggle { display: none; }
+@media (max-width: 900px) {
+  .sidebarHeader .brand { padding-bottom: 6px; }
+  .mobileMenuToggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 40px;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: 1px solid currentColor;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--sidebar-text);
+    cursor: pointer;
+  }
+  .mobileMenuToggle:hover { background: rgba(255, 255, 255, .1); }
+  .mobileMenuToggle:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+  .sidebar .nav { display: none; }
+  .sidebar.mobileMenuOpen .nav { display: grid; margin-top: 14px; }
+}
+
+@media (max-width: 900px) {
+  .mobileAccountActions { border-top: 1px solid rgba(255, 255, 255, .18); margin-top: 16px; padding-top: 16px; }
+  .mobileAccountActions[hidden] { display: none; }
+  .mobileAccountActions .topbarActions { justify-content: flex-start; gap: 10px; }
+  .mobileAccountActions .userPill { color: var(--text); }
+  .mobileAccountActions .topbarActions > .button,
+  .mobileAccountActions .userPill { width: 100%; }
+}
+
+@media (max-width: 640px) {
+  .projectContentTable td[class*="column-"] {
+    width: 100%;
+    min-width: 0;
+    white-space: normal;
+    text-align: left;
+    align-items: flex-start;
+  }
+
+  .projectContentTable td::before {
+    flex-shrink: 0;
+  }
+
+  .projectContentTable td > * {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .projectContentTable .column-topic,
+  .projectContentTable .column-menu,
+  .projectContentTable .column-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .projectContentTable .campaignTopicWithPreview {
+    align-items: flex-start;
+  }
+
+  .projectContentTable .compactContentTopic,
+  .projectContentTable .contentTopicWithRating > span:first-child {
+    display: block;
+    overflow: visible;
+    -webkit-line-clamp: unset;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .projectContentTable .projectContentActions,
+  .projectContentTable .contentRowMenuSelect {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .projectContentTable .projectContentActions {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .projectContentTable .projectContentActions .button {
+    min-width: 0;
+    white-space: normal;
+  }
 }
