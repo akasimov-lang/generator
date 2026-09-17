@@ -9027,11 +9027,13 @@ a {
   }
 
   .sidebar {
-    position: static;
+    position: relative;
     width: auto;
     height: auto;
     overflow-y: visible;
   }
+
+  .sidebarDigitalRain { display: none; }
 
   .main {
     grid-column: 1;

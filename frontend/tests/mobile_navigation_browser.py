@@ -49,6 +49,7 @@ with sync_playwright() as p:
             page.set_viewport_size({"width": width, "height": 850})
             expect(nav).to_be_hidden()
             assert page.locator('.sidebar').bounding_box()['height'] <= 60
+            expect(page.locator('.sidebarDigitalRain')).to_be_hidden()
             toggle.click()
             expect(nav).to_be_visible()
             assert toggle.bounding_box()["x"] + toggle.bounding_box()["width"] <= width
