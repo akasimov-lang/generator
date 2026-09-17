@@ -48,6 +48,7 @@ with sync_playwright() as p:
         for width in [900, 540, 390, 320]:
             page.set_viewport_size({"width": width, "height": 850})
             expect(nav).to_be_hidden()
+            assert page.locator('.sidebar').bounding_box()['height'] <= 60
             toggle.click()
             expect(nav).to_be_visible()
             assert toggle.bounding_box()["x"] + toggle.bounding_box()["width"] <= width
