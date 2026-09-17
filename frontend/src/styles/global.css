@@ -9648,3 +9648,72 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
     white-space: normal;
   }
 }
+
+@media (max-width: 640px) {
+  .projectWorkspaceView .projectHeader { gap: 8px; }
+  .projectWorkspaceView .workspaceProjectTitle { flex-wrap: wrap; gap: 6px; }
+  .projectWorkspaceView .workspaceProjectTitle strong { overflow-wrap: anywhere; }
+  .projectWorkspaceView .projectRefreshButton {
+    grid-row: 2;
+    min-width: 0;
+    width: 100%;
+    padding: 8px 10px;
+    gap: 4px;
+  }
+  .projectWorkspaceView .projectTopDetails {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .projectWorkspaceView .projectTopDetails > span:first-child,
+  .projectWorkspaceView .projectTopDetails > .projectTitleCard { grid-column: 1 / -1; }
+  .projectWorkspaceView .projectTopDetails > span,
+  .projectWorkspaceView .projectTopDetails > button.projectMetricCard {
+    padding: 8px 10px;
+    gap: 4px;
+    border-radius: 9px;
+  }
+  .projectWorkspaceView .projectCanonValue { gap: 4px; }
+  .projectWorkspaceView .projectCanonDomain { min-height: 0; max-height: none; }
+  .projectWorkspaceView .projectCanonActions { margin-top: 0; }
+  .projectWorkspaceView .projectTopDetails > .projectMetricCard {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    text-align: left;
+  }
+  .projectWorkspaceView .projectTopDetails > .projectMetricCard b { font-size: 20px; }
+  .projectWorkspaceView .projectTopDetails > .projectMenuCapability {
+    grid-template-rows: auto minmax(32px, 1fr) auto;
+    padding: 6px 8px;
+  }
+  .projectWorkspaceView .projectMenuCapabilityValue {
+    grid-template-columns: 26px minmax(0, 1fr);
+    gap: 4px;
+  }
+  .projectWorkspaceView .projectMenuCapabilityValue .menuReadyMedal {
+    width: 25px;
+    height: 28px;
+  }
+}
+
+@media (max-width: 640px) {
+  .projectWorkspaceView .projectCanonValue {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 8px;
+  }
+  .projectWorkspaceView .projectCanonDomain { flex: 1 1 140px; width: auto; }
+  .projectWorkspaceView .projectCanonActions { flex: 0 0 auto; flex-wrap: nowrap; }
+}
+
+@media (max-width: 640px) {
+  .projectWorkspaceView .projectCanonActions { gap: 6px; }
+  .projectWorkspaceView .projectCanonActions > a,
+  .projectWorkspaceView .projectCanonActions > button {
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+  }
+  .projectWorkspaceView .projectCanonActions svg { width: 20px; height: 20px; }
+  .projectWorkspaceView .projectWebDevButton .projectWebDevLabel { font-size: 10px; line-height: 1; }
+}

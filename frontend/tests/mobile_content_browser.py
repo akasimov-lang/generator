@@ -30,6 +30,16 @@ with sync_playwright() as p:
   page.set_viewport_size(dict(width=width,height=900))
   title=table.locator('.contentTopicWithRating > span:first-child');expect(title).to_have_text(topic)
   if width<=640:
+   header=page.locator('.projectHeader').first
+   refresh=header.locator('.projectRefreshButton'); expect(refresh).to_be_visible()
+   assert refresh.bounding_box()['y'] < header.locator('.projectMeta').bounding_box()['y']
+   metrics=header.locator('.projectMetricCard'); a,bm=[e.bounding_box() for e in metrics.all()]
+   assert abs(a['y']-bm['y'])<1, 'Counters must share one row'
+   for e in header.locator('.projectTopDetails > *, .projectRefreshButton').all():
+    box=e.bounding_box(); assert box['x']>=0 and box['x']+box['width']<=width+1, (width,box)
+   links=header.locator('.projectCanonActions > *'); assert len({round(e.bounding_box()['y']) for e in links.all()})==1
+   assert all(e.bounding_box()['width']>=44 and e.bounding_box()['height']>=44 for e in links.all())
+   assert header.bounding_box()['height']<490, header.bounding_box()
    assert title.evaluate('(e)=>e.scrollHeight <= e.clientHeight + 1'), 'Title clipped'
    for loc in [table.locator('td'), table.locator('button'),table.locator('a')]:
     for e in loc.all():
