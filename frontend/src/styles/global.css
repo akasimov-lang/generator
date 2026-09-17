@@ -9765,3 +9765,16 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
   .workspaceHeadingFull { display: none; }
   .workspaceHeadingCompact { display: inline; white-space: nowrap; }
 }
+
+@media (max-width: 640px) {
+  .projectNetworkPanel > .panelHeader { gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .projectNetworkPanel > .panelHeader h2 { font-size: 14px; line-height: 1.25; white-space: nowrap; }
+  .projectNetworkPanel > .panelHeader > .button {
+    width: auto;
+    flex: 0 0 auto;
+    min-height: 30px;
+    padding: 5px 8px;
+    font-size: 12px;
+    line-height: 1.25;
+  }
+}
