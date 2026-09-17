@@ -1361,7 +1361,7 @@ function App() {
         <header className="topbar">
           <div>
             <p className="eyebrow">Рабочая панель</p>
-            <h1>{viewTitle(activeView, workspaceTab)}</h1>
+            <h1>{activeView === "workspace" ? <><span className="workspaceHeadingFull">{viewTitle(activeView, workspaceTab)}</span><span className="workspaceHeadingCompact">Рабочий экран проекта</span></> : viewTitle(activeView, workspaceTab)}</h1>
           </div>
           {!compactNavigation && accountActions}
         </header>

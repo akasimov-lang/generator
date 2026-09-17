@@ -9755,3 +9755,13 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
   .projectUpdatedAt > strong { font-size: 11px; }
   .projectUpdatedAt > b { margin-left: 0; padding: 2px 5px; font-size: 9px; }
 }
+
+.workspaceHeadingCompact { display: none; }
+@media (max-width: 640px) {
+  .main { padding: 10px 12px; }
+  .topbar { min-height: 0; margin-bottom: 10px; gap: 0; }
+  .topbar .eyebrow { display: none; }
+  .topbar h1 { font-size: 16px; line-height: 1.25; }
+  .workspaceHeadingFull { display: none; }
+  .workspaceHeadingCompact { display: inline; white-space: nowrap; }
+}
