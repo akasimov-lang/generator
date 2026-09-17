@@ -9080,7 +9080,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
               title: row.homepageTitle ? (
                 <SiteTitleTooltip name={row.name} title={row.homepageTitle} />
               ) : "—",
-              canon: <strong className="siteMainDomain">{row.canon}</strong>,
+              canon: <strong className="siteMainDomain" title={row.canon}>{row.canon}</strong>,
               language: <LocaleCode value={row.language} />,
               status: readOnly ? (
                 <span className={`siteStatusReadonly ${row.projectStatus}`}>
@@ -9108,7 +9108,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
                   {formatNumber(row.menuCount)}
                 </button>
               ) : "0",
-              xDefault: row.xDefaultHistory.length ? <span title="Домены, ранее указанные в x-default">{row.xDefaultHistory.join(", ")}</span> : "—",
+              xDefault: row.xDefaultHistory.length ? <span className="siteXDefault" title={row.xDefaultHistory.join("\n")}>{row.xDefaultHistory.join(", ")}</span> : "—",
               domainsCount: <a href={pathForRoute("workspace", "network", row.name)} aria-label={`Открыть сетку проекта ${row.name}`}>{formatNumber(row.domainsCount)}</a>
             };
             return visibleColumnOrder.map((column) => cells[column]);
