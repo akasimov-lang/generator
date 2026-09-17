@@ -1,3 +1,4 @@
+from app.project_access import external_projects
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -481,7 +482,7 @@ def refresh_project_server_id(db: Session, site: models.Site) -> str:
     """Resolve and persist the project's current server before a direct request."""
     if not site.name:
         raise ProjectCacheError("Project name is not configured")
-    projects = fetch_project_cache([site.name])
+    projects = external_projects(db, fetch_project_cache([site.name]))
     project = next((item for item in projects if str(item.get("name") or "").strip() == site.name), None)
     if not project:
         raise ProjectCacheError(f"Project '{site.name}' was not found in cache")
@@ -937,6 +938,7 @@ def sync_project_data_update(
 
 
 def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str, Any]:
+    projects = external_projects(db, projects)
     projects, skipped_duplicate_count = _deduplicate_cache_projects(projects)
     default_prompt = db.scalar(
         select(models.PromptTemplate)

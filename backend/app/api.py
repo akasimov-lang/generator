@@ -1,7 +1,7 @@
+from app.project_access import external_projects
 import asyncio
 from datetime import datetime, timedelta, timezone
 import json
-import secrets
 import httpx
 from typing import Any
 from urllib.parse import urlsplit
@@ -47,7 +47,6 @@ from app.schemas import (
     MenuStructurePreviewRequest,
     MenuStructurePreviewResponse,
     MenuVisibilityCheckResponse,
-    PasswordChange,
     PublishedContentRegenerationRequest,
     PublishedContentBulkDeleteRequest,
     PublishedContentBulkDeleteResponse,
@@ -83,13 +82,12 @@ from app.schemas import (
     TokenResponse,
     TopicSuggestionsRequest,
     TopicSuggestionsResponse,
-    UserCreate,
     UserResponse,
-    UserUpdate,
 )
 from app.menu_templates import MENU_TEMPLATES
 from app.project_cache import ProjectCacheError, fetch_project_cache, fetch_project_template_capabilities_resilient, project_server_url, refresh_project_server_id, sync_project_cache
-from app.security import AdminUser, AuthUser, create_token, hash_password, verify_password
+from app.security import AdminUser, AuthUser
+from app import external_auth
 from app.services import (
     BASE_PROMPT_TEMPLATE_NAME,
     approve_and_schedule_item,
@@ -128,10 +126,6 @@ from app.services import (
 from app.worker import check_site_menu_visibility_job, collect_competitor_research_job, generate_content_item_job, generate_task_content_job, publish_campaign_bundle_job, revise_content_item_job, run_task_pipeline_job
 
 router = APIRouter()
-
-
-def _active_admin_count(db: Session) -> int:
-    return db.scalar(select(func.count()).select_from(models.User).where(models.User.is_admin.is_(True), models.User.is_active.is_(True))) or 0
 
 
 def _get_site_or_404(db: Session, site_id: str) -> models.Site:
@@ -372,10 +366,10 @@ def health() -> dict:
 
 @router.post("/auth/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
-    user = db.scalar(select(models.User).where(models.User.username == payload.username.strip()))
-    if not user or not user.is_active or not verify_password(payload.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid username or password")
-    return TokenResponse(access_token=create_token(user.id, user.username, user.is_admin), user=user)
+    token = external_auth.login_external(payload.username, payload.password)
+    identity = external_auth.identity(token, fresh=True)
+    user = external_auth.local_profile(db, identity)
+    return TokenResponse(access_token=token, user=user)
 
 
 @router.get("/auth/me", response_model=UserResponse)
@@ -383,17 +377,8 @@ def current_user(user: AuthUser, db: Session = Depends(get_db)) -> Any:
     db_user = db.get(models.User, user["id"])
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
-    return db_user
-
-
-@router.post("/me/password")
-def change_password(payload: PasswordChange, user: AuthUser, db: Session = Depends(get_db)) -> dict:
-    db_user = db.get(models.User, user["id"])
-    if not db_user or not verify_password(payload.current_password, db_user.password_hash):
-        raise HTTPException(status_code=400, detail="Current password is incorrect")
-    db_user.password_hash = hash_password(payload.new_password)
-    db.commit()
-    return {"status": "ok"}
+    return {**UserResponse.model_validate(db_user).model_dump(), "is_admin": user["is_admin"],
+            "allowed_site_ids": user.get("allowed_site_ids")}
 
 
 @router.get("/me/favorite-sites", response_model=FavoriteSitesResponse)
@@ -401,7 +386,8 @@ def get_favorite_sites(user: AuthUser, db: Session = Depends(get_db)) -> dict[st
     db_user = db.get(models.User, user["id"])
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
-    return {"site_ids": list(db_user.favorite_site_ids or [])}
+    return {"site_ids": [site_id for site_id in (db_user.favorite_site_ids or [])
+                         if user.get("allowed_site_ids") is None or site_id in user["allowed_site_ids"]]}
 
 
 @router.put("/me/favorite-sites/{site_id}", response_model=FavoriteSitesResponse)
@@ -428,65 +414,6 @@ def remove_favorite_site(site_id: str, user: AuthUser, db: Session = Depends(get
     db_user.favorite_site_ids = favorite_site_ids
     db.commit()
     return {"site_ids": favorite_site_ids}
-
-
-@router.get("/users", response_model=list[UserResponse])
-def list_users(_: AdminUser, db: Session = Depends(get_db)) -> Any:
-    return db.scalars(select(models.User).order_by(models.User.created_at.desc())).all()
-
-
-@router.post("/users", response_model=UserResponse)
-def create_user(payload: UserCreate, _: AdminUser, db: Session = Depends(get_db)) -> Any:
-    username = payload.username.strip()
-    if not username:
-        raise HTTPException(status_code=400, detail="Username is required")
-    existing = db.scalar(select(models.User).where(models.User.username == username))
-    if existing:
-        raise HTTPException(status_code=409, detail="User already exists")
-    user = models.User(
-        username=username,
-        password_hash=hash_password(payload.password),
-        is_admin=payload.is_admin,
-        is_active=True,
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return user
-
-
-@router.patch("/users/{user_id}", response_model=UserResponse)
-def update_user(user_id: str, payload: UserUpdate, current_admin: AdminUser, db: Session = Depends(get_db)) -> Any:
-    user = db.get(models.User, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    if payload.is_admin is not None and payload.is_admin != user.is_admin:
-        if user.is_admin and not payload.is_admin and _active_admin_count(db) <= 1:
-            raise HTTPException(status_code=400, detail="Cannot remove the last active admin")
-        user.is_admin = payload.is_admin
-
-    if payload.is_active is not None and payload.is_active != user.is_active:
-        if user.id == current_admin["id"] and not payload.is_active:
-            raise HTTPException(status_code=400, detail="Cannot disable your own account")
-        if user.is_admin and not payload.is_active and _active_admin_count(db) <= 1:
-            raise HTTPException(status_code=400, detail="Cannot disable the last active admin")
-        user.is_active = payload.is_active
-
-    db.commit()
-    db.refresh(user)
-    return user
-
-
-@router.post("/users/{user_id}/reset-password")
-def reset_user_password(user_id: str, _: AdminUser, db: Session = Depends(get_db)) -> dict[str, str]:
-    user = db.get(models.User, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    temporary_password = secrets.token_urlsafe(12)
-    user.password_hash = hash_password(temporary_password)
-    db.commit()
-    return {"password": temporary_password}
 
 
 @router.get("/dashboard")
@@ -600,6 +527,9 @@ def background_job_status(job_id: str, _: AuthUser, db: Session = Depends(get_db
     job = db.get(models.BackgroundJob, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Task not found")
+    if not _.get("is_admin"):
+        if job.kind != "publication" or not db.get(models.ContentItem, job.payload.get("content_id")):
+            raise HTTPException(status_code=404, detail="Task not found")
     return {"id": job.id, "kind": job.kind, "status": job.status, "result": job.result, "error": job.error}
 
 
@@ -617,7 +547,7 @@ def refresh_site_cache(site_id: str, _: AuthUser, db: Session = Depends(get_db))
     """Refresh one project's cache when an authenticated user opens its workspace."""
     site = _get_site_or_404(db, site_id)
     try:
-        projects = fetch_project_cache([site.name])
+        projects = external_projects(db, fetch_project_cache([site.name]))
         if not any(str(project.get("name") or "").strip() == site.name for project in projects):
             raise ProjectCacheError(f"Project '{site.name}' was not found in cache")
         return sync_project_cache(db, projects)
@@ -777,7 +707,7 @@ def get_project_page_preview(site_id: str, slug: str, _: AuthUser, db: Session =
     if not normalized_slug:
         raise HTTPException(status_code=400, detail="У пункта меню нет адреса страницы")
     try:
-        projects = fetch_project_cache([site.name])
+        projects = external_projects(db, fetch_project_cache([site.name]))
     except ProjectCacheError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
     project = next((item for item in projects if str(item.get("name") or "").strip() == site.name), None)
@@ -2893,7 +2823,7 @@ async def retry_admin_request_log(log_id: str, user: AdminUser, db: Session = De
 
 
 @router.post("/publication/run-due")
-def run_due_publication(_: AuthUser) -> dict:
+def run_due_publication(_: AdminUser) -> dict:
     from app.worker import publish_due_items
 
     result = publish_due_items.delay()

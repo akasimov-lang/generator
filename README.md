@@ -28,8 +28,6 @@ docker-compose up -d --build
 Логин и пароль задаются в `.env`:
 
 ```env
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=change-me
 ```
 
 Для синхронизации списка сайтов на странице `/sites` также задаются серверные
@@ -75,3 +73,7 @@ make test
 
 На production deploy hook запускает `alembic upgrade head` перед перезапуском
 сервисов.
+
+Вход выполняется через учётную запись Webdev. `anton` — администратор,
+остальные пользователи видят только назначенные им проекты.
+Подробности: [авторизация и права](docs/EXTERNAL_AUTH.md).

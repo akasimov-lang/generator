@@ -1,4 +1,4 @@
-import { readProjectSnapshot, writeProjectSnapshot } from "./projectSnapshot";
+import { readProjectSnapshot, writeProjectSnapshot, removeLegacyProjectSnapshot } from "./projectSnapshot";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { createPortal } from "react-dom";
@@ -449,6 +449,7 @@ type TaskRegenerateAllOptions = {
 };
 
 type User = {
+  allowed_site_ids?: string[] | null;
   id: string;
   username: string;
   is_admin: boolean;
@@ -638,35 +639,6 @@ async function copyTextToClipboard(text: string) {
   const copied = document.execCommand("copy");
   document.body.removeChild(textarea);
   if (!copied) throw new Error("Clipboard copy failed");
-}
-
-function secureRandomIndex(max: number): number {
-  if (!Number.isInteger(max) || max < 1 || max > 256) throw new Error("Invalid random range");
-  const randomByte = new Uint8Array(1);
-  const unbiasedLimit = Math.floor(256 / max) * max;
-  do {
-    window.crypto.getRandomValues(randomByte);
-  } while (randomByte[0] >= unbiasedLimit);
-  return randomByte[0] % max;
-}
-
-function generateSecurePassword(length = 10): string {
-  const groups = [
-    "abcdefghijkmnopqrstuvwxyz",
-    "ABCDEFGHJKLMNPQRSTUVWXYZ",
-    "23456789",
-    "!@#$%^&*_-+="
-  ];
-  const allCharacters = groups.join("");
-  const characters = groups.map((group) => group[secureRandomIndex(group.length)]);
-  while (characters.length < Math.max(length, groups.length)) {
-    characters.push(allCharacters[secureRandomIndex(allCharacters.length)]);
-  }
-  for (let index = characters.length - 1; index > 0; index -= 1) {
-    const swapIndex = secureRandomIndex(index + 1);
-    [characters[index], characters[swapIndex]] = [characters[swapIndex], characters[index]];
-  }
-  return characters.join("");
 }
 
 const MAIN_VIEW_PATHS: Record<Exclude<AppView, "workspace">, string> = {
@@ -926,6 +898,8 @@ function App() {
   const mobileMenuButton = React.useRef<HTMLButtonElement>(null);
   const initialRoute = React.useMemo(() => routeFromPath(window.location.pathname), []);
   const [token, setToken] = React.useState(() => localStorage.getItem("admin_token") || "");
+  const activeTokenRef = React.useRef(token);
+  activeTokenRef.current = token;
   const [theme, setTheme] = React.useState<ThemeMode>(() => (localStorage.getItem("theme_mode") === "dark" ? "dark" : "light"));
   const [inputStyle, setInputStyle] = React.useState<InputStyle>(storedInputStyle);
   const [activeView, setActiveView] = React.useState<AppView>(initialRoute.view);
@@ -958,12 +932,11 @@ function App() {
       setSitesUpdatedAt(snapshotTimeRef.current);
     }
     const user = userRef.current;
-    if (user) void writeProjectSnapshot("shared-projects-v1", { projects: next, updatedAt: snapshotTimeRef.current })
+    if (user) void writeProjectSnapshot(`webdev-projects-v2:${user.id}`, { projects: next, updatedAt: snapshotTimeRef.current })
       .catch(() => setMessage("Не удалось сохранить список локально. Текущие данные доступны до перезагрузки."));
   }, []);
   const [providers, setProviders] = React.useState<AiProvider[]>([]);
   const [currentUser, setCurrentUser] = React.useState<User | null>(null);
-  const [users, setUsers] = React.useState<User[]>([]);
   const [message, setMessage] = React.useState("");
   const [notificationPromptVisible, setNotificationPromptVisible] = React.useState(false);
   const [viewAsUser, setViewAsUser] = React.useState(false);
@@ -1018,12 +991,12 @@ function App() {
         }
         await new Promise((resolve) => window.setTimeout(resolve, 250 * (attempt + 1)));
       }
+      if (activeTokenRef.current !== token) throw new Error("Сессия изменилась.");
       if (!response) throw networkError instanceof Error ? networkError : new Error("Failed to fetch");
       if (response.status === 401) {
         localStorage.removeItem("admin_token");
         setToken("");
         setCurrentUser(null);
-        setUsers([]);
         setArchivedTasks([]);
         const authError = new Error("Нужно войти заново") as ApiRequestError;
         authError.statusCode = response.status;
@@ -1073,8 +1046,7 @@ function App() {
         setContent(await api<ContentItem[]>("/content"));
       } else if (view === "dashboard" && user.is_admin) {
         setDashboard(await api<Dashboard>("/dashboard"));
-      } else if (view === "settings" && user.is_admin) {
-        setUsers(await api<User[]>("/users"));
+
       }
       if (["providers", "tasks", "prompts"].includes(view)) {
         setProviders(await api<AiProvider[]>("/ai-providers"));
@@ -1118,14 +1090,20 @@ function App() {
   }
 
   React.useEffect(() => {
-    if (!token) return;
     let cancelled = false;
+    setDashboard(null); setTasks([]); setArchivedTasks([]); setContent([]); setProviders([]);
+    snapshotRef.current = []; snapshotTimeRef.current = null;
+    refreshFlight.current = null; initialSitesFlight.current = null;
+    userRef.current = null;
+    if (!token) return;
     setCurrentUser(null);
     setSites([]);
     setSiteSnapshot([]);
     void (async () => {
       const user = await api<User>("/auth/me");
-      const saved = await readProjectSnapshot<Site>("shared-projects-v1").catch(() => ({ projects: [], updatedAt: null }));
+      await removeLegacyProjectSnapshot().catch(() => {});
+      const saved = await readProjectSnapshot<Site>(`webdev-projects-v2:${user.id}`).catch(() => ({ projects: [], updatedAt: null }));
+      if (!user.is_admin) saved.projects = saved.projects.filter(site => user.allowed_site_ids?.includes(site.id));
       if (cancelled) return;
       userRef.current = user;
       snapshotRef.current = saved.projects;
@@ -1139,6 +1117,26 @@ function App() {
     })().catch(error => { if (!cancelled) setMessage(error instanceof Error ? error.message : "Не удалось загрузить данные"); });
     return () => { cancelled = true; userRef.current = null; };
   }, [api, token]);
+
+  React.useEffect(() => {
+    if (!currentUser || !token) return;
+    let busy = false;
+    const check = async () => {
+      if (busy || document.hidden) return;
+      busy = true;
+      try {
+        const next = await api<User>("/auth/me");
+        if (next.id !== currentUser.id || next.is_admin !== currentUser.is_admin ||
+            JSON.stringify(next.allowed_site_ids) !== JSON.stringify(currentUser.allowed_site_ids)) {
+          window.location.reload();
+        }
+      } catch { /* API handles expired sessions; unavailable auth does not grant access. */ }
+      finally { busy = false; }
+    };
+    const timer = window.setInterval(() => void check(), 30000);
+    window.addEventListener("focus", check);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", check); };
+  }, [api, token, currentUser]);
 
   React.useEffect(() => {
     const breakpoint = window.matchMedia("(max-width: 900px)");
@@ -1292,8 +1290,7 @@ function App() {
                 localStorage.removeItem("admin_token");
                 setToken("");
                 setCurrentUser(null);
-                setUsers([]);
-                setArchivedTasks([]);
+                        setArchivedTasks([]);
               }}
               title="Выйти"
             >
@@ -1398,7 +1395,7 @@ function App() {
         {activeView === "guide" && <React.Suspense fallback={<p>Загрузка инструкции…</p>}><UserGuideView /></React.Suspense>}
         {isAdmin && activeView === "autoReglue" && <AutoReglueView api={api} />}
         {activeView === "autoReglueGuide" && <><a className="button secondary" href="/guide" onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("guide"); } }}>Все инструкции</a><AutoReglueGuide backLabel={isAdmin ? "Вернуться к автопереклею" : "Все инструкции"} onBack={() => navigateTo(isAdmin ? "autoReglue" : "guide")} /></>}
-        {activeView === "settings" && <SettingsView api={api} currentUser={currentUser} users={users} designVersion={designVersion} onDesignVersionChange={setDesignVersion} inputStyle={inputStyle} onInputStyleChange={setInputStyle} onChanged={loadAll} />}
+        {activeView === "settings" && <SettingsView api={api} currentUser={currentUser} designVersion={designVersion} onDesignVersionChange={setDesignVersion} inputStyle={inputStyle} onInputStyleChange={setInputStyle} onChanged={loadAll} />}
       </main>
       {notificationPromptVisible ? (
         <div className="permissionOverlay" role="dialog" aria-modal="true" aria-labelledby="popup-permission-title">
@@ -1545,7 +1542,7 @@ function AuthScreen({ children }: { children: React.ReactNode }) {
 }
 
 function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
-  const [username, setUsername] = React.useState("admin");
+  const [username, setUsername] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
@@ -1561,7 +1558,8 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
         body: JSON.stringify({ username, password })
       });
       if (!response.ok) {
-        setError("Неверный логин или пароль");
+        const error = await response.json().catch(() => ({}));
+        setError(typeof error.detail === "string" ? error.detail : "Не удалось войти. Попробуйте ещё раз.");
         return;
       }
       const data = await response.json();
@@ -1581,14 +1579,14 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
           <div className="brandMark large logoMark loginBrandLogo"><BrandLogo /></div>
           <LoginBrandName />
         </div>
-        <p>Вход в панель генерации и публикации контента.</p>
+        <p>Войдите с логином и паролем Webdev.</p>
         <label>
           Логин
-          <input value={username} onChange={(event) => setUsername(event.target.value)} disabled={submitting} />
+          <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" autoFocus required disabled={submitting} />
         </label>
         <label>
           Пароль
-          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoFocus disabled={submitting} />
+          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required disabled={submitting} />
         </label>
         {error ? <span className="formError">{error}</span> : null}
         <button className="button primary" type="submit" disabled={submitting}>
@@ -9607,9 +9605,8 @@ function TableFilterHeader({ label, options, selectedValues, onToggle, onSelectA
   );
 }
 
-function SettingsView({ api, currentUser, users, inputStyle, onInputStyleChange, designVersion, onDesignVersionChange, onChanged }: ViewProps & {
+function SettingsView({ api, currentUser, inputStyle, onInputStyleChange, designVersion, onDesignVersionChange, onChanged }: ViewProps & {
   currentUser: User | null;
-  users: User[];
   designVersion: DesignVersion;
   onDesignVersionChange: (version: DesignVersion) => void;
   inputStyle: InputStyle;
@@ -9627,7 +9624,7 @@ function SettingsView({ api, currentUser, users, inputStyle, onInputStyleChange,
           </div>
           {currentUser ? <RoleBadge admin={currentUser.is_admin} /> : null}
         </div>
-        <PasswordChangeForm api={api} />
+        <p className="muted">Вход и пароль управляются в Webdev. Администратор панели — anton.</p>
       </DataPanel>
 
       {currentUser?.is_admin ? (
@@ -9645,7 +9642,6 @@ function SettingsView({ api, currentUser, users, inputStyle, onInputStyleChange,
             </div>
             <p className="muted">Применяется сразу и сохраняется в этом браузере, включая экран входа. Данные и функции проекта одинаковы в обеих версиях.</p>
           </DataPanel>
-          <UsersAdminPanel api={api} currentUser={currentUser} users={users} onChanged={onChanged} />
           <AdminMenuVisibilityQueuePanel api={api} />
           <AdminRequestLogsPanel api={api} />
         </>
@@ -9822,192 +9818,6 @@ function AdminRequestLogsPanel({ api }: Pick<ViewProps, "api">) {
           ])}
         />
       )}
-    </DataPanel>
-  );
-}
-
-function PasswordChangeForm({ api }: Pick<ViewProps, "api">) {
-  const [currentPassword, setCurrentPassword] = React.useState("");
-  const [newPassword, setNewPassword] = React.useState("");
-  const [confirmPassword, setConfirmPassword] = React.useState("");
-  const [formError, setFormError] = React.useState("");
-  const [saved, setSaved] = React.useState(false);
-
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    setSaved(false);
-    setFormError("");
-    if (newPassword !== confirmPassword) {
-      setFormError("Новый пароль и подтверждение не совпадают.");
-      return;
-    }
-    try {
-      await api("/me/password", {
-        method: "POST",
-        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
-      });
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-      setSaved(true);
-    } catch (error) {
-      setFormError(error instanceof Error ? error.message : "Не удалось обновить пароль");
-    }
-  }
-
-  return (
-    <form className="formGrid compactForm" onSubmit={submit}>
-      <label>
-        Текущий пароль
-        <input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required />
-      </label>
-      <label>
-        Новый пароль
-        <input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required minLength={8} />
-      </label>
-      <label>
-        Повтор нового пароля
-        <input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required minLength={8} />
-      </label>
-      <div className="formActions alignEnd">
-        <button className="button primary" type="submit"><KeyRound size={18} /> Обновить пароль</button>
-      </div>
-      {formError ? <span className="formError wide">{formError}</span> : null}
-      {saved ? <span className="formSuccess wide">Пароль обновлен.</span> : null}
-    </form>
-  );
-}
-
-function UsersAdminPanel({ api, currentUser, users, onChanged }: ViewProps & { currentUser: User; users: User[] }) {
-  const [username, setUsername] = React.useState("");
-  const [password, setPassword] = React.useState(() => generateSecurePassword());
-  const [isAdmin, setIsAdmin] = React.useState(false);
-  const [formError, setFormError] = React.useState("");
-  const [passwordActionId, setPasswordActionId] = React.useState("");
-  const [passwordCopiedId, setPasswordCopiedId] = React.useState("");
-  const [generatedPasswordNotice, setGeneratedPasswordNotice] = React.useState("Предложен новый безопасный пароль.");
-
-  async function createUser(event: React.FormEvent) {
-    event.preventDefault();
-    setFormError("");
-    try {
-      await api("/users", {
-        method: "POST",
-        body: JSON.stringify({ username, password, is_admin: isAdmin })
-      });
-      setUsername("");
-      setPassword(generateSecurePassword());
-      setGeneratedPasswordNotice("Пользователь создан. Подготовлен новый пароль для следующего пользователя.");
-      setIsAdmin(false);
-      await onChanged();
-    } catch (error) {
-      setFormError(error instanceof Error ? error.message : "Не удалось создать пользователя");
-    }
-  }
-
-  async function generatePasswordForNewUser() {
-    setFormError("");
-    const generatedPassword = generateSecurePassword();
-    setPassword(generatedPassword);
-    try {
-      await copyTextToClipboard(generatedPassword);
-      setGeneratedPasswordNotice("Безопасный пароль сгенерирован и скопирован.");
-    } catch {
-      setGeneratedPasswordNotice("Безопасный пароль сгенерирован и добавлен в поле.");
-    }
-  }
-
-  async function updateUser(user: User, changes: Partial<Pick<User, "is_admin" | "is_active">>) {
-    setFormError("");
-    try {
-      await api<User>(`/users/${user.id}`, {
-        method: "PATCH",
-        body: JSON.stringify(changes)
-      });
-      await onChanged();
-    } catch (error) {
-      setFormError(error instanceof Error ? error.message : "Не удалось обновить пользователя");
-    }
-  }
-
-  async function resetAndCopyPassword(user: User) {
-    const confirmed = window.confirm(`Текущий пароль пользователя «${user.username}» нельзя прочитать. Создать новый пароль и скопировать его?`);
-    if (!confirmed) return;
-    setFormError("");
-    setPasswordActionId(user.id);
-    setPasswordCopiedId("");
-    try {
-      const result = await api<{ password: string }>(`/users/${user.id}/reset-password`, { method: "POST" });
-      try {
-        await copyTextToClipboard(result.password);
-        setPasswordCopiedId(user.id);
-        window.setTimeout(() => setPasswordCopiedId((current) => current === user.id ? "" : current), 2400);
-      } catch {
-        window.prompt(`Новый пароль пользователя ${user.username}. Скопируйте его сейчас:`, result.password);
-      }
-    } catch (error) {
-      setFormError(error instanceof Error ? error.message : "Не удалось создать новый пароль");
-    } finally {
-      setPasswordActionId("");
-    }
-  }
-
-  return (
-    <DataPanel title="Пользователи">
-      <div className="subPanelTitle"><Users size={18} /><strong>Доступы</strong></div>
-      <form className="formGrid compactForm" onSubmit={createUser}>
-        <label>
-          Логин
-          <input value={username} onChange={(event) => setUsername(event.target.value)} required minLength={2} />
-        </label>
-        <label>
-          Пароль
-          <span className="generatedPasswordControl">
-            <input type="text" autoComplete="new-password" value={password} onChange={(event) => { setPassword(event.target.value); setGeneratedPasswordNotice(""); }} required minLength={8} />
-            <button className="button secondary" type="button" onClick={() => void generatePasswordForNewUser()}><KeyRound size={16} /> Сгенерировать пароль</button>
-          </span>
-        </label>
-        <label className="checkboxRow">
-          <input type="checkbox" checked={isAdmin} onChange={(event) => setIsAdmin(event.target.checked)} />
-          Администратор
-        </label>
-        <div className="formActions alignEnd">
-          <button className="button primary" type="submit"><UserPlus size={18} /> Создать пользователя</button>
-        </div>
-        {formError ? <span className="formError wide">{formError}</span> : null}
-        {generatedPasswordNotice ? <span className="formSuccess wide">{generatedPasswordNotice}</span> : null}
-      </form>
-
-      <ResponsiveTable
-        columns={["Пользователь", "Роль", "Статус", "Создан", "Действия"]}
-        rows={users.map((user) => [
-          user.username,
-          <RoleBadge admin={user.is_admin} />,
-          user.is_active ? "Активен" : "Отключен",
-          formatDate(user.created_at),
-          <div className="userActions">
-            <button
-              className="button compact"
-              type="button"
-              onClick={() => updateUser(user, { is_admin: !user.is_admin })}
-              disabled={user.id === currentUser.id && user.is_admin}
-            >
-              {user.is_admin ? "Снять admin" : "Сделать admin"}
-            </button>
-            <button
-              className={`button compact ${user.is_active ? "danger" : ""}`}
-              type="button"
-              onClick={() => updateUser(user, { is_active: !user.is_active })}
-              disabled={user.id === currentUser.id}
-            >
-              {user.is_active ? "Отключить" : "Включить"}
-            </button>
-            <button className="button compact secondary" type="button" onClick={() => void resetAndCopyPassword(user)} disabled={Boolean(passwordActionId)}>
-              <Copy size={15} /> {passwordActionId === user.id ? "Создаём пароль" : passwordCopiedId === user.id ? "Скопировано" : "Скопировать пароль"}
-            </button>
-          </div>
-        ])}
-      />
     </DataPanel>
   );
 }

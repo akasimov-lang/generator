@@ -1,3 +1,4 @@
+from app.project_access import external_projects
 import asyncio
 import copy
 import html
@@ -5029,7 +5030,8 @@ def _has_successful_page_publication(db: Session, item: models.ContentItem) -> b
 
 
 def _find_project_pages(site: models.Site, slug: str) -> list[dict]:
-    projects = fetch_project_cache([site.name])
+    from sqlalchemy.orm import object_session
+    projects = external_projects(object_session(site), fetch_project_cache([site.name]))
     project = next((entry for entry in projects if str(entry.get("name") or "").strip() == site.name), None)
     data = project.get("data") if isinstance(project, dict) and isinstance(project.get("data"), dict) else {}
     pages = data.get("pages") if isinstance(data.get("pages"), list) else []
@@ -5268,7 +5270,7 @@ async def delete_published_item(
         raise ValueError("Only published content can be deleted from a project")
     refresh_project_server_id(db, site)
     endpoint = project_server_url(site, "/projects/delete")
-    projects = fetch_project_cache([site.name])
+    projects = external_projects(db, fetch_project_cache([site.name]))
     project = next((entry for entry in projects if str(entry.get("name") or "").strip() == site.name), None)
     data = project.get("data") if isinstance(project, dict) and isinstance(project.get("data"), dict) else {}
     current_pages = data.get("pages") if isinstance(data.get("pages"), list) else []

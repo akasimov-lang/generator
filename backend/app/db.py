@@ -31,7 +31,7 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
     apply_lightweight_migrations()
-    ensure_default_admin()
+    disable_local_credentials()
 
 
 def apply_lightweight_migrations() -> None:
@@ -176,32 +176,10 @@ def apply_lightweight_migrations() -> None:
         )
 
 
-def ensure_default_admin() -> None:
-    from app import models
-    from app.security import hash_password
-
-    with SessionLocal() as db:
-        settings = get_settings()
-        admin = db.scalar(select(models.User).where(models.User.username == settings.admin_username))
-        active_admin = db.scalar(select(models.User).where(models.User.is_admin.is_(True), models.User.is_active.is_(True)).limit(1))
-
-        if active_admin:
-            return
-
-        if not admin:
-            admin = models.User(
-                username=settings.admin_username,
-                password_hash=hash_password(settings.admin_password),
-                is_admin=True,
-                is_active=True,
-            )
-            db.add(admin)
-        else:
-            admin.is_admin = True
-            admin.is_active = True
-            if not admin.password_hash:
-                admin.password_hash = hash_password(settings.admin_password)
-        db.commit()
+def disable_local_credentials() -> None:
+    # Preserve user IDs referenced by audit records; eliminate local login secrets/grants.
+    with engine.begin() as connection:
+        connection.execute(text("UPDATE users SET password_hash = '', is_admin = false, is_active = false WHERE password_hash <> ''"))
 
 
 def backfill_content_site_ids() -> None:

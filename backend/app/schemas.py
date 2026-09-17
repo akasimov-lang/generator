@@ -8,8 +8,8 @@ from app.core.config import get_settings
 
 
 class LoginRequest(BaseModel):
-    username: str
-    password: str
+    username: str = Field(min_length=1, max_length=80)
+    password: str = Field(min_length=1, max_length=1024)
 
 
 class UserResponse(BaseModel):
@@ -20,28 +20,13 @@ class UserResponse(BaseModel):
     is_admin: bool
     is_active: bool
     created_at: datetime
+    allowed_site_ids: list[str] | None = None
 
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
-
-
-class UserCreate(BaseModel):
-    username: str = Field(min_length=2, max_length=80)
-    password: str = Field(min_length=8)
-    is_admin: bool = False
-
-
-class UserUpdate(BaseModel):
-    is_admin: bool | None = None
-    is_active: bool | None = None
-
-
-class PasswordChange(BaseModel):
-    current_password: str
-    new_password: str = Field(min_length=8)
 
 
 class FavoriteSitesResponse(BaseModel):

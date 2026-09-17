@@ -13,8 +13,6 @@ class Settings(BaseSettings):
     db_max_overflow: int = 5
     app_public_url: str = "https://ai-seo-content-panel.site"
     secret_key: str = Field(default="change-this-secret-before-production")
-    admin_username: str = "admin"
-    admin_password: str = "change-this-password"
     project_cache_url: str = "https://o59s9a012jd.com"
     indexing_endpoint: str = "https://o59s9a012jd.com/indexing"
     project_cache_username: str = ""
