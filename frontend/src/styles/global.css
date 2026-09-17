@@ -9564,7 +9564,11 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
   grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   justify-self: start;
-  width: max-content;
+  width: 250px;
+  max-width: 100%;
+}
+.networkFakePath {
+  width: 250px;
   max-width: 100%;
 }
 .networkFakeCurrent label {
