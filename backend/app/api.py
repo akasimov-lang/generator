@@ -534,10 +534,17 @@ def background_job_status(job_id: str, _: AuthUser, db: Session = Depends(get_db
 
 
 @router.post("/sites/cache/sync", response_model=ProjectCacheSyncResponse)
-def synchronize_project_cache(payload: ProjectCacheSyncRequest, _: AdminUser, db: Session = Depends(get_db)) -> dict[str, Any]:
+def synchronize_project_cache(payload: ProjectCacheSyncRequest, _: AuthUser, db: Session = Depends(get_db)) -> dict[str, Any]:
     try:
         names = list(dict.fromkeys(name.strip() for name in payload.names if name.strip()))
-        return sync_project_cache(db, fetch_project_cache(names or None))
+        keys = db.info.get("allowed_project_keys")
+        if keys is not None:
+            allowed_names = {name for name, server in keys}
+            if set(names) - allowed_names:
+                raise HTTPException(status_code=404, detail="Project not found")
+            names = names or sorted(allowed_names)
+        projects = fetch_project_cache(names or None) if names or keys is None else []
+        return sync_project_cache(db, external_projects(db, projects))
     except ProjectCacheError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
 

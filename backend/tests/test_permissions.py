@@ -164,3 +164,39 @@ def test_external_project_reads_preserve_server_scope(api,monkeypatch):
     r=c.get('/api/sites/own/pages/preview?slug=page')
     assert r.status_code==200,r.text
     assert r.json()['title']=='ALLOWED' and 'PRIVATE' not in r.text
+
+def test_user_refresh_imports_only_authorized_projects(api, monkeypatch):
+    from app import api as endpoints
+    c, engine, grants = api
+    grants['projects'] = frozenset({('own.test', 'one'), ('new.test', 'one')})
+    with Session(engine) as db:
+        db.get(models.Site, 'own').external_project_id = 'remote-own'
+        db.commit()
+    calls = []
+    rows = [dict(id=id, name=name, serverIp=server,
+                 settings={'canon':name, 'lang':'en'}, head={}, data={})
+            for id,name,server in [('remote-own','own.test','one'),
+                                    ('remote-new','new.test','one'),
+                                    ('private-duplicate','own.test','two'),
+                                    ('private-other','other.test','two')]]
+    monkeypatch.setattr(endpoints, 'fetch_project_cache', lambda names: calls.append(names) or rows)
+    for created in [1, 0]:
+        r = c.post('/api/sites/cache/sync', json={})
+        assert r.status_code == 200, r.text
+        assert r.json()['created_count'] == created
+        assert r.json()['cache_count'] == 2
+        assert {p['external_project_id'] for p in r.json()['projects']} == {'remote-own','remote-new'}
+    assert calls == [['new.test','own.test']] * 2
+    assert {s['name'] for s in c.get('/api/sites').json()} == {'own.test','new.test'}
+    with Session(engine) as db:
+        assert db.get(models.Site, 'own').cache_language == 'en'
+        assert db.get(models.Site, 'duplicate').cache_language is None
+        assert db.get(models.Site, 'other').cache_language is None
+        assert len(db.scalars(select(models.Site)).all()) == 4
+    assert c.post('/api/sites/cache/sync', json={'names':['other.test']}).status_code == 404
+    grants['projects'] = frozenset()
+    r = c.post('/api/sites/cache/sync', json={})
+    assert r.status_code == 200, r.text
+    assert r.json()['cache_count'] == 0
+    assert len(calls) == 2
+    assert c.get('/api/sites').json() == []
