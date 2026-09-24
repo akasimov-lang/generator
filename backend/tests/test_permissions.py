@@ -114,6 +114,42 @@ def test_external_contract(monkeypatch):
     count=len(calls);assert external_auth.identity(token)==result and len(calls)==count
     external_auth.identity(token,fresh=True);assert len(calls)==count+2
 
+
+def test_login_retries_with_a_new_token_when_webdev_rejects_the_first(monkeypatch):
+    tokens = iter(['expired-token', 'fresh-token'])
+    requested = []
+
+    def login(username, password):
+        requested.append((username, password))
+        return next(tokens)
+
+    def identity(token, fresh=False):
+        assert fresh is True
+        if token == 'expired-token':
+            raise HTTPException(401, 'expired')
+        return {'username': 'sergey', 'is_admin': False, 'projects': frozenset()}
+
+    monkeypatch.setattr(external_auth, 'login_external', login)
+    monkeypatch.setattr(external_auth, 'identity', identity)
+    token, profile = external_auth.authenticate('sergey', 'secret')
+
+    assert token == 'fresh-token'
+    assert profile['username'] == 'sergey'
+    assert requested == [('sergey', 'secret'), ('sergey', 'secret')]
+
+
+def test_login_does_not_retry_invalid_credentials(monkeypatch):
+    calls = []
+
+    def login(username, password):
+        calls.append((username, password))
+        raise HTTPException(401, 'Неверный логин или пароль Webdev.')
+
+    monkeypatch.setattr(external_auth, 'login_external', login)
+    with pytest.raises(HTTPException, match='Неверный логин или пароль'):
+        external_auth.authenticate('sergey', 'wrong')
+    assert calls == [('sergey', 'wrong')]
+
 @pytest.mark.parametrize('status',[401,403,500])
 def test_external_failure_closed(monkeypatch,status):
     external_auth._cache.clear();original=httpx.Client

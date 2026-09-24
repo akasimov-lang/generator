@@ -366,8 +366,7 @@ def health() -> dict:
 
 @router.post("/auth/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
-    token = external_auth.login_external(payload.username, payload.password)
-    identity = external_auth.identity(token, fresh=True)
+    token, identity = external_auth.authenticate(payload.username, payload.password)
     user = external_auth.local_profile(db, identity)
     return TokenResponse(access_token=token, user=user)
 

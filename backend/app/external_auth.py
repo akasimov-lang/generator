@@ -17,9 +17,9 @@ _cache_lock = threading.Lock()
 CACHE_SECONDS = 30
 
 
-def _json(response):
+def _json(response, unauthorized_message="Срок действия токена Webdev истёк."):
     if response.status_code in (400, 401, 403):
-        raise HTTPException(401, "Неверный логин, пароль или срок действия токена истёк.")
+        raise HTTPException(401, unauthorized_message)
     if not response.is_success:
         raise HTTPException(503, "Сервис авторизации временно недоступен.")
     try:
@@ -30,15 +30,35 @@ def _json(response):
 
 def login_external(username, password):
     try:
-        with httpx.Client(timeout=20, follow_redirects=False) as client:
+        with httpx.Client(timeout=20, follow_redirects=False,
+                          headers={'Cache-Control': 'no-cache', 'Pragma': 'no-cache'}) as client:
             data = _json(client.post(get_settings().project_cache_url.rstrip('/') + '/auth/login',
-                                     json={"username": username.strip(), "pass": password}))
+                                     json={"username": username.strip(), "pass": password}),
+                         "Неверный логин или пароль Webdev.")
         token = data.get('token') if isinstance(data, dict) else None
         if not isinstance(token, str) or not token.strip():
             raise HTTPException(503, "Сервис авторизации не вернул токен.")
         return token
     except httpx.HTTPError:
         raise HTTPException(503, "Сервис авторизации временно недоступен.") from None
+
+
+def authenticate(username, password):
+    """Request a new Webdev token and retry once if that token is already invalid."""
+    for attempt in range(2):
+        token = login_external(username, password)
+        try:
+            return token, identity(token, fresh=True)
+        except HTTPException as error:
+            forget(token)
+            if error.status_code != 401:
+                raise
+            if attempt:
+                raise HTTPException(
+                    401,
+                    "Webdev выдал новый токен, но не подтвердил его. Повторите вход.",
+                ) from None
+    raise HTTPException(401, "Не удалось подтвердить токен Webdev.")
 
 
 def assigned_to(settings, profile):
