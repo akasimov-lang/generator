@@ -1,4 +1,4 @@
-"""Admin-only configuration and explicit preview/start API."""
+"""Authenticated configuration and explicit preview/start API."""
 from uuid import UUID
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app import models, auto_reglue as auto
 from app.alternate_templates import template_catalog
 from app.db import get_db
-from app.security import AdminUser
+from app.security import AuthUser
 from app.project_network import NetworkConflict, network_lock
 from app.project_cache import ProjectCacheError
 import httpx
@@ -17,10 +17,17 @@ import httpx
 router = APIRouter(prefix='/auto-reglue', tags=['auto-reglue'])
 
 
-def site_or_404(db, site_id):
+def site_or_404(db, site_id, user=None):
     site = db.get(models.Site, site_id)
-    if not site: raise HTTPException(404, 'Проект не найден.')
+    allowed = user.get('allowed_site_ids') if user else None
+    if not site or (allowed is not None and site.id not in allowed):
+        raise HTTPException(404, 'Проект не найден.')
     return site
+
+
+def allowed_site_ids(user):
+    value = user.get('allowed_site_ids')
+    return None if value is None else set(value)
 
 
 def call(fn, *args):
@@ -65,29 +72,38 @@ def schedule_task(db, site):
 
 
 @router.get('')
-def overview(_: AdminUser, db: Session = Depends(get_db), project_id: str | None = None):
-    sites = db.scalars(select(models.Site).where(models.Site.project_status == 'mass_actions').order_by(models.Site.name)).all()
+def overview(user: AuthUser, db: Session = Depends(get_db), project_id: str | None = None):
+    allowed = allowed_site_ids(user)
+    sites_query = select(models.Site).where(models.Site.project_status == 'mass_actions')
+    if allowed is not None:
+        sites_query = sites_query.where(models.Site.id.in_(allowed))
+    sites = db.scalars(sites_query.order_by(models.Site.name)).all()
     query = select(models.AutoReglueRun)
+    if allowed is not None:
+        query = query.where(models.AutoReglueRun.site_id.in_(allowed))
     if project_id:
-        site_or_404(db, project_id)
+        site_or_404(db, project_id, user)
         query = query.where(models.AutoReglueRun.site_id == project_id)
     runs = db.scalars(query.order_by(models.AutoReglueRun.created_at.desc()).limit(100)).all()
-    task_sites = db.scalars(select(models.Site).join(models.AutoReglueSchedule, models.AutoReglueSchedule.site_id == models.Site.id).order_by(models.Site.name)).all()
+    task_query = select(models.Site).join(models.AutoReglueSchedule, models.AutoReglueSchedule.site_id == models.Site.id)
+    if allowed is not None:
+        task_query = task_query.where(models.Site.id.in_(allowed))
+    task_sites = db.scalars(task_query.order_by(models.Site.name)).all()
     return {'tasks': [schedule_task(db, s) for s in task_sites if not project_id or s.id == project_id], 'settings': auto.config(db).model_dump(),
             'projects': [{'id':s.id,'name':s.name,'geo':s.cache_geo,'next_run_at':auto.next_scheduled_at(db,s),'config':auto.config(db,s.id).model_dump()} for s in sites if auto.config(db,s.id).scope != 'personal'],
             'language_pool': auto.default_language_pool(), 'templates': template_catalog(), 'runs': [auto.serialize(r) for r in runs]}
 
 
 @router.put('/settings')
-def settings(payload: auto.GlobalConfig, _: AdminUser, db: Session = Depends(get_db)):
+def settings(payload: auto.GlobalConfig, _: AuthUser, db: Session = Depends(get_db)):
     saved = call(auto.save_config, db, payload)
     kick_due_schedule(db)
     return saved
 
 
 @router.get('/projects/{site_id}')
-def project_settings(site_id: str, _: AdminUser, db: Session = Depends(get_db)):
-    site = site_or_404(db, site_id)
+def project_settings(site_id: str, user: AuthUser, db: Session = Depends(get_db)):
+    site = site_or_404(db, site_id, user)
     runs = db.scalars(select(models.AutoReglueRun).where(models.AutoReglueRun.site_id==site.id).order_by(models.AutoReglueRun.created_at.desc()).limit(20)).all()
     return {'task': schedule_task(db, site), 'config':auto.config(db,site.id).model_dump(), 'settings':auto.config(db).model_dump(),
             'eligible':site.project_status=='mass_actions' or auto.config(db,site.id).scope=='personal', 'geo':site.cache_geo, 'next_run_at':auto.next_scheduled_at(db,site),
@@ -96,8 +112,8 @@ def project_settings(site_id: str, _: AdminUser, db: Session = Depends(get_db)):
 
 
 @router.put('/projects/{site_id}')
-def save_project(site_id: str, payload: auto.ProjectConfig, _: AdminUser, db: Session = Depends(get_db)):
-    site_or_404(db,site_id)
+def save_project(site_id: str, payload: auto.ProjectConfig, user: AuthUser, db: Session = Depends(get_db)):
+    site_or_404(db,site_id,user)
     payload = auto.saved_project_rules(payload)
     effective = auto.effective_project_config(auto.config(db), payload)
     if effective.enabled and effective.domain_layout != 'root_main':
@@ -113,8 +129,8 @@ def save_project(site_id: str, payload: auto.ProjectConfig, _: AdminUser, db: Se
 
 
 @router.post('/projects/{site_id}/preview')
-def preview(site_id: str, _: AdminUser, db: Session = Depends(get_db), scope: Literal['mass', 'project'] = 'mass'):
-    return call(auto.preview,db,site_or_404(db,site_id),scope)
+def preview(site_id: str, user: AuthUser, db: Session = Depends(get_db), scope: Literal['mass', 'project'] = 'mass'):
+    return call(auto.preview,db,site_or_404(db,site_id,user),scope)
 
 
 class StartItem(BaseModel):
@@ -129,13 +145,13 @@ class BatchStart(BaseModel):
 
 
 @router.post('/start')
-def start(payload: BatchStart, user: AdminUser, db: Session = Depends(get_db)):
+def start(payload: BatchStart, user: AuthUser, db: Session = Depends(get_db)):
     if payload.scope == 'project' and len(payload.items) != 1: raise HTTPException(400,'Персональный запуск содержит один проект.')
     if payload.scope == 'mass' and len(payload.items)>auto.config(db).max_projects: raise HTTPException(400,'Превышен лимит проектов одного запуска.')
     results=[]
     for item in payload.items:
         try:
-            run, fresh = call(auto.prepare_run,db,site_or_404(db,item.site_id),item.request_id,item.preview_token,user['username'],payload.scope)
+            run, fresh = call(auto.prepare_run,db,site_or_404(db,item.site_id,user),item.request_id,item.preview_token,user['username'],payload.scope)
             if fresh: dispatch(db,run)
             results.append({'site_id':item.site_id,'run':auto.serialize(run)})
         except HTTPException as error:
@@ -144,9 +160,11 @@ def start(payload: BatchStart, user: AdminUser, db: Session = Depends(get_db)):
 
 
 @router.post('/runs/{run_id}/{action}')
-def control(run_id: str, action: str, _: AdminUser, db: Session = Depends(get_db)):
+def control(run_id: str, action: str, user: AuthUser, db: Session = Depends(get_db)):
     run=db.get(models.AutoReglueRun,run_id)
-    if not run:raise HTTPException(404,'Запуск не найден.')
+    allowed = allowed_site_ids(user)
+    if not run or (allowed is not None and run.site_id not in allowed):
+        raise HTTPException(404,'Запуск не найден.')
     if action not in {'resume','cancel'}:raise HTTPException(400,'Неизвестное действие.')
     try:
         with network_lock(db,'auto-run:'+run.id):

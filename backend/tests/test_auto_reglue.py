@@ -98,7 +98,7 @@ def test_timeout_pauses_and_never_resends_unknown_step(monkeypatch):
     assert calls==['reserve','reglue','alternates']
 
 
-def test_api_is_admin_only_and_defaults_disabled():
+def test_api_is_available_to_authenticated_users_and_defaults_disabled():
     from app.auto_reglue_api import router
     from app.security import require_auth
     client,_=make_client();client.app.include_router(router,prefix='/api')
@@ -106,8 +106,8 @@ def test_api_is_admin_only_and_defaults_disabled():
     assert response.status_code==200
     assert response.json()['settings']['enabled'] is False
     assert response.json()['projects']==[]
-    client.app.dependency_overrides[require_auth]=lambda:{'id':'user','username':'user','is_admin':False}
-    assert client.get('/api/auto-reglue').status_code==403
+    client.app.dependency_overrides[require_auth]=lambda:{'id':'user','username':'user','is_admin':False,'allowed_site_ids':None}
+    assert client.get('/api/auto-reglue').status_code==200
 
 
 def test_missing_copy_page_stops_before_reserve(monkeypatch):

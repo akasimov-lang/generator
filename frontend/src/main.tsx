@@ -723,7 +723,7 @@ function pathForRoute(view: AppView, workspaceTab: WorkspaceTab = DEFAULT_WORKSP
 }
 
 function isAdminOnlyView(view: AppView) {
-  return ["dashboard", "providers", "published", "autoReglue"].includes(view);
+  return ["dashboard", "providers", "published"].includes(view);
 }
 
 const DEFAULT_PROMPT_DRAFT = `Рабочий промпт для конкретной задачи.
@@ -1248,7 +1248,7 @@ function App() {
 
   const accountActions = (
           <div className="topbarActions">
-            {isAdmin && activeView === "autoReglue" && <a className="button primary autoReglueGuideButton" href={pathForRoute("autoReglueGuide")} onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("autoReglueGuide"); } }}><BookOpen size={18} /> Инструкция по автопереклеям</a>}
+            {activeView === "autoReglue" && <a className="button primary autoReglueGuideButton" href={pathForRoute("autoReglueGuide")} onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("autoReglueGuide"); } }}><BookOpen size={18} /> Инструкция по автопереклеям</a>}
             {currentUser.is_admin ? (
               <button
                 className={`button secondary adminViewModeButton ${viewAsUser ? "active" : ""}`}
@@ -1346,7 +1346,7 @@ function App() {
               <NavButton href={pathForRoute("favorites")} icon={<Star className="favoriteNavIcon" fill="currentColor" />} label="Избранное" active={activeView === "favorites"} onClick={() => navigateTo("favorites")} />
             </>
           )}
-          {isAdmin && <NavButton href={pathForRoute("autoReglue")} icon={<RefreshCcw />} label="Автопереклей" active={activeView === "autoReglue"} onClick={() => navigateTo("autoReglue")} />}
+          <NavButton href={pathForRoute("autoReglue")} icon={<RefreshCcw />} label="Автопереклей" active={activeView === "autoReglue"} onClick={() => navigateTo("autoReglue")} />
           <NavButton href={pathForRoute("settings")} icon={<Settings />} label="Настройки" active={activeView === "settings"} onClick={() => navigateTo("settings")} />
           {isAdmin ? <NavButton href={pathForRoute("published")} icon={<CheckCircle2 />} label="Опубликовано" active={activeView === "published"} onClick={() => navigateTo("published")} /> : null}
           <NavButton href={pathForRoute("guide")} icon={<BookOpen />} label="Инструкции" active={activeView === "guide" || activeView === "autoReglueGuide"} onClick={() => navigateTo("guide")} />
@@ -1365,7 +1365,7 @@ function App() {
 
         {message ? <div className="notice">{message}</div> : null}
 
-        {activeView === "workspace" && <ProjectWorkspaceView canManageAutomation={isAdmin} api={api} sites={sites} providers={providers} currentUsername={currentUser.username} activeTab={workspaceTab} contentOpenRequest={workspaceContentOpenRequest} onTabChange={(tab, projectName) => navigateTo("workspace", tab, false, projectName)} onChanged={loadAll} />}
+        {activeView === "workspace" && <ProjectWorkspaceView canManageAutomation api={api} sites={sites} providers={providers} currentUsername={currentUser.username} activeTab={workspaceTab} contentOpenRequest={workspaceContentOpenRequest} onTabChange={(tab, projectName) => navigateTo("workspace", tab, false, projectName)} onChanged={loadAll} />}
         {activeView === "prompts" && <PromptsView api={api} sites={sites} isAdmin={isAdmin} onChanged={loadAll} />}
         {isAdmin && activeView === "dashboard" && dashboard && <DashboardView api={api} dashboard={dashboard} tasks={tasks} content={content} sites={sites} onOpenTask={(task) => {
           const site = sites.find((candidate) => candidate.id === task.site_id);
@@ -1393,8 +1393,8 @@ function App() {
         {activeView === "sites" && <SitesView api={api} sites={siteSnapshot} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll} />}
         {activeView === "favorites" && <SitesView api={api} sites={siteSnapshot} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} favoritesOnly readOnly={!isAdmin} onChanged={loadAll} />}
         {activeView === "guide" && <React.Suspense fallback={<p>Загрузка инструкции…</p>}><UserGuideView /></React.Suspense>}
-        {isAdmin && activeView === "autoReglue" && <AutoReglueView api={api} />}
-        {activeView === "autoReglueGuide" && <><a className="button secondary" href="/guide" onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("guide"); } }}>Все инструкции</a><AutoReglueGuide backLabel={isAdmin ? "Вернуться к автопереклею" : "Все инструкции"} onBack={() => navigateTo(isAdmin ? "autoReglue" : "guide")} /></>}
+        {activeView === "autoReglue" && <AutoReglueView api={api} />}
+        {activeView === "autoReglueGuide" && <><a className="button secondary" href="/guide" onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("guide"); } }}>Все инструкции</a><AutoReglueGuide backLabel="Вернуться к автопереклею" onBack={() => navigateTo("autoReglue")} /></>}
         {activeView === "settings" && <SettingsView api={api} currentUser={currentUser} designVersion={designVersion} onDesignVersionChange={setDesignVersion} inputStyle={inputStyle} onInputStyleChange={setInputStyle} onChanged={loadAll} />}
       </main>
       {notificationPromptVisible ? (
