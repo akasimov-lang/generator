@@ -67,6 +67,10 @@ with sync_playwright() as p:
     expect(page.get_by_label('Бренд other.test',exact=True)).to_have_count(0)
     state['revoked']=True;page.evaluate('window.dispatchEvent(new Event("focus"))')
     expect(page.get_by_label('Бренд own.test',exact=True)).to_have_count(0)
+    # The permission change reloads the app. Wait until the new authenticated
+    # screen has mounted its focus listener before expiring that session.
+    expect(page.get_by_title('Выйти',exact=True)).to_be_visible()
+    page.wait_for_timeout(100)
     state['expired']=True;page.evaluate('window.dispatchEvent(new Event("focus"))')
     expect(page.get_by_role('button',name='Войти',exact=True)).to_be_visible()
     expect(page.get_by_text('Срок действия токена истёк. Войдите заново, чтобы получить новый токен.',exact=True)).to_be_visible()
