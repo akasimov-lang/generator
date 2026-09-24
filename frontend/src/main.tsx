@@ -10404,7 +10404,12 @@ function ContentPreviewModal({ item, promptName, actions, api, onChanged, onClos
     try {
       const queued = await api<ContentItem>(`/content/${currentItem.id}/revise`, {
         method: "POST",
-        body: JSON.stringify({ remarks: remarks.trim(), generate_title: generateTitle })
+        body: JSON.stringify({
+          remarks: remarks.trim(),
+          generate_title: generateTitle,
+          source_revision_id: selectedVersion?.revisionId || null,
+          source_revision_side: selectedVersion?.side || null
+        })
       });
       setCurrentItem(queued);
       setSelectedVersion(null);
@@ -10458,6 +10463,7 @@ function ContentPreviewModal({ item, promptName, actions, api, onChanged, onClos
               </div>
             ) : (
               <form onSubmit={requestRevision}>
+                <div className="notice">Основа новой доработки: <b>{selectedVersionLabel}</b>.</div>
                 <label>
                   Замечания к доработке
                   <textarea value={remarks} onChange={(event) => setRemarks(event.target.value)} rows={4} minLength={3} maxLength={5000} placeholder="Напишите, что в тексте нужно исправить, добавить или доработать" required />

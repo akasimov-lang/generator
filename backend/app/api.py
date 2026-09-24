@@ -2260,6 +2260,22 @@ def revise_content(content_id: str, payload: ContentRevisionRequest, user: AuthU
         raise HTTPException(status_code=400, detail=f"Content in status '{item.status}' cannot be revised")
     if not item.generated_json:
         raise HTTPException(status_code=400, detail="Generate the text before requesting a revision")
+    source_json = item.generated_json
+    source_generated_at = item.generated_at
+    if payload.source_revision_id:
+        source_revision = db.get(models.ContentRevision, payload.source_revision_id)
+        if not source_revision or source_revision.content_item_id != item.id:
+            raise HTTPException(status_code=404, detail="Selected content revision not found")
+        if payload.source_revision_side == "source":
+            source_json = source_revision.source_json
+            source_generated_at = source_revision.source_generated_at
+        elif payload.source_revision_side == "revised" and source_revision.revised_json:
+            source_json = source_revision.revised_json
+            source_generated_at = source_revision.revised_generated_at
+        else:
+            raise HTTPException(status_code=400, detail="Selected content revision version is unavailable")
+    elif payload.source_revision_side:
+        raise HTTPException(status_code=400, detail="Selected content revision is required")
     previous_status = item.status
     revision = models.ContentRevision(
         content_item_id=item.id,
@@ -2268,8 +2284,8 @@ def revise_content(content_id: str, payload: ContentRevisionRequest, user: AuthU
         generate_title=payload.generate_title,
         source_status=previous_status,
         is_published_replacement=previous_status == "published",
-        source_json=item.generated_json,
-        source_generated_at=item.generated_at,
+        source_json=source_json,
+        source_generated_at=source_generated_at,
         status="queued",
     )
     db.add(revision)

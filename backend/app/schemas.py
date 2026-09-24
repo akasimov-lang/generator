@@ -677,6 +677,8 @@ class ContentUpdate(BaseModel):
 class ContentRevisionRequest(BaseModel):
     remarks: str = Field(min_length=3, max_length=5000)
     generate_title: bool = True
+    source_revision_id: str | None = None
+    source_revision_side: Literal["source", "revised"] | None = None
 
 
 class PublishedContentRegenerationRequest(BaseModel):
