@@ -1136,7 +1136,7 @@ function App() {
       } catch { /* API handles expired sessions; unavailable auth does not grant access. */ }
       finally { busy = false; }
     };
-    const timer = window.setInterval(() => void check(), 30000);
+    const timer = window.setInterval(() => void check(), 60 * 60 * 1000);
     window.addEventListener("focus", check);
     return () => { window.clearInterval(timer); window.removeEventListener("focus", check); };
   }, [api, token, currentUser]);
