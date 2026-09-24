@@ -938,6 +938,7 @@ function App() {
   const [providers, setProviders] = React.useState<AiProvider[]>([]);
   const [currentUser, setCurrentUser] = React.useState<User | null>(null);
   const [message, setMessage] = React.useState("");
+  const [authNotice, setAuthNotice] = React.useState("");
   const [notificationPromptVisible, setNotificationPromptVisible] = React.useState(false);
   const [viewAsUser, setViewAsUser] = React.useState(false);
   const [workspaceContentOpenRequest, setWorkspaceContentOpenRequest] = React.useState(0);
@@ -965,6 +966,7 @@ function App() {
 
   const handleLogin = React.useCallback((nextToken: string) => {
     setMessage("");
+    setAuthNotice("");
     setToken(nextToken);
   }, []);
 
@@ -995,6 +997,7 @@ function App() {
       if (!response) throw networkError instanceof Error ? networkError : new Error("Failed to fetch");
       if (response.status === 401) {
         localStorage.removeItem("admin_token");
+        setAuthNotice("Срок действия токена истёк. Войдите заново, чтобы получить новый токен.");
         setToken("");
         setCurrentUser(null);
         setArchivedTasks([]);
@@ -1227,7 +1230,7 @@ function App() {
   }, [activeView, currentUser, isAdmin, navigateTo, workspaceTab]);
 
   if (!token) {
-    return <LoginScreen onLogin={handleLogin} />;
+    return <LoginScreen onLogin={handleLogin} notice={authNotice} />;
   }
 
   if (!currentUser) {
@@ -1541,7 +1544,7 @@ function AuthScreen({ children }: { children: React.ReactNode }) {
   );
 }
 
-function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
+function LoginScreen({ onLogin, notice = "" }: { onLogin: (token: string) => void; notice?: string }) {
   const [username, setUsername] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState("");
@@ -1580,6 +1583,7 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
           <LoginBrandName />
         </div>
         <p>Войдите с логином и паролем Webdev.</p>
+        {notice ? <div className="notice" role="status">{notice}</div> : null}
         <label>
           Логин
           <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" autoFocus required disabled={submitting} />

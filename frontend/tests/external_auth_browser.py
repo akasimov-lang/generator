@@ -8,7 +8,7 @@ base=os.environ.get('VITE_TEST_URL','http://127.0.0.1:5174')
 with sync_playwright() as p:
     browser=p.chromium.launch(executable_path=os.environ.get('CHROME'),headless=True)
     page=browser.new_page(viewport={'width':1280,'height':900})
-    errors=[]; calls=[]; state={'user':'editor','revoked':False,'unavailable':False}
+    errors=[]; calls=[]; state={'user':'editor','revoked':False,'unavailable':False,'expired':False}
     page.on('pageerror',lambda e:errors.append(str(e)))
     def route(r):
         path=r.request.url.split('/api')[-1].split('?')[0]
@@ -21,7 +21,9 @@ with sync_playwright() as p:
             assert body['password']=='external-password'
             state['user']=body['username'];data={'access_token':'external-'+state['user']}
             if state['unavailable']:status=503;data={'detail':'Сервис авторизации временно недоступен.'}
-        elif path=='/auth/me':data=user
+        elif path=='/auth/me':
+            if state['expired']:status=401;data={'detail':'Срок действия токена Webdev истёк.'}
+            else:data=user
         elif path in ['/sites','/sites/cache/projects']:data=[site('own'),site('other')] if admin else ([] if state['revoked'] else [site('own')])
         elif path=='/me/favorite-sites':data={'site_ids':[]}
         elif path.startswith('/admin/'):data=[]
@@ -65,6 +67,10 @@ with sync_playwright() as p:
     expect(page.get_by_label('Бренд other.test',exact=True)).to_have_count(0)
     state['revoked']=True;page.evaluate('window.dispatchEvent(new Event("focus"))')
     expect(page.get_by_label('Бренд own.test',exact=True)).to_have_count(0)
+    state['expired']=True;page.evaluate('window.dispatchEvent(new Event("focus"))')
+    expect(page.get_by_role('button',name='Войти',exact=True)).to_be_visible()
+    expect(page.get_by_text('Срок действия токена истёк. Войдите заново, чтобы получить новый токен.',exact=True)).to_be_visible()
+    assert page.evaluate('localStorage.getItem("admin_token")') is None
     assert not errors,errors
     browser.close()
-    print('PASS: external login, unavailable auth, user/admin isolation, stale and shared cache, revoked rights, no local password/user controls.')
+    print('PASS: external login, unavailable auth, user/admin isolation, revoked rights, expired-token logout, no local password/user controls.')
