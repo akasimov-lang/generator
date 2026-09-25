@@ -40,9 +40,11 @@ def _json(response, unauthorized_message="Срок действия токена
 
 def login_external(username, password):
     try:
+        settings = get_settings()
         with httpx.Client(timeout=20, follow_redirects=False,
-                          headers={'Cache-Control': 'no-cache', 'Pragma': 'no-cache'}) as client:
-            response = client.post(get_settings().project_cache_url.rstrip('/') + '/auth/login',
+                          headers={'Cache-Control': 'no-cache', 'Pragma': 'no-cache',
+                                   'Origin': settings.app_public_url.rstrip('/')}) as client:
+            response = client.post(settings.project_cache_url.rstrip('/') + '/auth/login',
                                    json={"username": username.strip(), "pass": password})
             if not response.is_success:
                 raise ExternalLoginResponse(response)

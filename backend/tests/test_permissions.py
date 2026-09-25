@@ -103,6 +103,9 @@ def test_external_contract(monkeypatch):
         calls.append(request)
         if request.url.path=='/auth/login':
             assert __import__('json').loads(request.content)=={'username':'editor','pass':'secret'}
+            assert request.headers['Origin']=='https://ai-seo-content-panel.site'
+            assert request.headers['Cache-Control']=='no-cache'
+            assert request.headers['Pragma']=='no-cache'
             return httpx.Response(200,json={'token':'remote-token'})
         assert request.headers['Authorization']=='Bearer remote-token'
         if request.url.path=='/auth/me':return httpx.Response(200,json={'username':'editor','role':'admin','restricted':False,'foreign':'Editor','name':'Редактор'})
