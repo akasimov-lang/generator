@@ -17,6 +17,16 @@ _cache_lock = threading.Lock()
 CACHE_SECONDS = 30
 
 
+class ExternalLoginResponse(Exception):
+    """An unsuccessful Webdev login response that must reach the browser unchanged."""
+
+    def __init__(self, response: httpx.Response):
+        super().__init__(f"Webdev login returned HTTP {response.status_code}")
+        self.status_code = response.status_code
+        self.content = response.content
+        self.content_type = response.headers.get("content-type")
+
+
 def _json(response, unauthorized_message="Срок действия токена Webdev истёк."):
     if response.status_code in (400, 401, 403):
         raise HTTPException(401, unauthorized_message)
@@ -32,9 +42,11 @@ def login_external(username, password):
     try:
         with httpx.Client(timeout=20, follow_redirects=False,
                           headers={'Cache-Control': 'no-cache', 'Pragma': 'no-cache'}) as client:
-            data = _json(client.post(get_settings().project_cache_url.rstrip('/') + '/auth/login',
-                                     json={"username": username.strip(), "pass": password}),
-                         "Неверный логин или пароль Webdev.")
+            response = client.post(get_settings().project_cache_url.rstrip('/') + '/auth/login',
+                                   json={"username": username.strip(), "pass": password})
+            if not response.is_success:
+                raise ExternalLoginResponse(response)
+            data = _json(response)
         token = data.get('token') if isinstance(data, dict) else None
         if not isinstance(token, str) or not token.strip():
             raise HTTPException(503, "Сервис авторизации не вернул токен.")

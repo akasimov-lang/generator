@@ -6,7 +6,7 @@ import httpx
 from typing import Any
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, load_only
 
@@ -365,8 +365,12 @@ def health() -> dict:
 
 
 @router.post("/auth/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
-    token, identity = external_auth.authenticate(payload.username, payload.password)
+def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse | Response:
+    try:
+        token, identity = external_auth.authenticate(payload.username, payload.password)
+    except external_auth.ExternalLoginResponse as error:
+        headers = {"content-type": error.content_type} if error.content_type else None
+        return Response(content=error.content, status_code=error.status_code, headers=headers)
     user = external_auth.local_profile(db, identity)
     return TokenResponse(access_token=token, user=user)
 

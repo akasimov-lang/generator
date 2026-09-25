@@ -138,17 +138,37 @@ def test_login_retries_with_a_new_token_when_webdev_rejects_the_first(monkeypatc
     assert requested == [('sergey', 'secret'), ('sergey', 'secret')]
 
 
-def test_login_does_not_retry_invalid_credentials(monkeypatch):
+def test_login_does_not_retry_rejected_webdev_response(monkeypatch):
     calls = []
+    upstream = external_auth.ExternalLoginResponse(
+        httpx.Response(403, content=b'{"code":"ACCOUNT_BLOCKED","message":"Access denied"}', headers={'content-type': 'application/json'})
+    )
 
     def login(username, password):
         calls.append((username, password))
-        raise HTTPException(401, 'Неверный логин или пароль Webdev.')
+        raise upstream
 
     monkeypatch.setattr(external_auth, 'login_external', login)
-    with pytest.raises(HTTPException, match='Неверный логин или пароль'):
+    with pytest.raises(external_auth.ExternalLoginResponse) as error:
         external_auth.authenticate('sergey', 'wrong')
+    assert error.value is upstream
     assert calls == [('sergey', 'wrong')]
+
+
+def test_login_api_preserves_webdev_error_status_body_and_content_type(api, monkeypatch):
+    c, _, _ = api
+    body = b'{"code":"ACCOUNT_BLOCKED","message":"Access denied"}'
+
+    def authenticate(username, password):
+        response = httpx.Response(403, content=body, headers={'content-type': 'application/json; charset=utf-8'})
+        raise external_auth.ExternalLoginResponse(response)
+
+    monkeypatch.setattr(external_auth, 'authenticate', authenticate)
+    response = c.post('/api/auth/login', json={'username': 'sergey', 'password': 'secret'})
+
+    assert response.status_code == 403
+    assert response.content == body
+    assert response.headers['content-type'] == 'application/json; charset=utf-8'
 
 @pytest.mark.parametrize('status',[401,403,500])
 def test_external_failure_closed(monkeypatch,status):

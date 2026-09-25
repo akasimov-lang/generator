@@ -1562,7 +1562,8 @@ function LoginScreen({ onLogin, notice = "" }: { onLogin: (token: string) => voi
       });
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        setError(typeof error.detail === "string" ? error.detail : "Не удалось войти. Попробуйте ещё раз.");
+        const upstreamMessage = [error.detail, error.message, error.error].find((value) => typeof value === "string" && value.trim());
+        setError(typeof upstreamMessage === "string" ? upstreamMessage : `Не удалось войти. Webdev вернул HTTP ${response.status}.`);
         return;
       }
       const data = await response.json();
