@@ -106,13 +106,14 @@ def test_external_contract(monkeypatch):
             return httpx.Response(200,json={'token':'remote-token'})
         assert request.headers['Authorization']=='Bearer remote-token'
         if request.url.path=='/auth/me':return httpx.Response(200,json={'username':'editor','role':'admin','restricted':False,'foreign':'Editor','name':'Редактор'})
-        return httpx.Response(201,json=[{'name':name,'serverIp':'one','settings':settings} for name,settings in [('own.test',{'duty':'Editor'}),('second.test',{'secondDuty':'Editor'}),('dev.test',{'webdevDuty':{'developer':'Редактор'}}),('no.test',{'duty':'Other'})]])
+        raise AssertionError(f'Unexpected Webdev request: {request.url.path}')
     original=httpx.Client
     monkeypatch.setattr(external_auth.httpx,'Client',lambda **kwargs:original(transport=httpx.MockTransport(respond),**kwargs))
     token=external_auth.login_external('editor','secret');result=external_auth.identity(token,fresh=True)
-    assert not result['is_admin'] and result['projects']==frozenset({('own.test','one'),('second.test','one'),('dev.test','one')})
+    assert result['is_admin'] and result['projects'] is None
+    assert [request.url.path for request in calls] == ['/auth/login', '/auth/me']
     count=len(calls);assert external_auth.identity(token)==result and len(calls)==count
-    external_auth.identity(token,fresh=True);assert len(calls)==count+2
+    external_auth.identity(token,fresh=True);assert len(calls)==count+1
 
 
 def test_login_retries_with_a_new_token_when_webdev_rejects_the_first(monkeypatch):

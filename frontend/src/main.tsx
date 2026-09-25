@@ -940,9 +940,8 @@ function App() {
   const [message, setMessage] = React.useState("");
   const [authNotice, setAuthNotice] = React.useState("");
   const [notificationPromptVisible, setNotificationPromptVisible] = React.useState(false);
-  const [viewAsUser, setViewAsUser] = React.useState(false);
   const [workspaceContentOpenRequest, setWorkspaceContentOpenRequest] = React.useState(0);
-  const isAdmin = Boolean(currentUser?.is_admin && !viewAsUser);
+  const isAdmin = Boolean(currentUser);
 
   const navigateTo = React.useCallback((view: AppView, nextWorkspaceTab: WorkspaceTab = workspaceTab, replace = false, projectName?: string | null) => {
     const normalizedWorkspaceTab = view === "workspace" ? nextWorkspaceTab : workspaceTab;
@@ -1173,14 +1172,6 @@ function App() {
   }, [api, currentUser?.id, activeView, workspaceTab]);
 
   React.useEffect(() => {
-    if (!currentUser?.is_admin) {
-      setViewAsUser(false);
-      return;
-    }
-    setViewAsUser(localStorage.getItem(`admin_view_mode:${currentUser.username}`) === "user");
-  }, [currentUser?.id, currentUser?.is_admin, currentUser?.username]);
-
-  React.useEffect(() => {
     const handlePopState = () => {
       setMobileMenuOpen(false);
       const nextRoute = routeFromPath(window.location.pathname);
@@ -1252,26 +1243,9 @@ function App() {
   const accountActions = (
           <div className="topbarActions">
             {activeView === "autoReglue" && <a className="button primary autoReglueGuideButton" href={pathForRoute("autoReglueGuide")} onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("autoReglueGuide"); } }}><BookOpen size={18} /> Инструкция по автопереклеям</a>}
-            {currentUser.is_admin ? (
-              <button
-                className={`button secondary adminViewModeButton ${viewAsUser ? "active" : ""}`}
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  const nextValue = !viewAsUser;
-                  setViewAsUser(nextValue);
-                  localStorage.setItem(`admin_view_mode:${currentUser.username}`, nextValue ? "user" : "admin");
-                  if (nextValue && isAdminOnlyView(activeView)) navigateTo("workspace", DEFAULT_WORKSPACE_TAB);
-                }}
-                title={viewAsUser ? "Вернуться к полному интерфейсу администратора" : "Показать интерфейс обычного пользователя"}
-              >
-                {viewAsUser ? <ShieldCheck size={17} /> : <Eye size={17} />}
-                {viewAsUser ? "Режим администратора" : "Посмотреть как пользователь"}
-              </button>
-            ) : null}
             {currentUser ? (
               <div className="userPill">
-                <span>{viewAsUser ? "Просмотр как пользователь" : currentUser.is_admin ? "Администратор" : "Пользователь"}</span>
+                <span>Полный доступ</span>
                 <strong>{currentUser.username}</strong>
               </div>
             ) : null}
@@ -9629,7 +9603,7 @@ function SettingsView({ api, currentUser, inputStyle, onInputStyleChange, design
           </div>
           {currentUser ? <RoleBadge admin={currentUser.is_admin} /> : null}
         </div>
-        <p className="muted">Вход и пароль управляются в Webdev. Администратор панели — anton.</p>
+        <p className="muted">Вход и пароль управляются в Webdev. Все авторизованные пользователи имеют одинаковый полный доступ.</p>
       </DataPanel>
 
       {currentUser?.is_admin ? (
