@@ -519,15 +519,16 @@ def test_regular_user_can_create_and_manage_generation_tasks() -> None:
     assert client.post("/api/content/missing/publish-now").status_code == 404
 
 
-def test_only_admin_can_start_shared_webdev_sync(monkeypatch):
+def test_authenticated_user_can_sync_webdev_cache_but_not_start_shared_job(monkeypatch):
     client, factory = make_client()
     monkeypatch.setattr(api_module, "fetch_project_cache", lambda names: [])
     monkeypatch.setattr(api_module, "sync_project_cache",
-                        lambda db, projects: {"cache_count": 0, "created_count": 0, "updated_count": 0, "synced_names": []})
+                        lambda db, projects: {"cache_count": 0, "matched_count": 0, "created_count": 0,
+                                              "updated_count": 0, "projects": []})
     client.app.dependency_overrides[require_auth] = lambda: {
         "id": "regular-user-id", "username": "regular", "is_admin": False, "is_active": True}
-    for route in ("/api/sites/cache/sync-jobs", "/api/sites/cache/sync"):
-        assert client.post(route, json={"names": []}).status_code == 403
+    assert client.post("/api/sites/cache/sync-jobs", json={"names": []}).status_code == 403
+    assert client.post("/api/sites/cache/sync", json={"names": []}).status_code == 200
     with factory() as db:
         assert db.scalars(select(models.BackgroundJob)).all() == []
     client.app.dependency_overrides[require_auth] = lambda: {
