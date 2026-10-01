@@ -210,6 +210,7 @@ def test_fresh_cache_confirms_publication_only_when_slug_is_present() -> None:
             slug="/guides/failed-but-present/",
             generated_json={"pages": []},
             status="publication_failed",
+            generation_error="Previous publication failure",
             idempotency_key="publish-failed-but-present",
         )
         db.add_all([absent, present, failed_but_present])
@@ -238,6 +239,7 @@ def test_fresh_cache_confirms_publication_only_when_slug_is_present() -> None:
         assert present.published_url == "https://publication-confirmation.example/guides/present/"
         assert present.indexing_status == "queued"
         assert failed_but_present.status == "published"
+        assert failed_but_present.generation_error is None
         assert failed_but_present.published_at is not None
         assert task.status != "published"
         confirmation_log = db.scalar(

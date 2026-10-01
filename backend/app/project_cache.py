@@ -599,6 +599,7 @@ def _confirm_published_content(db: Session, site: models.Site, project: dict[str
         if not page:
             continue
         item.status = "published"
+        item.generation_error = None
         item.published_at = now
         site.core_update_notice = now.isoformat().replace("+00:00", "") + ":" + item.id
         item.scheduled_at = None
