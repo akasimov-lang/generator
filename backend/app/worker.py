@@ -2,13 +2,14 @@ import asyncio
 from datetime import datetime, timezone
 
 from celery import Celery
+from celery.schedules import crontab
 from sqlalchemy import select
 
 from app import models
 from app.core.config import get_settings
 from app.db import SessionLocal
 from app.indexing import submit_pending_content_indexing
-from app.project_cache import ProjectCacheError, fetch_project_menu_capabilities, reconcile_pending_publications, refresh_project_server_id
+from app.project_cache import ProjectCacheError, fetch_project_menu_capabilities, reconcile_pending_publications, reconcile_server_project_inventory, refresh_project_server_id
 from app.services import COMPETITOR_RESEARCH_MAX_ATTEMPTS, collect_competitor_research_for_item, continue_competitor_research_for_item, generate_content_item, publish_campaign_bundle, publish_item, refresh_campaign_status, revise_content_item, validate_content_for_publication
 
 settings = get_settings()
@@ -29,6 +30,7 @@ celery_app.conf.update(
         "app.worker.publish_due_items": {"queue": "publication"},
         "app.worker.publish_campaign_bundle": {"queue": "publication"},
         "app.worker.reconcile_pending_publications": {"queue": "confirmation"},
+        "app.worker.reconcile_server_project_inventory": {"queue": "maintenance"},
         "app.worker.submit_pending_content_indexing": {"queue": "confirmation"},
         "app.worker.network_indexing": {"queue": "confirmation"},
         "app.worker.auto_reglue": {"queue": "automation"},
@@ -53,6 +55,10 @@ celery_app.conf.beat_schedule = {
         "task": "app.worker.reconcile_pending_publications",
         "schedule": 30.0,
     },
+    "reconcile-server-project-inventory": {
+        "task": "app.worker.reconcile_server_project_inventory",
+        "schedule": crontab(hour=2, minute=20),
+    },
 }
 
 
@@ -70,6 +76,15 @@ def reconcile_pending_publications_job() -> dict[str, int]:
     db = SessionLocal()
     try:
         return reconcile_pending_publications(db)
+    finally:
+        db.close()
+
+
+@celery_app.task(name="app.worker.reconcile_server_project_inventory")
+def reconcile_server_project_inventory_job() -> dict:
+    db = SessionLocal()
+    try:
+        return reconcile_server_project_inventory(db)
     finally:
         db.close()
 

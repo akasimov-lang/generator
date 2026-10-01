@@ -103,6 +103,63 @@ def test_server_refresh_uses_cache_only_when_saved_server_does_not_confirm(monke
         assert site.cache_server_ip == "new-server"
 
 
+def test_server_inventory_imports_only_unique_missing_names_without_duplicates(monkeypatch) -> None:
+    with make_session() as db:
+        existing = models.Site(
+            name="existing.example",
+            base_url="https://existing.example",
+            publication_endpoint="https://existing.example/api/content",
+            cache_server_ip="bear",
+            external_project_id="existing",
+        )
+        db.add(existing)
+        db.commit()
+        monkeypatch.setattr(
+            project_cache_module,
+            "fetch_project_cache",
+            lambda names=None: [{"id": "existing", "name": "existing.example", "serverId": "bear"}],
+        )
+        monkeypatch.setattr(
+            project_cache_module,
+            "fetch_server_project_inventories",
+            lambda server_ids: (
+                {
+                    "bear": {"existing.example", "new.example", "ambiguous.example"},
+                    "zebra": {"existing.example", "ambiguous.example", "template-sample"},
+                },
+                {"fox": "HTTP 502"},
+            ),
+        )
+
+        def direct(server_id: str, name: str) -> dict | None:
+            assert (server_id, name) == ("bear", "new.example")
+            return {
+                "settings": {
+                    "canon": "www.new.example",
+                    "domains": ["new.example", "www.new.example"],
+                    "geo": "en_US",
+                    "lang": "en-US",
+                },
+                "data": {"menu": {"header": [], "footer": []}, "pages": []},
+            }
+
+        monkeypatch.setattr(project_cache_module, "_fetch_project_from_server_id", direct)
+
+        result = project_cache_module.reconcile_server_project_inventory(db)
+
+        sites = db.scalars(select(models.Site).order_by(models.Site.name)).all()
+        assert [site.name for site in sites] == ["existing.example", "new.example"]
+        imported = next(site for site in sites if site.name == "new.example")
+        assert imported.cache_server_ip == "bear"
+        assert imported.cache_domains == ["new.example", "www.new.example"]
+        assert imported.network_state["domains"] == ["new.example", "www.new.example"]
+        assert result["imported_projects"] == ["new.example"]
+        assert result["imported_count"] == 1
+        assert result["deleted_count"] == 0
+        assert result["rejected_missing"] == {"ambiguous.example": "ambiguous servers: bear, zebra"}
+        assert result["failed_servers"] == {"fox": "HTTP 502"}
+
+
 def test_main_history_survives_canon_changes_and_removed_domains() -> None:
     with make_session() as db:
         project = {"id": "history-project", "name": "history.test", "settings": {"canon": "first.test", "domains": ["first.test", "second.test"]}}
@@ -401,6 +458,7 @@ def test_periodic_reconciliation_recovers_confirmation_missed_by_stream(monkeypa
                 },
             }]
 
+        monkeypatch.setattr(project_cache_module, "_fetch_project_from_known_server", lambda target: None)
         monkeypatch.setattr(project_cache_module, "fetch_project_cache", fake_fetch)
         result = reconcile_pending_publications(db, min_age_seconds=0)
 
@@ -418,6 +476,63 @@ def test_periodic_reconciliation_recovers_confirmation_missed_by_stream(monkeypa
         assert item.status == "published"
         assert item.indexing_status == "queued"
         assert item.published_at is not None
+        assert task.status == "published"
+
+
+def test_periodic_reconciliation_uses_saved_server_when_aggregate_cache_omits_project(monkeypatch) -> None:
+    with make_session() as db:
+        site = models.Site(
+            name="omitted.example",
+            base_url="https://current.example",
+            publication_endpoint="https://current.example/api/content",
+            cache_server_ip="bear",
+            external_project_id="omitted",
+        )
+        db.add(site)
+        db.flush()
+        task = models.GenerationTask(
+            title="Direct confirmation",
+            site_id=site.id,
+            geo="PT",
+            language="pt",
+            topics_count=1,
+            status="publishing",
+        )
+        db.add(task)
+        db.flush()
+        item = models.ContentItem(
+            task=task,
+            site_id=site.id,
+            topic="Privacidade",
+            slug="/privacidade/",
+            generated_json={"pages": []},
+            status="publication_pending_confirmation",
+            idempotency_key="direct-confirmation",
+            last_publication_status_code=201,
+            updated_at=datetime(2026, 9, 4, 8, 0, tzinfo=timezone.utc),
+        )
+        db.add(item)
+        db.commit()
+
+        direct_project = {
+            "settings": {"canon": "current.example", "domains": ["omitted.example", "current.example"]},
+            "data": {"menu": {"header": [], "footer": []}, "pages": [{"slug": "/privacidade/"}]},
+        }
+        monkeypatch.setattr(project_cache_module, "_fetch_project_from_known_server", lambda target: direct_project)
+        monkeypatch.setattr(
+            project_cache_module,
+            "fetch_project_cache",
+            lambda names: (_ for _ in ()).throw(AssertionError(f"aggregate cache must not be queried: {names}")),
+        )
+
+        result = reconcile_pending_publications(db, min_age_seconds=0)
+
+        db.refresh(item)
+        db.refresh(task)
+        assert result["checked_projects"] == 1
+        assert result["missing_projects"] == 0
+        assert result["confirmed"] == 1
+        assert item.status == "published"
         assert task.status == "published"
 
 

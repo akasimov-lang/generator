@@ -372,6 +372,123 @@ def fetch_project_cache(names: list[str] | None = None) -> list[dict[str, Any]]:
     return [project for project in payload if isinstance(project, dict)]
 
 
+def _server_id(project: dict[str, Any]) -> str:
+    return str(
+        project.get("serverId")
+        or project.get("server_id")
+        or project.get("serverIp")
+        or project.get("server_ip")
+        or ""
+    ).strip().split(".", 1)[0]
+
+
+def fetch_server_project_inventories(server_ids: set[str]) -> tuple[dict[str, set[str]], dict[str, str]]:
+    """Read project names from every known Webdev server without changing local state."""
+    settings = get_settings()
+    inventories: dict[str, set[str]] = {}
+    failures: dict[str, str] = {}
+    try:
+        with httpx.Client(timeout=45.0) as client:
+            login_response = client.post(
+                f"{settings.project_cache_url.rstrip('/')}/auth/login",
+                json={"username": settings.project_cache_username, "pass": settings.project_cache_password},
+                headers=webdev_origin_headers(settings),
+            )
+            login_response.raise_for_status()
+            token = str(login_response.json().get("token") or "").strip()
+            if not token:
+                raise ProjectCacheError("Project cache login did not return a token")
+            for server_id in sorted(server_ids):
+                if not re.fullmatch(r"[A-Za-z0-9-]+", server_id):
+                    failures[server_id] = "invalid serverId"
+                    continue
+                url = f"https://{server_id}.{settings.alfan_url.strip().strip('/')}/projects/all"
+                try:
+                    response = client.get(url, headers={"Authorization": f"Bearer {token}"})
+                    response.raise_for_status()
+                    payload = response.json()
+                    if not isinstance(payload, list):
+                        raise ValueError("unexpected response")
+                    inventories[server_id] = {
+                        str(item).strip() for item in payload if isinstance(item, str) and str(item).strip()
+                    }
+                except (httpx.HTTPError, ValueError, TypeError) as error:
+                    failures[server_id] = str(error)
+    except (httpx.HTTPError, ValueError, TypeError) as error:
+        raise ProjectCacheError(f"Project server inventory request failed: {error}") from error
+    return inventories, failures
+
+
+def _fetch_project_from_server_id(server_id: str, project_name: str) -> dict[str, Any] | None:
+    probe = models.Site(name=project_name, cache_server_ip=server_id)
+    return _fetch_project_from_known_server(probe)
+
+
+def reconcile_server_project_inventory(db: Session) -> dict[str, Any]:
+    """Import only unambiguous projects missing entirely from PagePilot.
+
+    The inventory is additive. A server timeout never removes a project, and a
+    name already present locally is not imported again from a migration copy.
+    """
+    aggregate_projects = fetch_project_cache()
+    local_sites = db.scalars(select(models.Site)).all()
+    server_ids = {
+        *(site.cache_server_ip for site in local_sites if site.cache_server_ip),
+        *(_server_id(project) for project in aggregate_projects if _server_id(project)),
+    }
+    inventories, failures = fetch_server_project_inventories(server_ids)
+    local_names = {site.name for site in local_sites if site.name}
+    locations: dict[str, set[str]] = {}
+    for server_id, names in inventories.items():
+        for name in names:
+            locations.setdefault(name, set()).add(server_id)
+
+    missing_locations = {
+        name: servers for name, servers in locations.items()
+        if name not in local_names and not name.startswith("template-")
+    }
+    imported_projects: list[dict[str, Any]] = []
+    rejected_missing: dict[str, str] = {}
+    for name, servers in sorted(missing_locations.items()):
+        if len(servers) != 1:
+            rejected_missing[name] = f"ambiguous servers: {', '.join(sorted(servers))}"
+            continue
+        server_id = next(iter(servers))
+        project = _fetch_project_from_server_id(server_id, name)
+        if not project:
+            rejected_missing[name] = "direct project lookup did not confirm network membership"
+            continue
+        imported_projects.append({
+            **project,
+            "id": project.get("id") or project.get("_id") or f"server:{server_id}:{name}",
+            "name": name,
+            "serverId": server_id,
+        })
+
+    sync_result = sync_project_cache(db, imported_projects) if imported_projects else {
+        "created_count": 0,
+        "updated_count": 0,
+        "deleted_duplicate_count": 0,
+    }
+    inventory_duplicates = {
+        name: sorted(servers) for name, servers in locations.items() if len(servers) > 1
+    }
+    return {
+        "known_servers": len(server_ids),
+        "checked_servers": len(inventories),
+        "failed_servers": failures,
+        "server_project_pairs": sum(len(names) for names in inventories.values()),
+        "unique_server_projects": len(locations),
+        "local_projects_before": len(local_names),
+        "missing_projects_found": len(missing_locations),
+        "imported_projects": sorted(project["name"] for project in imported_projects),
+        "imported_count": int(sync_result["created_count"]),
+        "rejected_missing": rejected_missing,
+        "names_on_multiple_servers": inventory_duplicates,
+        "deleted_count": int(sync_result["deleted_duplicate_count"]),
+    }
+
+
 def reconcile_pending_publications(
     db: Session,
     *,
@@ -419,14 +536,31 @@ def reconcile_pending_publications(
             "reconciled_tasks": reconciled_tasks,
         }
 
-    projects = fetch_project_cache(project_names)
-    projects_by_name = {
-        str(project.get("name") or "").strip(): project
-        for project in projects
-        if str(project.get("name") or "").strip() in project_names
-    }
-    for project_name, project in projects_by_name.items():
-        sync_project_data_update(db, project_name, project)
+    projects_by_name: dict[str, dict[str, Any]] = {}
+    unresolved_names: list[str] = []
+    sites_by_name = {site.name: site for site in sites if site.name}
+    for project_name in project_names:
+        site = sites_by_name[project_name]
+        direct_project = _fetch_project_from_known_server(site)
+        if direct_project:
+            projects_by_name[project_name] = direct_project
+            sync_project_data_update(
+                db,
+                project_name,
+                direct_project,
+                server_host=site.cache_server_ip,
+            )
+        else:
+            unresolved_names.append(project_name)
+
+    if unresolved_names:
+        cached_projects = fetch_project_cache(unresolved_names)
+        for project in cached_projects:
+            project_name = str(project.get("name") or "").strip()
+            if project_name not in unresolved_names:
+                continue
+            projects_by_name[project_name] = project
+            sync_project_data_update(db, project_name, project)
 
     reconciled_tasks += _reconcile_completed_publication_tasks(db, limit=limit)
 
