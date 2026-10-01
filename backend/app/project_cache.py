@@ -421,16 +421,30 @@ def fetch_server_project_inventories(server_ids: set[str]) -> tuple[dict[str, se
 
 
 def _fetch_project_from_server_id(server_id: str, project_name: str) -> dict[str, Any] | None:
-    probe = models.Site(name=project_name, cache_server_ip=server_id)
-    return _fetch_project_from_known_server(probe)
-
-
-def _project_confirms_name(project: dict[str, Any], project_name: str) -> bool:
-    settings = project.get("settings") if isinstance(project.get("settings"), dict) else {}
-    domains = set(_project_domains(project))
-    if canon := _normalize_domain(settings.get("canon")):
-        domains.add(canon)
-    return _normalize_domain(project_name) in domains
+    settings = get_settings()
+    if not re.fullmatch(r"[A-Za-z0-9-]+", server_id):
+        return None
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            login_response = client.post(
+                f"{settings.project_cache_url.rstrip('/')}/auth/login",
+                json={"username": settings.project_cache_username, "pass": settings.project_cache_password},
+                headers=webdev_origin_headers(settings),
+            )
+            login_response.raise_for_status()
+            token = str(login_response.json().get("token") or "").strip()
+            if not token:
+                return None
+            response = client.get(
+                f"https://{server_id}.{settings.alfan_url.strip().strip('/')}/projects/one/"
+                f"{quote(project_name, safe='')}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            response.raise_for_status()
+            project = response.json()
+    except (httpx.HTTPError, ValueError, TypeError):
+        return None
+    return project if isinstance(project, dict) and isinstance(project.get("settings"), dict) else None
 
 
 def _fetch_server_network_snapshots(
@@ -451,8 +465,8 @@ def _fetch_server_network_snapshots(
                 )
                 response.raise_for_status()
                 project = response.json()
-                if not isinstance(project, dict) or not _project_confirms_name(project, project_name):
-                    failures[project_name] = "project settings do not confirm network membership"
+                if not isinstance(project, dict) or not isinstance(project.get("settings"), dict):
+                    failures[project_name] = "project detail response has no settings"
                     continue
                 snapshots[project_name] = project
             except (httpx.HTTPError, ValueError, TypeError) as error:
@@ -562,7 +576,7 @@ def reconcile_server_project_inventory(db: Session) -> dict[str, Any]:
         server_id = next(iter(servers))
         project = _fetch_project_from_server_id(server_id, name)
         if not project:
-            rejected_missing[name] = "direct project lookup did not confirm network membership"
+            rejected_missing[name] = "direct project lookup did not confirm a real Webdev project"
             continue
         imported_projects.append({
             **project,

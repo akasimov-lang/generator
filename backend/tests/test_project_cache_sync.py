@@ -82,6 +82,38 @@ def test_direct_project_recovery_requires_network_membership_and_sends_origin(mo
     assert seen_origins == ["https://panel.test"]
 
 
+def test_inventory_accepts_real_webdev_project_after_original_domain_left_network(monkeypatch) -> None:
+    settings = SimpleNamespace(
+        project_cache_url="https://webdev.test",
+        project_cache_username="publisher",
+        project_cache_password="secret",
+        app_public_url="https://panel.test/",
+        alfan_url="servers.test",
+    )
+    monkeypatch.setattr(project_cache_module, "get_settings", lambda: settings)
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/auth/login":
+            return httpx.Response(200, json={"token": "fresh-token"})
+        assert request.url == "https://bear.servers.test/projects/one/old-project.example"
+        return httpx.Response(200, json={
+            "settings": {"canon": "current.example", "domains": ["current.example"]},
+            "data": {"menu": {"header": [], "footer": []}},
+        })
+
+    real_client = httpx.Client
+    monkeypatch.setattr(
+        project_cache_module.httpx,
+        "Client",
+        lambda **kwargs: real_client(transport=httpx.MockTransport(respond), **kwargs),
+    )
+
+    project = project_cache_module._fetch_project_from_server_id("bear", "old-project.example")
+
+    assert project is not None
+    assert project["settings"]["canon"] == "current.example"
+
+
 def test_server_refresh_uses_cache_only_when_saved_server_does_not_confirm(monkeypatch) -> None:
     with make_session() as db:
         site = models.Site(
