@@ -521,8 +521,17 @@ def reconcile_all_project_networks(db: Session) -> dict[str, Any]:
             snapshots.update({(server_id, name): project for name, project in server_snapshots.items()})
             failures.update({f"{server_id}:{name}": reason for name, reason in server_failures.items()})
 
+    previous_domain_owners = _domain_owners(sites)
+    transferred_domains = 0
     for key, project in snapshots.items():
-        _apply_direct_project_snapshot(db, sites_by_key[key], project, commit=False)
+        site = sites_by_key[key]
+        domains = _project_domains(project)
+        transferred_domains += _reset_newly_transferred_domain_memory(
+            site,
+            domains,
+            previous_domain_owners,
+        )
+        _apply_direct_project_snapshot(db, site, project, commit=False)
     db.commit()
 
     domain_owners: dict[str, set[str]] = {}
@@ -541,7 +550,49 @@ def reconcile_all_project_networks(db: Session) -> dict[str, Any]:
         "unconfirmed_projects": failures,
         "cross_project_domain_conflicts": conflicts,
         "cross_project_domain_conflict_count": len(conflicts),
+        "transferred_domains_reset": transferred_domains,
     }
+
+
+def _domain_owners(sites: list[models.Site]) -> dict[str, set[str]]:
+    owners: dict[str, set[str]] = {}
+    for site in sites:
+        for domain in site.cache_domains or []:
+            if normalized := _normalize_domain(str(domain)):
+                owners.setdefault(normalized, set()).add(site.id)
+    return owners
+
+
+def _reset_newly_transferred_domain_memory(
+    site: models.Site,
+    new_domains: list[str],
+    previous_domain_owners: dict[str, set[str]],
+) -> int:
+    previous_here = {_normalize_domain(str(domain)) for domain in (site.cache_domains or [])}
+    transferred = {
+        domain
+        for raw_domain in new_domains
+        if (domain := _normalize_domain(raw_domain))
+        and domain not in previous_here
+        and any(owner_id != site.id for owner_id in previous_domain_owners.get(domain, set()))
+    }
+    if not transferred:
+        return 0
+    site.main_domain_history = [
+        domain for domain in (site.main_domain_history or []) if _normalize_domain(domain) not in transferred
+    ]
+    site.alternate_domain_history = [
+        domain for domain in (site.alternate_domain_history or []) if _normalize_domain(domain) not in transferred
+    ]
+    site.x_default_history = [
+        domain for domain in (site.x_default_history or []) if _normalize_domain(domain) not in transferred
+    ]
+    site.domain_types = {
+        domain: domain_type
+        for domain, domain_type in (site.domain_types or {}).items()
+        if _normalize_domain(domain) not in transferred
+    }
+    return len(transferred)
 
 
 def reconcile_server_project_inventory(db: Session) -> dict[str, Any]:
@@ -1308,6 +1359,7 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
     )
     working_canons = _working_project_canons()
     existing_sites = db.scalars(select(models.Site).where(models.Site.external_project_id.is_not(None))).all()
+    previous_domain_owners = _domain_owners(existing_sites)
     sites_by_external_id = {site.external_project_id: site for site in existing_sites if site.external_project_id}
     now = datetime.now(timezone.utc)
     created_count = 0
@@ -1398,6 +1450,7 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
 
         site.name = name
         site.base_url = f"https://{canon}"
+        _reset_newly_transferred_domain_memory(site, domains, previous_domain_owners)
         _record_network_snapshot(site, canon, domains, now)
         observe_network(site, project)
         site.cache_canon = canon

@@ -256,6 +256,36 @@ def test_network_audit_replaces_stale_domains_with_saved_server_snapshot(monkeyp
         assert result["projects_unconfirmed"] == 0
 
 
+def test_domain_transfer_resets_destination_role_memory() -> None:
+    source = models.Site(
+        id="source",
+        name="source.example",
+        cache_domains=["moved.example"],
+    )
+    destination = models.Site(
+        id="destination",
+        name="destination.example",
+        cache_domains=["destination.example"],
+        main_domain_history=["moved.example", "destination.example"],
+        alternate_domain_history=["moved.example"],
+        x_default_history=["moved.example"],
+        domain_types={"moved.example": "amp", "destination.example": "main"},
+    )
+    owners = project_cache_module._domain_owners([source, destination])
+
+    reset_count = project_cache_module._reset_newly_transferred_domain_memory(
+        destination,
+        ["destination.example", "moved.example"],
+        owners,
+    )
+
+    assert reset_count == 1
+    assert destination.main_domain_history == ["destination.example"]
+    assert destination.alternate_domain_history == []
+    assert destination.x_default_history == []
+    assert destination.domain_types == {"destination.example": "main"}
+
+
 def test_main_history_survives_canon_changes_and_removed_domains() -> None:
     with make_session() as db:
         project = {"id": "history-project", "name": "history.test", "settings": {"canon": "first.test", "domains": ["first.test", "second.test"]}}
