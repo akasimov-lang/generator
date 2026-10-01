@@ -461,7 +461,7 @@ def validate_ai_provider(provider_id: str, _: AdminUser, db: Session = Depends(g
 @router.get("/sites", response_model=list[SiteResponse])
 def list_sites(_: AuthUser, db: Session = Depends(get_db)) -> Any:
     sites = db.scalars(
-        select(models.Site).order_by(
+        select(models.Site).where(models.Site.is_active.is_(True)).order_by(
             models.Site.is_test_project.desc(),
             models.Site.has_menu.desc(),
             models.Site.name.asc(),
@@ -475,7 +475,9 @@ def list_sites(_: AuthUser, db: Session = Depends(get_db)) -> Any:
 
 @router.get("/sites/lookup", response_model=SiteResponse)
 def lookup_site(_: AuthUser, name: str = "", site_id: str = "", db: Session = Depends(get_db)) -> Any:
-    site = db.scalar(select(models.Site).where(models.Site.name == name)) if name else db.get(models.Site, site_id)
+    lookup = select(models.Site).where(models.Site.is_active.is_(True))
+    lookup = lookup.where(models.Site.name == name) if name else lookup.where(models.Site.id == site_id)
+    site = db.scalar(lookup)
     if not site:
         raise HTTPException(status_code=404, detail="Project not found")
     from app.project_notices import refresh_and_commit_notices
@@ -486,7 +488,7 @@ def lookup_site(_: AuthUser, name: str = "", site_id: str = "", db: Session = De
 @router.get("/sites/cache/projects", response_model=list[SiteResponse])
 def list_cached_projects(_: AuthUser, db: Session = Depends(get_db)) -> Any:
     status_order = {"test": 0, "working": 1, "mass_actions": 2, "not_in_focus": 3, "duplicate": 4}
-    sites = db.scalars(select(models.Site)).all()
+    sites = db.scalars(select(models.Site).where(models.Site.is_active.is_(True))).all()
     from app.project_notices import refresh_and_commit_notices
     refresh_and_commit_notices(db, sites)
     return sorted(sites, key=lambda site: (status_order.get(site.project_status, 3), not site.has_menu, site.name.lower()))

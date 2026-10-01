@@ -369,6 +369,27 @@ def test_regular_user_site_list_includes_all_project_statuses() -> None:
     }
 
 
+def test_inactive_sites_are_hidden_from_project_lists_and_lookup() -> None:
+    client, TestingSession = make_client()
+    with TestingSession() as db:
+        inactive = models.Site(
+            name="retired.example",
+            base_url="https://retired.example",
+            publication_endpoint="https://retired.example/api/content",
+            is_active=False,
+        )
+        db.add(inactive)
+        db.commit()
+        inactive_id = inactive.id
+
+    assert "retired.example" not in {site["name"] for site in client.get("/api/sites").json()}
+    assert "retired.example" not in {
+        site["name"] for site in client.get("/api/sites/cache/projects").json()
+    }
+    assert client.get("/api/sites/lookup?name=retired.example").status_code == 404
+    assert client.get(f"/api/sites/lookup?site_id={inactive_id}").status_code == 404
+
+
 def test_regular_user_can_delete_menu_item_with_unpublished_content() -> None:
     client, TestingSession = make_client()
     with TestingSession() as db:
