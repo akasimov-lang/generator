@@ -487,10 +487,14 @@ def refresh_project_server_id(db: Session, site: models.Site) -> str:
     """Resolve and persist the project's current server before a direct request."""
     if not site.name:
         raise ProjectCacheError("Project name is not configured")
+    direct_project = _fetch_project_from_known_server(site)
+    if direct_project:
+        _apply_direct_project_snapshot(db, site, direct_project)
+        return str(site.cache_server_ip)
     projects = external_projects(db, fetch_project_cache([site.name]))
     project = next((item for item in projects if str(item.get("name") or "").strip() == site.name), None)
     if not project:
-        raise ProjectCacheError(f"Project '{site.name}' was not found in cache")
+        raise ProjectCacheError(f"Project '{site.name}' was not found on its saved server or in cache")
     server_id = str(
         project.get("serverId")
         or project.get("server_id")
@@ -504,6 +508,64 @@ def refresh_project_server_id(db: Session, site: models.Site) -> str:
         site.cache_server_ip = server_id
         db.commit()
     return server_id
+
+
+def _fetch_project_from_known_server(site: models.Site) -> dict[str, Any] | None:
+    """Recover a project omitted by the aggregate cache from its last confirmed server."""
+    if not site.cache_server_ip:
+        return None
+    settings = get_settings()
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            login_response = client.post(
+                f"{settings.project_cache_url.rstrip('/')}/auth/login",
+                json={"username": settings.project_cache_username, "pass": settings.project_cache_password},
+                headers=webdev_origin_headers(settings),
+            )
+            login_response.raise_for_status()
+            token = str(login_response.json().get("token") or "").strip()
+            if not token:
+                return None
+            response = client.get(
+                f"{project_server_url(site, '/projects/one')}/{quote(site.name, safe='')}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            if not response.is_success:
+                return None
+            project = response.json()
+    except (httpx.HTTPError, ValueError, TypeError):
+        return None
+    if not isinstance(project, dict):
+        return None
+    project_domains = set(_project_domains(project))
+    settings_payload = project.get("settings") if isinstance(project.get("settings"), dict) else {}
+    canon = _normalize_domain(settings_payload.get("canon"))
+    if canon:
+        project_domains.add(canon)
+    return project if _normalize_domain(site.name) in project_domains else None
+
+
+def _apply_direct_project_snapshot(db: Session, site: models.Site, project: dict[str, Any]) -> None:
+    settings = project.get("settings") if isinstance(project.get("settings"), dict) else {}
+    canon = _normalize_domain(settings.get("canon"))
+    domains = _project_domains(project)
+    menu = _project_menu(project)
+    if canon:
+        site.base_url = f"https://{canon}"
+        site.publication_endpoint = f"https://{canon}/api/content"
+    observe_network(site, project)
+    site.cache_canon = canon or site.cache_canon
+    site.cache_language = str(settings.get("lang") or "").strip() or site.cache_language
+    site.cache_geo = str(settings.get("geo") or "").strip() or site.cache_geo
+    site.cache_domains = domains
+    site.domains_count = len(domains)
+    site.homepage_title = _homepage_title(project) or site.homepage_title
+    site.internal_pages_count = _internal_pages_count(project)
+    site.default_menu = menu
+    site.has_menu = bool(menu["header"] or menu["footer"])
+    site.cache_synced_at = datetime.now(timezone.utc)
+    site.is_active = True
+    db.commit()
 
 
 def _project_menu(project: dict[str, Any]) -> dict[str, list[Any]]:

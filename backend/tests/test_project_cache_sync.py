@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
+import httpx
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -15,6 +17,90 @@ def make_session() -> Session:
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(bind=engine)
     return Session(engine)
+
+
+def test_server_refresh_recovers_project_omitted_from_aggregate_cache(monkeypatch) -> None:
+    with make_session() as db:
+        site = models.Site(
+            name="associacaojorgepina.pt",
+            base_url="https://casinos.associacaojorgepina.pt",
+            publication_endpoint="https://casinos.associacaojorgepina.pt/api/content",
+            cache_server_ip="bear",
+        )
+        db.add(site)
+        db.commit()
+        direct_project = {
+            "settings": {
+                "canon": "casinos-pt.terrasdafeira.pt",
+                "domains": ["associacaojorgepina.pt", "casinos-pt.terrasdafeira.pt"],
+                "geo": "pt_PT",
+                "lang": "pt-PT",
+            },
+            "data": {"menu": {"header": [], "footer": []}, "pages": [{"slug": "/", "title": "Portugal"}]},
+        }
+        monkeypatch.setattr(project_cache_module, "fetch_project_cache", lambda names: (_ for _ in ()).throw(AssertionError("cache must not be queried after serverId succeeds")))
+        monkeypatch.setattr(project_cache_module, "_fetch_project_from_known_server", lambda target: direct_project)
+
+        assert project_cache_module.refresh_project_server_id(db, site) == "bear"
+        assert site.cache_server_ip == "bear"
+        assert site.cache_canon == "casinos-pt.terrasdafeira.pt"
+        assert site.cache_domains == ["associacaojorgepina.pt", "casinos-pt.terrasdafeira.pt"]
+        assert site.base_url == "https://casinos-pt.terrasdafeira.pt"
+        assert site.cache_language == "pt-PT"
+        assert site.cache_geo == "pt_PT"
+
+
+def test_direct_project_recovery_requires_network_membership_and_sends_origin(monkeypatch) -> None:
+    settings = SimpleNamespace(
+        project_cache_url="https://webdev.test",
+        project_cache_username="publisher",
+        project_cache_password="secret",
+        app_public_url="https://panel.test/",
+        alfan_url="servers.test",
+    )
+    monkeypatch.setattr(project_cache_module, "get_settings", lambda: settings)
+    seen_origins: list[str] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/auth/login":
+            seen_origins.append(request.headers["Origin"])
+            return httpx.Response(200, json={"token": "fresh-token"})
+        assert request.url.host == "bear.servers.test"
+        assert request.url.path == "/projects/one/associacaojorgepina.pt"
+        assert request.headers["Authorization"] == "Bearer fresh-token"
+        return httpx.Response(200, json={"settings": {"canon": "current.test", "domains": ["unrelated.test"]}})
+
+    real_client = httpx.Client
+    monkeypatch.setattr(
+        project_cache_module.httpx,
+        "Client",
+        lambda **kwargs: real_client(transport=httpx.MockTransport(respond), **kwargs),
+    )
+    site = models.Site(name="associacaojorgepina.pt", cache_server_ip="bear")
+
+    assert project_cache_module._fetch_project_from_known_server(site) is None
+    assert seen_origins == ["https://panel.test"]
+
+
+def test_server_refresh_uses_cache_only_when_saved_server_does_not_confirm(monkeypatch) -> None:
+    with make_session() as db:
+        site = models.Site(
+            name="moved.example",
+            base_url="https://moved.example",
+            publication_endpoint="https://moved.example/api/content",
+            cache_server_ip="old-server",
+        )
+        db.add(site)
+        db.commit()
+        monkeypatch.setattr(project_cache_module, "_fetch_project_from_known_server", lambda target: None)
+        monkeypatch.setattr(
+            project_cache_module,
+            "fetch_project_cache",
+            lambda names: [{"name": "moved.example", "serverId": "new-server"}],
+        )
+
+        assert project_cache_module.refresh_project_server_id(db, site) == "new-server"
+        assert site.cache_server_ip == "new-server"
 
 
 def test_main_history_survives_canon_changes_and_removed_domains() -> None:
