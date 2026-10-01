@@ -544,7 +544,7 @@ type PublicationCampaignQueue = {
 
 type ThemeMode = "light" | "dark";
 type InputStyle = "balanced" | "classic" | "soft" | "inset" | "underline" | "emerald" | "graphite" | "rounded" | "contrast" | "glass";
-type AppView = "autoReglueGuide" | "autoReglue" | "published" | "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "favorites" | "guide" | "settings";
+type AppView = "templateGenerator" | "autoReglueGuide" | "autoReglue" | "published" | "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "favorites" | "guide" | "settings";
 type WorkspaceTab = "overview" | "topics" | "content" | "publication" | "menu" | "network" | "redirects" | "autoReglue";
 
 type WorkspaceAccordionContextValue = {
@@ -642,6 +642,7 @@ async function copyTextToClipboard(text: string) {
 }
 
 const MAIN_VIEW_PATHS: Record<Exclude<AppView, "workspace">, string> = {
+  templateGenerator: "/template-generator",
   autoReglue: "/auto-reglue",
   autoReglueGuide: "/auto-reglue/guide",
   dashboard: "/dashboard",
@@ -1323,6 +1324,7 @@ function App() {
               <NavButton href={pathForRoute("favorites")} icon={<Star className="favoriteNavIcon" fill="currentColor" />} label="Избранное" active={activeView === "favorites"} onClick={() => navigateTo("favorites")} />
             </>
           )}
+          <NavButton href={pathForRoute("templateGenerator")} icon={<FilePlus2 />} label="Генератор шаблона" active={activeView === "templateGenerator"} onClick={() => navigateTo("templateGenerator")} />
           <NavButton href={pathForRoute("autoReglue")} icon={<RefreshCcw />} label="Автопереклей" active={activeView === "autoReglue"} onClick={() => navigateTo("autoReglue")} />
           <NavButton href={pathForRoute("settings")} icon={<Settings />} label="Настройки" active={activeView === "settings"} onClick={() => navigateTo("settings")} />
           {isAdmin ? <NavButton href={pathForRoute("published")} icon={<CheckCircle2 />} label="Опубликовано" active={activeView === "published"} onClick={() => navigateTo("published")} /> : null}
@@ -1369,6 +1371,7 @@ function App() {
         {isAdmin && activeView === "providers" && <ProvidersView api={api} providers={providers} onChanged={loadAll} />}
         {activeView === "sites" && <SitesView api={api} sites={siteSnapshot} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll} />}
         {activeView === "favorites" && <SitesView api={api} sites={siteSnapshot} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} favoritesOnly readOnly={!isAdmin} onChanged={loadAll} />}
+        {activeView === "templateGenerator" && <TemplateGeneratorView />}
         {activeView === "guide" && <React.Suspense fallback={<p>Загрузка инструкции…</p>}><UserGuideView /></React.Suspense>}
         {activeView === "autoReglue" && <AutoReglueView api={api} />}
         {activeView === "autoReglueGuide" && <><a className="button secondary" href="/guide" onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("guide"); } }}>Все инструкции</a><AutoReglueGuide backLabel="Вернуться к автопереклею" onBack={() => navigateTo("autoReglue")} /></>}
@@ -10641,6 +10644,25 @@ function RoleBadge({ admin }: { admin: boolean }) {
   return <span className={`roleBadge ${admin ? "admin" : ""}`}>{admin ? "Администратор" : "Пользователь"}</span>;
 }
 
+function TemplateGeneratorView() {
+  return (
+    <section className="viewStack">
+      <section className="dataPanel">
+        <div className="dataPanelHeader">
+          <div>
+            <p className="eyebrow">Новый инструмент</p>
+            <h2>Генератор шаблона</h2>
+          </div>
+        </div>
+        <div className="dataPanelBody">
+          <p>Раздел подготовлен для создания новых шаблонов.</p>
+          <p className="muted">Параметры генерации, правила формирования и история результатов появятся здесь после подключения логики шаблонов.</p>
+        </div>
+      </section>
+    </section>
+  );
+}
+
 function sectionLabel(sectionId: string | null, sections: Section[]) {
   if (!sectionId) return "Не выбран";
   const section = sections.find((item) => item.id === sectionId);
@@ -10653,6 +10675,7 @@ function viewTitle(view: AppView, _workspaceTab: WorkspaceTab) {
   }
 
   const titles: Record<Exclude<AppView, "workspace">, string> = {
+    templateGenerator: "Генератор шаблона",
     dashboard: "Dashboard",
     prompts: "Промпты",
     tasks: "Задачи генерации",
