@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app import models
 from app.core.config import get_settings
+from app.webdev import webdev_origin_headers
 
 _cache = OrderedDict()
 _cache_lock = threading.Lock()
@@ -43,7 +44,7 @@ def login_external(username, password):
         settings = get_settings()
         with httpx.Client(timeout=20, follow_redirects=False,
                           headers={'Cache-Control': 'no-cache', 'Pragma': 'no-cache',
-                                   'Origin': settings.app_public_url.rstrip('/')}) as client:
+                                   **webdev_origin_headers(settings)}) as client:
             response = client.post(settings.project_cache_url.rstrip('/') + '/auth/login',
                                    json={"username": username.strip(), "pass": password})
             if not response.is_success:

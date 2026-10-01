@@ -694,7 +694,8 @@ def test_menu_capability_check_reauthenticates_after_unauthorized(monkeypatch) -
         def __exit__(self, exc_type, exc, tb):
             return False
 
-        def post(self, url: str, json: dict):
+        def post(self, url: str, json: dict, headers: dict | None = None):
+            assert headers == {"Origin": "https://ai-seo-content-panel.site"}
             token = f"token-{sum(1 for method, _ in calls if method == 'POST') + 1}"
             calls.append(("POST", token))
             return FakeResponse(200, {"token": token})

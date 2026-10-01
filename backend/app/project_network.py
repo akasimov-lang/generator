@@ -16,6 +16,7 @@ from app import models
 from app.core.config import get_settings
 from app.network_state import alternate_links, domain_name, observe_network, state_revision, validate_markup
 from app.project_cache import ProjectCacheError, project_server_url, refresh_project_server_id
+from app.webdev import webdev_origin_headers
 
 
 from app.fake_main import create_fake_settings, select_fake_settings
@@ -75,7 +76,7 @@ class Remote:
         try:
             response = self.client.post(settings.project_cache_url.rstrip("/") + "/auth/login", json={
                 "username": settings.project_cache_username, "pass": settings.project_cache_password,
-            })
+            }, headers=webdev_origin_headers(settings))
             response.raise_for_status()
             token = response.json().get("token")
             if not token:

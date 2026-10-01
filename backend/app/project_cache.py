@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app import models
 from app.network_state import observe_network
 from app.core.config import get_settings
+from app.webdev import webdev_origin_headers
 
 
 class ProjectCacheError(RuntimeError):
@@ -41,6 +42,7 @@ async def refresh_project_server_token(client: httpx.AsyncClient) -> str:
     response = await client.post(
         f"{settings.project_cache_url.rstrip('/')}/auth/login",
         json={"username": settings.project_cache_username, "pass": settings.project_cache_password},
+        headers=webdev_origin_headers(settings),
     )
     response.raise_for_status()
     token = str(response.json().get("token") or "").strip()
@@ -70,6 +72,7 @@ def fetch_project_template_capabilities(site: models.Site) -> dict[str, bool]:
                 login_response = client.post(
                     f"{settings.project_cache_url.rstrip('/')}/auth/login",
                     json={"username": settings.project_cache_username, "pass": settings.project_cache_password},
+                    headers=webdev_origin_headers(settings),
                 )
                 login_response.raise_for_status()
                 token = str(login_response.json().get("token") or "").strip()
@@ -343,6 +346,7 @@ def fetch_project_cache(names: list[str] | None = None) -> list[dict[str, Any]]:
             login_response = client.post(
                 "/auth/login",
                 json={"username": settings.project_cache_username, "pass": settings.project_cache_password},
+                headers=webdev_origin_headers(settings),
             )
             login_response.raise_for_status()
             token = login_response.json().get("token")
