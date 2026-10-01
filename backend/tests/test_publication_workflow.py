@@ -707,12 +707,15 @@ def test_project_server_requests_refresh_token_and_store_status_codes(db: Sessio
     site, item = make_content(db)
     site.name = "nauchi52.ru"
     site.cache_server_ip = "stale-server"
+    item.generation_error = "Previous publication failure"
     section = models.Section(site=site, external_id="test", name="test", path="/test/", menu_type="header", sync_status="pending")
     db.add(section)
     db.commit()
 
     menu_result = asyncio.run(sync_project_menus(db, site))
     asyncio.run(publish_item(db, item, site))
+
+    assert item.generation_error is None
 
     auth_calls = [call for call in calls if call["url"].endswith("/auth/login")]
     menu_calls = [call for call in calls if call["url"].endswith("/projects/menu")]

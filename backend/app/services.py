@@ -5148,6 +5148,7 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
         refresh_campaign_status(db, item.publication_campaign_id)
         db.commit()
         return
+    item.generation_error = None
     if is_technical(item):
         try:
             await sync_technical_menu(db, item, site, initiator_username)
@@ -5254,6 +5255,7 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
             )
         )
         item.status = "publication_failed"
+        item.generation_error = f"{type(exc).__name__}: {exc}"[:500]
         item.scheduled_at = None
         refresh_campaign_status(db, item.publication_campaign_id)
         db.commit()
