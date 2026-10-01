@@ -1088,7 +1088,7 @@ def analyze_content_quality(payload: dict) -> dict:
         lowered = page_text.lower()
         for phrase in RISKY_CONTENT_PHRASES:
             if phrase.lower() in lowered:
-                issues.append({"code": "risky_phrase", "page": page_index, "phrase": phrase, "message": "Risky legal or promotional phrase found."})
+                warnings.append({"code": "risky_phrase", "page": page_index, "phrase": phrase, "message": "Risky legal or promotional phrase found."})
         if "[muss geprüft werden" in lowered:
             warnings.append({"code": "unverified_marker", "page": page_index, "message": "Text contains facts that must be checked before publication."})
 

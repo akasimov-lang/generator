@@ -41,11 +41,30 @@ def test_quality_check_flags_metadata_and_risky_phrases() -> None:
 
     result = analyze_content_quality(payload)
     codes = {issue["code"] for issue in result["issues"]}
+    warning_codes = {warning["code"] for warning in result["warnings"]}
 
     assert result["status"] == "failed"
     assert "metadata_inside_body" in codes
-    assert "risky_phrase" in codes
+    assert "risky_phrase" in warning_codes
     assert "oversized_paragraph" in codes
+
+
+def test_risky_phrase_is_a_warning_and_does_not_block_publication() -> None:
+    payload = {
+        "pages": [{
+            "content": {"blocks": [
+                header_block("Kontakt", 1),
+                header_block("Direkte Kanäle", 2),
+                paragraph_block("Die Nutzung unserer direkten Kanäle garantiert eine schnelle Zuweisung."),
+            ]}
+        }]
+    }
+
+    result = analyze_content_quality(payload)
+
+    assert result["status"] == "warning"
+    assert result["issues"] == []
+    assert {warning["code"] for warning in result["warnings"]} == {"risky_phrase"}
 
 
 def test_quality_check_accepts_structured_payload() -> None:
