@@ -4,7 +4,7 @@ import ReactDOM from "react-dom/client";
 import { createPortal } from "react-dom";
 import { LANGUAGE_OPTIONS, type LanguageOption } from "./languageOptions";
 import { getMenuLibrary, type MenuLibraryItem } from "./menuLibrary";
-import { matchesProjectSearch, projectSearchKeywords } from "./projectSearch";
+import { isExactNetworkDomainSearch, matchesProjectSearch, projectSearchKeywords } from "./projectSearch";
 import { TechnicalPagesForm } from "./TechnicalPagesForm";
 import { workspaceRequestCache } from "./workspaceRequestCache";
 import { ProjectNetworkPanel } from "./ProjectNetworkPanel";
@@ -8677,16 +8677,26 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
     if (summaryFilter === "mass_actions") return row.projectStatus === "mass_actions";
     return row.projectStatus === "duplicate";
   };
-  const filteredRows = domainRows.filter((row) => (
-    (!favoritesOnly || row.isFavorite)
-    && matchesSummaryFilter(row)
-    && (!medalFilter || row.medalStatus === medalFilter)
-    && statusFilters.includes(row.projectStatus)
-    && menuTypeFilters.includes(row.menuTypeKey)
-    && (!geoFilter || siteGeoFilterCode(row.geo) === geoFilter)
-    && (!normalizedBrandFilter || matchesProjectSearch(row.brand, normalizedBrandFilter))
-    && (!normalizedQuery || [row.name, row.homepageTitle || "", row.canon, row.externalProjectId || "", row.projectStatus, ...row.domains].some((value) => matchesProjectSearch(value, normalizedQuery)))
-  ));
+  const filteredRows = domainRows.filter((row) => {
+    const exactNetworkDomainMatch = isExactNetworkDomainSearch(row.domains, normalizedQuery);
+    const matchesSearch = !normalizedQuery
+      || [row.name, row.homepageTitle || "", row.canon, row.externalProjectId || "", row.projectStatus, ...row.domains]
+        .some((value) => matchesProjectSearch(value, normalizedQuery));
+    const matchesActiveFilters = (
+      (!favoritesOnly || row.isFavorite)
+      && matchesSummaryFilter(row)
+      && (!medalFilter || row.medalStatus === medalFilter)
+      && statusFilters.includes(row.projectStatus)
+      && menuTypeFilters.includes(row.menuTypeKey)
+      && (!geoFilter || siteGeoFilterCode(row.geo) === geoFilter)
+      && (!normalizedBrandFilter || matchesProjectSearch(row.brand, normalizedBrandFilter))
+    );
+    return matchesSearch && (exactNetworkDomainMatch || matchesActiveFilters);
+  }).sort((left, right) => {
+    if (!normalizedQuery) return 0;
+    return Number(isExactNetworkDomainSearch(right.domains, normalizedQuery))
+      - Number(isExactNetworkDomainSearch(left.domains, normalizedQuery));
+  });
   const totalPages = rowsPerPage === "all" ? 1 : Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
   const activePage = Math.min(currentPage, totalPages);
   const pageStart = rowsPerPage === "all" ? 0 : (activePage - 1) * rowsPerPage;

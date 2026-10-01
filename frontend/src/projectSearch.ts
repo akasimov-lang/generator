@@ -22,3 +22,15 @@ export function matchesProjectSearch(value: string, query: string): boolean {
   const normalizedQuery = query.trim().toLowerCase();
   return keywords.includes(normalizedQuery) || keywords.includes(normalizeProjectSearch(normalizedQuery));
 }
+
+function domainSearchKey(value: string): string {
+  return normalizeProjectSearch(value.trim())
+    .replace(/^https?:\/\//, "")
+    .split(/[/?#]/, 1)[0]
+    .replace(/\.$/, "");
+}
+
+export function isExactNetworkDomainSearch(domains: string[], query: string): boolean {
+  const queryKey = domainSearchKey(query);
+  return Boolean(queryKey) && domains.some((domain) => domainSearchKey(domain) === queryKey);
+}
