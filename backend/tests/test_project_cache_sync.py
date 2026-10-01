@@ -142,6 +142,7 @@ def test_server_inventory_imports_only_unique_missing_names_without_duplicates(m
             base_url="https://existing.example",
             publication_endpoint="https://existing.example/api/content",
             cache_server_ip="bear",
+            cache_domains=["existing.example", "moved.example"],
             external_project_id="existing",
         )
         db.add(existing)
@@ -156,7 +157,7 @@ def test_server_inventory_imports_only_unique_missing_names_without_duplicates(m
             "fetch_server_project_inventories",
             lambda server_ids: (
                 {
-                    "bear": {"existing.example", "new.example", "ambiguous.example"},
+                    "bear": {"existing.example", "new.example", "moved.example", "ambiguous.example"},
                     "zebra": {"existing.example", "ambiguous.example", "template-sample"},
                 },
                 {"fox": "HTTP 502"},
@@ -164,7 +165,10 @@ def test_server_inventory_imports_only_unique_missing_names_without_duplicates(m
         )
 
         def direct(server_id: str, name: str) -> dict | None:
-            assert (server_id, name) == ("bear", "new.example")
+            assert server_id == "bear"
+            if name == "moved.example":
+                return None
+            assert name == "new.example"
             return {
                 "settings": {
                     "canon": "www.new.example",
@@ -189,6 +193,7 @@ def test_server_inventory_imports_only_unique_missing_names_without_duplicates(m
         assert result["imported_count"] == 1
         assert result["deleted_count"] == 0
         assert result["rejected_missing"] == {"ambiguous.example": "ambiguous servers: bear, zebra"}
+        assert result["transferred_domains"] == {"moved.example": ["existing.example"]}
         assert result["failed_servers"] == {"fox": "HTTP 502"}
 
 

@@ -620,6 +620,12 @@ def reconcile_server_project_inventory(db: Session) -> dict[str, Any]:
     }
     imported_projects: list[dict[str, Any]] = []
     rejected_missing: dict[str, str] = {}
+    transferred_domains: dict[str, list[str]] = {}
+    current_domain_owners: dict[str, set[str]] = {}
+    for site in local_sites:
+        for domain in site.cache_domains or []:
+            if normalized := _normalize_domain(str(domain)):
+                current_domain_owners.setdefault(normalized, set()).add(site.name)
     for name, servers in sorted(missing_locations.items()):
         if len(servers) != 1:
             rejected_missing[name] = f"ambiguous servers: {', '.join(sorted(servers))}"
@@ -627,6 +633,9 @@ def reconcile_server_project_inventory(db: Session) -> dict[str, Any]:
         server_id = next(iter(servers))
         project = _fetch_project_from_server_id(server_id, name)
         if not project:
+            if owners := current_domain_owners.get(_normalize_domain(name)):
+                transferred_domains[name] = sorted(owners)
+                continue
             rejected_missing[name] = "direct project lookup did not confirm a real Webdev project"
             continue
         imported_projects.append({
@@ -655,6 +664,7 @@ def reconcile_server_project_inventory(db: Session) -> dict[str, Any]:
         "imported_projects": sorted(project["name"] for project in imported_projects),
         "imported_count": int(sync_result["created_count"]),
         "rejected_missing": rejected_missing,
+        "transferred_domains": transferred_domains,
         "names_on_multiple_servers": inventory_duplicates,
         "deleted_count": int(sync_result["deleted_duplicate_count"]),
     }
@@ -901,6 +911,7 @@ def _record_network_snapshot(
         })
     latest = history[-1] if history else {}
     if latest.get("canon") == normalized_canon and latest.get("domains") == normalized_domains:
+        site.network_snapshot_history = history
         return
     history.append({
         "observed_at": observed_at.isoformat(),
