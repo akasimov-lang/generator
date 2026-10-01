@@ -160,6 +160,66 @@ def test_server_inventory_imports_only_unique_missing_names_without_duplicates(m
         assert result["failed_servers"] == {"fox": "HTTP 502"}
 
 
+def test_network_audit_replaces_stale_domains_with_saved_server_snapshot(monkeypatch) -> None:
+    with make_session() as db:
+        site = models.Site(
+            name="network.example",
+            base_url="https://old.example",
+            publication_endpoint="https://old.example/api/content",
+            cache_server_ip="bear",
+            cache_canon="old.example",
+            cache_domains=["old.example", "removed.example"],
+            network_state={"domains": ["old.example", "removed.example"]},
+        )
+        db.add(site)
+        db.commit()
+        settings = SimpleNamespace(
+            project_cache_url="https://webdev.test",
+            project_cache_username="publisher",
+            project_cache_password="secret",
+            app_public_url="https://panel.test/",
+            alfan_url="servers.test",
+        )
+        monkeypatch.setattr(project_cache_module, "get_settings", lambda: settings)
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            assert request.url.path == "/auth/login"
+            return httpx.Response(200, json={"token": "audit-token"})
+
+        real_client = httpx.Client
+        monkeypatch.setattr(
+            project_cache_module.httpx,
+            "Client",
+            lambda **kwargs: real_client(transport=httpx.MockTransport(respond), **kwargs),
+        )
+        monkeypatch.setattr(
+            project_cache_module,
+            "_fetch_server_network_snapshots",
+            lambda server_id, names, token: (
+                {
+                    "network.example": {
+                        "settings": {
+                            "canon": "current.example",
+                            "domains": ["network.example", "current.example"],
+                        },
+                        "data": {"menu": {"header": [], "footer": []}, "pages": []},
+                    }
+                },
+                {},
+            ),
+        )
+
+        result = project_cache_module.reconcile_all_project_networks(db)
+
+        db.refresh(site)
+        assert site.cache_canon == "current.example"
+        assert site.cache_domains == ["network.example", "current.example"]
+        assert site.network_state["domains"] == ["network.example", "current.example"]
+        assert "removed.example" not in site.cache_domains
+        assert result["projects_confirmed"] == 1
+        assert result["projects_unconfirmed"] == 0
+
+
 def test_main_history_survives_canon_changes_and_removed_domains() -> None:
     with make_session() as db:
         project = {"id": "history-project", "name": "history.test", "settings": {"canon": "first.test", "domains": ["first.test", "second.test"]}}

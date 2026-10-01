@@ -1,5 +1,6 @@
 from app.project_access import external_projects
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import re
@@ -424,6 +425,111 @@ def _fetch_project_from_server_id(server_id: str, project_name: str) -> dict[str
     return _fetch_project_from_known_server(probe)
 
 
+def _project_confirms_name(project: dict[str, Any], project_name: str) -> bool:
+    settings = project.get("settings") if isinstance(project.get("settings"), dict) else {}
+    domains = set(_project_domains(project))
+    if canon := _normalize_domain(settings.get("canon")):
+        domains.add(canon)
+    return _normalize_domain(project_name) in domains
+
+
+def _fetch_server_network_snapshots(
+    server_id: str,
+    project_names: list[str],
+    token: str,
+) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
+    settings = get_settings()
+    snapshots: dict[str, dict[str, Any]] = {}
+    failures: dict[str, str] = {}
+    base_url = f"https://{server_id}.{settings.alfan_url.strip().strip('/')}"
+    with httpx.Client(base_url=base_url, timeout=30.0) as client:
+        for project_name in project_names:
+            try:
+                response = client.get(
+                    f"/projects/one/{quote(project_name, safe='')}",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+                response.raise_for_status()
+                project = response.json()
+                if not isinstance(project, dict) or not _project_confirms_name(project, project_name):
+                    failures[project_name] = "project settings do not confirm network membership"
+                    continue
+                snapshots[project_name] = project
+            except (httpx.HTTPError, ValueError, TypeError) as error:
+                failures[project_name] = str(error)
+    return snapshots, failures
+
+
+def reconcile_all_project_networks(db: Session) -> dict[str, Any]:
+    """Refresh every network from its saved serverId without deleting unconfirmed data."""
+    sites = db.scalars(
+        select(models.Site).where(
+            models.Site.cache_server_ip.is_not(None),
+            models.Site.name.is_not(None),
+        )
+    ).all()
+    grouped: dict[str, list[str]] = {}
+    sites_by_key: dict[tuple[str, str], models.Site] = {}
+    for site in sites:
+        server_id = str(site.cache_server_ip or "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9-]+", server_id) or not site.name:
+            continue
+        grouped.setdefault(server_id, []).append(site.name)
+        sites_by_key[(server_id, site.name)] = site
+
+    settings = get_settings()
+    with httpx.Client(timeout=30.0) as client:
+        login_response = client.post(
+            f"{settings.project_cache_url.rstrip('/')}/auth/login",
+            json={"username": settings.project_cache_username, "pass": settings.project_cache_password},
+            headers=webdev_origin_headers(settings),
+        )
+        login_response.raise_for_status()
+        token = str(login_response.json().get("token") or "").strip()
+    if not token:
+        raise ProjectCacheError("Project cache login did not return a token")
+
+    snapshots: dict[tuple[str, str], dict[str, Any]] = {}
+    failures: dict[str, str] = {}
+    max_workers = min(8, max(1, len(grouped)))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(_fetch_server_network_snapshots, server_id, sorted(set(names)), token): server_id
+            for server_id, names in grouped.items()
+        }
+        for future in as_completed(futures):
+            server_id = futures[future]
+            try:
+                server_snapshots, server_failures = future.result()
+            except Exception as error:  # Keep other authoritative servers auditable.
+                failures[f"server:{server_id}"] = str(error)
+                continue
+            snapshots.update({(server_id, name): project for name, project in server_snapshots.items()})
+            failures.update({f"{server_id}:{name}": reason for name, reason in server_failures.items()})
+
+    for key, project in snapshots.items():
+        _apply_direct_project_snapshot(db, sites_by_key[key], project, commit=False)
+    db.commit()
+
+    domain_owners: dict[str, set[str]] = {}
+    for site in sites:
+        for domain in site.cache_domains or []:
+            normalized = _normalize_domain(str(domain))
+            if normalized:
+                domain_owners.setdefault(normalized, set()).add(site.name)
+    conflicts = {
+        domain: sorted(owners) for domain, owners in domain_owners.items() if len(owners) > 1
+    }
+    return {
+        "projects_considered": len(sites_by_key),
+        "projects_confirmed": len(snapshots),
+        "projects_unconfirmed": len(failures),
+        "unconfirmed_projects": failures,
+        "cross_project_domain_conflicts": conflicts,
+        "cross_project_domain_conflict_count": len(conflicts),
+    }
+
+
 def reconcile_server_project_inventory(db: Session) -> dict[str, Any]:
     """Import only unambiguous projects missing entirely from PagePilot.
 
@@ -679,7 +785,13 @@ def _fetch_project_from_known_server(site: models.Site) -> dict[str, Any] | None
     return project if _normalize_domain(site.name) in project_domains else None
 
 
-def _apply_direct_project_snapshot(db: Session, site: models.Site, project: dict[str, Any]) -> None:
+def _apply_direct_project_snapshot(
+    db: Session,
+    site: models.Site,
+    project: dict[str, Any],
+    *,
+    commit: bool = True,
+) -> None:
     settings = project.get("settings") if isinstance(project.get("settings"), dict) else {}
     canon = _normalize_domain(settings.get("canon"))
     domains = _project_domains(project)
@@ -699,7 +811,8 @@ def _apply_direct_project_snapshot(db: Session, site: models.Site, project: dict
     site.has_menu = bool(menu["header"] or menu["footer"])
     site.cache_synced_at = datetime.now(timezone.utc)
     site.is_active = True
-    db.commit()
+    if commit:
+        db.commit()
 
 
 def _project_menu(project: dict[str, Any]) -> dict[str, list[Any]]:
