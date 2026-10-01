@@ -63,6 +63,7 @@ def apply_lightweight_migrations() -> None:
             "alternate_domain_history": "JSON DEFAULT '[]' NOT NULL",
             "domain_types": "JSON DEFAULT '{}' NOT NULL",
             "network_state": "JSON DEFAULT '{}' NOT NULL",
+            "network_snapshot_history": "JSON DEFAULT '[]' NOT NULL",
             "cache_server_ip": "VARCHAR(120)",
             "project_status": "VARCHAR(32) DEFAULT 'working' NOT NULL",
             "is_test_project": "BOOLEAN DEFAULT FALSE NOT NULL",

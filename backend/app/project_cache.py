@@ -810,6 +810,8 @@ def _apply_direct_project_snapshot(
     canon = _normalize_domain(settings.get("canon"))
     domains = _project_domains(project)
     menu = _project_menu(project)
+    synced_at = datetime.now(timezone.utc)
+    _record_network_snapshot(site, canon, domains, synced_at)
     if canon:
         site.base_url = f"https://{canon}"
         site.publication_endpoint = f"https://{canon}/api/content"
@@ -823,10 +825,39 @@ def _apply_direct_project_snapshot(
     site.internal_pages_count = _internal_pages_count(project)
     site.default_menu = menu
     site.has_menu = bool(menu["header"] or menu["footer"])
-    site.cache_synced_at = datetime.now(timezone.utc)
+    site.cache_synced_at = synced_at
     site.is_active = True
     if commit:
         db.commit()
+
+
+def _record_network_snapshot(
+    site: models.Site,
+    canon: str,
+    domains: list[str],
+    observed_at: datetime,
+) -> None:
+    """Keep an append-only history only when current Webdev membership changes."""
+    normalized_domains = list(dict.fromkeys(filter(None, (_normalize_domain(item) for item in domains))))
+    normalized_canon = _normalize_domain(canon)
+    history = list(site.network_snapshot_history or [])
+    if not history and (site.cache_canon or site.cache_domains):
+        history.append({
+            "observed_at": (site.cache_synced_at or observed_at).isoformat(),
+            "server_id": site.cache_server_ip,
+            "canon": _normalize_domain(site.cache_canon),
+            "domains": list(dict.fromkeys(_normalize_domain(item) for item in (site.cache_domains or []) if item)),
+        })
+    latest = history[-1] if history else {}
+    if latest.get("canon") == normalized_canon and latest.get("domains") == normalized_domains:
+        return
+    history.append({
+        "observed_at": observed_at.isoformat(),
+        "server_id": site.cache_server_ip,
+        "canon": normalized_canon,
+        "domains": normalized_domains,
+    })
+    site.network_snapshot_history = history
 
 
 def _project_menu(project: dict[str, Any]) -> dict[str, list[Any]]:
@@ -1367,6 +1398,7 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
 
         site.name = name
         site.base_url = f"https://{canon}"
+        _record_network_snapshot(site, canon, domains, now)
         observe_network(site, project)
         site.cache_canon = canon
         site.cache_language = language

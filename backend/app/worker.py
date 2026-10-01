@@ -62,7 +62,7 @@ celery_app.conf.beat_schedule = {
     },
     "reconcile-all-project-networks": {
         "task": "app.worker.reconcile_all_project_networks",
-        "schedule": crontab(hour=2, minute=50, day_of_week="sunday"),
+        "schedule": crontab(hour=2, minute=50),
     },
 }
 

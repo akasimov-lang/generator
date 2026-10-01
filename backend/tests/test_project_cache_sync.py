@@ -248,6 +248,10 @@ def test_network_audit_replaces_stale_domains_with_saved_server_snapshot(monkeyp
         assert site.cache_domains == ["network.example", "current.example"]
         assert site.network_state["domains"] == ["network.example", "current.example"]
         assert "removed.example" not in site.cache_domains
+        assert [snapshot["domains"] for snapshot in site.network_snapshot_history] == [
+            ["old.example", "removed.example"],
+            ["network.example", "current.example"],
+        ]
         assert result["projects_confirmed"] == 1
         assert result["projects_unconfirmed"] == 0
 
