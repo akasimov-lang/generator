@@ -1456,7 +1456,7 @@ def build_gemini_prompt(
         )
     return prepend_editorial_skill(prompt)
 
-async def call_gemini(provider: models.AiProvider, prompt: str, *, url_context: bool = False) -> dict:
+async def call_gemini(provider: models.AiProvider, prompt: str, *, url_context: bool = False, images: list[str] | None = None) -> dict:
     model = provider.model or GEMINI_DEFAULT_MODEL
     endpoint_template = provider.endpoint_url or GEMINI_DEFAULT_ENDPOINT
     endpoint = endpoint_template.format(model=model)
@@ -1474,6 +1474,10 @@ async def call_gemini(provider: models.AiProvider, prompt: str, *, url_context: 
     }
     if url_context:
         body["tools"] = [{"url_context": {}}]
+    if images:
+        body["contents"][0]["parts"].extend(
+            {"inline_data": {"mime_type": "image/jpeg", "data": image}} for image in images
+        )
     headers = {
         "Content-Type": "application/json",
         "x-goog-api-key": provider.api_key,

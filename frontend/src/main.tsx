@@ -1,3 +1,4 @@
+import { TemplateGenerator } from "./TemplateGenerator";
 import { readProjectSnapshot, writeProjectSnapshot, removeLegacyProjectSnapshot } from "./projectSnapshot";
 import React from "react";
 import ReactDOM from "react-dom/client";
@@ -1372,7 +1373,7 @@ function App() {
         {isAdmin && activeView === "providers" && <ProvidersView api={api} providers={providers} onChanged={loadAll} />}
         {activeView === "sites" && <SitesView api={api} sites={siteSnapshot} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll} />}
         {activeView === "favorites" && <SitesView api={api} sites={siteSnapshot} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} favoritesOnly readOnly={!isAdmin} onChanged={loadAll} />}
-        {activeView === "templateGenerator" && <TemplateGeneratorView />}
+        {activeView === "templateGenerator" && <TemplateGenerator api={api} />}
         {activeView === "guide" && <React.Suspense fallback={<p>Загрузка инструкции…</p>}><UserGuideView /></React.Suspense>}
         {activeView === "autoReglue" && <AutoReglueView api={api} />}
         {activeView === "autoReglueGuide" && <><a className="button secondary" href="/guide" onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("guide"); } }}>Все инструкции</a><AutoReglueGuide backLabel="Вернуться к автопереклею" onBack={() => navigateTo("autoReglue")} /></>}
@@ -10657,24 +10658,6 @@ function RoleBadge({ admin }: { admin: boolean }) {
   return <span className={`roleBadge ${admin ? "admin" : ""}`}>{admin ? "Администратор" : "Пользователь"}</span>;
 }
 
-function TemplateGeneratorView() {
-  return (
-    <section className="viewStack">
-      <section className="dataPanel">
-        <div className="dataPanelHeader">
-          <div>
-            <p className="eyebrow">Новый инструмент</p>
-            <h2>Генератор шаблона</h2>
-          </div>
-        </div>
-        <div className="dataPanelBody">
-          <p>Раздел подготовлен для создания новых шаблонов.</p>
-          <p className="muted">Параметры генерации, правила формирования и история результатов появятся здесь после подключения логики шаблонов.</p>
-        </div>
-      </section>
-    </section>
-  );
-}
 
 function sectionLabel(sectionId: string | null, sections: Section[]) {
   if (!sectionId) return "Не выбран";

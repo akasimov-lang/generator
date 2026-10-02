@@ -31,7 +31,7 @@ def dispatch_pending(db, send):
     sent = 0
     for job in jobs:
         try:
-            send(job.id, "publication" if job.kind == "publication" else "cache_sync")
+            send(job.id, {"publication": "publication", "site_template": "generation"}.get(job.kind, "cache_sync"))
         except Exception:
             continue
         job.dispatched_at = now
@@ -49,7 +49,13 @@ def run_job(db, job_id):
     job.started_at = datetime.now(timezone.utc)
     db.commit()  # Duplicated broker deliveries must never repeat remote mutations.
     try:
-        if job.kind == "cache_sync":
+        if job.kind == "site_template":
+            from app.site_templates import generate, audit_edited
+            row = db.get(models.SiteTemplate, job.payload["template_id"])
+            if not row:
+                raise ValueError("Шаблон не найден")
+            result = asyncio.run(audit_edited(db, row) if job.payload.get("audit") else generate(db, row))
+        elif job.kind == "cache_sync":
             from app.project_cache import sync_project_cache, fetch_project_cache
             result = sync_project_cache(db, fetch_project_cache(job.payload.get("names") or None))
         elif job.kind == "publication":
@@ -87,6 +93,12 @@ def run_job(db, job_id):
         job = db.get(models.BackgroundJob, job_id)
         job.status = "failed"
         job.error = f"{type(error).__name__}: {error}"[:1000]
+        if job.kind == "site_template":
+            row = db.get(models.SiteTemplate, job.payload["template_id"])
+            if row:
+                row.status, row.phase = "failed", "Нужна повторная попытка"
+                row.error = (str(error)[:700] if isinstance(error, ValueError) else
+                             "Не удалось завершить генерацию или визуальную проверку. Проверьте провайдер и повторите.")
         job.finished_at = datetime.now(timezone.utc)
         if job.kind == "publication":
             item = db.get(models.ContentItem, job.payload["content_id"])
