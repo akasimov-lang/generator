@@ -1,0 +1,66 @@
+{
+  "reviewed_on": "2026-10-02",
+  "references": [
+    {
+      "brand": "Pinco",
+      "geo": "AZ",
+      "url": "https://thegarageboardshops.com/pinco/",
+      "access": "browser 200",
+      "observed": "Two adjacent promotional panels above centered introduction",
+      "concept": "twin_portal"
+    },
+    {
+      "brand": "Pin-Up",
+      "geo": "AZ",
+      "url": "https://pinup-online-az.co.com/pin-up/",
+      "access": "browser 200",
+      "observed": "Intro beside highlighted panel; category strip; alternating content",
+      "concept": "promo_catalog"
+    },
+    {
+      "brand": "Betano",
+      "geo": "DE",
+      "url": "https://betanoonline.de/",
+      "access": "browser 200",
+      "observed": "Contrasting brand header, large visual beside introduction, facts table",
+      "concept": "feature_billboard"
+    },
+    {
+      "brand": "Unibet",
+      "geo": "SE",
+      "url": "https://www.casinoguide.se/unibet",
+      "access": "browser 200",
+      "observed": "Review summary, fact chips, table of contents and structured long form",
+      "concept": "review_dashboard"
+    },
+    {
+      "brand": "bet365",
+      "geo": "GB",
+      "url": "https://www.goal.com/en-gb/betting/bet365-review/blt937f66560f84a024",
+      "access": "web text available; browser 403",
+      "observed": "Editorial review structure; visual design not verified",
+      "concept": "editorial_index"
+    },
+    {
+      "brand": "Mostbet",
+      "geo": "BR",
+      "url": "https://mostbetbr.br.com/",
+      "access": "search results only; browser unavailable",
+      "observed": "No visual inference used"
+    }
+  ],
+  "additional_compositions": [
+    "journey_map",
+    "card_directory"
+  ],
+  "device_references": [
+    "https://www.apple.com/ph/iphone-16/specs/",
+    "https://design.samsung.com/global/contents/galaxy-s25/index.html",
+    "https://www.oppo.com/en/smartphones/series-find-x/find-x8/"
+  ],
+  "rules": [
+    "References inform composition, not copied prose or promotions.",
+    "No fabricated scores, bonuses or official status.",
+    "Phone frames are schematic original SVGs; screenshots and logos are captured from the user-specified public site."
+  ]
+}

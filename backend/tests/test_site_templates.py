@@ -63,12 +63,15 @@ def test_unique_protocol_compares_all_fifteen_axes_and_hard_rules():
         assert not compare(candidate, old)['passed']
     assert compare({**distinct, 'palette': old['palette'], 'density': old['density']}, old)['passed']
     concepts = choose_concepts([{'id': 'old', 'design': old}], 'new')
-    assert len(concepts) == 3
+    assert len(concepts) == 10
     for c in concepts:
         assert set(c) == set(AXES)
         assert compare(c, old)['passed']
-    for key in ('hero', 'navigation', 'shell', 'typography', 'palette', 'visual_style'):
-        assert len({c[key] for c in concepts}) == 3
+    assert len({c['hero'] for c in concepts}) == 10
+    from app.template_design import CORE_AXES
+    for i, candidate in enumerate(concepts):
+        for other in concepts[:i]:
+            assert sum(candidate[a] != other[a] for a in CORE_AXES) >= 4
 
 
 def test_scope_is_brand_geo_or_every_template(db):
@@ -191,7 +194,7 @@ def test_generation_uses_gemini_and_persists_audited_result(db, monkeypatch):
     monkeypatch.setattr(templates, 'screenshots', capture)
     result = asyncio.run(templates.generate(db,r))
     assert result['status']=='ready' and r.status=='ready'
-    assert r.document['design_status']=='built' and len(r.document['concepts'])==3
+    assert r.document['design_status']=='built' and len(r.document['concepts'])==10
     assert r.document['scope']=='brand_geo' and all(m['mode']=='fake' for m in r.document['menu'])
     assert len(calls)==2 and provider.total_tokens_used==20
     assert len(r.document['screenshots'])==4
@@ -233,3 +236,101 @@ def test_research_does_not_invent_inaccessible_source_content(db,monkeypatch):
     report=asyncio.run(templates.research_competitors(db,r,request,provider))
     assert len(report['sources'])==2 and report['sources'][1]['excerpt']==''
     assert r.document['research']['analysis']
+
+
+def test_research_inputs_parse_and_validate():
+    request = templates.TemplateRequest(brand='Brand', geo='PL', ai_provider_id='g',
+        keywords='brand review, brand bonus\nbrand review',
+        competitors='example.com, https://example.org/review/\nexample.com https://example.net')
+    assert request.search_queries() == ['brand review', 'brand bonus']
+    assert request.competitor_urls() == ['https://example.com', 'https://example.org/review', 'https://example.net']
+    for patch in ({'keywords': ','.join(str(i) for i in range(6))}, {'competitors': 'ftp://example.com'},
+                  {'competitors': 'https://user:password@example.com'}):
+        with pytest.raises(ValueError):
+            templates.TemplateRequest(brand='Brand', geo='PL', ai_provider_id='g', **patch)
+
+
+def test_manual_competitors_without_search_provider(monkeypatch):
+    from app import services, factual_research
+    async def fetch(url):
+        return {'url': url, 'status': 'fetched', 'excerpt': 'Source content'}
+    async def gemini(*args, **kwargs):
+        return {'text': 'Analysis ' * 30}
+    monkeypatch.setattr(factual_research, 'fetch_source', fetch)
+    monkeypatch.setattr(services, 'get_dataforseo_provider', lambda db: pytest.fail('Search must not run'))
+    monkeypatch.setattr(services, 'call_gemini', gemini)
+    monkeypatch.setattr(services, 'extract_gemini_text', lambda response: response['text'])
+    monkeypatch.setattr(services, 'apply_provider_usage', lambda *args: None)
+    request = templates.TemplateRequest(brand='Brand', geo='PL', ai_provider_id='g',
+        collect_competitors=False, competitors='example.com example.org')
+    report = asyncio.run(templates.research_competitors(SimpleNamespace(commit=lambda: None), SimpleNamespace(), request, None))
+    assert [s['url'] for s in report['sources']] == ['https://example.com', 'https://example.org']
+
+
+def test_multiple_queries_merge_manual_sources(monkeypatch):
+    from app import services, factual_research
+    queries = []
+    async def serp(provider, query, geo, language):
+        queries.append(query)
+        return [{'url': 'https://example.com/', 'position': 1}, {'url': f'https://{query}.org', 'position': 2}]
+    async def fetch(url):
+        return {'url': url, 'status': 'fetched', 'excerpt': 'Source content'}
+    async def gemini(*args, **kwargs):
+        return {'text': 'Analysis ' * 30}
+    monkeypatch.setattr(services, 'get_dataforseo_provider', lambda db: None)
+    monkeypatch.setattr(services, 'call_dataforseo_google_serp', serp)
+    monkeypatch.setattr(services, 'extract_organic_serp_items', lambda response: response)
+    monkeypatch.setattr(factual_research, 'fetch_source', fetch)
+    monkeypatch.setattr(services, 'call_gemini', gemini)
+    monkeypatch.setattr(services, 'extract_gemini_text', lambda response: response['text'])
+    monkeypatch.setattr(services, 'apply_provider_usage', lambda *args: None)
+    request = templates.TemplateRequest(brand='Brand', geo='PL', ai_provider_id='g', keywords='one,two', competitors='example.com')
+    report = asyncio.run(templates.research_competitors(SimpleNamespace(commit=lambda: None), SimpleNamespace(), request, None))
+    assert queries == ['one', 'two']
+    assert len(report['sources']) == 3
+    assert report['sources'][0]['origin'] == 'manual'
+
+
+@pytest.mark.parametrize('kind', list(__import__('app.template_compositions', fromlist=['CONCEPTS']).CONCEPTS))
+def test_new_compositions_render_valid_html(kind):
+    r = row()
+    r.document['design']['hero'] = kind
+    html = templates.render(r, r.document)
+    templates.validate_html(html)
+    assert 'topic-card' in html and html.count('<h1>') == 1
+    assert '<script' not in html
+
+
+def test_phone_gallery_assets_and_backwards_compatibility():
+    from app.template_phones import FRAMES, frame_svg, data_uri
+    from app.site_templates_api import assets
+    assert len(FRAMES) == 15
+    assert len({frame_svg(f[0]) for f in FRAMES}) == 15
+    r = row()
+    screen = data_uri('image/jpeg', b'fixture-screen')
+    logo = data_uri('image/png', b'fixture-logo')
+    r.document['brand_media'] = {'screens': [screen]*3, 'frames': [FRAMES[0][0]]*3, 'logo': logo}
+    r.document['content']['mobile_gallery_heading'] = 'Brand mobile website'
+    r.html = templates.render(r,r.document)
+    assert 'id="mobile-screens"' in r.html
+    templates.validate_html(r.html)
+    exported = downloadable_html(r)
+    assert 'src="assets/phone-1.svg"' in exported
+    assert 'url(assets/brand-logo.png)' in exported
+    assert assets(r)['assets/brand-logo.png'] == b'fixture-logo'
+    assert screen in assets(r)['assets/phone-1.svg']
+    assert 'mobile-screens' not in templates.render(row(), row().document).split('</style>')[1]
+
+
+def test_brand_url_validation():
+    req = templates.TemplateRequest(brand='Brand',geo='PL',ai_provider_id='g',brand_url='example.com')
+    assert req.brand_url == 'https://example.com'
+    for url in ['example.com example.org','file:///etc/passwd','https://user:pass@example.com']:
+        with pytest.raises(ValueError):
+            templates.TemplateRequest(brand='Brand',geo='PL',ai_provider_id='g',brand_url=url)
+
+
+def test_phone_capture_rejects_private_sources():
+    from app.template_phones import capture_brand
+    with pytest.raises(ValueError, match='Non-public'):
+        asyncio.run(capture_brand('http://127.0.0.1', 'Brand'))

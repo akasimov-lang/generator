@@ -22,3 +22,16 @@ const en = new Intl.DisplayNames(["en"], { type: "region" });
 const flag = (code: string) => String.fromCodePoint(...[...code].map(c => 127397 + c.charCodeAt(0)));
 export const TEMPLATE_GEOS = codes.map(code => ({ value: code, label: `${code} — ${ru.of(code) || code}`, keywords: en.of(code) || code })).sort((a,b) => a.label.slice(5).localeCompare(b.label.slice(5), "ru")).map(o => ({ ...o, label: `${flag(o.value)} ${o.label}` }));
 export const TEMPLATE_LANGUAGES = LANGUAGE_OPTIONS.map(o => ({ value: o.code, label: `${o.nativeName} (${o.code.toUpperCase()})`, keywords: o.name }));
+
+export function languageForGeo(geo: string): string {
+  if (!codes.includes(geo)) return "";
+  const language = new Intl.Locale(`und-${geo}`).maximize().language;
+  return language === "fil" ? "tl" : language;
+}
+const languageNames = new Intl.DisplayNames(["ru"], { type: "language" });
+for (const code of new Set(codes.map(languageForGeo))) {
+  if (TEMPLATE_LANGUAGES.some(o => o.value === code)) continue;
+  const nativeName = new Intl.DisplayNames([code], { type: "language" }).of(code) || code;
+  TEMPLATE_LANGUAGES.push({ value: code, label: `${nativeName} (${code.toUpperCase()})`, keywords: languageNames.of(code) || code });
+}
+export const TEMPLATE_BRANDS = ["1win", "1xBet", "888casino", "Bet365", "Betano", "Betfair", "Betsson", "Bwin", "Casumo", "22Bet", "Dafabet", "DraftKings", "FanDuel", "Fonbet", "LeoVegas", "Melbet", "Mostbet", "Parimatch", "Pin-Up", "Pinco", "Pinnacle", "PokerStars", "Stake", "Unibet", "Vavada", "William Hill"].sort((a, b) => a.localeCompare(b)).map(value => ({ value, label: value }));

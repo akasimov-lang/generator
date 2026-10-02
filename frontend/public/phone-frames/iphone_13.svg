@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 850" fill="none">
+<defs><linearGradient id="metal" x2="1" y2="1"><stop stop-color="#eef0f1"/><stop offset=".18" stop-color="#8dabc0"/><stop offset=".5" stop-color="#202327"/><stop offset=".8" stop-color="#8dabc0"/><stop offset="1" stop-color="#090a0c"/></linearGradient><mask id="body-mask"><rect width="400" height="850" fill="white"/><rect x="14" y="66" width="372" height="766" rx="32" fill="black"/></mask><clipPath id="screen"><rect x="14" y="18" width="372" height="814" rx="32"/></clipPath></defs>
+<rect x="0" y="138" width="7" height="55" rx="3" fill="#8dabc0"/><rect x="0" y="215" width="7" height="84" rx="3" fill="#8dabc0"/><rect x="393" y="186" width="7" height="102" rx="3" fill="#8dabc0"/>
+<g mask="url(#body-mask)"><rect x="4" y="2" width="392" height="846" rx="44" fill="url(#metal)" stroke="#707379"/>
+<rect x="9" y="7" width="382" height="836" rx="40" fill="#192028" stroke="#32363b"/></g>
+<g clip-path="url(#screen)"></g><path d="M112 18h176v20q0 22-22 22H134q-22 0-22-22z" fill="#08090b"/><rect x="167" y="30" width="52" height="5" rx="3" fill="#36393e"/>
+</svg>

@@ -1,0 +1,185 @@
+{
+  "description": "Original schematic front-view frames; replace the transparent screen area with a real screenshot. Not exact OEM product renders.",
+  "frames": [
+    {
+      "id": "iphone_16",
+      "name": "iPhone 16",
+      "width": 400,
+      "height": 850,
+      "screen": {
+        "x": 14,
+        "y": 66,
+        "width": 372,
+        "height": 766
+      }
+    },
+    {
+      "id": "iphone_16_pro",
+      "name": "iPhone 16 Pro",
+      "width": 400,
+      "height": 864,
+      "screen": {
+        "x": 14,
+        "y": 66,
+        "width": 372,
+        "height": 780
+      }
+    },
+    {
+      "id": "iphone_16_pro_max",
+      "name": "iPhone 16 Pro Max",
+      "width": 400,
+      "height": 880,
+      "screen": {
+        "x": 14,
+        "y": 66,
+        "width": 372,
+        "height": 796
+      }
+    },
+    {
+      "id": "iphone_13",
+      "name": "iPhone 13",
+      "width": 400,
+      "height": 850,
+      "screen": {
+        "x": 14,
+        "y": 66,
+        "width": 372,
+        "height": 766
+      }
+    },
+    {
+      "id": "iphone_se",
+      "name": "iPhone SE",
+      "width": 400,
+      "height": 810,
+      "screen": {
+        "x": 18,
+        "y": 65,
+        "width": 364,
+        "height": 677
+      }
+    },
+    {
+      "id": "galaxy_s25",
+      "name": "Samsung Galaxy S25",
+      "width": 400,
+      "height": 864,
+      "screen": {
+        "x": 14,
+        "y": 66,
+        "width": 372,
+        "height": 780
+      }
+    },
+    {
+      "id": "galaxy_s25_ultra",
+      "name": "Samsung Galaxy S25 Ultra",
+      "width": 400,
+      "height": 874,
+      "screen": {
+        "x": 14,
+        "y": 66,
+        "width": 372,
+        "height": 790
+      }
+    },
+    {
+      "id": "galaxy_a55",
+      "name": "Samsung Galaxy A55",
+      "width": 400,
+      "height": 860,
+      "screen": {
+        "x": 14,
+        "y": 66,
+        "width": 372,
+        "height": 776
+      }
+    },
+    {
+      "id": "galaxy_z_flip",
+      "name": "Samsung Galaxy Z Flip",
+      "width": 400,
+      "height": 916,
+      "screen": {
+        "x": 14,
+        "y": 66,
+        "width": 372,
+        "height": 832
+      }
+    },
+    {
+      "id": "oppo_find_x8",
+      "name": "OPPO Find X8",
+      "width": 400,
+      "height": 860,
+      "screen": {
+        "x": 14,
+        "y": 66,
+        "width": 372,
+        "height": 776
+      }
+    },
+    {
+      "id": "oppo_reno12",
+      "name": "OPPO Reno12",
+      "width": 400,
+      "height": 884,
+      "screen": {
+        "x": 14,
+        "y": 66,
+        "width": 372,
+        "height": 800
+      }
+    },
+    {
+      "id": "pixel_9",
+      "name": "Google Pixel 9",
+      "width": 400,
+      "height": 855,
+      "screen": {
+        "x": 14,
+        "y": 66,
+        "width": 372,
+        "height": 771
+      }
+    },
+    {
+      "id": "xiaomi_14",
+      "name": "Xiaomi 14",
+      "width": 400,
+      "height": 858,
+      "screen": {
+        "x": 14,
+        "y": 66,
+        "width": 372,
+        "height": 774
+      }
+    },
+    {
+      "id": "oneplus_12",
+      "name": "OnePlus 12",
+      "width": 400,
+      "height": 894,
+      "screen": {
+        "x": 14,
+        "y": 66,
+        "width": 372,
+        "height": 810
+      }
+    },
+    {
+      "id": "nothing_phone_2",
+      "name": "Nothing Phone (2)",
+      "width": 400,
+      "height": 864,
+      "screen": {
+        "x": 14,
+        "y": 66,
+        "width": 372,
+        "height": 780
+      }
+    }
+  ]
+}

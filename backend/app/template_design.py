@@ -1,13 +1,16 @@
 """Versioned design families; identifiers describe rendered behavior, never aliases."""
+from app.template_compositions import CONCEPTS, composition_css
+
 import random
 import unicodedata
 
-PROTOCOL_VERSION = "1"
+PROTOCOL_VERSION = "2"
+CONCEPT_COUNT = 10
 AXES = {
     "shell": ("full_width", "reading_column", "offset_column", "framed", "islands"),
     "header": ("inline", "centered", "stacked", "brand_band"),
     "navigation": ("underline", "tabs", "index", "divided", "capsule"),
-    "hero": ("poster", "split_title", "left_manifesto", "inset_cover", "bottom_caption"),
+    "hero": ("poster", "split_title", "left_manifesto", "inset_cover", "bottom_caption", *CONCEPTS),
     "section_rhythm": ("alternating", "ruled", "spaced", "staggered"),
     "content_patterns": ("flow", "two_columns", "lead_aside", "fact_tiles"),
     "typography": ("editorial_serif", "humanist", "geometric", "technical", "classical"),
@@ -40,20 +43,20 @@ def validate_design(design):
 
 
 def choose_concepts(history, seed):
-    """Find three concepts with six independently different core families."""
+    """Offer ten different compositions, varying at least four core axes per pair."""
     rng = random.Random(seed)
     concepts = []
     for _ in range(30000):
         design = {axis: rng.choice(values) for axis, values in AXES.items()}
-        if any(any(design[axis] == c[axis] for axis in CORE_AXES) for c in concepts):
+        if any(design["hero"] == c["hero"] or sum(design[a] != c[a] for a in CORE_AXES) < 4 for c in concepts):
             continue
         if any(not compare(design, entry["design"])["passed"] for entry in history):
             continue
         concepts.append(design)
-        if len(concepts) == 3:
+        if len(concepts) == CONCEPT_COUNT:
             break
-    if len(concepts) != 3:
-        raise ValueError("Не удалось найти три уникальные концепции в доступных семействах. История сохранена; расширьте библиотеку дизайна.")
+    if len(concepts) != CONCEPT_COUNT:
+        raise ValueError("Не удалось найти десять уникальных концепций в доступных семействах. История сохранена; расширьте библиотеку дизайна.")
     concepts.sort(key=lambda candidate: max((compare(candidate, p["design"])["similarity"] for p in history), default=0))
     return concepts
 
@@ -155,7 +158,7 @@ a{{color:inherit;text-underline-offset:5px;overflow-wrap:anywhere}}a:focus-visib
         },
     }
     for axis, options in rules.items():
-        css += options[d[axis]] + "\n"
+        css += options.get(d[axis], "") + "\n"
     css += """@media(max-width:760px){body{margin:0;border:0;font-size:16px;line-height:1.5}header{padding:18px;flex-direction:row;align-items:center;justify-content:space-between;text-align:left;flex-wrap:wrap}.logo{justify-content:flex-start;max-width:68%}.desktop-nav{display:none}.mobile-nav{display:block}.mobile-nav summary{cursor:pointer;padding:10px}.mobile-nav nav{padding:18px 0;max-width:85vw}.section{margin:0;padding:30px 20px;border-left:0;max-width:none}.section:nth-of-type(even),.section:nth-of-type(odd):not(:first-of-type){padding-left:20px;padding-right:20px}.section+.section{margin-top:0}.hero{min-height:360px;grid-template-columns:1fr;text-align:left;justify-items:start;gap:14px}.hero h1{grid-row:auto;font-size:clamp(2.2rem,10vw,3.4rem);max-width:100%;margin-bottom:8px}.hero p{font-size:1.05rem}.hero .cta{justify-self:start}.hero .art{right:0;width:65%;opacity:.08}.content-body,.faq-list,.faq-item{grid-template-columns:1fr;gap:18px}.points{border-left:0}.points li{padding:8px}.table-wrap{margin:18px 0}td,th{padding:10px;min-width:110px}footer{padding:30px 20px;grid-template-columns:1fr;text-align:left;justify-items:start}footer nav{align-items:flex-start;justify-content:flex-start}h2{margin-bottom:18px}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}"""
     mobile_hero = {
         "poster": ".hero{text-align:center;justify-items:center;min-height:430px}.hero h1{font-size:3.2rem}.hero .cta{justify-self:center}",
@@ -164,11 +167,13 @@ a{{color:inherit;text-underline-offset:5px;overflow-wrap:anywhere}}a:focus-visib
         "inset_cover": ".hero{margin:0;padding:26px 18px;border:2px solid var(--accent);min-height:360px}.hero h1{font-size:2.3rem}",
         "bottom_caption": ".hero{min-height:500px;padding-top:100px;align-content:end}.hero .art{top:0;width:100%;height:32%}",
     }
-    css += "@media(max-width:760px){" + mobile_hero[d["hero"]] + "}"
+    css += "@media(max-width:760px){" + mobile_hero.get(d["hero"], "") + "}"
     if d["navigation"] == "tabs":
         css += "@media(max-width:760px){header .desktop-nav{display:flex;max-width:100%;width:100%;overflow-x:auto;flex-wrap:nowrap;margin:0}header .desktop-nav a{flex:none}header .mobile-nav{display:none}}"
     elif d["navigation"] == "index":
         css += "@media(max-width:760px){header .desktop-nav{display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:100%;width:100%;margin:0}header .desktop-nav a{font-size:.8rem}header .mobile-nav{display:none}}"
+    if d["hero"] in CONCEPTS:
+        css += composition_css(d["hero"])
     return css
 
 

@@ -41,10 +41,16 @@ with sync_playwright() as p:
     page.goto(base+'/template-generator')
     expect(page.get_by_text('Первый шаблон начинается с бренда')).to_be_visible()
     page.get_by_role('button', name='Создать первый шаблон').click()
-    expect(page.get_by_label('На основе выдачи и конкурентов')).to_be_checked()
+    expect(page.get_by_label('Искать конкурентов в Google')).to_be_checked()
     expect(page.get_by_role('combobox', name='ГЕО', exact=True)).to_have_value('')
     expect(page.get_by_role('combobox', name='Язык', exact=True)).to_have_value('')
-    page.get_by_label('Бренд', exact=True).fill('Brand')
+    brand = page.get_by_role('combobox', name='Бренд', exact=True)
+    brand.fill('Mostbet')
+    brand.press('Enter')
+    expect(brand).to_have_value('Mostbet')
+    brand.fill('Custom Brand')
+    brand.press('Tab')
+    expect(brand).to_have_value('Custom Brand')
     expect(page.get_by_role('button', name='Сгенерировать шаблон', exact=True)).to_be_disabled()
     geo = page.get_by_role('combobox', name='ГЕО', exact=True)
     geo.click()
@@ -56,6 +62,11 @@ with sync_playwright() as p:
     expect(geo).to_have_value('🇩🇪 DE — Германия')
     language = page.get_by_role('combobox', name='Язык', exact=True)
     expect(language).to_have_value('Deutsch (DE)')
+    geo.fill('Нидерланды')
+    geo.press('Enter')
+    expect(language).to_have_value('Nederlands (NL)')
+    geo.fill('Германия')
+    geo.press('Enter')
     language.fill('польский')
     expect(page.locator('.tg-combobox-list [role=option]')).to_have_count(1)
     language.press('Enter')
@@ -66,12 +77,20 @@ with sync_playwright() as p:
     expect(page.get_by_text('Ничего не найдено. Попробуйте название или код.')).to_be_visible()
     geo.press('Escape')
     expect(geo).to_have_value('🇩🇪 DE — Германия')
+    page.get_by_label('Ключевые запросы', exact=False).fill('brand review, brand bonus')
+    page.get_by_placeholder('example.com, https://example.org/review/').fill('example.com, example.org example.net')
+    page.get_by_placeholder('https://brand.com').fill('https://brand.example')
     page.get_by_label('Все шаблоны', exact=False).check()
     page.screenshot(path='/private/tmp/template-ui-create-desktop.png', full_page=True)
     page.get_by_role('button', name='Сгенерировать шаблон', exact=True).click()
     expect(page.get_by_role('tab', name='Предпросмотр')).to_be_visible()
     assert state['created']['uniqueness_scope'] == 'global'
     assert state['created']['collect_competitors'] is True
+    assert state['created']['brand'] == 'Custom Brand'
+    assert state['created']['brand_url'] == 'https://brand.example'
+    assert state['created']['language'] == 'pl'
+    assert state['created']['keywords'] == 'brand review, brand bonus'
+    assert state['created']['competitors'] == 'example.com, example.org example.net'
     expect(page.locator('iframe')).to_have_attribute('sandbox', '')
     page.get_by_role('button', name='Телефон', exact=True).click()
     assert page.locator('iframe').bounding_box()['width'] == 390

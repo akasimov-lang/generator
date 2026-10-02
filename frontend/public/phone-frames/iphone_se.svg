@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 810" fill="none">
+<defs><linearGradient id="metal" x2="1" y2="1"><stop stop-color="#eef0f1"/><stop offset=".18" stop-color="#b9bdc2"/><stop offset=".5" stop-color="#202327"/><stop offset=".8" stop-color="#b9bdc2"/><stop offset="1" stop-color="#090a0c"/></linearGradient><mask id="body-mask"><rect width="400" height="810" fill="white"/><rect x="18" y="65" width="364" height="677" rx="4" fill="black"/></mask><clipPath id="screen"><rect x="18" y="65" width="364" height="677" rx="4"/></clipPath></defs>
+<rect x="0" y="138" width="7" height="55" rx="3" fill="#b9bdc2"/><rect x="0" y="215" width="7" height="84" rx="3" fill="#b9bdc2"/><rect x="393" y="186" width="7" height="102" rx="3" fill="#b9bdc2"/>
+<g mask="url(#body-mask)"><rect x="4" y="2" width="392" height="806" rx="36" fill="url(#metal)" stroke="#707379"/>
+<rect x="9" y="7" width="382" height="796" rx="32" fill="#192028" stroke="#32363b"/></g>
+<g clip-path="url(#screen)"></g><rect x="170" y="31" width="60" height="5" rx="3" fill="#34373c"/><circle cx="200" cy="775" r="20" fill="#13151a" stroke="#b9bdc2" stroke-width="2"/>
+</svg>

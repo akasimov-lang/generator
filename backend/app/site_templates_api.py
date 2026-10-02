@@ -102,14 +102,31 @@ def edit_template(template_id: str, payload: TemplateEdit, user: AuthUser, db: S
 
 
 def assets(row):
-    accent = PALETTES[row.document["design"]["palette"]][4]
-    return {"assets/hero.svg": art_svg(row.document["design"]["visual_style"]).replace("currentColor", accent)}
+    design = row.document["design"]
+    accent = PALETTES[design["palette"]][5 if design["hero"] == "feature_billboard" else 4]
+    result = {"assets/hero.svg": art_svg(row.document["design"]["visual_style"]).replace("currentColor", accent)}
+    from app.template_phones import frame_svg, FRAMES
+    media = row.document.get("brand_media") or {}
+    for i, screen in enumerate(media.get("screens", [])):
+        frame = media.get("frames", [FRAMES[0][0]] * len(media["screens"]))[i]
+        result[f"assets/phone-{i+1}.svg"] = frame_svg(frame, screen)
+    if media.get("logo"):
+        result["assets/brand-logo.png"] = base64.b64decode(media["logo"].split(",", 1)[1])
+    return result
 
 
 def downloadable_html(row):
     inline = art_svg(row.document["design"]["visual_style"])
-    return row.html.replace(inline, '<img src="assets/hero.svg" alt="" width="600" height="400" decoding="async">').replace(
-        ".art svg{", ".art img{object-fit:contain;")
+    html = row.html.replace(inline, '<img src="assets/hero.svg" alt="" width="600" height="400" decoding="async">').replace(
+        ".art svg{", ".art img{object-fit:contain;").replace(".composition-art svg{", ".composition-art img{")
+    for path, image in assets(row).items():
+        if path.startswith("assets/phone-"):
+            encoded = "data:image/svg+xml;base64," + base64.b64encode(image.encode()).decode()
+            html = html.replace(encoded, path)
+    logo = (row.document.get("brand_media") or {}).get("logo")
+    if logo:
+        html = html.replace(logo, "assets/brand-logo.png")
+    return html
 
 
 @router.get("/{template_id}/download/{kind}")
