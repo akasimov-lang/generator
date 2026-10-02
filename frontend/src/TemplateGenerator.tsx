@@ -31,7 +31,7 @@ export function TemplateGenerator({ api }: { api: Api }) {
   const [error, setError] = React.useState("");
   const [search, setSearch] = React.useState("");
   const [busy, setBusy] = React.useState(false);
-  const [form, setForm] = React.useState({ brand: "", geo: "PL", language: "pl", ai_provider_id: "", uniqueness_scope: "brand_geo", collect_competitors: true, keyword: "", facts: "" });
+  const [form, setForm] = React.useState({ brand: "", geo: "", language: "", ai_provider_id: "", uniqueness_scope: "brand_geo", collect_competitors: true, keyword: "", facts: "" });
   const requestSequence = React.useRef(0);
   const loadList = React.useCallback(async () => {
     const data = await api<Summary[]>("/site-templates");
@@ -75,8 +75,15 @@ export function TemplateGenerator({ api }: { api: Api }) {
     } catch (e) { if (seq === requestSequence.current) setError(errorText(e)); }
     finally { if (seq === requestSequence.current) setLoading(false); }
   }
+  function openCreate() {
+    setError("");
+    setForm(f => ({ ...f, geo: "", language: "" }));
+    setScreen("new");
+  }
   async function create(event: React.FormEvent) {
-    event.preventDefault(); setBusy(true); setError("");
+    event.preventDefault();
+    if (!form.geo || !form.language) { setError("Выберите ГЕО и язык."); return; }
+    setBusy(true); setError("");
     try {
       const result = await api<Template>("/site-templates", { method: "POST", body: JSON.stringify(form) });
       setSelected(result); setItems(rows => [result, ...rows]); setScreen("detail");
@@ -87,8 +94,8 @@ export function TemplateGenerator({ api }: { api: Api }) {
   return <div className="tg">
     {error && <div className="tg-alert" role="alert"><AlertCircle size={18} />{error}<button type="button" onClick={() => setError("")} aria-label="Закрыть ошибку">×</button></div>}
     {screen === "list" && <>
-      <div className="tg-heading"><div><h2>Ваши шаблоны</h2><p>Одностраничные сайты с контентом, дизайном и готовым меню.</p></div><button className="button primary" onClick={() => { setError(""); setScreen("new"); }}><Plus size={18} />Создать шаблон</button></div>
-      {loading ? <div className="tg-empty"><Loader2 className="tg-spin" />Загружаем шаблоны…</div> : items.length === 0 ? <div className="tg-empty"><Sparkles size={36} /><h3>Первый шаблон начинается с бренда</h3><p>Gemini изучит конкурентов, подготовит текст и выберет самостоятельный дизайн. Результат можно посмотреть и скачать.</p><button className="button primary" onClick={() => setScreen("new")}>Создать первый шаблон</button></div> : <>
+      <div className="tg-heading"><div><h2>Ваши шаблоны</h2><p>Одностраничные сайты с контентом, дизайном и готовым меню.</p></div><button className="button primary" onClick={openCreate}><Plus size={18} />Создать шаблон</button></div>
+      {loading ? <div className="tg-empty"><Loader2 className="tg-spin" />Загружаем шаблоны…</div> : items.length === 0 ? <div className="tg-empty"><Sparkles size={36} /><h3>Первый шаблон начинается с бренда</h3><p>Gemini изучит конкурентов, подготовит текст и выберет самостоятельный дизайн. Результат можно посмотреть и скачать.</p><button className="button primary" onClick={openCreate}>Создать первый шаблон</button></div> : <>
         <label className="tg-search"><Search size={18} /><input placeholder="Найти по бренду или ГЕО" value={search} onChange={e => setSearch(e.target.value)} /></label>
         <div className="tg-list">{filtered.map(item => <button className="tg-row" key={item.id} onClick={() => void open(item.id)}><div><strong>{item.brand}</strong><span>{item.geo} · {item.language.toUpperCase()} · {new Date(item.created_at).toLocaleDateString("ru-RU")}</span></div><span className={`tg-status tg-${item.status}`}>{busyStatus(item.status) && <Loader2 size={14} className="tg-spin" />}{statusLabels[item.status] || item.status}</span><ChevronRight size={18} /></button>)}</div>
         {filtered.length === 0 && <p>По этому запросу шаблонов нет.</p>}
@@ -105,7 +112,7 @@ export function TemplateGenerator({ api }: { api: Api }) {
         <label className="tg-check"><input type="checkbox" checked={form.collect_competitors} onChange={e => setForm({ ...form, collect_competitors: e.target.checked })} /><span><strong>На основе выдачи и конкурентов</strong><small>До 10 страниц из Google через DataForSEO. Анализ сохранится вместе с шаблоном.</small></span></label>
         <fieldset className="tg-scope"><legend>С чем сравнивать уникальность</legend><label><input type="radio" name="scope" checked={form.uniqueness_scope === "brand_geo"} onChange={() => setForm({ ...form, uniqueness_scope: "brand_geo" })} /><span>Этот бренд + ГЕО<small>Рекомендуется для обычной генерации</small></span></label><label><input type="radio" name="scope" checked={form.uniqueness_scope === "global"} onChange={() => setForm({ ...form, uniqueness_scope: "global" })} /><span>Все шаблоны<small>Сравнение со всей историей генератора</small></span></label></fieldset>
         <details className="tg-options"><summary>Дополнительные настройки</summary><label>Поисковый запрос<input maxLength={250} placeholder={form.brand || "По умолчанию — название бренда"} value={form.keyword} onChange={e => setForm({ ...form, keyword: e.target.value })} /></label><label>Проверенные сведения о бренде<textarea rows={5} maxLength={20000} placeholder="Особенности, условия, подтверждённые контакты и другие факты, которые нужно учесть." value={form.facts} onChange={e => setForm({ ...form, facts: e.target.value })} /></label></details>
-        <button className="button primary tg-submit" disabled={busy || !form.brand.trim() || !form.ai_provider_id}>{busy ? <Loader2 size={18} className="tg-spin" /> : <Sparkles size={18} />}{busy ? "Создаём задачу…" : "Сгенерировать шаблон"}</button>
+        <button className="button primary tg-submit" disabled={busy || !form.brand.trim() || !form.ai_provider_id || !form.geo || !form.language}>{busy ? <Loader2 size={18} className="tg-spin" /> : <Sparkles size={18} />}{busy ? "Создаём задачу…" : "Сгенерировать шаблон"}</button>
       </form><aside className="tg-card tg-explainer"><h3>Что получится</h3><ol><li><strong>Контент под бренд и ГЕО</strong><p>Анализ источников, структура страницы и текст на выбранном языке.</p></li><li><strong>Самостоятельный дизайн</strong><p>Три концепции, 15 параметров уникальности и сравнение готового вида с историей.</p></li><li><strong>Готовый одностраничник</strong><p>Хедер, футер и адаптивное меню без JavaScript.</p></li></ol><div className="tg-note">По умолчанию пункты фейкового меню ведут к секциям страницы. Позже им можно назначить реальные адреса.</div><p className="tg-help">Генерация занимает несколько минут. Можно закрыть раздел — результат сохранится здесь.</p></aside></div>
     </>}
     {screen === "detail" && selected && <TemplateDetail key={`${selected.id}:${selected.revision}:${selected.status}`} template={selected} api={api} onBack={() => { setScreen("list"); void loadList().catch(e => setError(errorText(e))); }} onUpdate={t => { setSelected(t); setItems(rows => rows.map(r => r.id === t.id ? t : r)); }} />}

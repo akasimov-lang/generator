@@ -42,7 +42,10 @@ with sync_playwright() as p:
     expect(page.get_by_text('Первый шаблон начинается с бренда')).to_be_visible()
     page.get_by_role('button', name='Создать первый шаблон').click()
     expect(page.get_by_label('На основе выдачи и конкурентов')).to_be_checked()
+    expect(page.get_by_role('combobox', name='ГЕО', exact=True)).to_have_value('')
+    expect(page.get_by_role('combobox', name='Язык', exact=True)).to_have_value('')
     page.get_by_label('Бренд', exact=True).fill('Brand')
+    expect(page.get_by_role('button', name='Сгенерировать шаблон', exact=True)).to_be_disabled()
     geo = page.get_by_role('combobox', name='ГЕО', exact=True)
     geo.click()
     assert page.locator('.tg-combobox-list [role=option]').count() > 200
