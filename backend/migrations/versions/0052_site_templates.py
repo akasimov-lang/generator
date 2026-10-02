@@ -2,8 +2,8 @@
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0051_site_templates"
-down_revision = "0050_external_auth"
+revision = "0052_site_templates"
+down_revision = "0051_network_snapshot_history"
 branch_labels = None
 depends_on = None
 
