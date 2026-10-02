@@ -1,3 +1,5 @@
+import { TemplateCombobox } from "./TemplateCombobox";
+import { TEMPLATE_GEOS, TEMPLATE_LANGUAGES } from "./templateLocaleOptions";
 import React from "react";
 import { Download, Monitor, Smartphone, Plus, ArrowLeft, Loader2, CheckCircle2, AlertCircle, RefreshCcw, Sparkles, Search, ChevronRight } from "lucide-react";
 import "./styles/template-generator.css";
@@ -16,7 +18,6 @@ type Template = Summary & { html: string | null; request: { uniqueness_scope: st
   research?: { query: string; analysis: string; sources: { url: string; title: string; status: string; position: number }[] };
 } };
 const GEO = [ ["PL", "Польша", "pl"], ["DE", "Германия", "de"], ["CZ", "Чехия", "cs"], ["RU", "Россия", "ru"], ["GB", "Великобритания", "en"], ["US", "США", "en"], ["CA", "Канада", "en"], ["BR", "Бразилия", "pt"], ["ES", "Испания", "es"], ["FR", "Франция", "fr"], ["IT", "Италия", "it"], ["IN", "Индия", "en"], ["TR", "Турция", "tr"], ["KZ", "Казахстан", "ru"], ["SE", "Швеция", "sv"], ["AU", "Австралия", "en"] ];
-const languages = [["en", "English"], ["pl", "Polski"], ["de", "Deutsch"], ["cs", "Čeština"], ["ru", "Русский"], ["pt", "Português"], ["es", "Español"], ["fr", "Français"], ["it", "Italiano"], ["tr", "Türkçe"], ["sv", "Svenska"], ["uk", "Українська"], ["hi", "हिन्दी"], ["kk", "Қазақша"]];
 const statusLabels: Record<string, string> = { queued: "В очереди", generating: "Генерируется", ready: "Готов", failed: "Ошибка" };
 const busyStatus = (status: string) => ["queued", "generating"].includes(status);
 const errorText = (e: unknown) => e instanceof Error ? e.message : "Не удалось выполнить действие";
@@ -98,7 +99,7 @@ export function TemplateGenerator({ api }: { api: Api }) {
       <div className="tg-create-layout"><form className="tg-card" onSubmit={create}>
         <h2>Новый шаблон</h2><p>Укажите бренд и страну. Остальное генератор подготовит автоматически.</p>
         <label>Бренд<input autoFocus required maxLength={160} placeholder="Название бренда" value={form.brand} onChange={e => setForm({ ...form, brand: e.target.value })} /></label>
-        <div className="tg-fields"><label>ГЕО<input required aria-label="ГЕО" list="template-geos" pattern="[A-Za-z]{2}" title="Двухбуквенный код страны, например DE или PL" minLength={2} maxLength={2} value={form.geo} onChange={e => { const geo = e.target.value.toUpperCase(); setForm({ ...form, geo, language: GEO.find(g => g[0] === geo)?.[2] || form.language }); }} /><datalist id="template-geos">{GEO.map(([code, name]) => <option key={code} value={code}>{name}</option>)}</datalist></label><label>Язык<select aria-label="Язык" value={form.language} onChange={e => setForm({ ...form, language: e.target.value })}>{languages.map(([code, name]) => <option key={code} value={code}>{name}</option>)}</select></label></div>
+        <div className="tg-fields"><TemplateCombobox label="ГЕО" value={form.geo} options={TEMPLATE_GEOS} onChange={geo => setForm(f => ({ ...f, geo, language: GEO.find(g => g[0] === geo)?.[2] || f.language }))} /><TemplateCombobox label="Язык" value={form.language} options={TEMPLATE_LANGUAGES} onChange={language => setForm(f => ({ ...f, language }))} /></div>
         <label>Gemini<select aria-label="Gemini" required value={form.ai_provider_id} onChange={e => setForm({ ...form, ai_provider_id: e.target.value })}><option value="" disabled>Выберите провайдер</option>{gemini.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
         {gemini.length === 0 && <p className="tg-help">Сначала подключите Gemini в <a href="/ai-providers">API Providers</a>.</p>}
         <label className="tg-check"><input type="checkbox" checked={form.collect_competitors} onChange={e => setForm({ ...form, collect_competitors: e.target.checked })} /><span><strong>На основе выдачи и конкурентов</strong><small>До 10 страниц из Google через DataForSEO. Анализ сохранится вместе с шаблоном.</small></span></label>
