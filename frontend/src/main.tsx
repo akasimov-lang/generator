@@ -6,6 +6,7 @@ import { LANGUAGE_OPTIONS, type LanguageOption } from "./languageOptions";
 import { getMenuLibrary, type MenuLibraryItem } from "./menuLibrary";
 import { isExactNetworkDomainSearch, matchesProjectSearch, projectSearchKeywords } from "./projectSearch";
 import { TechnicalPagesForm } from "./TechnicalPagesForm";
+import { FactualResearchPanel, factualResearchFromPayload } from "./FactualResearchPanel";
 import { workspaceRequestCache } from "./workspaceRequestCache";
 import { ProjectNetworkPanel } from "./ProjectNetworkPanel";
 import { AutoReglueGuide } from "./AutoReglueGuide";
@@ -3215,6 +3216,7 @@ function CompetitorResearchCard({
           </button>
         </div>
       </div>
+      <FactualResearchPanel value={item.generation_context?.factual_research} />
       {research?.results.length ? (
         <div className="competitorList">
           <strong>Найденные конкуренты</strong>
@@ -10444,6 +10446,7 @@ function ContentPreviewModal({ item, promptName, actions, api, onChanged, onClos
         <span className="previewGenerationLabel">Генерация</span>
         <GenerationProgressCell item={currentItem} />
       </div>
+      <FactualResearchPanel value={(!selectedVersion && currentItem.generation_context?.factual_research) || factualResearchFromPayload(previewItem.generated_json)} />
       {api && (revisionAllowed || revisionActive) ? (
         <section className="revisionAccordion open">
           <div className="revisionAccordionToggle revisionAccordionHeading"><span><Sparkles size={15} /> Доработать текст</span></div>

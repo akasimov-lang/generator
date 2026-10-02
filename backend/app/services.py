@@ -20,6 +20,8 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app import models
+from app.editorial_skill import prepend_editorial_skill
+from app.factual_research import COMPETITOR_QUERY_LIMIT, render_research, research_facts
 from app.technical_pages import is_technical, generate_checked, validate_publication as validate_technical_publication, sync_menu as sync_technical_menu
 from app.core.config import get_settings
 from app.project_cache import ProjectCacheError, fetch_project_cache, fetch_project_template_capabilities, project_server_url, refresh_project_server_id, refresh_project_server_token
@@ -40,7 +42,6 @@ DATAFORSEO_DEFAULT_ENDPOINT = "https://api.dataforseo.com/v3"
 DATAFORSEO_USER_DATA_PATH = "/appendix/user_data"
 DATAFORSEO_LOCATIONS_PATH = "/serp/google/locations"
 DATAFORSEO_SERP_PATH = "/serp/google/organic/live/advanced"
-COMPETITOR_QUERY_LIMIT = 5
 COMPETITOR_RESULTS_PER_QUERY = 6
 COMPETITOR_RESEARCH_MAX_ATTEMPTS = 6
 MAX_COMPETITOR_PAGE_CHARS = 1_200_000
@@ -1437,6 +1438,9 @@ def build_gemini_prompt(
     variability_protocol = render_task_variability_protocol(variation_context)
     if variability_protocol and TEXT_VARIABILITY_PROTOCOL_MARKER not in prompt:
         prompt += f"\n\n{variability_protocol}\n"
+    factual_research = (generation_context or {}).get("factual_research")
+    if isinstance(factual_research, dict):
+        prompt += f"\n\n{render_research(factual_research)}"
     if (generation_context or {}).get("content_kind") == "technical_page":
         prompt += (
             "\nTECHNICAL PAGE EDITOR CHECK CONTRACT (overrides generic editorial reporting):\n"
@@ -1450,9 +1454,9 @@ def build_gemini_prompt(
             "Use Editor Check only for unresolved contradictions or regulatory claims requiring "
             "human verification. Keep this section outside public article text.\n"
         )
-    return prompt
+    return prepend_editorial_skill(prompt)
 
-async def call_gemini(provider: models.AiProvider, prompt: str) -> dict:
+async def call_gemini(provider: models.AiProvider, prompt: str, *, url_context: bool = False) -> dict:
     model = provider.model or GEMINI_DEFAULT_MODEL
     endpoint_template = provider.endpoint_url or GEMINI_DEFAULT_ENDPOINT
     endpoint = endpoint_template.format(model=model)
@@ -1468,6 +1472,8 @@ async def call_gemini(provider: models.AiProvider, prompt: str) -> dict:
             "temperature": 0.7,
         },
     }
+    if url_context:
+        body["tools"] = [{"url_context": {}}]
     headers = {
         "Content-Type": "application/json",
         "x-goog-api-key": provider.api_key,
@@ -2400,7 +2406,7 @@ async def collect_competitor_serp_for_item(db: Session, item: models.ContentItem
     site = db.get(models.Site, item.site_id) if item.site_id else None
     if not task:
         raise ValueError("Generation task not found")
-    queries = ensure_competitor_queries(db, item, task.geo, task.language)
+    queries = ensure_competitor_queries(db, item, task.geo, task.language)[:COMPETITOR_QUERY_LIMIT]
     provider = get_dataforseo_provider(db)
 
     item.competitor_research_status = "collecting_serp"
@@ -3606,6 +3612,37 @@ async def _build_task_content(db: Session, item: models.ContentItem, **kwargs) -
     technical = is_technical(item)
     if not technical:
         kwargs.pop("technical_revision", None)
+    provider = kwargs.get("provider")
+    task = db.get(models.GenerationTask, item.task_id)
+    # Respect the existing research opt-out, and avoid external research for
+    # technical pages whose source of truth is the supplied project information.
+    context = dict(kwargs.get("generation_context") or item.generation_context or {})
+    context.pop("factual_research", None)
+    item.generation_context = context
+    if not technical and task and task.collect_competitors and provider and provider.provider_type == "gemini":
+        def save_research(report):
+            item.generation_context = {**context, "factual_research": copy.deepcopy(report)}
+            db.commit()
+
+        try:
+            search_provider = get_dataforseo_provider(db)
+        except ValueError:
+            report = {"status": "unavailable", "reason": "DataForSEO provider is not configured"}
+            save_research(report)
+        else:
+            report = await research_facts(
+                provider, search_provider,
+                context={
+                    "topic": kwargs["topic"], "geo": kwargs["geo"], "language": language,
+                    "date": datetime.now(timezone.utc).date().isoformat(),
+                    "brief": kwargs.get("prompt_template") or DEFAULT_CONTENT_PROMPT_TEMPLATE,
+                    "competitor_research": kwargs.get("competitor_brief") or {},
+                    "page_context": context,
+                },
+                checkpoint=save_research,
+            )
+        context["factual_research"] = report
+    kwargs["generation_context"] = context
     original_prompt = kwargs.get("prompt_template")
     last_detected: str | None = None
     for attempt in range(3):
