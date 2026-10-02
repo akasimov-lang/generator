@@ -1,0 +1,639 @@
+{
+  "version": 1,
+  "updated_at": "2026-10-02",
+  "brands": [
+    {
+      "id": "bet365",
+      "name": "Bet365",
+      "aliases": [
+        "bet 365"
+      ],
+      "kind": "wordmark",
+      "source": "https://content001.bet365partners.com/Partners/Logos/bet365.svg",
+      "logo": "bet365-logo.png",
+      "favicon": "bet365-favicon.png",
+      "surface": "dark",
+      "favicon_source": "https://www.google.com/s2/favicons?domain=www.bet365.com&sz=128",
+      "favicon_derived": false
+    },
+    {
+      "id": "1xbet",
+      "name": "1xBet",
+      "aliases": [
+        "1x Bet"
+      ],
+      "kind": "brand_mark",
+      "source": "https://www.google.com/s2/favicons?domain=1xbet.com&sz=128",
+      "logo": "1xbet-logo.png",
+      "favicon": "1xbet-favicon.png",
+      "surface": "dark",
+      "favicon_source": "https://www.google.com/s2/favicons?domain=1xbet.com&sz=128",
+      "favicon_derived": false
+    },
+    {
+      "id": "1win",
+      "name": "1win",
+      "aliases": [],
+      "kind": "brand_mark",
+      "source": "https://1win.com/resources/v1/plain/favicons/apple-touch-icon-v4.png",
+      "logo": "1win-logo.png",
+      "favicon": "1win-favicon.png",
+      "surface": "dark",
+      "favicon_source": "https://1win.com/resources/v1/plain/favicons/apple-touch-icon-v4.png",
+      "favicon_derived": false
+    },
+    {
+      "id": "betano",
+      "name": "Betano",
+      "aliases": [],
+      "kind": "brand_mark",
+      "source": "https://www.google.com/s2/favicons?domain=www.betano.com&sz=128",
+      "logo": "betano-logo.png",
+      "favicon": "betano-favicon.png",
+      "surface": "dark",
+      "favicon_source": "https://www.google.com/s2/favicons?domain=www.betano.com&sz=128",
+      "favicon_derived": false
+    },
+    {
+      "id": "888casino",
+      "name": "888casino",
+      "aliases": [],
+      "kind": "brand_mark",
+      "source": "https://www.888slots.de/content/dam/holdings888/888casino/common/icons/Casino-favicon.ico",
+      "logo": "888casino-logo.png",
+      "favicon": "888casino-favicon.png",
+      "surface": "dark",
+      "favicon_source": "https://www.888slots.de/content/dam/holdings888/888casino/common/icons/Casino-favicon.ico",
+      "favicon_derived": false
+    },
+    {
+      "id": "betfair",
+      "name": "Betfair",
+      "aliases": [],
+      "kind": "brand_mark",
+      "source": "https://www.google.com/s2/favicons?domain=www.betfair.com&sz=128",
+      "logo": "betfair-logo.png",
+      "favicon": "betfair-favicon.png",
+      "surface": "dark",
+      "favicon_source": "https://www.google.com/s2/favicons?domain=www.betfair.com&sz=128",
+      "favicon_derived": false
+    },
+    {
+      "id": "casumo",
+      "name": "Casumo",
+      "aliases": [],
+      "kind": "brand_mark",
+      "source": "https://www.google.com/s2/favicons?domain=www.casumo.com&sz=128",
+      "logo": "casumo-logo.png",
+      "favicon": "casumo-favicon.png",
+      "surface": "dark",
+      "favicon_source": "https://www.google.com/s2/favicons?domain=www.casumo.com&sz=128",
+      "favicon_derived": false
+    },
+    {
+      "id": "betsson",
+      "name": "Betsson",
+      "aliases": [],
+      "kind": "brand_mark",
+      "source": "https://www.google.com/s2/favicons?domain=www.betsson.com&sz=128",
+      "logo": "betsson-logo.png",
+      "favicon": "betsson-favicon.png",
+      "surface": "dark",
+      "favicon_source": "https://www.google.com/s2/favicons?domain=www.betsson.com&sz=128",
+      "favicon_derived": false
+    },
+    {
+      "id": "draftkings",
+      "name": "DraftKings",
+      "aliases": [],
+      "kind": "brand_mark",
+      "source": "https://www.google.com/s2/favicons?domain=www.draftkings.com&sz=128",
+      "logo": "draftkings-logo.png",
+      "favicon": "draftkings-favicon.png",
+      "surface": "dark",
+      "favicon_source": "https://www.google.com/s2/favicons?domain=www.draftkings.com&sz=128",
+      "favicon_derived": false
+    },
+    {
+      "id": "bwin",
+      "name": "Bwin",
+      "aliases": [],
+      "kind": "brand_mark",
+      "source": "https://www.google.com/s2/favicons?domain=www.bwin.com&sz=128",
+      "logo": "bwin-logo.png",
+      "favicon": "bwin-favicon.png",
+      "surface": "dark",
+      "favicon_source": "https://www.google.com/s2/favicons?domain=www.bwin.com&sz=128",
+      "favicon_derived": false
+    },
+    {
+      "id": "dafabet",
+      "name": "Dafabet",
+      "aliases": [],
+      "kind": "wordmark",
+      "source": "https://www.dafabet.com",
+      "logo": "dafabet-logo.png",
+      "favicon": "dafabet-favicon.png",
+      "surface": "dark",
+      "favicon_source": "https://www.dafabet.com/en/dafa/images/favicon.ico",
+      "favicon_derived": false
+    },
+    {
+      "id": "fonbet",
+      "name": "Fonbet",
+      "aliases": [],
+      "kind": "brand_mark",
+      "source": "https://www.google.com/s2/favicons?domain=www.fonbet.ru&sz=128",
+      "logo": "fonbet-logo.png",
+      "favicon": "fonbet-favicon.png",
+      "surface": "dark",
+      "favicon_source": "https://www.google.com/s2/favicons?domain=www.fonbet.ru&sz=128",
+      "favicon_derived": false
+    },
+    {
+      "id": "melbet",
+      "name": "Melbet",
+      "aliases": [],
+      "kind": "brand_mark",
+      "source": "https://www.google.com/s2/favicons?domain=melbet.com&sz=128",
+      "logo": "melbet-logo.png",
+      "favicon": "melbet-favicon.png",
+      "surface": "dark",
+      "favicon_source": "https://www.google.com/s2/favicons?domain=melbet.com&sz=128",
+      "favicon_derived": false
+    },
+    {
+      "id": "leovegas",
+      "name": "LeoVegas",
+      "aliases": [],
+      "kind": "brand_mark",
+      "source": "https://cdn.leovegas.com/frontend/8.1.8/public/static/img/favicon.png",
+      "logo": "leovegas-logo.png",
+      "favicon": "leovegas-favicon.png",
+      "surface": "dark",
+      "favicon_source": "https://cdn.leovegas.com/frontend/8.1.8/public/static/img/favicon.png",
+      "favicon_derived": false
+    },
+    {
+      "id": "fanduel",
+      "name": "FanDuel",
+      "aliases": [],
+      "kind": "wordmark",
+      "source": "https://www.fanduel.com",
+      "logo": "fanduel-logo.png",
+      "favicon": "fanduel-favicon.png",
+      "surface": "dark",
+      "favicon_source": "https://iwa-assets.fanduel.com/fd-iwa-assets/graphics/fd-dfs-favicon.ico",
+      "favicon_derived": false
+    },
+    {
+      "id": "mostbet",
+      "name": "Mostbet",
+      "aliases": [],
+      "kind": "wordmark",
+      "source": "https://mostbet.com",
+      "logo": "mostbet-logo.png",
+      "favicon": "mostbet-favicon.png",
+      "surface": "dark",
+      "favicon_source": "https://mostbet.com",
+      "favicon_derived": true
+    },
+    {
+      "id": "22bet",
+      "name": "22Bet",
+      "aliases": [],
+      "kind": "wordmark",
+      "source": "https://22bet.com",
+      "logo": "22bet-logo.png",
+      "favicon": "22bet-favicon.png",
+      "surface": "dark",
+      "favicon_source": "https://www.google.com/s2/favicons?domain=22bet.com&sz=128",
+      "favicon_derived": false
+    },
+    {
+      "id": "pinnacle",
+      "name": "Pinnacle",
+      "aliases": [],
+      "kind": "brand_mark",
+      "source": "https://www.google.com/s2/favicons?domain=www.pinnacle.com&sz=128",
+      "logo": "pinnacle-logo.png",
+      "favicon": "pinnacle-favicon.png",
+      "surface": "dark",
+      "favicon_source": "https://www.google.com/s2/favicons?domain=www.pinnacle.com&sz=128",
+      "favicon_derived": false
+    },
+    {
+      "id": "parimatch",
+      "name": "Parimatch",
+      "aliases": [],
+      "kind": "brand_mark",
+      "source": "https://parimatchde.net/content/uploads/icons/COM1/favicon.ico",
+      "logo": "parimatch-logo.png",
+      "favicon": "parimatch-favicon.png",
+      "surface": "dark",
+      "favicon_source": "https://parimatchde.net/content/uploads/icons/COM1/favicon.ico",
+      "favicon_derived": false
+    },
+    {
+      "id": "pinup",
+      "name": "Pin-Up",
+      "aliases": [
+        "Pin Up",
+        "Pinup",
+        "Пин Ап"
+      ],
+      "kind": "wordmark",
+      "source": "https://pinup-online-az.co.com/pin-up/",
+      "logo": "pinup-logo.png",
+      "favicon": "pinup-favicon.png",
+      "surface": "dark",
+      "favicon_source": "https://pinup-online-az.co.com/wp-content/uploads/2025/02/pin-up-favicon-150x150.png",
+      "favicon_derived": false
+    },
+    {
+      "id": "pinco",
+      "name": "Pinco",
+      "aliases": [
+        "Пинко"
+      ],
+      "kind": "wordmark",
+      "source": "https://thegarageboardshops.com/pinco/",
+      "logo": "pinco-logo.png",
+      "favicon": "pinco-favicon.png",
+      "surface": "dark",
+      "favicon_source": "https://thegarageboardshops.com/storage/favicon/KymWJHP0IZ1P25tjHYbQAVmgkwT5wj1tTLl4R2cK.png",
+      "favicon_derived": false
+    },
+    {
+      "id": "stake",
+      "name": "Stake",
+      "aliases": [],
+      "kind": "brand_mark",
+      "source": "https://www.google.com/s2/favicons?domain=stake.com&sz=128",
+      "logo": "stake-logo.png",
+      "favicon": "stake-favicon.png",
+      "surface": "dark",
+      "favicon_source": "https://www.google.com/s2/favicons?domain=stake.com&sz=128",
+      "favicon_derived": false
+    },
+    {
+      "id": "vavada",
+      "name": "Vavada",
+      "aliases": [],
+      "kind": "brand_mark",
+      "source": "https://www.google.com/s2/favicons?domain=vavada.com&sz=128",
+      "logo": "vavada-logo.png",
+      "favicon": "vavada-favicon.png",
+      "surface": "dark",
+      "favicon_source": "https://www.google.com/s2/favicons?domain=vavada.com&sz=128",
+      "favicon_derived": false
+    },
+    {
+      "id": "williamhill",
+      "name": "William Hill",
+      "aliases": [],
+      "kind": "wordmark",
+      "source": "https://www.williamhill.com",
+      "logo": "williamhill-logo.png",
+      "favicon": "williamhill-favicon.png",
+      "surface": "dark",
+      "favicon_source": "https://www.williamhill.com/germany/images/favicon.ico",
+      "favicon_derived": false
+    },
+    {
+      "id": "pokerstars",
+      "name": "PokerStars",
+      "aliases": [],
+      "kind": "wordmark",
+      "source": "https://cdn.cookielaw.org/logos/8bd4c07a-1393-44e4-bc9b-52567a41d6f6/5b1b3a10-0907-4226-8ba7-31528396db84/b5127beb-697a-4111-8ec2-923f2ee3db76/PokerStars_2.jpg",
+      "logo": "pokerstars-logo.png",
+      "favicon": "pokerstars-favicon.png",
+      "surface": "dark",
+      "favicon_source": "https://cms.rationalcdn.com/v3/assets/blteecf9626d9a38b03/blt224bf63c63ac22dd/6672a98851f656efd1b74d22/favicon.ico",
+      "favicon_derived": false
+    },
+    {
+      "id": "unibet",
+      "name": "Unibet",
+      "aliases": [],
+      "kind": "wordmark",
+      "source": "https://www.unibet.com",
+      "logo": "unibet-logo.png",
+      "favicon": "unibet-favicon.png",
+      "surface": "dark",
+      "favicon_source": "https://www.unibet.com/kwp-bundle-store/kwp-assets/0.12.0/assets/unibet/favicon.png",
+      "favicon_derived": false
+    }
+  ],
+  "payments": [
+    {
+      "id": "visa",
+      "name": "Visa",
+      "aliases": [],
+      "source": "https://cdn.jsdelivr.net/npm/simple-icons@16.0.0/icons/visa.svg",
+      "license": "Simple Icons CC0; trademarks belong to their owners",
+      "logo": "visa-logo.png",
+      "surface": "light"
+    },
+    {
+      "id": "mastercard",
+      "name": "Mastercard",
+      "aliases": [],
+      "source": "https://cdn.jsdelivr.net/npm/simple-icons@16.0.0/icons/mastercard.svg",
+      "license": "Simple Icons CC0; trademarks belong to their owners",
+      "logo": "mastercard-logo.png",
+      "surface": "light"
+    },
+    {
+      "id": "paypal",
+      "name": "PayPal",
+      "aliases": [],
+      "source": "https://cdn.jsdelivr.net/npm/simple-icons@16.0.0/icons/paypal.svg",
+      "license": "Simple Icons CC0; trademarks belong to their owners",
+      "logo": "paypal-logo.png",
+      "surface": "light"
+    },
+    {
+      "id": "applepay",
+      "name": "Apple Pay",
+      "aliases": [],
+      "source": "https://cdn.jsdelivr.net/npm/simple-icons@16.0.0/icons/applepay.svg",
+      "license": "Simple Icons CC0; trademarks belong to their owners",
+      "logo": "applepay-logo.png",
+      "surface": "light"
+    },
+    {
+      "id": "googlepay",
+      "name": "Google Pay",
+      "aliases": [],
+      "source": "https://cdn.jsdelivr.net/npm/simple-icons@16.0.0/icons/googlepay.svg",
+      "license": "Simple Icons CC0; trademarks belong to their owners",
+      "logo": "googlepay-logo.png",
+      "surface": "light"
+    },
+    {
+      "id": "pix",
+      "name": "Pix",
+      "aliases": [],
+      "source": "https://cdn.jsdelivr.net/npm/simple-icons@16.0.0/icons/pix.svg",
+      "license": "Simple Icons CC0; trademarks belong to their owners",
+      "logo": "pix-logo.png",
+      "surface": "light"
+    },
+    {
+      "id": "bitcoin",
+      "name": "Bitcoin",
+      "aliases": [
+        "BTC"
+      ],
+      "source": "https://cdn.jsdelivr.net/npm/simple-icons@16.0.0/icons/bitcoin.svg",
+      "license": "Simple Icons CC0; trademarks belong to their owners",
+      "logo": "bitcoin-logo.png",
+      "surface": "light"
+    },
+    {
+      "id": "ethereum",
+      "name": "Ethereum",
+      "aliases": [
+        "ETH"
+      ],
+      "source": "https://cdn.jsdelivr.net/npm/simple-icons@16.0.0/icons/ethereum.svg",
+      "license": "Simple Icons CC0; trademarks belong to their owners",
+      "logo": "ethereum-logo.png",
+      "surface": "light"
+    },
+    {
+      "id": "tether",
+      "name": "Tether",
+      "aliases": [
+        "USDT"
+      ],
+      "source": "https://cdn.jsdelivr.net/npm/simple-icons@16.0.0/icons/tether.svg",
+      "license": "Simple Icons CC0; trademarks belong to their owners",
+      "logo": "tether-logo.png",
+      "surface": "light"
+    },
+    {
+      "id": "litecoin",
+      "name": "Litecoin",
+      "aliases": [],
+      "source": "https://cdn.jsdelivr.net/npm/simple-icons@16.0.0/icons/litecoin.svg",
+      "license": "Simple Icons CC0; trademarks belong to their owners",
+      "logo": "litecoin-logo.png",
+      "surface": "light"
+    },
+    {
+      "id": "ripple",
+      "name": "XRP",
+      "aliases": [],
+      "source": "https://cdn.jsdelivr.net/npm/simple-icons@16.0.0/icons/ripple.svg",
+      "license": "Simple Icons CC0; trademarks belong to their owners",
+      "logo": "ripple-logo.png",
+      "surface": "light"
+    },
+    {
+      "id": "dogecoin",
+      "name": "Dogecoin",
+      "aliases": [],
+      "source": "https://cdn.jsdelivr.net/npm/simple-icons@16.0.0/icons/dogecoin.svg",
+      "license": "Simple Icons CC0; trademarks belong to their owners",
+      "logo": "dogecoin-logo.png",
+      "surface": "light"
+    },
+    {
+      "id": "neteller",
+      "name": "NETELLER",
+      "aliases": [],
+      "source": "https://raw.githubusercontent.com/activemerchant/payment_icons/master/app/assets/images/payment_icons/neteller.svg",
+      "logo": "neteller-logo.png",
+      "surface": "light",
+      "license": "MIT; see PAYMENT-ICONS-LICENSE.txt"
+    },
+    {
+      "id": "paysafecard",
+      "name": "paysafecard",
+      "aliases": [],
+      "source": "https://raw.githubusercontent.com/activemerchant/payment_icons/master/app/assets/images/payment_icons/paysafecard.svg",
+      "logo": "paysafecard-logo.png",
+      "surface": "light",
+      "license": "MIT; see PAYMENT-ICONS-LICENSE.txt"
+    },
+    {
+      "id": "trustly",
+      "name": "Trustly",
+      "aliases": [],
+      "source": "https://raw.githubusercontent.com/activemerchant/payment_icons/master/app/assets/images/payment_icons/trustly.svg",
+      "logo": "trustly-logo.png",
+      "surface": "light",
+      "license": "MIT; see PAYMENT-ICONS-LICENSE.txt"
+    }
+  ],
+  "providers": [
+    {
+      "id": "evolution",
+      "name": "Evolution",
+      "aliases": [],
+      "source": "https://www.evolution.com",
+      "logo": "evolution-logo.png",
+      "surface": "dark"
+    },
+    {
+      "id": "playngo",
+      "name": "Play’n GO",
+      "aliases": [
+        "Play'n GO",
+        "Play’n GO",
+        "Play n GO"
+      ],
+      "source": "https://www.playngo.com",
+      "logo": "playngo-logo.png",
+      "surface": "dark"
+    },
+    {
+      "id": "microgaming",
+      "name": "Microgaming",
+      "aliases": [],
+      "source": "https://www.microgaming.co.uk",
+      "logo": "microgaming-logo.png",
+      "surface": "dark"
+    },
+    {
+      "id": "spribe",
+      "name": "Spribe",
+      "aliases": [],
+      "source": "https://spribe.co",
+      "logo": "spribe-logo.png",
+      "surface": "light"
+    },
+    {
+      "id": "quickspin",
+      "name": "Quickspin",
+      "aliases": [],
+      "source": "https://www.quickspin.com",
+      "logo": "quickspin-logo.png",
+      "surface": "dark"
+    },
+    {
+      "id": "thunderkick",
+      "name": "Thunderkick",
+      "aliases": [],
+      "source": "https://www.thunderkick.com",
+      "logo": "thunderkick-logo.png",
+      "surface": "dark"
+    },
+    {
+      "id": "pragmaticplay",
+      "name": "Pragmatic Play",
+      "aliases": [],
+      "source": "https://www.pragmaticplay.com/wp-content/themes/gp-theme-basic/libs/dist/images/PP-white-logo.svg",
+      "logo": "pragmaticplay-logo.png",
+      "surface": "dark"
+    },
+    {
+      "id": "relaxgaming",
+      "name": "Relax Gaming",
+      "aliases": [],
+      "source": "https://www.relax-gaming.com/static/img/logo.svg",
+      "logo": "relaxgaming-logo.png",
+      "surface": "dark"
+    },
+    {
+      "id": "pgsoft",
+      "name": "PG Soft",
+      "aliases": [
+        "Pocket Games Soft"
+      ],
+      "source": "https://www.pgsoft.com/_nuxt/img/nav_common_logo_white@2x.0a1ef47.png",
+      "logo": "pgsoft-logo.png",
+      "surface": "dark"
+    },
+    {
+      "id": "pushgaming",
+      "name": "Push Gaming",
+      "aliases": [],
+      "source": "https://www.pushgaming.com/i/footer_logo.png",
+      "logo": "pushgaming-logo.png",
+      "surface": "dark"
+    },
+    {
+      "id": "playtech",
+      "name": "Playtech",
+      "aliases": [],
+      "source": "https://www.playtech.com/app/uploads/2023/08/logo-asset.svg",
+      "logo": "playtech-logo.png",
+      "surface": "dark"
+    },
+    {
+      "id": "elkstudios",
+      "name": "ELK Studios",
+      "aliases": [],
+      "source": "https://www.elk-studios.com/app/themes/elkstudios/assets/img/logo-new.svg",
+      "logo": "elkstudios-logo.png",
+      "surface": "dark"
+    },
+    {
+      "id": "yggdrasil",
+      "name": "Yggdrasil",
+      "aliases": [],
+      "source": "https://yggdrasilgaming.com/w/files/2022/02/logo-header.svg",
+      "logo": "yggdrasil-logo.png",
+      "surface": "light"
+    },
+    {
+      "id": "bgaming",
+      "name": "BGaming",
+      "aliases": [],
+      "source": "https://bgaming.com/wp-content/uploads/2025/03/63f4c9689497e0d7c32f4a31_BGaming_logo.svg",
+      "logo": "bgaming-logo.png",
+      "surface": "light"
+    },
+    {
+      "id": "hacksawgaming",
+      "name": "Hacksaw Gaming",
+      "aliases": [],
+      "source": "https://www.hacksawgaming.com",
+      "logo": "hacksawgaming-logo.png",
+      "surface": "dark"
+    },
+    {
+      "id": "netent",
+      "name": "NetEnt",
+      "aliases": [],
+      "source": "https://cdn.evolution.com/uploads/netent_colour_e2b1b1e9bd.svg",
+      "logo": "netent-logo.png",
+      "surface": "light"
+    },
+    {
+      "id": "redtiger",
+      "name": "Red Tiger",
+      "aliases": [],
+      "source": "https://cdn.evolution.com/uploads/red_tiger_colour_fa2a0c2706.svg",
+      "logo": "redtiger-logo.png",
+      "surface": "light"
+    },
+    {
+      "id": "nolimitcity",
+      "name": "Nolimit City",
+      "aliases": [],
+      "source": "https://cdn.evolution.com/uploads/nolimit_city_colour_46be486d50.svg",
+      "logo": "nolimitcity-logo.png",
+      "surface": "light"
+    },
+    {
+      "id": "ezugi",
+      "name": "Ezugi",
+      "aliases": [],
+      "source": "https://cdn.evolution.com/uploads/ezugi_colour_7a09a36261.svg",
+      "logo": "ezugi-logo.png",
+      "surface": "light"
+    },
+    {
+      "id": "bigtimegaming",
+      "name": "Big Time Gaming",
+      "aliases": [],
+      "source": "https://cdn.evolution.com/uploads/big_time_gaming_colour_70032741dd.svg",
+      "logo": "bigtimegaming-logo.png",
+      "surface": "light"
+    }
+  ]
+}

@@ -185,7 +185,7 @@ def test_generation_uses_gemini_and_persists_audited_result(db, monkeypatch):
     calls=[]
     async def fake(provider, prompt, **kwargs):
         calls.append(prompt)
-        result = {'selected': 1, 'rationale': 'Readable composition'} if 'web art director' in prompt else content().model_dump()
+        result = {'design': document()['design'], 'css': templates.design_css(document()['design']), 'rationale': 'Generated composition'} if 'web art director' in prompt else content().model_dump()
         return {'candidates': [{'content': {'parts': [{'text': json.dumps(result)}]}}], 'usageMetadata': {'totalTokenCount': 10}}
     async def capture(html):
         templates.validate_html(html)
@@ -194,7 +194,9 @@ def test_generation_uses_gemini_and_persists_audited_result(db, monkeypatch):
     monkeypatch.setattr(templates, 'screenshots', capture)
     result = asyncio.run(templates.generate(db,r))
     assert result['status']=='ready' and r.status=='ready'
-    assert r.document['design_status']=='built' and len(r.document['concepts'])==10
+    assert r.document['design_status']=='built' and r.document['design_origin']=='gemini_generated'
+    assert r.document['generated_css'] in r.html
+    assert 'concepts' not in r.document
     assert r.document['scope']=='brand_geo' and all(m['mode']=='fake' for m in r.document['menu'])
     assert len(calls)==2 and provider.total_tokens_used==20
     assert len(r.document['screenshots'])==4
@@ -334,3 +336,37 @@ def test_phone_capture_rejects_private_sources():
     from app.template_phones import capture_brand
     with pytest.raises(ValueError, match='Non-public'):
         asyncio.run(capture_brand('http://127.0.0.1', 'Brand'))
+
+
+@pytest.mark.parametrize('unsafe', ['@import "https://example.com";', 'x{background:url(https://example.com)}', '</style><script>alert(1)</script>', 'a{background:u\\72l(x)}'])
+def test_generated_css_rejects_external_and_active_content(unsafe):
+    from app.template_generated_design import validate_generated_css
+    with pytest.raises(ValueError):
+        validate_generated_css(templates.design_css(document()['design']) + unsafe)
+
+
+def test_asset_library_matching_evidence_and_export():
+    from app.template_asset_library import build_snapshot, catalog
+    from app.site_templates_api import assets
+    lib = catalog()
+    assert len(lib['brands']) >= 20 and len(lib['providers']) >= 15
+    facts = 'Pin-Up supports Visa payments and offers Pragmatic Play games.'
+    c = content()
+    c.payment_systems = [templates.AssetMention(id='visa', source_url='facts', evidence=facts),
+                         templates.AssetMention(id='mastercard', source_url='facts', evidence=facts)]
+    c.game_providers = [templates.AssetMention(id='pragmaticplay', source_url='facts', evidence=facts)]
+    snap = build_snapshot('pin up',c,None,facts)
+    assert snap['logo'] and snap['favicon']
+    assert [x['id'] for x in snap['payments']] == ['visa']
+    assert [x['id'] for x in snap['providers']] == ['pragmaticplay']
+    r=row();r.document['library_assets']=snap;r.document['content']=c.model_dump();r.html=templates.render(r,r.document)
+    exported=downloadable_html(r)
+    assert 'rel="icon"' in exported and 'assets/library-favicon-' in exported
+    assert 'assets/payments-visa-logo.png' in exported
+    assert 'assets/providers-pragmaticplay-logo.png' in exported
+    assert assets(r)['assets/payments-visa-logo.png'].startswith(b'\x89PNG')
+    assert not build_snapshot('Unknown Brand',c,None,'')['payments']
+    competitor='Another Casino accepts Visa payments.'
+    c.payment_systems=[templates.AssetMention(id='visa',source_url='https://example.com',evidence=competitor)]
+    research={'sources':[{'url':'https://example.com','status':'fetched','excerpt':competitor}]}
+    assert not build_snapshot('Pin-Up',c,research,'')['payments']
