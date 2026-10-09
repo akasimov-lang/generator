@@ -883,6 +883,7 @@ def _apply_direct_project_snapshot(
     site.cache_domains = domains
     site.domains_count = len(domains)
     site.homepage_title = _homepage_title(project) or site.homepage_title
+    _apply_fibery_name(site, settings)
     site.internal_pages_count = _internal_pages_count(project)
     site.default_menu = menu
     site.has_menu = bool(menu["header"] or menu["footer"])
@@ -928,6 +929,13 @@ def _project_menu(project: dict[str, Any]) -> dict[str, list[Any]]:
     header = menu.get("header") if isinstance(menu.get("header"), list) else []
     footer = menu.get("footer") if isinstance(menu.get("footer"), list) else []
     return {"header": header, "footer": footer}
+
+
+def _apply_fibery_name(site, settings):
+    duty = settings.get("webdevDuty")
+    if isinstance(duty, dict) and "fibery" in duty:
+        value = duty["fibery"]
+        site.fibery_name = value.strip() or None if isinstance(value, str) else None
 
 
 def _homepage_title(project: dict[str, Any]) -> str | None:
@@ -1421,6 +1429,7 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
                 "language": language,
                 "geo": geo,
                 "homepage_title": homepage_title,
+                "fibery_name": (settings.get("webdevDuty") or {}).get("fibery") if isinstance(settings.get("webdevDuty"), dict) else None,
                 "internal_pages_count": internal_pages_count,
                 "domains_count": domains_count,
                 "domains": domains,
@@ -1469,6 +1478,7 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
         site.cache_geo = geo
         site.cache_server_ip = server_ip
         site.homepage_title = homepage_title
+        _apply_fibery_name(site, settings)
         from app.site_brands import update_detected_brand
         update_detected_brand(site)
         site.internal_pages_count = internal_pages_count

@@ -113,6 +113,8 @@ with sync_playwright() as playwright:
             data = site
         elif path == "/sites":
             data = [site]
+        elif path == "/sites/preview/pages":
+            data = {"pages": [], "total": 0}
         elif path == "/sites/preview/content":
             data = [item]
         elif path == "/content/content1/revisions":

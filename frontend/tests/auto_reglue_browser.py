@@ -29,6 +29,7 @@ with sync_playwright() as p:
   elif path.endswith('/network'):data=network
   elif path.endswith('/overview'):data={'site':site,'stats':{},'recent_content':[]}
   elif path=='/auto-reglue':data={'tasks':[task] if task else [],'settings':global_cfg,'projects':[{'id':'preview','name':site['name'],'geo':'AZ','config':cfg}],'runs':[]}
+  elif path=='/auto-reglue/brands':data={'brands':[],'transfers_enabled':False}
   elif path=='/auto-reglue/settings':
    global_cfg.update(r.request.post_data_json);data=global_cfg
   elif path=='/auto-reglue/projects/preview':

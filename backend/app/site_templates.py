@@ -213,7 +213,7 @@ async def research_competitors(db, row, request, provider):
         extract_organic_serp_items, call_gemini, extract_gemini_text, apply_provider_usage)
     from app.template_sources import capture_google, excerpt
     stored_report = (row.document or {}).get("research") or {}
-    row.phase = "Сбор выдачи и чтение конкурентов"
+    row.phase = "Этап 1/3 · сбор выдачи и HTML конкурентов"
     db.commit()
     queries = request.search_queries() if request.collect_competitors and not stored_report.get("sources") else []
     query = "; ".join(queries) or "Конкуренты, указанные вручную"
@@ -241,7 +241,7 @@ async def research_competitors(db, row, request, provider):
             source = models.TemplateSource(template_id=row.id, url=item["url"], capture={})
             db.add(source); db.flush()
         if item["url"] and not source.google_html and not blocked and not source.capture.get("attempted"):
-            row.phase = f"HTML из Google · конкурент {index + 1}/{len(items)}"
+            row.phase = f"Этап 1/3 · HTML из Google · конкурент {index + 1}/{len(items)}"
             db.commit()
             try:
                 result = await asyncio.wait_for(capture_google(item["url"], request.browser_profile), timeout=150)
@@ -260,10 +260,10 @@ async def research_competitors(db, row, request, provider):
         row.document = {**(row.document or {}), "research": {"query": stored_report.get("query") or query, "sources": sources}}
         db.commit()
     if not any(source["status"] == "fetched" for source in sources):
-        row.status, row.phase = "awaiting_sources", "Нужен HTML конкурентов из Google"
+        row.status, row.phase = "awaiting_sources", "Этап 1/3 · нужен HTML конкурентов из Google"
         db.commit()
         return None
-    row.phase = "Анализ конкурентов в Gemini"
+    row.phase = "Этап 1/3 · анализ конкурентов в Gemini"
     row.document = {**(row.document or {}), "research": {"query": query, "sources": sources}}
     db.commit()
     response = await call_gemini(provider,
@@ -480,7 +480,7 @@ async def audit_visual(provider, captures, history):
     return comparisons
 
 
-async def generate(db, row, *, content_only=False):
+async def generate(db, row, *, content_only=False, research_only=False):
     from app.services import call_gemini, extract_gemini_text, apply_provider_usage
     from app.editorial_skill import prepend_editorial_skill
     from app.template_asset_library import catalog, build_snapshot
@@ -488,13 +488,24 @@ async def generate(db, row, *, content_only=False):
     provider = db.get(models.AiProvider, request.ai_provider_id)
     if not provider or not provider.is_active or provider.provider_type != "gemini" or not provider.api_key:
         raise ValueError("Нужен активный Gemini-провайдер с API-ключом")
-    row.status, row.phase, row.error = "generating", "Этап 1/2 · формирование текста", None
+    row.status, row.phase, row.error = "generating", "Этап 1/3 · сбор конкурентов", None
+    row.document = {**(row.document or {}), "pipeline": {**((row.document or {}).get("pipeline") or {}),
+        "stage": "research" if research_only else "content" if content_only else "design"}}
     db.commit()
     research = (row.document or {}).get("research")
     if (request.collect_competitors or request.competitor_urls() or (research or {}).get("sources")) and not (research or {}).get("analysis"):
         research = await research_competitors(db, row, request, provider)
         if research is None:
             return {"template_id": row.id, "status": "awaiting_sources"}
+    if research_only:
+        if not (research or {}).get("sources"):
+            row.status, row.phase = "awaiting_sources", "Этап 1/3 · вставьте HTML конкурентов"
+        else:
+            row.status, row.phase = "sources_ready", "Этап 1/3 готов · проверьте конкурентов и запустите контент"
+        db.commit()
+        return {"template_id": row.id, "status": row.status}
+    row.phase = "Этап 2/3 · генерация контента" if content_only else "Этап 3/3 · генерация HTML"
+    db.commit()
     if row.document and row.document.get("content"):
         content = PageContent.model_validate(row.document["content"])
     else:
@@ -530,7 +541,7 @@ async def generate(db, row, *, content_only=False):
     base_document = {"content": content.model_dump(), "menu": (row.document or {}).get("menu") or default_menu(content), "protocol_version": PROTOCOL_VERSION, "research": research}
     if content_only:
         row.document = {**base_document, "pipeline": {"text_ready": True, "stage": "content"}}
-        row.status, row.phase = "content_ready", "Этап 1/2 готов · проверьте текст и запустите шаблон"
+        row.status, row.phase = "content_ready", "Этап 2/3 готов · проверьте контент и запустите HTML"
         db.commit()
         return {"template_id": row.id, "status": "content_ready"}
     base_document["library_assets"] = build_snapshot(row.brand, content, research, request.facts)
@@ -550,7 +561,7 @@ async def generate(db, row, *, content_only=False):
     from app.template_generated_design import DESIGN_PROMPT, validate_generated_css
     feedback = []
     for attempt in range(3):
-        row.phase = f"Этап 2/2 · генерация дизайна · попытка {attempt + 1}/3"
+        row.phase = f"Этап 3/3 · генерация HTML · попытка {attempt + 1}/3"
         db.commit()
         registry_lock(db)
         previous = history_rows(db, row)

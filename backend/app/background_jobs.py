@@ -31,7 +31,7 @@ def dispatch_pending(db, send):
     sent = 0
     for job in jobs:
         try:
-            send(job.id, {"publication": "publication", "site_template": "generation", "auto_lb": "generation"}.get(job.kind, "cache_sync"))
+            send(job.id, {"publication": "publication", "site_template": "generation", "auto_lb": "generation", "project_page_ai": "generation"}.get(job.kind, "cache_sync"))
         except Exception:
             continue
         job.dispatched_at = now
@@ -55,13 +55,20 @@ def run_job(db, job_id):
             if not row:
                 raise ValueError("Генерация АвтоЛБ не найдена")
             result = asyncio.run(generate(db, row))
+        elif job.kind == "project_page_ai":
+            from app.page_content_tools import generate
+            row = db.get(models.ProjectPageDraft, job.payload["draft_id"])
+            if not row:
+                raise ValueError("Черновик не найден")
+            result = asyncio.run(generate(db, row))
         elif job.kind == "site_template":
             from app.site_templates import generate, audit_edited
             row = db.get(models.SiteTemplate, job.payload["template_id"])
             if not row:
                 raise ValueError("Шаблон не найден")
             result = asyncio.run(audit_edited(db, row) if job.payload.get("audit") else
-                                 generate(db, row, content_only=job.payload.get("stage") == "content"))
+                                 generate(db, row, content_only=job.payload.get("stage") == "content",
+                                          research_only=job.payload.get("stage") == "research"))
         elif job.kind == "cache_sync":
             from app.project_cache import sync_project_cache, fetch_project_cache
             result = sync_project_cache(db, fetch_project_cache(job.payload.get("names") or None))
@@ -106,6 +113,11 @@ def run_job(db, job_id):
                 row.status = "failed"
                 row.error = (str(error)[:500] if isinstance(error, ValueError) else
                              "Не удалось получить результат Gemini. Проверьте провайдер и повторите генерацию.")
+        if job.kind == "project_page_ai":
+            row = db.get(models.ProjectPageDraft, job.payload["draft_id"])
+            if row:
+                row.status = "failed"
+                row.error = str(error)[:500] if isinstance(error, ValueError) else "Не удалось завершить обработку Gemini. Исходный контент сохранён."
         if job.kind == "site_template":
             row = db.get(models.SiteTemplate, job.payload["template_id"])
             if row:

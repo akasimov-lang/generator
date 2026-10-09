@@ -125,6 +125,7 @@ class Site(Base, TimestampMixin):
     cache_language: Mapped[str | None] = mapped_column(String(40), nullable=True)
     cache_geo: Mapped[str | None] = mapped_column(String(40), nullable=True)
     homepage_title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fibery_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     technical_page_settings: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     internal_pages_count: Mapped[int] = mapped_column(Integer, default=0)
     domains_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -429,3 +430,31 @@ class BackgroundJob(Base, TimestampMixin):
     dispatched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ProjectPageEdit(Base, TimestampMixin):
+    __tablename__ = "project_page_edits"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id"), nullable=False, index=True)
+    page_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    requested_by: Mapped[str] = mapped_column(String(160), nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    before_page: Mapped[dict] = mapped_column(JSON, nullable=False)
+    after_page: Mapped[dict] = mapped_column(JSON, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    response_status: Mapped[int | None] = mapped_column(Integer)
+    error: Mapped[str | None] = mapped_column(Text)
+
+
+class ProjectPageDraft(Base, TimestampMixin):
+    __tablename__ = "project_page_drafts"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id"), nullable=False, index=True)
+    page_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    requested_by: Mapped[str] = mapped_column(String(160), nullable=False)
+    provider_id: Mapped[str] = mapped_column(ForeignKey("ai_providers.id"), nullable=False)
+    action: Mapped[str] = mapped_column(String(24), nullable=False)
+    input_content: Mapped[dict] = mapped_column(JSON, nullable=False)
+    result_content: Mapped[dict | None] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="queued")
+    error: Mapped[str | None] = mapped_column(Text)

@@ -39,7 +39,8 @@ def detail(row):
 
 def enqueue(db, row, *, audit=False, stage="design"):
     db.add(models.BackgroundJob(kind="site_template", payload={"template_id": row.id, "audit": audit, "stage": stage}))
-    row.status, row.phase, row.error = "queued", "В очереди", None
+    row.document = {**(row.document or {}), "pipeline": {**((row.document or {}).get("pipeline") or {}), "stage": stage}}
+    row.status, row.phase, row.error = "queued", {"research": "Этап 1/3 · сбор конкурентов в очереди", "content": "Этап 2/3 · контент в очереди", "design": "Этап 3/3 · HTML в очереди"}[stage], None
     db.commit()
 
 
@@ -66,7 +67,7 @@ def create_template(payload: TemplateRequest, user: AuthUser, db: Session = Depe
         geo=payload.geo.upper(), language=payload.language, request_data=payload.model_dump())
     db.add(row)
     db.flush()
-    enqueue(db, row, stage="content")
+    enqueue(db, row, stage="research")
     return detail(row)
 
 
@@ -188,7 +189,7 @@ def retry_template(template_id: str, user: AuthUser, db: Session = Depends(get_d
     if row.status != "failed":
         raise HTTPException(409, "Повтор доступен после ошибки генерации")
     enqueue(db, row, audit=bool((row.document or {}).get("edited") and (row.document or {}).get("design")),
-            stage="design" if (row.document or {}).get("design") else "content")
+            stage=((row.document or {}).get("pipeline") or {}).get("stage") or ("design" if (row.document or {}).get("design") else "content"))
     return detail(row)
 
 

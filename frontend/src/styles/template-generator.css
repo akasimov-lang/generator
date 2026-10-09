@@ -7,3 +7,5 @@
 .tg-source-field h4 { margin: 0; }
 .tg-source-field .tg-downloads { flex-wrap: wrap; }
 .tg-stage-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 16px 0; }
+
+.tg-pipeline { display:flex; flex-wrap:wrap; gap:12px; list-style:none; padding:0; margin:20px 0; }.tg-pipeline li { padding:10px 16px; background:#eef3ff; color:#24438b; border-radius:10px; font-weight:600; }

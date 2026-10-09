@@ -20,7 +20,7 @@ router = APIRouter(prefix='/auto-reglue', tags=['auto-reglue'])
 def site_or_404(db, site_id, user=None):
     site = db.get(models.Site, site_id)
     allowed = user.get('allowed_site_ids') if user else None
-    if not site or (allowed is not None and site.id not in allowed):
+    if not site or not site.is_active or (allowed is not None and site.id not in allowed):
         raise HTTPException(404, 'Проект не найден.')
     return site
 
@@ -74,7 +74,7 @@ def schedule_task(db, site):
 @router.get('')
 def overview(user: AuthUser, db: Session = Depends(get_db), project_id: str | None = None):
     allowed = allowed_site_ids(user)
-    sites_query = select(models.Site).where(models.Site.project_status == 'mass_actions')
+    sites_query = select(models.Site).where(models.Site.project_status == 'mass_actions', models.Site.is_active.is_(True))
     if allowed is not None:
         sites_query = sites_query.where(models.Site.id.in_(allowed))
     sites = db.scalars(sites_query.order_by(models.Site.name)).all()
@@ -85,7 +85,7 @@ def overview(user: AuthUser, db: Session = Depends(get_db), project_id: str | No
         site_or_404(db, project_id, user)
         query = query.where(models.AutoReglueRun.site_id == project_id)
     runs = db.scalars(query.order_by(models.AutoReglueRun.created_at.desc()).limit(100)).all()
-    task_query = select(models.Site).join(models.AutoReglueSchedule, models.AutoReglueSchedule.site_id == models.Site.id)
+    task_query = select(models.Site).join(models.AutoReglueSchedule, models.AutoReglueSchedule.site_id == models.Site.id).where(models.Site.is_active.is_(True))
     if allowed is not None:
         task_query = task_query.where(models.Site.id.in_(allowed))
     task_sites = db.scalars(task_query.order_by(models.Site.name)).all()
@@ -177,3 +177,28 @@ def control(run_id: str, action: str, user: AuthUser, db: Session = Depends(get_
     except NetworkConflict as e: raise HTTPException(409,'Этап ещё выполняется. Дождитесь завершения запроса.') from e
     if action == 'resume': dispatch(db, run)
     return auto.serialize(run)
+
+
+@router.get('/brands')
+def brands(user: AuthUser, db: Session = Depends(get_db)):
+    """Read-only inventory for future cross-project experiments. Never transfers domains."""
+    import re
+    import unicodedata
+    groups = {}
+    query = select(models.Site).where(models.Site.is_active.is_(True)).order_by(models.Site.name)
+    allowed = allowed_site_ids(user)
+    if allowed is not None:
+        query = query.where(models.Site.id.in_(allowed))
+    for site in db.scalars(query):
+        brand = (site.brand or '').strip()
+        if not brand or brand.casefold() == 'общие ключи':
+            continue
+        key = re.sub(r'[\s\-–—_]+', '', unicodedata.normalize('NFKC', brand).casefold())
+        group = groups.setdefault(key, {'key': key, 'brand': brand, 'projects': [], 'project_count': 0, 'domain_count': 0})
+        count = max(0, site.domains_count or 0)
+        group['projects'].append({'id': site.id, 'name': site.name, 'geo': site.cache_geo,
+                                 'domain_count': count, 'synced_at': site.cache_synced_at})
+        group['project_count'] += 1
+        group['domain_count'] += count
+    return {'brands': sorted(groups.values(), key=lambda g: (-g['project_count'], g['brand'].casefold())),
+            'counts_source': 'project_cache', 'transfers_enabled': False}

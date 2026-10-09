@@ -1,3 +1,4 @@
+import { ProjectPages } from "./ProjectPages";
 import { TemplateGenerator } from "./TemplateGenerator";
 import { readProjectSnapshot, writeProjectSnapshot, removeLegacyProjectSnapshot } from "./projectSnapshot";
 import React from "react";
@@ -255,6 +256,7 @@ type Site = {
   cache_language: string | null;
   cache_geo: string | null;
   homepage_title: string | null;
+  fibery_name?: string | null;
   internal_pages_count: number;
   domains_count: number;
   cache_domains: string[];
@@ -329,6 +331,7 @@ type ProjectCacheItem = {
   language: string | null;
   geo: string | null;
   homepage_title: string | null;
+  fibery_name?: string | null;
   internal_pages_count: number;
   domains_count: number;
   domains: string[];
@@ -1946,7 +1949,7 @@ function ProjectWorkspaceView({
   const [menuCapabilitiesError, setMenuCapabilitiesError] = React.useState("");
   const [projectRefreshStatus, setProjectRefreshStatus] = React.useState<"idle" | "loading" | "success" | "error">("idle");
   const [projectRefreshResponseCode, setProjectRefreshResponseCode] = React.useState("");
-  const [publicationWorkflowSection, setPublicationWorkflowSection] = React.useState<PublicationWorkspaceSection>("campaigns");
+  const [publicationWorkflowSection, setPublicationWorkflowSection] = React.useState<PublicationWorkspaceSection>("pages");
   const projectLoadRequestRef = React.useRef(0);
   const loadedWorkspaceTabRef = React.useRef("");
   const selectedSite = sites.find((site) => site.id === selectedSiteId) || null;
@@ -1981,10 +1984,8 @@ function ProjectWorkspaceView({
 
   React.useEffect(() => {
     if (!selectedSiteId) return;
-    const saved = window.localStorage.getItem(`publication_workspace_section:${currentUsername}:${selectedSiteId}`) as PublicationWorkspaceSection | null;
-    if (saved && ["content", "campaigns", "process", "queue", "backlog", "deleted"].includes(saved)) setPublicationWorkflowSection(saved);
-    else setPublicationWorkflowSection("campaigns");
-  }, [currentUsername, selectedSiteId]);
+    setPublicationWorkflowSection("pages");
+  }, [currentUsername, selectedSiteId, activeTab]);
 
   const openPublicationSection = React.useCallback((section: PublicationWorkspaceSection) => {
     setPublicationWorkflowSection(section);
@@ -2471,7 +2472,7 @@ function ProjectWorkspaceView({
             icon={<span className="tabButtonIcon document" aria-hidden="true"><FileText size={15} /></span>}
             label={unpublishedGeneratedContentCount ? `Контент и публикация (${unpublishedGeneratedContentCount})` : "Контент и публикация"}
             active={activeTab === "content" || activeTab === "publication"}
-            onClick={() => onTabChange("content", selectedSite?.name)}
+            onClick={() => { setPublicationWorkflowSection("pages"); onTabChange("content", selectedSite?.name); }}
           />
           <TabButton
             href={pathForRoute("workspace", "menu", selectedSite?.name)}
@@ -2541,13 +2542,14 @@ function ProjectWorkspaceView({
             />
           </WorkspaceTabPane>
           <WorkspaceTabPane active={activeTab === "content" || activeTab === "publication"} storagePrefix={`${currentUsername}:${selectedSite.id}:content`}>
+            {publicationWorkflowSection === "pages" ? <ProjectPages key={selectedSite.id} siteId={selectedSite.id} api={api} /> : null}
             {publicationWorkflowSection === "campaigns" ? <>
               <FastProjectPublicationPanel key={`${selectedSite.id}:publication-launch`} mode="launch" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} promptTemplates={promptTemplates} onPoll={pollProject} onChanged={refreshProject} />
               <FastProjectPublicationPanel key={`${selectedSite.id}:publication-campaigns`} mode="campaigns" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} promptTemplates={promptTemplates} onPoll={pollProject} onChanged={refreshProject} />
             </> : null}
             {publicationWorkflowSection === "deleted" ? <DeletedContentPanel api={api} content={siteContent} onChanged={refreshProject} /> : null}
             {publicationWorkflowSection === "content" ? <FastProjectContentPanel key={`${selectedSite.id}:content`} api={api} site={selectedSite} content={siteContent} sections={sections} onPoll={pollProject} onChanged={refreshProject} /> : null}
-            {publicationWorkflowSection !== "content" && publicationWorkflowSection !== "campaigns" && publicationWorkflowSection !== "deleted" ? (
+            {publicationWorkflowSection !== "pages" && publicationWorkflowSection !== "content" && publicationWorkflowSection !== "campaigns" && publicationWorkflowSection !== "deleted" ? (
               <FastProjectPublicationPanel key={`${selectedSite.id}:publication-workflow`} mode="workflow" workflowSection={publicationWorkflowSection} api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} promptTemplates={promptTemplates} onPoll={pollProject} onChanged={refreshProject} />
             ) : null}
           </WorkspaceTabPane>
@@ -4190,7 +4192,7 @@ function DeletedContentPanel({ api, content, onChanged }: ViewProps & { content:
 }
 
 type PublicationWorkflowSection = "process" | "queue" | "backlog";
-type PublicationWorkspaceSection = "deleted" | "content" | "campaigns" | PublicationWorkflowSection;
+type PublicationWorkspaceSection = "pages" | "deleted" | "content" | "campaigns" | PublicationWorkflowSection;
 
 function PublicationWorkflowNav({ content, campaigns, activeSection, onSectionChange }: { content: ContentItem[]; campaigns: PublicationCampaign[]; activeSection: PublicationWorkspaceSection; onSectionChange: (section: PublicationWorkspaceSection) => void }) {
   const awaitingPublicationCount = content.filter((item) => Boolean(item.generated_at) && !["published", "deleted", "deletion_pending"].includes(item.status)).length;
@@ -4204,6 +4206,9 @@ function PublicationWorkflowNav({ content, campaigns, activeSection, onSectionCh
   const errorCount = content.filter((item) => item.status === "publication_failed").length;
   return (
     <nav className="publicationWorkflowNav publicationWorkflowNavTop" aria-label="Разделы публикации">
+      <button className={activeSection === "pages" ? "active" : ""} type="button" onClick={() => onSectionChange("pages")}>
+        <FileText size={17} /> <span className="publicationWorkflowLabel"><strong>Все страницы</strong><small>Главная и внутренние</small></span><span aria-hidden="true">↗</span>
+      </button>
       <button className={activeSection === "campaigns" ? "active" : ""} type="button" onClick={() => onSectionChange("campaigns")} title="Запустить публикацию" aria-label="Кампании — запустить публикацию">
         <FolderKanban size={17} /> <span className="publicationWorkflowLabel"><strong>Кампании</strong><small>{activeCampaignCount} в работе · {completedCampaignCount} завершено</small></span><span>{campaigns.length}</span>
       </button>
@@ -8286,10 +8291,10 @@ function ProvidersView({ api, providers, onChanged }: ViewProps & { providers: A
   );
 }
 
-type SiteTableColumn = "brand" | "rowNumber" | "select" | "name" | "title" | "canon" | "language" | "status" | "internalPages" | "menuType" | "menuCount" | "domainsCount" | "xDefault";
+type SiteTableColumn = "brand" | "rowNumber" | "select" | "name" | "title" | "canon" | "language" | "status" | "internalPages" | "menuType" | "menuCount" | "domainsCount" | "fiberyName";
 type SiteSummaryFilter = "projects" | "working" | "menu" | "mass_actions" | "duplicate" | "all";
 
-const DEFAULT_SITE_COLUMN_ORDER: SiteTableColumn[] = ["rowNumber", "select", "name", "brand", "title", "canon", "language", "status", "internalPages", "menuType", "menuCount", "domainsCount", "xDefault"];
+const DEFAULT_SITE_COLUMN_ORDER: SiteTableColumn[] = ["rowNumber", "select", "name", "brand", "title", "canon", "language", "status", "internalPages", "menuType", "menuCount", "domainsCount", "fiberyName"];
 const SITE_COLUMN_LABELS: Record<SiteTableColumn, string> = {
   brand: "Бренд",
   rowNumber: "№",
@@ -8302,7 +8307,7 @@ const SITE_COLUMN_LABELS: Record<SiteTableColumn, string> = {
   internalPages: "Внутренние страницы",
   menuType: "Тип меню",
   menuCount: "Пункты меню",
-  xDefault: "x-default",
+  fiberyName: "Имя проекта",
   domainsCount: "Доменов в сетке"
 };
 const SITE_COLUMN_SORT_KEYS: Record<SiteTableColumn, string | null> = {
@@ -8317,7 +8322,7 @@ const SITE_COLUMN_SORT_KEYS: Record<SiteTableColumn, string | null> = {
   internalPages: "internalPages",
   menuType: "menuType",
   menuCount: "menuCount",
-  xDefault: null,
+  fiberyName: "fiberyName",
   domainsCount: "domainsCount"
 };
 
@@ -8503,7 +8508,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
     return Array.isArray(stored) && stored.every((value) => allMenuTypeFilters.includes(value)) ? stored : allMenuTypeFilters;
   });
   const [columnOrder, setColumnOrder] = React.useState<SiteTableColumn[]>(() => {
-    const previous = storedPreferences.columnOrder;
+    const previous = Array.isArray(storedPreferences.columnOrder) ? storedPreferences.columnOrder.map(column => (column as string) === "xDefault" ? "fiberyName" as SiteTableColumn : column) : storedPreferences.columnOrder;
     const stored = Array.isArray(previous) && !previous.includes("brand")
       ? previous.flatMap(column => column === "name" ? [column, "brand" as SiteTableColumn] : [column])
       : previous;
@@ -8512,7 +8517,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       : DEFAULT_SITE_COLUMN_ORDER;
   });
   const [hiddenColumns, setHiddenColumns] = React.useState<SiteTableColumn[]>(() => {
-    const stored = storedPreferences.hiddenColumns;
+    const stored = Array.isArray(storedPreferences.hiddenColumns) ? storedPreferences.hiddenColumns.filter(column => (column as string) !== "xDefault") : storedPreferences.hiddenColumns;
     return Array.isArray(stored) && stored.every((column) => DEFAULT_SITE_COLUMN_ORDER.includes(column)) ? stored : [];
   });
   const [favoriteSiteIds, setFavoriteSiteIds] = React.useState<string[]>([]);
@@ -8647,7 +8652,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       menuType: headerMenuCount && footerMenuCount ? "Header + Footer" : headerMenuCount ? "Header" : footerMenuCount ? "Footer" : "",
       menuCount: headerMenuCount + footerMenuCount,
       internalPagesCount: site.internal_pages_count,
-      xDefaultHistory: site.x_default_history || [],
+      fiberyName: site.fibery_name || "",
       domainsCount: site.domains_count,
       domains: Array.isArray(site.cache_domains) ? site.cache_domains : [],
       syncedAt: site.cache_synced_at
@@ -8662,6 +8667,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
     }
     const values: Record<string, [string | number, string | number]> = {
       brand: [left.brand, right.brand],
+      fiberyName: [left.fiberyName, right.fiberyName],
       name: [left.name, right.name],
       title: [left.homepageTitle || "", right.homepageTitle || ""],
       canon: [left.canon, right.canon],
@@ -8694,7 +8700,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
   const filteredRows = domainRows.filter((row) => {
     const exactNetworkDomainMatch = isExactNetworkDomainSearch(row.domains, normalizedQuery);
     const matchesSearch = !normalizedQuery
-      || [row.name, row.homepageTitle || "", row.canon, row.externalProjectId || "", row.projectStatus, ...row.domains]
+      || [row.name, row.fiberyName, row.homepageTitle || "", row.canon, row.externalProjectId || "", row.projectStatus, ...row.domains]
         .some((value) => matchesProjectSearch(value, normalizedQuery));
     const matchesActiveFilters = (
       (!favoritesOnly || row.isFavorite)
@@ -8917,7 +8923,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       >
         <div className="siteCacheSearch">
           <Search size={18} />
-          <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Поиск по домену" />
+          <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Поиск по домену или имени проекта" />
           <div className="siteCacheFilter siteGeoFilter">
             <span>GEO</span>
             <SearchableSelect
@@ -9114,7 +9120,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
                   {formatNumber(row.menuCount)}
                 </button>
               ) : "0",
-              xDefault: row.xDefaultHistory.length ? <span className="siteXDefault" title={row.xDefaultHistory.join("\n")}>{row.xDefaultHistory.join(", ")}</span> : "—",
+              fiberyName: row.fiberyName ? <span className="siteFiberyName" title={row.fiberyName}>{row.fiberyName}</span> : "—",
               domainsCount: <a href={pathForRoute("workspace", "network", row.name)} aria-label={`Открыть сетку проекта ${row.name}`}>{formatNumber(row.domainsCount)}</a>
             };
             return visibleColumnOrder.map((column) => cells[column]);

@@ -28,8 +28,8 @@ export function TemplateSources({ templateId, api, pending, onChanged, onBusy }:
     window.addEventListener("message", extensionSaved);
     return () => { live = false; clearInterval(timer); window.removeEventListener("message", extensionSaved); };
   }, [api, templateId, pending, onChanged]);
-  return <section className="tg-card tg-source-editor"><h3>HTML конкурентов из Google</h3>
-    <p>Один конкурент — одно поле. В Rich Results Test откройте «Просмотреть проверенную страницу → HTML», скопируйте код и вставьте ниже. Изменения сохраняются автоматически.</p>
+  return <section className="tg-card tg-source-editor"><h3>Этап 1 — HTML конкурентов</h3>
+    <p>Ручная вставка HTML с автосохранением: один конкурент — одно поле. В Rich Results Test откройте «Просмотреть проверенную страницу → HTML», скопируйте код и вставьте ниже. Изменения сохраняются автоматически.</p>
     <p className="tg-help">Серверный агент собирает HTML через Google. При запросе входа или CAPTCHA используйте расширение в своём Chrome или вставьте код вручную. Обычный HTML браузера не подменяет результат Google.</p>
     <div className="tg-downloads"><a className="button secondary" href="/extensions/pagepilot-chrome.zip" download><Download size={16} />Скачать расширение Chrome</a><a href="/extensions/install.html" target="_blank" rel="noopener noreferrer">Установка на macOS и Windows</a></div>
     {pending && <p className="tg-help">Сейчас выполняется задача. Поля станут доступны для изменений после завершения этапа.</p>}

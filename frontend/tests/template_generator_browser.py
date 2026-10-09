@@ -59,7 +59,7 @@ with sync_playwright() as p:
     brand.fill('Custom Brand')
     brand.press('Tab')
     expect(brand).to_have_value('Custom Brand')
-    expect(page.get_by_role('button', name='Этап 1 — сгенерировать текст', exact=True)).to_be_disabled()
+    expect(page.get_by_role('button', name='Этап 1 — собрать конкурентов', exact=True)).to_be_disabled()
     geo = page.get_by_role('combobox', name='ГЕО', exact=True)
     geo.click()
     assert page.locator('.tg-combobox-list [role=option]').count() > 200
@@ -90,7 +90,7 @@ with sync_playwright() as p:
     page.get_by_placeholder('https://brand.com').fill('https://brand.example')
     page.get_by_label('Все шаблоны', exact=False).check()
     page.screenshot(path='/private/tmp/template-ui-create-desktop.png', full_page=True)
-    page.get_by_role('button', name='Этап 1 — сгенерировать текст', exact=True).click()
+    page.get_by_role('button', name='Этап 1 — собрать конкурентов', exact=True).click()
     expect(page.get_by_role('tab', name='Предпросмотр')).to_be_visible()
     assert state['created']['uniqueness_scope'] == 'global'
     assert state['created']['collect_competitors'] is True

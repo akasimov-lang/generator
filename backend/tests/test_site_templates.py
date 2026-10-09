@@ -428,3 +428,37 @@ def test_content_stage_does_not_call_designer(db,monkeypatch):
     monkeypatch.setattr(services,'call_gemini',gemini)
     assert asyncio.run(templates.generate(db,r,content_only=True))['status']=='content_ready'
     assert len(calls)==1 and not r.html and 'design' not in r.document
+
+
+def test_research_stage_waits_for_manual_html_without_generating_content(db, monkeypatch):
+    from app import services
+    user = models.User(username='three-stage', password_hash='')
+    provider = models.AiProvider(name='g',provider_type='gemini',endpoint_url='https://api.test',api_key='test')
+    db.add_all([user,provider]); db.flush()
+    request=templates.TemplateRequest(brand='Brand',geo='DE',ai_provider_id=provider.id,collect_competitors=False)
+    row=models.SiteTemplate(created_by_user_id=user.id,brand='Brand',geo='DE',language='en',request_data=request.model_dump())
+    db.add(row);db.commit()
+    async def fail(*args,**kwargs): raise AssertionError('Research without sources must not generate content')
+    monkeypatch.setattr(services,'call_gemini',fail)
+    assert asyncio.run(templates.generate(db,row,research_only=True))['status']=='awaiting_sources'
+    assert 'content' not in row.document
+    row.document={'research':{'sources':[{'status':'fetched','excerpt':'verified'}],'analysis':'analysis'}}
+    db.commit()
+    assert asyncio.run(templates.generate(db,row,research_only=True))['status']=='sources_ready'
+    assert 'content' not in row.document and not row.html
+
+
+def test_new_template_starts_with_research_and_retry_preserves_stage(db):
+    app=FastAPI();app.include_router(router);app.dependency_overrides[get_db]=lambda:db
+    user=models.User(username='new-three',password_hash='')
+    provider=models.AiProvider(name='g',provider_type='gemini',endpoint_url='https://api.test',api_key='test')
+    db.add_all([user,provider]);db.commit()
+    app.dependency_overrides[require_auth]=lambda:{'id':user.id,'is_admin':True}
+    client=TestClient(app)
+    response=client.post('/site-templates',json={'brand':'Brand','geo':'DE','ai_provider_id':provider.id,'collect_competitors':False})
+    assert response.status_code==202
+    row=db.get(models.SiteTemplate,response.json()['id'])
+    assert db.scalar(select(models.BackgroundJob)).payload['stage']=='research'
+    row.status='failed';db.commit()
+    assert client.post(f'/site-templates/{row.id}/retry').status_code==202
+    assert all(job.payload['stage']=='research' for job in db.scalars(select(models.BackgroundJob)))

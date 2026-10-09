@@ -102,6 +102,7 @@ class SiteResponse(BaseModel):
     cache_language: str | None
     cache_geo: str | None
     homepage_title: str | None
+    fibery_name: str | None = None
     internal_pages_count: int
     domains_count: int
     cache_domains: list[str]
@@ -155,6 +156,7 @@ class ProjectCacheItemResponse(BaseModel):
     language: str | None
     geo: str | None
     homepage_title: str | None
+    fibery_name: str | None = None
     internal_pages_count: int
     domains_count: int
     domains: list[str]

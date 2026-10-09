@@ -6,6 +6,7 @@ from app.api import router
 from app.auto_reglue_api import router as auto_reglue_router
 from app.site_templates_api import router as site_templates_router
 from app.auto_lb_api import router as auto_lb_router
+from app.project_pages import router as project_pages_router
 from app.core.config import get_settings
 from app.db import init_db
 
@@ -34,3 +35,5 @@ app.include_router(router, prefix="/api")
 app.include_router(auto_reglue_router, prefix="/api")
 app.include_router(site_templates_router, prefix="/api")
 app.include_router(auto_lb_router, prefix="/api")
+
+app.include_router(project_pages_router, prefix="/api")
