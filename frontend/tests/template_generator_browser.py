@@ -13,7 +13,7 @@ r = fixture['row']()
 detail = {'id': 'template', 'brand': 'Brand', 'geo': 'PL', 'language': 'pl', 'status': 'ready', 'phase': 'Готово',
           'error': None, 'revision': 1, 'created_at': '2026-10-02T10:00:00Z', 'updated_at': '2026-10-02T10:00:00Z',
           'request': {'uniqueness_scope': 'brand_geo'}, 'document': r.document, 'html': render(r, r.document)}
-state = {'items': [], 'created': None, 'saved': None, 'sources': []}
+state = {'items': [], 'created': None, 'saved': None, 'sources': [], 'drafts': []}
 base = os.environ.get('VITE_TEST_URL', 'http://127.0.0.1:5178')
 with sync_playwright() as p:
     browser = p.chromium.launch(executable_path=os.environ.get('CHROME', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'), headless=True)
@@ -29,6 +29,14 @@ with sync_playwright() as p:
         elif path == '/site-templates' and method == 'POST':
             state['created'] = route.request.post_data_json
             state['items'] = [detail]; data = detail; status = 202
+        elif path.startswith('/site-templates/source-drafts'):
+            if method == 'GET': data=state['drafts']
+            else:
+                draft=route.request.post_data_json
+                index=int(path.rsplit('/',1)[-1].removeprefix('draft-')) if method=='PUT' else len(state['drafts'])
+                data={**draft,'id':f'draft-{index}','revision':draft['revision']+1,'capture':{'status':'google_ready'}}
+                if method=='PUT':state['drafts'][index]=data
+                else:state['drafts'].append(data)
         elif path == '/site-templates': data = state['items']
         elif path == '/site-templates/template' and method == 'PUT':
             state['saved'] = route.request.post_data_json
@@ -50,6 +58,23 @@ with sync_playwright() as p:
     expect(page.get_by_role('heading', name='Новый шаблон', exact=True)).to_be_visible()
     page.get_by_role('button', name='Новый шаблон', exact=True).click()
     expect(page.get_by_label('Искать конкурентов в Google')).to_be_checked()
+    # Drafts persist before creating a task, with one independent field per competitor.
+    draft_html='<html><body>'+('Research source. '*30)+'</body></html>'
+    page.get_by_role('textbox',name='HTML конкурента 1',exact=True).fill(draft_html)
+    expect(page.locator('.tg-source-field [role=status]').first).to_have_text('Сохранено')
+    expect(page.get_by_label('Искать конкурентов в Google')).not_to_be_checked()
+    page.get_by_role('button',name='Добавить конкурента',exact=True).click()
+    page.get_by_role('textbox',name='HTML конкурента 2',exact=True).fill(draft_html+'second')
+    expect(page.locator('.tg-source-field [role=status]').nth(1)).to_have_text('Сохранено')
+    assert len(state['drafts'])==2
+    page.reload()
+    page.get_by_role('button',name='Новый шаблон',exact=True).click()
+    expect(page.get_by_role('textbox',name='HTML конкурента 1',exact=True)).to_have_value(draft_html)
+    expect(page.get_by_role('textbox',name='HTML конкурента 2',exact=True)).to_have_value(draft_html+'second')
+    page.get_by_role('textbox',name='HTML конкурента 1',exact=True).fill(draft_html+'updated')
+    expect(page.locator('.tg-source-field [role=status]').first).to_have_text('Сохранено')
+    assert state['drafts'][0]['revision']==2
+    page.get_by_label('Искать конкурентов в Google').check()
     expect(page.get_by_role('combobox', name='ГЕО', exact=True)).to_have_value('')
     expect(page.get_by_role('combobox', name='Язык', exact=True)).to_have_value('')
     brand = page.get_by_role('combobox', name='Бренд', exact=True)
@@ -92,6 +117,7 @@ with sync_playwright() as p:
     page.screenshot(path='/private/tmp/template-ui-create-desktop.png', full_page=True)
     page.get_by_role('button', name='Этап 1 — собрать конкурентов', exact=True).click()
     expect(page.get_by_role('tab', name='Предпросмотр')).to_be_visible()
+    assert state['created']['source_drafts']==[{'id':'draft-0','revision':2},{'id':'draft-1','revision':1}]
     assert state['created']['uniqueness_scope'] == 'global'
     assert state['created']['collect_competitors'] is True
     assert state['created']['brand'] == 'Custom Brand'
@@ -124,7 +150,7 @@ with sync_playwright() as p:
     field.fill(html.replace('Competitor','Updated'))
     page.wait_for_function("document.querySelector('.tg-source-field [role=status]').textContent === 'Сохранено'")
     assert state['sources'][0]['revision']==2 and 'Updated' in state['sources'][0]['html']
-    page.get_by_role('button',name='Добавить HTML конкурента').click()
+    page.get_by_role('button',name='Добавить конкурента').click()
     page.get_by_role('textbox',name='HTML конкурента 2',exact=True).fill('Second draft')
     page.wait_for_function("document.querySelectorAll('.tg-source-field [role=status]')[1].textContent === 'Сохранено'")
     assert len(state['sources'])==2

@@ -36,7 +36,8 @@ def state(site_id: str, user: AuthUser, db: Session = Depends(get_db)):
     provider = db.scalar(select(models.AiProvider).where(models.AiProvider.provider_type == "gemini",
                          models.AiProvider.is_active.is_(True)).order_by(models.AiProvider.created_at.desc()).limit(1))
     return {"context": context, "context_error": error, "provider_ready": bool(provider and provider.api_key),
-            "anchor_count": len(auto_lb.ANCHORS), "topic_count": 100,
+            "anchor_count": auto_lb.OUTPUT_LINES, "topic_count": auto_lb.OUTPUT_LINES,
+            "topic_text": "\n".join(auto_lb.topic_lines(db, site_id, context)),
             "prompts": {k: auto_lb.build_prompt(k, context) for k in ("anchors", "topics")} if context else {},
             "generations": [auto_lb.serialize(row) for row in rows]}
 

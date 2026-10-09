@@ -14,7 +14,8 @@ from app.db import get_db
 from app.security import AuthUser
 from app.site_templates import TemplateRequest, TemplateEdit, build_archive, render
 from app.template_design import art_svg, PALETTES
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
+from uuid import UUID
 from app.template_sources import excerpt, MAX_HTML
 
 router = APIRouter(prefix="/site-templates", tags=["Site templates"])
@@ -52,8 +53,18 @@ def list_templates(user: AuthUser, db: Session = Depends(get_db)):
     return [summary(row) for row in rows]
 
 
+class SourceDraftRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: UUID
+    revision: int = Field(ge=0)
+
+
+class CreateTemplateRequest(TemplateRequest):
+    source_drafts: list[SourceDraftRef] = Field(default_factory=list, max_length=30)
+
+
 @router.post("", status_code=202)
-def create_template(payload: TemplateRequest, user: AuthUser, db: Session = Depends(get_db)):
+def create_template(payload: CreateTemplateRequest, user: AuthUser, db: Session = Depends(get_db)):
     provider = db.get(models.AiProvider, payload.ai_provider_id)
     if not provider or not provider.is_active or provider.provider_type != "gemini" or not provider.api_key:
         raise HTTPException(422, "Добавьте активный Gemini-провайдер с API-ключом в разделе API Providers")
@@ -63,17 +74,37 @@ def create_template(payload: TemplateRequest, user: AuthUser, db: Session = Depe
             get_dataforseo_provider(db)
         except ValueError:
             raise HTTPException(422, "Для анализа выдачи нужен DataForSEO. Подключите его или отключите поиск конкурентов.")
+    lock_draft_owner(db, user)
+    drafts = []
+    if len({ref.id for ref in payload.source_drafts}) != len(payload.source_drafts):
+        raise HTTPException(422, "Один черновик конкурента указан дважды.")
+    for ref in payload.source_drafts:
+        source = get_source_draft(db, user, str(ref.id))
+        if source.capture.get("revision", 0) != ref.revision:
+            raise HTTPException(409, "HTML конкурента изменился. Обновите форму перед созданием задачи.")
+        drafts.append(source)
     row = models.SiteTemplate(created_by_user_id=user["id"], brand=payload.brand,
-        geo=payload.geo.upper(), language=payload.language, request_data=payload.model_dump())
+        geo=payload.geo.upper(), language=payload.language, request_data=payload.model_dump(exclude={"source_drafts"}))
     db.add(row)
     db.flush()
+    entries = []
+    for draft in drafts:
+        if draft.google_html.strip() or draft.url.strip():
+            source = models.TemplateSource(template_id=row.id, url=draft.url,
+                google_html=draft.google_html, capture={**draft.capture, "revision": 0})
+            db.add(source); db.flush()
+            entries.append({"url": source.url, "title": source.url, "source_id": source.id,
+                "position": len(entries) + 1, "origin": "google_manual"})
+        db.delete(draft)
+    if entries:
+        seen = {item["url"] for item in entries if item["url"]}
+        for url in payload.competitor_urls():
+            if url not in seen and len(entries) < 30:
+                entries.append({"url": url, "title": url, "position": len(entries) + 1, "origin": "manual"})
+                seen.add(url)
+        row.document = {"research": {"sources": entries, "search_complete": not payload.collect_competitors}}
     enqueue(db, row, stage="research")
     return detail(row)
-
-
-@router.get("/{template_id}")
-def read_template(template_id: str, user: AuthUser, db: Session = Depends(get_db)):
-    return detail(get_template(db, template_id))
 
 
 class SourceDraft(BaseModel):
@@ -88,6 +119,46 @@ def source_detail(source):
             "updated_at": source.updated_at}
 
 
+def lock_draft_owner(db, user):
+    db.scalar(select(models.User.id).where(models.User.id == user["id"]).with_for_update())
+
+
+def get_source_draft(db, user, source_id):
+    source = db.scalar(select(models.TemplateSourceDraft).where(models.TemplateSourceDraft.id == source_id,
+        models.TemplateSourceDraft.user_id == user["id"]).with_for_update())
+    if not source:
+        raise HTTPException(404, "Черновик не найден. Возможно, он уже добавлен в созданную задачу.")
+    return source
+
+
+@router.get("/source-drafts")
+def list_source_drafts(user: AuthUser, db: Session = Depends(get_db)):
+    return [source_detail(row) for row in db.scalars(select(models.TemplateSourceDraft).where(
+        models.TemplateSourceDraft.user_id == user["id"]).order_by(models.TemplateSourceDraft.created_at)).all()]
+
+
+@router.post("/source-drafts", status_code=201)
+def create_source_draft(payload: SourceDraft, user: AuthUser, db: Session = Depends(get_db)):
+    lock_draft_owner(db, user)
+    ids = db.scalars(select(models.TemplateSourceDraft.id).where(models.TemplateSourceDraft.user_id == user["id"])).all()
+    if len(ids) >= 30:
+        raise HTTPException(422, "Можно добавить до 30 конкурентов.")
+    source = models.TemplateSourceDraft(user_id=user["id"], url="", google_html="", capture={})
+    db.add(source); db.flush()
+    return save_source(db, None, source, payload)
+
+
+@router.put("/source-drafts/{source_id}")
+def update_source_draft(source_id: str, payload: SourceDraft, user: AuthUser, db: Session = Depends(get_db)):
+    lock_draft_owner(db, user)
+    return save_source(db, None, get_source_draft(db, user, source_id), payload)
+
+
+@router.get("/{template_id}")
+def read_template(template_id: str, user: AuthUser, db: Session = Depends(get_db)):
+    return detail(get_template(db, template_id))
+
+
 def editable_sources(row):
     if row.status in {"queued", "generating"}:
         raise HTTPException(409, "Дождитесь завершения текущего этапа перед изменением источников.")
@@ -99,7 +170,7 @@ def save_source(db, row, source, payload):
     url = payload.url.strip()
     if url:
         try:
-            parsed = TemplateRequest(brand=row.brand, geo=row.geo, ai_provider_id=row.request_data["ai_provider_id"], competitors=url).competitor_urls()
+            parsed = TemplateRequest(brand="Draft", geo="DE", ai_provider_id="draft", competitors=url).competitor_urls()
             if len(parsed) != 1: raise ValueError()
             url = parsed[0]
         except ValueError:
@@ -116,11 +187,12 @@ def save_source(db, row, source, payload):
         except ValueError as error:
             capture["status"], capture["error"] = "invalid_html", str(error)
     source.capture = capture
-    document = dict(row.document or {})
-    document["sources_changed"] = True
-    if document.get("research"):
-        document["research"] = {**document["research"], "analysis": None}
-    row.document = document
+    if row is not None:
+        document = dict(row.document or {})
+        document["sources_changed"] = True
+        if document.get("research"):
+            document["research"] = {**document["research"], "analysis": None}
+        row.document = document
     db.commit()
     return source_detail(source)
 

@@ -9825,3 +9825,11 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
   .siteDomainsTable .siteStatusSelect,
   .siteDomainsTable .siteStatusReadonly { width: 82px; flex: 0 0 82px; }
 }
+
+/* Keep all project counters visible on laptop screens. */
+@media (min-width: 1181px) and (max-width: 1800px) {
+  .projectWorkspaceView .projectHeader { grid-template-columns: minmax(0, 1fr) auto; }
+  .projectWorkspaceView .projectMeta { grid-column: 1 / -1; grid-row: 2; }
+  .projectWorkspaceView .projectRefreshButton { grid-column: 2; grid-row: 1; }
+  .projectWorkspaceView .projectTopDetails { grid-template-columns: minmax(130px, .9fr) minmax(160px, 1.3fr) repeat(2, minmax(65px, .45fr)) repeat(2, minmax(100px, .7fr)); }
+}

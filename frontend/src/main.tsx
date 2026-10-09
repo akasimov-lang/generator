@@ -1949,6 +1949,8 @@ function ProjectWorkspaceView({
   const [menuCapabilitiesError, setMenuCapabilitiesError] = React.useState("");
   const [projectRefreshStatus, setProjectRefreshStatus] = React.useState<"idle" | "loading" | "success" | "error">("idle");
   const [projectRefreshResponseCode, setProjectRefreshResponseCode] = React.useState("");
+  const [pageCounts, setPageCounts] = React.useState<Record<string, number>>({});
+  const updatePageCount = React.useCallback((siteId: string, count: number) => setPageCounts(current => current[siteId] === count ? current : { ...current, [siteId]: count }), []);
   const [publicationWorkflowSection, setPublicationWorkflowSection] = React.useState<PublicationWorkspaceSection>("pages");
   const projectLoadRequestRef = React.useRef(0);
   const loadedWorkspaceTabRef = React.useRef("");
@@ -2389,7 +2391,7 @@ function ProjectWorkspaceView({
                   </span>
                   <span className="projectTitleCard"><small>Title</small><b title={selectedSite.homepage_title || "Title не указан"}>{selectedSite.homepage_title || "—"}</b></span>
                   <button type="button" className={`projectMetricCard ${activeTab === "network" ? "isActive" : ""}`} aria-pressed={activeTab === "network"} onClick={() => onTabChange("network", selectedSite.name)} aria-label="Открыть сетку проекта"><small>Доменов в сетке</small><b>{formatNumber(selectedSite.domains_count)}</b></button>
-                  <span className="projectMetricCard"><small>Страниц</small><b>{formatNumber(selectedSite.internal_pages_count)}</b></span>
+                  <span className="projectMetricCard"><small>Страниц</small><b>{formatNumber(pageCounts[selectedSite.id] ?? (selectedSite.internal_pages_count + 1))}</b></span>
                   <MenuCapabilityCard label="Header" templateRendered={menuCapabilities?.header_menu_template_rendered} rendered={menuCapabilities?.header_menu_rendered} nested={menuCapabilities?.header_menu_nested} nestedRequired={headerNestingRequired} icon="header" loading={menuCapabilitiesLoading || templateCapabilitiesLoading || menuCheckPending} error={menuCapabilitiesError} onRetry={refreshTemplateMenuCapabilities} />
                   <MenuCapabilityCard label="Footer" templateRendered={menuCapabilities?.footer_menu_template_rendered} rendered={menuCapabilities?.footer_menu_rendered} nested={menuCapabilities?.footer_menu_nested} icon="footer" loading={menuCapabilitiesLoading || templateCapabilitiesLoading || menuCheckPending} error={menuCapabilitiesError} onRetry={refreshTemplateMenuCapabilities} />
                 </div>
@@ -2501,6 +2503,7 @@ function ProjectWorkspaceView({
 
       {selectedSite && (activeTab === "content" || activeTab === "publication") ? (
         <PublicationWorkflowNav
+          pageCount={pageCounts[selectedSite.id] ?? (selectedSite.internal_pages_count + 1)}
           content={siteContent}
           campaigns={campaigns}
           activeSection={publicationWorkflowSection}
@@ -2542,7 +2545,7 @@ function ProjectWorkspaceView({
             />
           </WorkspaceTabPane>
           <WorkspaceTabPane active={activeTab === "content" || activeTab === "publication"} storagePrefix={`${currentUsername}:${selectedSite.id}:content`}>
-            {publicationWorkflowSection === "pages" ? <ProjectPages key={selectedSite.id} siteId={selectedSite.id} api={api} /> : null}
+            {publicationWorkflowSection === "pages" ? <ProjectPages key={selectedSite.id} siteId={selectedSite.id} api={api} onCount={updatePageCount} /> : null}
             {publicationWorkflowSection === "campaigns" ? <>
               <FastProjectPublicationPanel key={`${selectedSite.id}:publication-launch`} mode="launch" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} promptTemplates={promptTemplates} onPoll={pollProject} onChanged={refreshProject} />
               <FastProjectPublicationPanel key={`${selectedSite.id}:publication-campaigns`} mode="campaigns" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} promptTemplates={promptTemplates} onPoll={pollProject} onChanged={refreshProject} />
@@ -4194,7 +4197,7 @@ function DeletedContentPanel({ api, content, onChanged }: ViewProps & { content:
 type PublicationWorkflowSection = "process" | "queue" | "backlog";
 type PublicationWorkspaceSection = "pages" | "deleted" | "content" | "campaigns" | PublicationWorkflowSection;
 
-function PublicationWorkflowNav({ content, campaigns, activeSection, onSectionChange }: { content: ContentItem[]; campaigns: PublicationCampaign[]; activeSection: PublicationWorkspaceSection; onSectionChange: (section: PublicationWorkspaceSection) => void }) {
+function PublicationWorkflowNav({ pageCount, content, campaigns, activeSection, onSectionChange }: { pageCount: number; content: ContentItem[]; campaigns: PublicationCampaign[]; activeSection: PublicationWorkspaceSection; onSectionChange: (section: PublicationWorkspaceSection) => void }) {
   const awaitingPublicationCount = content.filter((item) => Boolean(item.generated_at) && !["published", "deleted", "deletion_pending"].includes(item.status)).length;
   const activeCampaignCount = campaigns.filter((campaign) => ["active", "paused", "created", "publishing_all"].includes(campaign.status)).length;
   const completedCampaignCount = campaigns.filter((campaign) => ["completed", "completed_with_errors"].includes(campaign.status)).length;
@@ -4207,7 +4210,7 @@ function PublicationWorkflowNav({ content, campaigns, activeSection, onSectionCh
   return (
     <nav className="publicationWorkflowNav publicationWorkflowNavTop" aria-label="Разделы публикации">
       <button className={activeSection === "pages" ? "active" : ""} type="button" onClick={() => onSectionChange("pages")}>
-        <FileText size={17} /> <span className="publicationWorkflowLabel"><strong>Все страницы</strong><small>Главная и внутренние</small></span><span aria-hidden="true">↗</span>
+        <FileText size={17} /> <span className="publicationWorkflowLabel"><strong>Все страницы</strong><small>Главная и внутренние</small></span><span>{pageCount}</span>
       </button>
       <button className={activeSection === "campaigns" ? "active" : ""} type="button" onClick={() => onSectionChange("campaigns")} title="Запустить публикацию" aria-label="Кампании — запустить публикацию">
         <FolderKanban size={17} /> <span className="publicationWorkflowLabel"><strong>Кампании</strong><small>{activeCampaignCount} в работе · {completedCampaignCount} завершено</small></span><span>{campaigns.length}</span>
@@ -8299,12 +8302,12 @@ const SITE_COLUMN_LABELS: Record<SiteTableColumn, string> = {
   brand: "Бренд",
   rowNumber: "№",
   select: "",
-  name: "Name",
+  name: "Name WebDev",
   title: "Title главной",
   canon: "Main",
   language: "Язык",
   status: "Статус",
-  internalPages: "Внутренние страницы",
+  internalPages: "Страницы",
   menuType: "Тип меню",
   menuCount: "Пункты меню",
   fiberyName: "Имя проекта",
@@ -8651,7 +8654,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       menuTypeKey: headerMenuCount && footerMenuCount ? "header_footer" : headerMenuCount ? "header" : footerMenuCount ? "footer" : "none",
       menuType: headerMenuCount && footerMenuCount ? "Header + Footer" : headerMenuCount ? "Header" : footerMenuCount ? "Footer" : "",
       menuCount: headerMenuCount + footerMenuCount,
-      internalPagesCount: site.internal_pages_count,
+      internalPagesCount: site.internal_pages_count + 1,
       fiberyName: site.fibery_name || "",
       domainsCount: site.domains_count,
       domains: Array.isArray(site.cache_domains) ? site.cache_domains : [],

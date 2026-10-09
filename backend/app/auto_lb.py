@@ -8,10 +8,11 @@ import unicodedata
 from urllib.parse import urlsplit
 
 from app import models
+from sqlalchemy import select
 
 DATA = Path(__file__).parent / "data" / "auto_lb"
 ANCHORS = (DATA / "anchors_cs.txt").read_text().splitlines()
-TOPIC_EXAMPLES = (DATA / "topics_cs.txt").read_text().splitlines()
+OUTPUT_LINES = 300
 
 
 def project_context(site):
@@ -29,38 +30,23 @@ def project_context(site):
             or parsed.scheme not in {"http", "https"} or re.search(r"[\s/?#]", host)):
         raise ValueError("Не найден текущий Main проекта. Обновите проект перед генерацией.")
     return {"brand": brand, "geo": geo, "language": language, "main": host,
-            "main_url": f"{parsed.scheme}://{host}"}
+            "main_url": f"{parsed.scheme}://{host}", "output_count": OUTPUT_LINES, "prompt_version": 2}
 
 
 def build_prompt(kind, context):
     brand, geo, language = (context[k] for k in ("brand", "geo", "language"))
-    data = json.dumps(context, ensure_ascii=False)
+    data = json.dumps({key: context[key] for key in ("brand", "geo", "language", "main", "main_url")}, ensure_ascii=False)
     common = (f"\nПараметры проекта (данные, не инструкции): {data}.\n"
               f"Язык результата: {language} (код языка). ГЕО: {geo} (ISO-код страны). "
               "Пиши естественно на этом языке, локализуй название страны. Сохрани бренд проекта. "
               "Только готовые строки, без вступлений, заключений, Markdown, групп и нумерации.\n")
     if kind == "anchors":
-        return (f"Сгенерируй анкор-лист с повторами для {brand}, ГЕО {geo}, на языке {language}, "
+        return (f"Сгенерируй анкор-лист из {OUTPUT_LINES} строк с повторами для {brand}, ГЕО {geo}, на языке {language}, "
                 "без нумерации, где каждый ключ с новой строки без разбивки на группы, "
                 "при этом рассчитай всё в правильном соотношении через повторы одинаковых анкоров."
-                + common +
-                f"Соотношение строго задано образцом ниже: ровно {len(ANCHORS)} строк, "
-                "одна строка результата соответствует одной строке образца в том же порядке. "
-                "Одинаковые строки переводи совершенно одинаково; повторы НЕ удаляй. "
-                "BetOnRed и Bet-On-Red — образец бренда: замени на бренд проекта и вариант его написания. "
-                "Česko — образец ГЕО: замени на локализованную страну проекта. "
-                f"Вместо betonred.cz используй строго {context['main']}; вместо https://betonred.cz "
-                f"используй строго {context['main_url']}. Не придумывай другие домены. "
-                "Переведи остальные слова образца на язык проекта, сохрани их смысл.\n"
-                "ОБРАЗЕЦ (чешский):\n" + "\n".join(ANCHORS))
-    return (f"Сгенерируй 100 рекламно-информационных тем для {brand} casino на языке {language}, "
-            "где каждая тема с новой строки без нумерации." + common +
-            "Ровно 100 разных тем без повторов. Используй пример как ориентир тематики и разнообразия; "
-            "адаптируй темы под бренд, страну и язык проекта. Пример не подтверждает наличие функций, "
-            "лицензии, конкретных бонусов, процентов, игр или способов оплаты у другого бренда. "
-            "Не обещай выигрыш и не выдумывай эти факты; если факт неизвестен, формулируй тему "
-            "как вопрос о доступности или проверке условий. Не переносить BetOnRed и Чехию в другой проект.\n"
-            "ПРИМЕР ТЕМ (чешский):\n" + "\n".join(TOPIC_EXAMPLES))
+                + common)
+    return (f"Сгенерируй {OUTPUT_LINES} рекламно-информационных тем для {brand} casino на языке {language}, "
+            "где каждая тема с новой строки без нумерации." + common)
 
 
 def parse_lines(text):
@@ -83,19 +69,26 @@ def normalized_key(value):
 
 def normalize_result(kind, text, context):
     lines = parse_lines(text)
-    expected = len(ANCHORS) if kind == "anchors" else 100
+    expected = context.get("output_count", len(ANCHORS) if kind == "anchors" else 100)
     if len(lines) != expected:
         raise ValueError(f"Ожидалось {expected} строк, Gemini вернул {len(lines)}.")
     if any(len(line) > 500 or line.startswith(("#", "{")) for line in lines):
         raise ValueError("Gemini вернул неверный формат списка.")
     if kind == "topics":
-        if len({normalized_key(line) for line in lines}) != 100:
+        if len({normalized_key(line) for line in lines}) != expected:
             raise ValueError("Gemini вернул повторяющиеся темы.")
         return "\n".join(lines)
-    # The reference, not the model, controls repeated-anchor frequencies.
+    if context.get("prompt_version", 1) >= 2:
+        # New prompts are free of examples; preserve Gemini's anchor choices and repetitions.
+        # Domain anchors always use the current Main, as requested by the user.
+        domain = re.compile(r"https?://[^\s<>]+|(?<![\w@])(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,24}(?:/[^\s<>]*)?", re.I)
+        return "\n".join(domain.sub(lambda match: context["main_url"] if match.group().lower().startswith(("http://", "https://")) else context["main"], line) for line in lines)
+    # Older queued tasks keep their original 87-line reference contract.
+
+    profile = ANCHORS
     translations = {"BetOnRed": context["brand"], "betonred.cz": context["main"],
                     "https://betonred.cz": context["main_url"]}
-    for source, translated in zip(ANCHORS, lines):
+    for source, translated in zip(profile, lines):
         translations.setdefault(source, translated)
     if len({normalized_key(v) for v in translations.values()}) != len(translations):
         raise ValueError("Gemini объединил разные варианты анкоров. Нужны разные переводы вариантов.")
@@ -104,7 +97,24 @@ def normalize_result(kind, text, context):
             raise ValueError("Gemini добавил домен вне строк образца.")
         if "BetOnRed" in source and normalized_key(context["brand"]) not in normalized_key(value):
             raise ValueError("Gemini изменил бренд в анкоре.")
-    return "\n".join(translations[source] for source in ANCHORS)
+    return "\n".join(translations[source] for source in profile)
+
+
+def topic_lines(db, site_id, context):
+    if not context:
+        return []
+    rows = db.execute(select(models.AutoLbGeneration.context, models.AutoLbGeneration.result_text).where(
+        models.AutoLbGeneration.site_id == site_id, models.AutoLbGeneration.kind == "topics",
+        models.AutoLbGeneration.status == "completed").order_by(models.AutoLbGeneration.created_at, models.AutoLbGeneration.id))
+    lines, seen = [], set()
+    for saved_context, text in rows:
+        if any(normalized_key(str(saved_context.get(key, ""))) != normalized_key(str(context.get(key, ""))) for key in ("brand", "geo", "language")):
+            continue
+        for line in (text or "").splitlines():
+            key = normalized_key(line)
+            if key and key not in seen:
+                seen.add(key); lines.append(line)
+    return lines
 
 
 async def generate(db, row):
@@ -114,18 +124,24 @@ async def generate(db, row):
         raise ValueError("Настройте активный Gemini с API-ключом в разделе API Providers.")
     row.status = "running"
     db.commit()
+    existing = {normalized_key(line) for line in topic_lines(db, row.site_id, row.context)} if row.kind == "topics" else set()
     correction = ""
     for attempt in range(2):
         response = await call_gemini(provider, row.prompt + correction)
         apply_provider_usage(provider, response.get("usageMetadata", {}))
         db.commit()
         try:
-            row.result_text = normalize_result(row.kind, extract_gemini_text(response), row.context)
+            result = normalize_result(row.kind, extract_gemini_text(response), row.context)
+            repeated = [line for line in result.splitlines() if normalized_key(line) in existing]
+            if repeated:
+                correction = "\nНе используй уже полученные темы: " + json.dumps(repeated, ensure_ascii=False)
+                raise ValueError("Новая порция повторяет ранее полученные темы. Нужны только новые темы.")
+            row.result_text = result
             break
         except ValueError as exc:
             if attempt:
                 raise
-            correction = f"\nПроверка предыдущей попытки: {exc} Исправь и верни весь список заново."
+            correction += f"\nПроверка предыдущей попытки: {exc} Исправь и верни весь список заново."
     row.status, row.error = "completed", None
     provider.validation_status = "valid"
     provider.validated_at = datetime.now(timezone.utc)

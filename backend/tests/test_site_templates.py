@@ -462,3 +462,48 @@ def test_new_template_starts_with_research_and_retry_preserves_stage(db):
     row.status='failed';db.commit()
     assert client.post(f'/site-templates/{row.id}/retry').status_code==202
     assert all(job.payload['stage']=='research' for job in db.scalars(select(models.BackgroundJob)))
+
+
+def test_new_template_html_drafts_autosave_isolation_and_atomic_attachment(db,monkeypatch):
+    app=FastAPI();app.include_router(router);app.dependency_overrides[get_db]=lambda:db
+    user=models.User(username='draft-owner',password_hash='')
+    other=models.User(username='other-owner',password_hash='')
+    provider=models.AiProvider(name='g',provider_type='gemini',endpoint_url='https://api.test',api_key='test')
+    db.add_all([user,other,provider]);db.commit()
+    actor={'id':user.id,'is_admin':True}
+    app.dependency_overrides[require_auth]=lambda:actor
+    client=TestClient(app)
+    path='/site-templates/source-drafts'
+    html='<html><body><p>'+('Competitor verified text. '*30)+'</p></body></html>'
+    first=client.post(path,json={'html':html}).json()
+    second=client.post(path,json={'html':'unfinished','url':'example.com'}).json()
+    assert len(client.get(path).json())==2
+    first=client.put(path+'/'+first['id'],json={'html':html.replace('verified','changed'),'revision':first['revision']}).json()
+    assert first['revision']==2
+    actor['id']=other.id
+    assert client.get(path).json()==[]
+    assert client.put(path+'/'+first['id'],json={'html':'stolen','revision':2}).status_code==404
+    actor['id']=user.id
+    payload={'brand':'Brand','geo':'DE','ai_provider_id':provider.id,'collect_competitors':False,
+             'source_drafts':[{'id':first['id'],'revision':1},{'id':second['id'],'revision':second['revision']}]}
+    assert client.post('/site-templates',json=payload).status_code==409
+    assert len(client.get(path).json())==2 and not db.scalar(select(models.SiteTemplate))
+    payload['source_drafts'][0]['revision']=2
+    created=client.post('/site-templates',json=payload)
+    assert created.status_code==202
+    saved=client.get('/site-templates/'+created.json()['id']+'/sources').json()
+    assert len(saved)==2 and saved[0]['html']==first['html'] and saved[1]['html']=='unfinished'
+    assert client.get(path).json()==[]
+    assert 'source_drafts' not in created.json()['request']
+    assert db.scalar(select(models.BackgroundJob)).payload['stage']=='research'
+    row=db.get(models.SiteTemplate,created.json()['id'])
+    prompts=[]
+    async def gemini(_provider,prompt,**kwargs):
+        prompts.append(prompt)
+        return {'candidates':[{'content':{'parts':[{'text':'Analysis of the saved competitor. '*10}]}}]}
+    monkeypatch.setattr('app.services.call_gemini',gemini)
+    async def fail(*args,**kwargs): raise AssertionError('Must not recapture pasted HTML')
+    monkeypatch.setattr('app.template_sources.capture_google',fail)
+    assert asyncio.run(templates.generate(db,row,research_only=True))['status']=='sources_ready'
+    assert len(prompts)==1 and 'changed text' in prompts[0]
+    assert not row.document.get('content')

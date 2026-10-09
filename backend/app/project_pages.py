@@ -75,6 +75,8 @@ def is_home(page):
 def page_summary(page):
     return {"key": page_key(page), "title": page.get("title") or "Без названия",
             "slug": page.get("slug") or "/", "is_home": is_home(page),
+            "created_at": page.get("createdTime") or page.get("publishedTime"),
+            "created_at_source": "createdTime" if page.get("createdTime") else "publishedTime",
             "updated_at": page.get("updatedTime"), "published_at": page.get("publishedTime")}
 
 

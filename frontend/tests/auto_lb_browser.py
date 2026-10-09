@@ -9,12 +9,11 @@ from playwright.sync_api import sync_playwright, expect
 ROOT = Path(__file__).resolve().parents[2]
 ART = ROOT / 'reports/auto-lb'
 ART.mkdir(exist_ok=True)
-source = (ROOT/'backend/app/data/auto_lb/anchors_cs.txt').read_text().strip()
-anchors = source.replace('https://betonred.cz','https://current.example').replace('betonred.cz','current.example')
-topics = (ROOT/'backend/app/data/auto_lb/topics_cs.txt').read_text().strip()
+anchors = '\n'.join(['BetOnRed']*298+['current.example','https://current.example'])
+topics = '\n'.join(f'Téma {i}' for i in range(300))
 site = dict(id='own', name='own.test', brand='BetOnRed',brand_source='manual',base_url='https://own.test',publication_endpoint='',payload_mode='simple_page',editor_version='2',default_menu={'header':[],'footer':[]},menu_library=[],default_banners=[],cache_canon='current.example',cache_geo='CZ',cache_language='cs',cache_domains=[],project_status='working',is_test_project=False,has_menu=False,domains_count=1,internal_pages_count=0)
 ctx={'brand':'BetOnRed','geo':'CZ','language':'cs','main':'current.example','main_url':'https://current.example'}
-state={'context':ctx,'context_error':None,'provider_ready':True,'anchor_count':87,'topic_count':100,'prompts':{'anchors':'Anchor prompt','topics':'Topic prompt'},'generations':[]}
+state={'context':ctx,'context_error':None,'provider_ready':True,'anchor_count':300,'topic_count':300,'topic_text':'','prompts':{'anchors':'Anchor prompt','topics':'Topic prompt'},'generations':[]}
 writes=[]
 with sync_playwright() as p:
     browser=p.chromium.launch(executable_path=os.environ.get('CHROME','/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),headless=True)
@@ -44,17 +43,28 @@ with sync_playwright() as p:
     expect(page.get_by_role('heading',name='АвтоЛБ',exact=True)).to_be_visible()
     expect(page.get_by_role('button',name='Скопировать анкор-лист')).to_be_disabled()
     page.get_by_role('button',name='Сгенерировать анкор-лист').click()
-    page.get_by_role('button',name='Сгенерировать 100 тем').click()
+    page.get_by_role('button',name='Добавить 300 тем').click()
     assert writes==['anchors','topics']
     for row in state['generations']:
         row['status']='completed';row['text']=anchors if row['kind']=='anchors' else topics
         row['line_count']=len(row['text'].splitlines());row['unique_count']=len(set(row['text'].splitlines()))
+    state['topic_text']=topics
     page.reload()
     expect(page.get_by_label('Результат: Анкор-лист',exact=True)).to_have_value(anchors)
     expect(page.get_by_label('Результат: Генерация тем',exact=True)).to_have_value(topics)
     for kind,value in [('анкор-лист',anchors),('темы',topics)]:
         page.get_by_role('button',name='Скопировать '+kind).click()
         assert page.evaluate('window.copied')==value
+    # Repeated generation retains the old list while queued, then appends a new batch.
+    page.get_by_role('button',name='Добавить 300 тем').click()
+    expect(page.get_by_label('Результат: Генерация тем',exact=True)).to_have_value(topics)
+    more='\n'.join(f'Nové téma {i}' for i in range(300))
+    row=state['generations'][0];row.update(status='completed',text=more,line_count=300,unique_count=300)
+    state['topic_text']=topics+'\n'+more
+    page.reload()
+    expect(page.get_by_label('Результат: Генерация тем',exact=True)).to_have_value(state['topic_text'])
+    page.get_by_role('button',name='Скопировать темы').click()
+    assert page.evaluate('window.copied')==state['topic_text']
     cards=page.locator('.autoLbCard')
     assert abs(cards.nth(0).bounding_box()['width']-cards.nth(1).bounding_box()['width'])<2
     page.screenshot(path=str(ART/'desktop.png'),full_page=True)

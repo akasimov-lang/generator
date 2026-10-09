@@ -35,6 +35,7 @@ def test_reference_frequencies_and_current_main_replacement(env):
     db, site, _ = env
     configure(db, site)
     context = auto_lb.project_context(site)
+    context.pop("output_count"); context.pop("prompt_version")
     result = auto_lb.normalize_result("anchors", "\n".join(auto_lb.ANCHORS), context).splitlines()
     expected = [context["main"] if x == "betonred.cz" else context["main_url"] if x == "https://betonred.cz" else x for x in auto_lb.ANCHORS]
     assert result == expected
@@ -49,7 +50,9 @@ def test_repeated_translations_are_enforced_without_deduplication(env):
     configure(db, site)
     lines = list(auto_lb.ANCHORS)
     lines[9] = "Different accidental translation"
-    result = auto_lb.normalize_result("anchors", "\n".join(lines), auto_lb.project_context(site)).splitlines()
+    context = auto_lb.project_context(site)
+    context.pop("output_count"); context.pop("prompt_version")
+    result = auto_lb.normalize_result("anchors", "\n".join(lines), context).splitlines()
     assert result[9] == result[2] == "BetOnRed Česko"
 
 
@@ -65,9 +68,12 @@ def test_prompt_adapts_every_available_language_and_project(env):
         prompt = auto_lb.build_prompt("anchors", context)
         assert f"Язык результата: {language}" in prompt
         assert "Other Brand" in prompt and "ГЕО DE" in prompt and "current.example" in prompt
-        assert "ровно 87 строк" in prompt
-    assert len(auto_lb.TOPIC_EXAMPLES) == 100
-    assert "100 рекламно-информационных тем" in auto_lb.build_prompt("topics", context)
+        assert "300 строк" in prompt
+        assert "ОБРАЗЕЦ" not in prompt and "Česko" not in prompt and "betonred.cz" not in prompt
+    prompt = auto_lb.build_prompt("topics", context)
+    assert "300 рекламно-информационных тем" in prompt
+    for removed in ["ПРИМЕР", "образец", "Используй пример", "Не обещай выигрыш", "Не переносить", "BetOnRed", "Чехию", "конкретных бонусов"]:
+        assert removed not in prompt
 
 
 @pytest.mark.parametrize("field,value", [("brand", "Общие ключи"), ("cache_geo", ""), ("cache_language", ""), ("cache_canon", "")])
@@ -84,10 +90,10 @@ def test_topic_count_duplicates_and_list_markers(env):
     configure(db, site)
     ctx = auto_lb.project_context(site)
     assert auto_lb.parse_lines("1. Heading\n5 tipů pro hráče\n• Another") == ["Heading", "5 tipů pro hráče", "Another"]
-    with pytest.raises(ValueError, match="100 строк"):
-        auto_lb.normalize_result("topics", "\n".join(auto_lb.TOPIC_EXAMPLES[:-1]), ctx)
+    with pytest.raises(ValueError, match="300 строк"):
+        auto_lb.normalize_result("topics", "\n".join(f"Topic {n}" for n in range(299)), ctx)
     with pytest.raises(ValueError, match="повторяющиеся"):
-        auto_lb.normalize_result("topics", "\n".join(["same"] * 100), ctx)
+        auto_lb.normalize_result("topics", "\n".join(["same"] * 300), ctx)
 
 
 def test_durable_jobs_separate_kinds_and_snapshot_context(env, monkeypatch):
@@ -106,7 +112,7 @@ def test_durable_jobs_separate_kinds_and_snapshot_context(env, monkeypatch):
     calls = []
     async def gemini(_provider, prompt):
         calls.append(prompt)
-        return response(auto_lb.ANCHORS)
+        return response(["BetOnRed"] * 298 + ["current.example", "https://current.example"])
     monkeypatch.setattr("app.services.call_gemini", gemini)
     assert run_job(db, jobs[0].id)["status"] == "completed"
     assert run_job(db, jobs[0].id)["status"] == "skipped"
@@ -127,7 +133,7 @@ def test_invalid_output_retries_then_records_failure(env, monkeypatch):
     job = db.scalar(select(models.BackgroundJob))
     assert run_job(db, job.id)["status"] == "failed"
     row = db.get(models.AutoLbGeneration, row["id"])
-    assert row.status == "failed" and "100 строк" in row.error and not row.result_text
+    assert row.status == "failed" and "300 строк" in row.error and not row.result_text
     assert provider.total_tokens_used == 24
 
 
@@ -150,3 +156,46 @@ def test_project_access_and_provider_secrets(env):
     for operation in (lambda: state(other.id, auth(), db), lambda: create(other.id, GenerateRequest(kind="topics"), auth(), db)):
         with pytest.raises(HTTPException) as error: operation()
         assert error.value.status_code == 404
+
+
+def test_new_anchor_generation_uses_no_reference_and_replaces_domains(env):
+    db,site,_=env;configure(db,site)
+    context=auto_lb.project_context(site)
+    lines=['BetOnRed']*150+['Local brand phrase']*148+['old-domain.test','https://old-domain.test']
+    result=auto_lb.normalize_result('anchors','\n'.join(lines),context).splitlines()
+    assert len(result)==300 and result[:298]==lines[:298]
+    assert result[-2:]==['current.example','https://current.example']
+
+
+def test_topic_accumulation_survives_history_limit_main_change_and_failure(env):
+    db,site,_=env;user,provider=configure(db,site)
+    context=auto_lb.project_context(site)
+    for n in range(42):
+        db.add(models.AutoLbGeneration(site_id=site.id,created_by_user_id=user.id,provider_id=provider.id,
+            kind='topics',context=context,prompt='old saved prompt',status='completed',result_text=f'Topic {n}'))
+    db.add(models.AutoLbGeneration(site_id=site.id,created_by_user_id=user.id,provider_id=provider.id,
+        kind='topics',context={**context,'language':'de'},prompt='',status='completed',result_text='Other language'))
+    db.add(models.AutoLbGeneration(site_id=site.id,created_by_user_id=user.id,provider_id=provider.id,
+        kind='topics',context=context,prompt='',status='failed',result_text=None))
+    db.commit()
+    from app.auto_lb_api import state
+    site.cache_canon='changed.example';db.commit()
+    result=state(site.id,{'id':user.id},db)
+    assert result['topic_text'].splitlines()==[f'Topic {n}' for n in range(42)]
+    assert len(result['generations'])==40
+    assert result['anchor_count']==result['topic_count']==300
+
+
+def test_repeated_generation_appends_300_topics_and_retries_duplicate_batch(env,monkeypatch):
+    db,site,_=env;user,provider=configure(db,site)
+    from app.auto_lb_api import create,GenerateRequest,state
+    batches=iter([[f'Old topic {i}' for i in range(300)], [f'Old topic {i}' for i in range(300)], [f'New topic {i}' for i in range(300)]])
+    async def gemini(*args): return response(next(batches))
+    monkeypatch.setattr('app.services.call_gemini',gemini)
+    for _ in range(2):
+        created=create(site.id,GenerateRequest(kind='topics'),{'id':user.id},db)
+        job=db.scalar(select(models.BackgroundJob).where(models.BackgroundJob.status=='queued'))
+        assert run_job(db,job.id)['status']=='completed'
+    text=state(site.id,{'id':user.id},db)['topic_text'].splitlines()
+    assert text==[f'Old topic {i}' for i in range(300)]+[f'New topic {i}' for i in range(300)]
+    assert provider.total_tokens_used==36

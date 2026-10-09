@@ -215,7 +215,7 @@ async def research_competitors(db, row, request, provider):
     stored_report = (row.document or {}).get("research") or {}
     row.phase = "Этап 1/3 · сбор выдачи и HTML конкурентов"
     db.commit()
-    queries = request.search_queries() if request.collect_competitors and not stored_report.get("sources") else []
+    queries = request.search_queries() if request.collect_competitors and (not stored_report.get("sources") or stored_report.get("search_complete") is False) else []
     query = "; ".join(queries) or "Конкуренты, указанные вручную"
     items = stored_report.get("sources") or [{"url": url, "title": url, "position": i + 1, "origin": "manual"}
              for i, url in enumerate(request.competitor_urls())]
@@ -257,14 +257,14 @@ async def research_competitors(db, row, request, provider):
             except ValueError:
                 pass
         sources.append(entry)
-        row.document = {**(row.document or {}), "research": {"query": stored_report.get("query") or query, "sources": sources}}
+        row.document = {**(row.document or {}), "research": {"query": stored_report.get("query") or query, "sources": sources, "search_complete": True}}
         db.commit()
     if not any(source["status"] == "fetched" for source in sources):
         row.status, row.phase = "awaiting_sources", "Этап 1/3 · нужен HTML конкурентов из Google"
         db.commit()
         return None
     row.phase = "Этап 1/3 · анализ конкурентов в Gemini"
-    row.document = {**(row.document or {}), "research": {"query": query, "sources": sources}}
+    row.document = {**(row.document or {}), "research": {"query": query, "sources": sources, "search_complete": True}}
     db.commit()
     response = await call_gemini(provider,
         "Analyze these search results and readable competitor excerpts for a single-brand website. "
@@ -279,7 +279,7 @@ async def research_competitors(db, row, request, provider):
     analysis = extract_gemini_text(response)
     if len(analysis.strip()) < 100:
         raise ValueError("Gemini не вернул анализ конкурентов")
-    report = {"query": query, "sources": sources, "analysis": analysis}
+    report = {"query": query, "sources": sources, "analysis": analysis, "search_complete": True}
     row.document = {**(row.document or {}), "research": report}
     db.commit()
     return report

@@ -9,3 +9,5 @@
 .tg-stage-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 16px 0; }
 
 .tg-pipeline { display:flex; flex-wrap:wrap; gap:12px; list-style:none; padding:0; margin:20px 0; }.tg-pipeline li { padding:10px 16px; background:#eef3ff; color:#24438b; border-radius:10px; font-weight:600; }
+
+.tg-create-aside{display:grid;gap:24px;align-self:start;min-width:0}.tg-source-title{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}.tg-source-title h3{margin:0}.tg-create-aside .tg-source-editor{margin:0}.tg-create-aside .tg-source-field{min-width:0}.tg-create-aside .tg-downloads{flex-wrap:wrap}.tg-create-aside .tg-note{font-size:13px;padding:12px}.tg-create-aside .tg-source-editor>p{font-size:13px;line-height:1.5}.tg-create-aside textarea{font-family:monospace;font-size:12px}@media(max-width:700px){.tg-source-title{align-items:stretch;flex-direction:column}.tg-create-aside .tg-card{padding:18px}}

@@ -6,7 +6,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
 
 site=dict(id='preview',name='example.cz',brand='Brand',fibery_name='#640_fontan casino_PL',external_project_id='project',base_url='https://example.cz',publication_endpoint='',payload_mode='simple_page',editor_version='2',default_menu={'header':[],'footer':[]},menu_library=[],default_banners=[],cache_canon='example.cz',cache_geo='CZ',cache_language='cs',homepage_title='Home',internal_pages_count=1,domains_count=2,cache_domains=['example.cz'],main_domain_history=[],x_default_history=['old.test'],alternate_domain_history=[],cache_server_host='test.example',project_status='working',is_test_project=False,has_menu=False,cache_synced_at='2026-10-09T10:00:00Z')
-home={'key':'home','title':'Home','description':'Original description','slug':'/','is_home':True,'revision':'a'*64,'content':{'version':'2.28','blocks':[
+home={'key':'home','title':'Home','description':'Original description','slug':'/','is_home':True,'created_at':'2026-01-15 10:30:00','updated_at':'2026-10-09 09:11:00','revision':'a'*64,'content':{'version':'2.28','blocks':[
  {'id':'heading','type':'header','data':{'text':'Brand overview','level':1}},
  {'id':'text','type':'paragraph','data':{'text':'Brand text with <a href="/terms/">terms</a> and <strong>100</strong> points.'}},
  {'id':'image','type':'image','data':{'file':{'url':'/uploads/brand.webp'},'caption':'Brand image','withBorder':False}},
@@ -57,6 +57,10 @@ with sync_playwright() as p:
  page.goto(base+'/project-content/example.cz/')
  expect(page.get_by_role('heading',name='Все страницы')).to_be_visible()
  expect(page.locator('.pp-page-row').first).to_contain_text('Главная')
+ expect(page.locator('.pp-page-row').first).to_contain_text('15.01.2026, 10:30')
+ expect(page.locator('.pp-page-row').first).to_contain_text('09.10.2026, 09:11')
+ expect(page.locator('.publicationWorkflowNav button').first).to_contain_text('2')
+ page.screenshot(path='/tmp/pagepilot-pages-dates.png')
  page.locator('.pp-page-row').first.click()
  expect(page.get_by_role('dialog')).to_be_visible()
  expect(page.get_by_label('Title страницы')).to_have_value('Home')
@@ -93,8 +97,11 @@ with sync_playwright() as p:
  page.set_viewport_size({'width':390,'height':844})
  assert page.locator('.pp-page-editor').evaluate('(e)=>e.scrollWidth<=innerWidth')
  page.screenshot(path='/tmp/pagepilot-editor-checks/mobile.png')
+ page.once('dialog',lambda d:d.dismiss())
+ page.get_by_role('button',name='Назад',exact=True).click()
+ expect(page.get_by_role('dialog')).to_be_visible()
  page.once('dialog',lambda d:d.accept())
- page.get_by_role('button',name='Закрыть редактор',exact=True).click()
+ page.get_by_role('button',name='Назад',exact=True).click()
  page.get_by_role('button',name='Bonus page',exact=False).click()
  page.get_by_role('button',name='Сгенерировать перелинковку',exact=True).click()
  expect(page.locator('.pp-content-block').nth(1).get_by_role('textbox',name='Текст',exact=True).locator('a')).to_have_attribute('href','/')
@@ -103,6 +110,8 @@ with sync_playwright() as p:
  page.set_viewport_size({'width':1440,'height':1000})
  page.goto(base+'/sites')
  expect(page.get_by_text('Имя проекта',exact=True)).to_be_visible()
+ expect(page.get_by_text('Name WebDev',exact=True)).to_be_visible()
+ expect(page.get_by_text('Страницы',exact=True)).to_be_visible()
  expect(page.get_by_text('x-default',exact=True)).to_have_count(0)
  page.get_by_placeholder('Поиск по домену или имени проекта').fill('fontan casino')
  expect(page.get_by_text('#640_fontan casino_PL',exact=True)).to_be_visible()

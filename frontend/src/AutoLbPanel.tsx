@@ -8,7 +8,7 @@ type Context = { brand: string; geo: string; language: string; main: string; mai
 type Generation = { id: string; kind: Kind; status: string; context: Context; prompt: string; text: string;
   error: string | null; line_count: number; unique_count: number; created_at: string };
 type State = { context: Context | null; context_error: string | null; provider_ready: boolean;
-  anchor_count: number; topic_count: number; prompts: Partial<Record<Kind, string>>; generations: Generation[] };
+  anchor_count: number; topic_count: number; topic_text: string; prompts: Partial<Record<Kind, string>>; generations: Generation[] };
 type Api = <T>(path: string, init?: RequestInit) => Promise<T>;
 const pending = (row: Generation) => row.status === "queued" || row.status === "running";
 const statusLabel: Record<string, string> = { queued: "В очереди", running: "Gemini генерирует список", completed: "Готово", failed: "Ошибка генерации" };
@@ -64,7 +64,7 @@ export function AutoLbPanel({ siteId, api }: { siteId: string; api: Api }) {
       const row = await api<Generation>(`/sites/${siteId}/auto-lb`, { method: "POST", body: JSON.stringify({ kind }) });
       if (!alive.current) return;
       setState(current => current ? { ...current, generations: [row, ...current.generations.filter(item => item.id !== row.id)] } : current);
-      setSelected(current => ({ ...current, [kind]: row.id }));
+      setSelected(current => ({ ...current, [kind]: kind === "topics" ? undefined : row.id }));
     } catch (error) {
       if (alive.current) setErrors(current => ({ ...current, [kind]: error instanceof Error ? error.message : "Не удалось запустить генерацию." }));
     } finally { if (alive.current) setBusy(current => ({ ...current, [kind]: false })); }
@@ -73,7 +73,7 @@ export function AutoLbPanel({ siteId, api }: { siteId: string; api: Api }) {
   async function copyResult(kind: Kind, row: Generation) {
     try {
       await copy(row.text);
-      if (alive.current) setCopied(current => ({ ...current, [kind]: row.id }));
+      if (alive.current) setCopied(current => ({ ...current, [kind]: `${row.id}:${row.text.length}` }));
     } catch (error) { if (alive.current) setErrors(current => ({ ...current, [kind]: error instanceof Error ? error.message : "Не удалось скопировать." })); }
   }
 
@@ -96,20 +96,23 @@ export function AutoLbPanel({ siteId, api }: { siteId: string; api: Api }) {
     <div className="autoLbColumns">
       {(["anchors", "topics"] as Kind[]).map(kind => {
         const rows = state?.generations.filter(row => row.kind === kind) || [];
-        const row = rows.find(item => item.id === selected[kind]) || rows[0];
+        const batch = rows.find(item => item.id === selected[kind]) || rows[0];
+        const topicText = state?.topic_text || "";
+        const cumulative = batch || (topicText && state?.context ? { id: "all-topics", kind, status: "completed", context: state.context, prompt: state.prompts.topics || "", text: "", error: null, line_count: 0, unique_count: 0, created_at: "" } : undefined);
+        const row = kind === "topics" && !selected.topics && cumulative ? { ...cumulative, text: topicText, line_count: topicText ? topicText.split("\n").length : 0 } : batch;
         const active = rows.find(pending);
         const title = kind === "anchors" ? "Анкор-лист" : "Генерация тем";
-        const count = kind === "anchors" ? state?.anchor_count ?? 87 : 100;
-        const changed = row && state?.context && Object.keys(row.context).some(key => row.context[key as keyof Context] !== state.context?.[key as keyof Context]);
+        const count = kind === "anchors" ? state?.anchor_count ?? 300 : state?.topic_count ?? 300;
+        const changed = row && state?.context && (["brand", "geo", "language", ...(kind === "anchors" ? ["main", "main_url"] : [])] as (keyof Context)[]).some(key => row.context[key] !== state.context?.[key]);
         return <section className="autoLbCard" key={kind} aria-label={title}>
           <div className="autoLbCardTitle"><h3>{title}</h3><span className="autoLbCount">{count} строк</span></div>
           <p className="muted autoLbDescription">{kind === "anchors"
-            ? "Структура и повторы из вашего образца. Перевод на язык проекта, домен и URL — текущий Main."
-            : "100 разных рекламно-информационных тем по вашему примеру, на языке и для бренда проекта."}</p>
+            ? "300 строк с повторами, без образца. Бренд и язык проекта, домен и URL — текущий Main."
+            : "Каждый запуск добавляет 300 новых тем без образца. Общий список сохраняется для бренда, ГЕО и языка проекта."}</p>
           <button type="button" className="button" disabled={!state?.context || !state.provider_ready || !!active || !!busy[kind] || !!loadError}
             onClick={() => void generate(kind)}>
             {active || busy[kind] ? <LoaderCircle size={16} className="autoLbSpinner" /> : <Sparkles size={16} />}
-            {active ? statusLabel[active.status] : busy[kind] ? "Запуск…" : kind === "anchors" ? "Сгенерировать анкор-лист" : "Сгенерировать 100 тем"}
+            {active ? statusLabel[active.status] : busy[kind] ? "Запуск…" : kind === "anchors" ? "Сгенерировать анкор-лист" : "Добавить 300 тем"}
           </button>
           {(active || busy[kind]) && <p className="muted" role="status">Задача выполняется на сервере. Можно закрыть вкладку.</p>}
           {errors[kind] && <p role="alert" className="notice">{errors[kind]}</p>}
@@ -118,14 +121,15 @@ export function AutoLbPanel({ siteId, api }: { siteId: string; api: Api }) {
           <div className="autoLbResultBar"><span>{row ? statusLabel[row.status] : "Результат"}{row?.text ? ` · ${row.line_count} строк${kind === "anchors" ? ` · ${row.unique_count} уникальных` : ""}` : ""}</span>
             <div className="autoLbActions"><button type="button" className="button secondary compact" disabled={!row?.text}
               aria-label={`Скопировать ${kind === "anchors" ? "анкор-лист" : "темы"}`} title="Скопировать" onClick={() => row && void copyResult(kind, row)}>
-              <Copy size={16} /><span>{row && copied[kind] === row.id ? "Скопировано" : "Скопировать"}</span></button>
+              <Copy size={16} /><span>{row && copied[kind] === `${row.id}:${row.text.length}` ? "Скопировано" : "Скопировать"}</span></button>
               <button type="button" className="button secondary compact" disabled={!row?.text} aria-label={`Скачать ${title} TXT`} title="Скачать TXT" onClick={() => row && download(row)}><Download size={16} /></button></div>
           </div>
           <textarea className="autoLbResult" aria-label={`Результат: ${title}`} readOnly dir="auto" value={row?.text || ""}
             placeholder={kind === "anchors" ? "Каждый анкор с новой строки. Повторы сохраняются." : "Каждая тема с новой строки, без нумерации."} />
-          <details><summary>Промпт для Gemini</summary><pre className="autoLbPrompt">{row?.prompt || state?.prompts[kind] || "Заполните бренд, ГЕО, язык и Main проекта."}</pre></details>
+          <details><summary>Промпт для Gemini</summary><pre className="autoLbPrompt">{(selected[kind] ? row?.prompt : state?.prompts[kind]) || state?.prompts[kind] || "Заполните бренд, ГЕО, язык и Main проекта."}</pre></details>
+          {kind === "topics" && selected.topics && <button type="button" className="button secondary compact" onClick={() => setSelected(current => ({ ...current, topics: undefined }))}>Показать общий список тем</button>}
           {rows.length > 0 && <details><summary>История генераций ({rows.length})</summary><div className="autoLbHistory">{rows.map(item => <button type="button"
-            key={item.id} className="button secondary compact" aria-pressed={row?.id === item.id} onClick={() => setSelected(current => ({ ...current, [kind]: item.id }))}>
+            key={item.id} className="button secondary compact" aria-pressed={selected[kind] === item.id} onClick={() => setSelected(current => ({ ...current, [kind]: item.id }))}>
             {new Date(item.created_at).toLocaleString("ru-RU")} · {statusLabel[item.status]}</button>)}</div></details>}
         </section>;
       })}

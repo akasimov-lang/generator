@@ -189,3 +189,11 @@ def test_fibery_name_keeps_value_when_snapshot_omits_field_and_clears_explicit_e
     assert site.fibery_name=='#640_fontan casino_PL'
     _apply_fibery_name(site,{'webdevDuty':{'fibery':''}})
     assert site.fibery_name is None
+
+
+def test_page_dates_from_webdev_with_publication_fallback():
+    row = pages.page_summary({'id': '1', 'slug': '/', 'createdTime': '2025-01-01', 'publishedTime': '2025-01-02', 'updatedTime': '2026-10-09'})
+    assert row['created_at'] == '2025-01-01' and row['created_at_source'] == 'createdTime'
+    assert row['updated_at'] == '2026-10-09'
+    assert pages.page_summary({'publishedTime': '2025-01-02'})['created_at'] == '2025-01-02'
+    assert pages.page_summary({})['created_at'] is None
