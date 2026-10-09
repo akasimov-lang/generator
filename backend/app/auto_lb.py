@@ -1,5 +1,4 @@
 """AutoLB drafts: immutable project context and exact reference anchor frequencies."""
-from collections import Counter
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -13,6 +12,7 @@ from sqlalchemy import select
 DATA = Path(__file__).parent / "data" / "auto_lb"
 ANCHORS = (DATA / "anchors_cs.txt").read_text().splitlines()
 OUTPUT_LINES = 300
+DEFAULT_UNIQUE_ANCHORS = 30
 
 
 def project_context(site):
@@ -41,10 +41,14 @@ def build_prompt(kind, context):
               "Пиши естественно на этом языке, локализуй название страны. Сохрани бренд проекта. "
               "Только готовые строки, без вступлений, заключений, Markdown, групп и нумерации.\n")
     if kind == "anchors":
+        unique_count = context.get("unique_anchor_count", DEFAULT_UNIQUE_ANCHORS)
         return (f"Сгенерируй анкор-лист из {OUTPUT_LINES} строк с повторами для {brand}, ГЕО {geo}, на языке {language}, "
                 "без нумерации, где каждый ключ с новой строки без разбивки на группы, "
                 "при этом рассчитай всё в правильном соотношении через повторы одинаковых анкоров."
                 + common
+                + f"В итоговом списке должно быть ровно {unique_count} уникальных анкоров. "
+                f"Остальные строки до общего количества {OUTPUT_LINES} заполни повторами этих анкоров. "
+                "Различия только в регистре букв или пробелах не считаются уникальными анкорами.\n"
                 + f"Не менее 10% всех строк (минимум {(OUTPUT_LINES + 9) // 10} из {OUTPUT_LINES}) должны быть "
                 "анкорами рекламно-информационного характера с обязательным вхождением бренда проекта. "
                 "Каждый такой анкор должен содержать бренд и содержательную рекламно-информационную фразу "
@@ -86,7 +90,14 @@ def normalize_result(kind, text, context):
         # New prompts are free of examples; preserve Gemini's anchor choices and repetitions.
         # Domain anchors always use the current Main, as requested by the user.
         domain = re.compile(r"https?://[^\s<>]+|(?<![\w@])(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,24}(?:/[^\s<>]*)?", re.I)
-        return "\n".join(domain.sub(lambda match: context["main_url"] if match.group().lower().startswith(("http://", "https://")) else context["main"], line) for line in lines)
+        lines = [domain.sub(lambda match: context["main_url"] if match.group().lower().startswith(("http://", "https://")) else context["main"], line) for line in lines]
+        # Only new jobs carry this requirement; saved/queued older jobs keep their contract.
+        unique_count = context.get("unique_anchor_count")
+        actual = len({normalized_key(line) for line in lines})
+        if unique_count is not None and actual != unique_count:
+            raise ValueError(f"Ожидалось {unique_count} уникальных анкоров, получено {actual}. "
+                             "Проверь повторы, регистр, пробелы и использование текущего Main.")
+        return "\n".join(lines)
     # Older queued tasks keep their original 87-line reference contract.
 
     profile = ANCHORS
@@ -157,4 +168,4 @@ def serialize(row):
     lines = (row.result_text or "").splitlines()
     return {"id": row.id, "kind": row.kind, "status": row.status, "context": row.context,
             "prompt": row.prompt, "text": row.result_text or "", "error": row.error,
-            "line_count": len(lines), "unique_count": len(Counter(lines)), "created_at": row.created_at}
+            "line_count": len(lines), "unique_count": len({normalized_key(line) for line in lines}), "created_at": row.created_at}

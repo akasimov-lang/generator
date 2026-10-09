@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from typing import Literal
+from pydantic import BaseModel, Field
+from typing import Annotated, Literal
 
 from app import models, auto_lb
 from app.db import get_db
@@ -13,6 +13,7 @@ router = APIRouter(prefix="/sites/{site_id}/auto-lb", tags=["AutoLB"])
 
 class GenerateRequest(BaseModel):
     kind: Literal["anchors", "topics"]
+    unique_anchor_count: int = Field(default=auto_lb.DEFAULT_UNIQUE_ANCHORS, ge=1, le=auto_lb.OUTPUT_LINES, strict=True)
 
 
 def get_site(db, site_id, lock=False):
@@ -24,7 +25,8 @@ def get_site(db, site_id, lock=False):
 
 
 @router.get("")
-def state(site_id: str, user: AuthUser, db: Session = Depends(get_db)):
+def state(site_id: str, user: AuthUser, db: Session = Depends(get_db),
+          unique_anchor_count: Annotated[int, Query(ge=1, le=auto_lb.OUTPUT_LINES)] = auto_lb.DEFAULT_UNIQUE_ANCHORS):
     site = get_site(db, site_id)
     error, context = None, None
     try:
@@ -38,7 +40,8 @@ def state(site_id: str, user: AuthUser, db: Session = Depends(get_db)):
     return {"context": context, "context_error": error, "provider_ready": bool(provider and provider.api_key),
             "anchor_count": auto_lb.OUTPUT_LINES, "topic_count": auto_lb.OUTPUT_LINES,
             "topic_text": "\n".join(auto_lb.topic_lines(db, site_id, context)),
-            "prompts": {k: auto_lb.build_prompt(k, context) for k in ("anchors", "topics")} if context else {},
+            "prompts": {k: auto_lb.build_prompt(k, {**context, "unique_anchor_count": unique_anchor_count})
+                        for k in ("anchors", "topics")} if context else {},
             "generations": [auto_lb.serialize(row) for row in rows]}
 
 
@@ -49,6 +52,8 @@ def create(site_id: str, payload: GenerateRequest, user: AuthUser, db: Session =
         context = auto_lb.project_context(site)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+    if payload.kind == "anchors":
+        context["unique_anchor_count"] = payload.unique_anchor_count
     existing = db.scalar(select(models.AutoLbGeneration).where(
         models.AutoLbGeneration.site_id == site_id, models.AutoLbGeneration.kind == payload.kind,
         models.AutoLbGeneration.status.in_(["queued", "running"])))

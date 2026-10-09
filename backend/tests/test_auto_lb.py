@@ -112,7 +112,7 @@ def test_durable_jobs_separate_kinds_and_snapshot_context(env, monkeypatch):
     calls = []
     async def gemini(_provider, prompt):
         calls.append(prompt)
-        return response(["BetOnRed"] * 298 + ["current.example", "https://current.example"])
+        return response([f"BetOnRed phrase {n % 28}" for n in range(298)] + ["current.example", "https://current.example"])
     monkeypatch.setattr("app.services.call_gemini", gemini)
     assert run_job(db, jobs[0].id)["status"] == "completed"
     assert run_job(db, jobs[0].id)["status"] == "skipped"
@@ -199,3 +199,57 @@ def test_repeated_generation_appends_300_topics_and_retries_duplicate_batch(env,
     text=state(site.id,{'id':user.id},db)['topic_text'].splitlines()
     assert text==[f'Old topic {i}' for i in range(300)]+[f'New topic {i}' for i in range(300)]
     assert provider.total_tokens_used==36
+
+
+@pytest.mark.parametrize('count', [1, 30, 47, 300])
+def test_unique_anchor_setting_snapshotted_and_preview_matches_job(env, count):
+    db, site, _ = env
+    user, _ = configure(db, site)
+    from app.auto_lb_api import create, GenerateRequest, state
+    preview = state(site.id, {'id': user.id}, db, unique_anchor_count=count)
+    row = create(site.id, GenerateRequest(kind='anchors', unique_anchor_count=count), {'id': user.id}, db)
+    assert row['context']['unique_anchor_count'] == count
+    assert row['prompt'] == preview['prompts']['anchors']
+    assert f'ровно {count} уникальных анкоров' in row['prompt']
+    assert 'Не менее 10%' in row['prompt']
+    lines = [f'BetOnRed phrase {n % count}' for n in range(300)]
+    assert auto_lb.normalize_result('anchors', '\n'.join(lines), row['context']).splitlines() == lines
+
+
+def test_unique_default_and_invalid_counts():
+    from app.auto_lb_api import GenerateRequest
+    from pydantic import ValidationError
+    assert GenerateRequest(kind='anchors').unique_anchor_count == 30
+    for invalid in [0, -1, 301, 2.5, True, None, '30']:
+        with pytest.raises(ValidationError):
+            GenerateRequest(kind='anchors', unique_anchor_count=invalid)
+
+
+def test_unique_count_checked_after_domain_replacement_and_normalization(env):
+    db, site, _ = env
+    configure(db, site)
+    ctx = {**auto_lb.project_context(site), 'unique_anchor_count': 4}
+    lines = ['BetOnRed  info', 'betonred info', 'one.example', 'two.example'] * 75
+    with pytest.raises(ValueError, match='получено 2'):
+        auto_lb.normalize_result('anchors', '\n'.join(lines), ctx)
+    ctx['unique_anchor_count'] = 2
+    result = auto_lb.normalize_result('anchors', '\n'.join(lines), ctx)
+    assert result.count('current.example') == 150
+
+
+def test_incorrect_unique_count_retries_with_saved_requirement(env, monkeypatch):
+    db, site, _ = env
+    user, _ = configure(db, site)
+    from app.auto_lb_api import create, GenerateRequest
+    row = create(site.id, GenerateRequest(kind='anchors', unique_anchor_count=40), {'id': user.id}, db)
+    prompts = []
+    async def gemini(_provider, prompt):
+        prompts.append(prompt)
+        count = 1 if len(prompts) == 1 else 40
+        return response([f'BetOnRed info {n % count}' for n in range(300)])
+    monkeypatch.setattr('app.services.call_gemini', gemini)
+    job = db.scalar(select(models.BackgroundJob))
+    assert run_job(db, job.id)['status'] == 'completed'
+    assert len(prompts) == 2 and 'Ожидалось 40 уникальных анкоров, получено 1' in prompts[1]
+    saved = db.get(models.AutoLbGeneration, row['id'])
+    assert auto_lb.serialize(saved)['unique_count'] == 40

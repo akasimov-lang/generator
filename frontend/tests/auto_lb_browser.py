@@ -3,7 +3,7 @@ import json
 import mimetypes
 import os
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 from playwright.sync_api import sync_playwright, expect
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -15,6 +15,7 @@ site = dict(id='own', name='own.test', brand='BetOnRed',brand_source='manual',ba
 ctx={'brand':'BetOnRed','geo':'CZ','language':'cs','main':'current.example','main_url':'https://current.example'}
 state={'context':ctx,'context_error':None,'provider_ready':True,'anchor_count':300,'topic_count':300,'topic_text':'','prompts':{'anchors':'Anchor prompt','topics':'Topic prompt'},'generations':[]}
 writes=[]
+anchor_counts=[]
 with sync_playwright() as p:
     browser=p.chromium.launch(executable_path=os.environ.get('CHROME','/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),headless=True)
     page=browser.new_page(viewport={'width':1600,'height':1100})
@@ -34,17 +35,30 @@ with sync_playwright() as p:
         elif path=='/sites/own/auto-lb':
             if r.request.method=='POST':
                 kind=r.request.post_data_json['kind'];writes.append(kind)
+                if kind=='anchors': anchor_counts.append(r.request.post_data_json['unique_anchor_count'])
                 row={'id':kind+str(len(writes)),'kind':kind,'status':'queued','context':dict(ctx),'prompt':kind+' prompt','text':'','error':None,'line_count':0,'unique_count':0,'created_at':'2026-10-09T12:00:00Z'}
                 state['generations'].insert(0,row);data=row
-            else:data=state
+            else:
+                count=parse_qs(urlparse(r.request.url).query).get('unique_anchor_count',['30'])[0]
+                data={**state,'prompts':{**state['prompts'],'anchors':f'Ровно {count} уникальных анкоров'}}
         r.fulfill(content_type='application/json',body=json.dumps(data))
     page.route('**/*',route)
     page.goto('http://localhost/project-auto-lb/own.test')
     expect(page.get_by_role('heading',name='АвтоЛБ',exact=True)).to_be_visible()
     expect(page.get_by_role('button',name='Скопировать анкор-лист')).to_be_disabled()
+    unique=page.get_by_label('Уникальных анкоров',exact=True)
+    expect(unique).to_have_value('30')
+    for invalid in ['0','301','2.5','']:
+        unique.fill(invalid)
+        expect(page.get_by_role('button',name='Сгенерировать анкор-лист')).to_be_disabled()
+    unique.fill('45')
+    page.locator('.autoLbCard').first.get_by_text('Промпт для Gemini',exact=True).click()
+    expect(page.locator('.autoLbPrompt').first).to_have_text('Ровно 45 уникальных анкоров')
     page.get_by_role('button',name='Сгенерировать анкор-лист').click()
+    expect(unique).to_be_disabled()
     page.get_by_role('button',name='Добавить 300 тем').click()
     assert writes==['anchors','topics']
+    assert anchor_counts==[45]
     for row in state['generations']:
         row['status']='completed';row['text']=anchors if row['kind']=='anchors' else topics
         row['line_count']=len(row['text'].splitlines());row['unique_count']=len(set(row['text'].splitlines()))

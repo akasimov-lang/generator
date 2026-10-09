@@ -8,6 +8,10 @@
 .autoLbCard p { margin: 0; }
 .autoLbDescription { min-height: 42px; font-size: 13px; line-height: 1.6; }
 .autoLbCount { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.autoLbUnique { display: flex; flex-direction: column; gap: 8px; }
+.autoLbUnique label { font-size: 13px; font-weight: 600; }
+.autoLbUnique input { width: 160px; max-width: 100%; box-sizing: border-box; }
+.autoLbUnique p { font-size: 12px; }
 .autoLbActions { display: flex; gap: 6px; flex-wrap: wrap; }
 .autoLbResultBar { font-size: 12px; }
 .autoLbResult { width: 100%; min-height: 420px; resize: vertical; box-sizing: border-box; line-height: 1.65; }
