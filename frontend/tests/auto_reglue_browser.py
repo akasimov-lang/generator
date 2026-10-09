@@ -12,6 +12,7 @@ plan=dict(site_id='preview',project=site['name'],old_main='old.test',new_main='n
 with sync_playwright() as p:
  b=p.chromium.launch(executable_path=os.environ.get('CHROME'),headless=True)
  page=b.new_page(viewport={'width':1440,'height':1000})
+ page.add_init_script("if (!crypto.randomUUID) crypto.randomUUID = () => '00000000-0000-4000-8000-000000000001'")
  errors=[];calls=[]
  page.on('pageerror',lambda e:errors.append(str(e)))
  def route(r):
@@ -19,7 +20,7 @@ with sync_playwright() as p:
   calls.append((method,path))
   task={'site_id':'preview','project':site['name'],'enabled':True,'scope':'personal','interval_days':cfg.get('interval_days',0),'status':'scheduled','url':'/auto-reglue?project_id=preview#auto-task-preview'} if cfg.get('schedule_enabled') and cfg.get('enabled') else None
   data=[]
-  if path=='/auth/me':data={'id':'admin','username':'admin','is_admin':True,'is_active':True}
+  if path=='/auth/me':data={'id':'user','username':'user','is_admin':False,'is_active':True}
   elif path=='/sites/lookup':data=site
   elif path in ['/sites','/sites/cache/projects']:data=[site]
   elif path=='/dashboard':data={}
@@ -183,5 +184,5 @@ with sync_playwright() as p:
  expect(page.get_by_role('heading',name='Автопереклей проекта',exact=True)).to_have_count(0)
  expect(page.get_by_role('button',name='Переклеить на резервный домен',exact=True)).to_be_visible()
  assert not errors,errors
- print('PASS: settings off by default, no work on open, project setup, explicit preview/start, group setup/start, mobile, no JS errors. All API calls mocked.')
+ print('PASS: ordinary user can use mass and project auto-reglue, explicit preview/start, guide, mobile, no JS errors. All API calls mocked.')
  b.close()

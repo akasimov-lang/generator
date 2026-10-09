@@ -5,7 +5,7 @@ import ReactDOM from "react-dom/client";
 import { createPortal } from "react-dom";
 import { LANGUAGE_OPTIONS, type LanguageOption } from "./languageOptions";
 import { getMenuLibrary, type MenuLibraryItem } from "./menuLibrary";
-import { matchesProjectSearch, projectSearchKeywords } from "./projectSearch";
+import { isExactNetworkDomainSearch, matchesProjectSearch, projectSearchKeywords } from "./projectSearch";
 import { TechnicalPagesForm } from "./TechnicalPagesForm";
 import { FactualResearchPanel, factualResearchFromPayload } from "./FactualResearchPanel";
 import { workspaceRequestCache } from "./workspaceRequestCache";
@@ -728,7 +728,7 @@ function pathForRoute(view: AppView, workspaceTab: WorkspaceTab = DEFAULT_WORKSP
 }
 
 function isAdminOnlyView(view: AppView) {
-  return ["dashboard", "providers", "published", "autoReglue"].includes(view);
+  return ["dashboard", "providers", "published"].includes(view);
 }
 
 const DEFAULT_PROMPT_DRAFT = `Рабочий промпт для конкретной задачи.
@@ -943,10 +943,10 @@ function App() {
   const [providers, setProviders] = React.useState<AiProvider[]>([]);
   const [currentUser, setCurrentUser] = React.useState<User | null>(null);
   const [message, setMessage] = React.useState("");
+  const [authNotice, setAuthNotice] = React.useState("");
   const [notificationPromptVisible, setNotificationPromptVisible] = React.useState(false);
-  const [viewAsUser, setViewAsUser] = React.useState(false);
   const [workspaceContentOpenRequest, setWorkspaceContentOpenRequest] = React.useState(0);
-  const isAdmin = Boolean(currentUser?.is_admin && !viewAsUser);
+  const isAdmin = Boolean(currentUser);
 
   const navigateTo = React.useCallback((view: AppView, nextWorkspaceTab: WorkspaceTab = workspaceTab, replace = false, projectName?: string | null) => {
     const normalizedWorkspaceTab = view === "workspace" ? nextWorkspaceTab : workspaceTab;
@@ -970,6 +970,7 @@ function App() {
 
   const handleLogin = React.useCallback((nextToken: string) => {
     setMessage("");
+    setAuthNotice("");
     setToken(nextToken);
   }, []);
 
@@ -1000,6 +1001,7 @@ function App() {
       if (!response) throw networkError instanceof Error ? networkError : new Error("Failed to fetch");
       if (response.status === 401) {
         localStorage.removeItem("admin_token");
+        setAuthNotice("Срок действия токена истёк. Войдите заново, чтобы получить новый токен.");
         setToken("");
         setCurrentUser(null);
         setArchivedTasks([]);
@@ -1138,7 +1140,7 @@ function App() {
       } catch { /* API handles expired sessions; unavailable auth does not grant access. */ }
       finally { busy = false; }
     };
-    const timer = window.setInterval(() => void check(), 30000);
+    const timer = window.setInterval(() => void check(), 60 * 60 * 1000);
     window.addEventListener("focus", check);
     return () => { window.clearInterval(timer); window.removeEventListener("focus", check); };
   }, [api, token, currentUser]);
@@ -1173,14 +1175,6 @@ function App() {
       api<AiProvider[]>("/ai-providers").then(setProviders).catch(error => { providersLoadedRef.current = false; setMessage(String(error)); });
     }
   }, [api, currentUser?.id, activeView, workspaceTab]);
-
-  React.useEffect(() => {
-    if (!currentUser?.is_admin) {
-      setViewAsUser(false);
-      return;
-    }
-    setViewAsUser(localStorage.getItem(`admin_view_mode:${currentUser.username}`) === "user");
-  }, [currentUser?.id, currentUser?.is_admin, currentUser?.username]);
 
   React.useEffect(() => {
     const handlePopState = () => {
@@ -1232,7 +1226,7 @@ function App() {
   }, [activeView, currentUser, isAdmin, navigateTo, workspaceTab]);
 
   if (!token) {
-    return <LoginScreen onLogin={handleLogin} />;
+    return <LoginScreen onLogin={handleLogin} notice={authNotice} />;
   }
 
   if (!currentUser) {
@@ -1253,27 +1247,10 @@ function App() {
 
   const accountActions = (
           <div className="topbarActions">
-            {isAdmin && activeView === "autoReglue" && <a className="button primary autoReglueGuideButton" href={pathForRoute("autoReglueGuide")} onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("autoReglueGuide"); } }}><BookOpen size={18} /> Инструкция по автопереклеям</a>}
-            {currentUser.is_admin ? (
-              <button
-                className={`button secondary adminViewModeButton ${viewAsUser ? "active" : ""}`}
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  const nextValue = !viewAsUser;
-                  setViewAsUser(nextValue);
-                  localStorage.setItem(`admin_view_mode:${currentUser.username}`, nextValue ? "user" : "admin");
-                  if (nextValue && isAdminOnlyView(activeView)) navigateTo("workspace", DEFAULT_WORKSPACE_TAB);
-                }}
-                title={viewAsUser ? "Вернуться к полному интерфейсу администратора" : "Показать интерфейс обычного пользователя"}
-              >
-                {viewAsUser ? <ShieldCheck size={17} /> : <Eye size={17} />}
-                {viewAsUser ? "Режим администратора" : "Посмотреть как пользователь"}
-              </button>
-            ) : null}
+            {activeView === "autoReglue" && <a className="button primary autoReglueGuideButton" href={pathForRoute("autoReglueGuide")} onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("autoReglueGuide"); } }}><BookOpen size={18} /> Инструкция по автопереклеям</a>}
             {currentUser ? (
               <div className="userPill">
-                <span>{viewAsUser ? "Просмотр как пользователь" : currentUser.is_admin ? "Администратор" : "Пользователь"}</span>
+                <span>Полный доступ</span>
                 <strong>{currentUser.username}</strong>
               </div>
             ) : null}
@@ -1351,8 +1328,8 @@ function App() {
               <NavButton href={pathForRoute("favorites")} icon={<Star className="favoriteNavIcon" fill="currentColor" />} label="Избранное" active={activeView === "favorites"} onClick={() => navigateTo("favorites")} />
             </>
           )}
-          <NavButton href={pathForRoute("templateGenerator")} icon={<Sparkles />} label="Генератор шаблона" active={activeView === "templateGenerator"} onClick={() => navigateTo("templateGenerator")} />
-          {isAdmin && <NavButton href={pathForRoute("autoReglue")} icon={<RefreshCcw />} label="Автопереклей" active={activeView === "autoReglue"} onClick={() => navigateTo("autoReglue")} />}
+          <NavButton href={pathForRoute("templateGenerator")} icon={<FilePlus2 />} label="Генератор шаблона" active={activeView === "templateGenerator"} onClick={() => navigateTo("templateGenerator")} />
+          <NavButton href={pathForRoute("autoReglue")} icon={<RefreshCcw />} label="Автопереклей" active={activeView === "autoReglue"} onClick={() => navigateTo("autoReglue")} />
           <NavButton href={pathForRoute("settings")} icon={<Settings />} label="Настройки" active={activeView === "settings"} onClick={() => navigateTo("settings")} />
           {isAdmin ? <NavButton href={pathForRoute("published")} icon={<CheckCircle2 />} label="Опубликовано" active={activeView === "published"} onClick={() => navigateTo("published")} /> : null}
           <NavButton href={pathForRoute("guide")} icon={<BookOpen />} label="Инструкции" active={activeView === "guide" || activeView === "autoReglueGuide"} onClick={() => navigateTo("guide")} />
@@ -1371,8 +1348,7 @@ function App() {
 
         {message ? <div className="notice">{message}</div> : null}
 
-        {activeView === "workspace" && <ProjectWorkspaceView canManageAutomation={isAdmin} api={api} sites={sites} providers={providers} currentUsername={currentUser.username} activeTab={workspaceTab} contentOpenRequest={workspaceContentOpenRequest} onTabChange={(tab, projectName) => navigateTo("workspace", tab, false, projectName)} onChanged={loadAll} />}
-        {activeView === "templateGenerator" && <TemplateGenerator api={api} />}
+        {activeView === "workspace" && <ProjectWorkspaceView canManageAutomation api={api} sites={sites} providers={providers} currentUsername={currentUser.username} activeTab={workspaceTab} contentOpenRequest={workspaceContentOpenRequest} onTabChange={(tab, projectName) => navigateTo("workspace", tab, false, projectName)} onChanged={loadAll} />}
         {activeView === "prompts" && <PromptsView api={api} sites={sites} isAdmin={isAdmin} onChanged={loadAll} />}
         {isAdmin && activeView === "dashboard" && dashboard && <DashboardView api={api} dashboard={dashboard} tasks={tasks} content={content} sites={sites} onOpenTask={(task) => {
           const site = sites.find((candidate) => candidate.id === task.site_id);
@@ -1399,9 +1375,10 @@ function App() {
         {isAdmin && activeView === "providers" && <ProvidersView api={api} providers={providers} onChanged={loadAll} />}
         {activeView === "sites" && <SitesView api={api} sites={siteSnapshot} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll} />}
         {activeView === "favorites" && <SitesView api={api} sites={siteSnapshot} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} favoritesOnly readOnly={!isAdmin} onChanged={loadAll} />}
+        {activeView === "templateGenerator" && <TemplateGenerator api={api} />}
         {activeView === "guide" && <React.Suspense fallback={<p>Загрузка инструкции…</p>}><UserGuideView /></React.Suspense>}
-        {isAdmin && activeView === "autoReglue" && <AutoReglueView api={api} />}
-        {activeView === "autoReglueGuide" && <><a className="button secondary" href="/guide" onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("guide"); } }}>Все инструкции</a><AutoReglueGuide backLabel={isAdmin ? "Вернуться к автопереклею" : "Все инструкции"} onBack={() => navigateTo(isAdmin ? "autoReglue" : "guide")} /></>}
+        {activeView === "autoReglue" && <AutoReglueView api={api} />}
+        {activeView === "autoReglueGuide" && <><a className="button secondary" href="/guide" onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("guide"); } }}>Все инструкции</a><AutoReglueGuide backLabel="Вернуться к автопереклею" onBack={() => navigateTo("autoReglue")} /></>}
         {activeView === "settings" && <SettingsView api={api} currentUser={currentUser} designVersion={designVersion} onDesignVersionChange={setDesignVersion} inputStyle={inputStyle} onInputStyleChange={setInputStyle} onChanged={loadAll} />}
       </main>
       {notificationPromptVisible ? (
@@ -1548,7 +1525,7 @@ function AuthScreen({ children }: { children: React.ReactNode }) {
   );
 }
 
-function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
+function LoginScreen({ onLogin, notice = "" }: { onLogin: (token: string) => void; notice?: string }) {
   const [username, setUsername] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState("");
@@ -1566,7 +1543,8 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
       });
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        setError(typeof error.detail === "string" ? error.detail : "Не удалось войти. Попробуйте ещё раз.");
+        const upstreamMessage = [error.detail, error.message, error.error].find((value) => typeof value === "string" && value.trim());
+        setError(typeof upstreamMessage === "string" ? upstreamMessage : `Не удалось войти. Webdev вернул HTTP ${response.status}.`);
         return;
       }
       const data = await response.json();
@@ -1587,6 +1565,7 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
           <LoginBrandName />
         </div>
         <p>Войдите с логином и паролем Webdev.</p>
+        {notice ? <div className="notice" role="status">{notice}</div> : null}
         <label>
           Логин
           <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" autoFocus required disabled={submitting} />
@@ -8712,16 +8691,26 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
     if (summaryFilter === "mass_actions") return row.projectStatus === "mass_actions";
     return row.projectStatus === "duplicate";
   };
-  const filteredRows = domainRows.filter((row) => (
-    (!favoritesOnly || row.isFavorite)
-    && matchesSummaryFilter(row)
-    && (!medalFilter || row.medalStatus === medalFilter)
-    && statusFilters.includes(row.projectStatus)
-    && menuTypeFilters.includes(row.menuTypeKey)
-    && (!geoFilter || siteGeoFilterCode(row.geo) === geoFilter)
-    && (!normalizedBrandFilter || matchesProjectSearch(row.brand, normalizedBrandFilter))
-    && (!normalizedQuery || [row.name, row.homepageTitle || "", row.canon, row.externalProjectId || "", row.projectStatus, ...row.domains].some((value) => matchesProjectSearch(value, normalizedQuery)))
-  ));
+  const filteredRows = domainRows.filter((row) => {
+    const exactNetworkDomainMatch = isExactNetworkDomainSearch(row.domains, normalizedQuery);
+    const matchesSearch = !normalizedQuery
+      || [row.name, row.homepageTitle || "", row.canon, row.externalProjectId || "", row.projectStatus, ...row.domains]
+        .some((value) => matchesProjectSearch(value, normalizedQuery));
+    const matchesActiveFilters = (
+      (!favoritesOnly || row.isFavorite)
+      && matchesSummaryFilter(row)
+      && (!medalFilter || row.medalStatus === medalFilter)
+      && statusFilters.includes(row.projectStatus)
+      && menuTypeFilters.includes(row.menuTypeKey)
+      && (!geoFilter || siteGeoFilterCode(row.geo) === geoFilter)
+      && (!normalizedBrandFilter || matchesProjectSearch(row.brand, normalizedBrandFilter))
+    );
+    return matchesSearch && (exactNetworkDomainMatch || matchesActiveFilters);
+  }).sort((left, right) => {
+    if (!normalizedQuery) return 0;
+    return Number(isExactNetworkDomainSearch(right.domains, normalizedQuery))
+      - Number(isExactNetworkDomainSearch(left.domains, normalizedQuery));
+  });
   const totalPages = rowsPerPage === "all" ? 1 : Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
   const activePage = Math.min(currentPage, totalPages);
   const pageStart = rowsPerPage === "all" ? 0 : (activePage - 1) * rowsPerPage;
@@ -9641,7 +9630,7 @@ function SettingsView({ api, currentUser, inputStyle, onInputStyleChange, design
           </div>
           {currentUser ? <RoleBadge admin={currentUser.is_admin} /> : null}
         </div>
-        <p className="muted">Вход и пароль управляются в Webdev. Администратор панели — anton.</p>
+        <p className="muted">Вход и пароль управляются в Webdev. Все авторизованные пользователи имеют одинаковый полный доступ.</p>
       </DataPanel>
 
       {currentUser?.is_admin ? (
@@ -10421,7 +10410,12 @@ function ContentPreviewModal({ item, promptName, actions, api, onChanged, onClos
     try {
       const queued = await api<ContentItem>(`/content/${currentItem.id}/revise`, {
         method: "POST",
-        body: JSON.stringify({ remarks: remarks.trim(), generate_title: generateTitle })
+        body: JSON.stringify({
+          remarks: remarks.trim(),
+          generate_title: generateTitle,
+          source_revision_id: selectedVersion?.revisionId || null,
+          source_revision_side: selectedVersion?.side || null
+        })
       });
       setCurrentItem(queued);
       setSelectedVersion(null);
@@ -10476,6 +10470,7 @@ function ContentPreviewModal({ item, promptName, actions, api, onChanged, onClos
               </div>
             ) : (
               <form onSubmit={requestRevision}>
+                <div className="notice">Основа новой доработки: <b>{selectedVersionLabel}</b>.</div>
                 <label>
                   Замечания к доработке
                   <textarea value={remarks} onChange={(event) => setRemarks(event.target.value)} rows={4} minLength={3} maxLength={5000} placeholder="Напишите, что в тексте нужно исправить, добавить или доработать" required />
@@ -10673,6 +10668,7 @@ function ProviderValidationCell({ provider }: { provider: AiProvider }) {
 function RoleBadge({ admin }: { admin: boolean }) {
   return <span className={`roleBadge ${admin ? "admin" : ""}`}>{admin ? "Администратор" : "Пользователь"}</span>;
 }
+
 
 function sectionLabel(sectionId: string | null, sections: Section[]) {
   if (!sectionId) return "Не выбран";

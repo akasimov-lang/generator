@@ -152,6 +152,89 @@ def test_published_content_revision_is_queued_with_editor_options(monkeypatch: p
         assert revisions[0].revised_json is None
 
 
+def test_revision_uses_the_selected_historical_version(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+    queued: list[tuple[str, str]] = []
+    monkeypatch.setattr("app.api.revise_content_item_job.delay", lambda *args: queued.append(args))
+
+    with TestingSession() as db:
+        task = models.GenerationTask(title="Revise", geo="CZ", language="cs", topics_count=1)
+        current_json = {"pages": [{"title": "Latest title", "content": {"blocks": []}}]}
+        selected_json = {"pages": [{"title": "Preferred title", "content": {"blocks": []}}]}
+        item = models.ContentItem(
+            task=task,
+            topic="Casino review",
+            slug="/casino-review/",
+            generated_json=current_json,
+            status="generated",
+            idempotency_key="selected-revision-item",
+        )
+        db.add(item)
+        db.flush()
+        historical = models.ContentRevision(
+            content_item_id=item.id,
+            remarks="Previous edit",
+            generate_title=True,
+            source_json={"pages": [{"title": "Original title", "content": {"blocks": []}}]},
+            revised_json=selected_json,
+            status="completed",
+        )
+        other_item = models.ContentItem(
+            task=task,
+            topic="Other review",
+            slug="/other-review/",
+            generated_json={"pages": []},
+            status="generated",
+            idempotency_key="other-revision-item",
+        )
+        db.add(other_item)
+        db.flush()
+        other_revision = models.ContentRevision(
+            content_item_id=other_item.id,
+            remarks="Other edit",
+            generate_title=True,
+            source_json={"pages": []},
+            revised_json={"pages": []},
+            status="completed",
+        )
+        db.add_all([historical, other_revision])
+        db.commit()
+
+        response = revise_content(
+            item.id,
+            ContentRevisionRequest(
+                remarks="Improve this exact version",
+                source_revision_id=historical.id,
+                source_revision_side="revised",
+            ),
+            {"id": "editor-id", "username": "editor", "is_admin": False},
+            db,
+        )
+
+        created = db.get(models.ContentRevision, queued[0][1])
+        assert response.status == "generation_queued"
+        assert created is not None
+        assert created.source_json == selected_json
+        assert created.source_json != current_json
+
+        item.status = "generated"
+        db.commit()
+        with pytest.raises(HTTPException) as error:
+            revise_content(
+                item.id,
+                ContentRevisionRequest(
+                    remarks="Try another article",
+                    source_revision_id=other_revision.id,
+                    source_revision_side="revised",
+                ),
+                {"id": "editor-id", "username": "editor", "is_admin": False},
+                db,
+            )
+        assert error.value.status_code == 404
+
+
 def test_completed_revision_keeps_before_and_after_versions(monkeypatch: pytest.MonkeyPatch) -> None:
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)

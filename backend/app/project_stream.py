@@ -11,6 +11,7 @@ import httpx
 from app.core.config import get_settings
 from app.db import SessionLocal
 from app.project_cache import ProjectCacheError, fetch_project_cache, sync_project_cache, sync_project_data_update
+from app.webdev import webdev_origin_headers
 
 
 logger = logging.getLogger("project-stream")
@@ -73,6 +74,7 @@ def _login(client: httpx.Client) -> str:
     response = client.post(
         f"{settings.project_cache_url.rstrip('/')}/auth/login",
         json={"username": settings.project_cache_username, "pass": settings.project_cache_password},
+        headers=webdev_origin_headers(settings),
     )
     response.raise_for_status()
     token = str(response.json().get("token") or "").strip()

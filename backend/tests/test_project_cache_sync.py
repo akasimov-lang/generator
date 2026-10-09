@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
+import httpx
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -15,6 +17,278 @@ def make_session() -> Session:
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(bind=engine)
     return Session(engine)
+
+
+def test_server_refresh_recovers_project_omitted_from_aggregate_cache(monkeypatch) -> None:
+    with make_session() as db:
+        site = models.Site(
+            name="associacaojorgepina.pt",
+            base_url="https://casinos.associacaojorgepina.pt",
+            publication_endpoint="https://casinos.associacaojorgepina.pt/api/content",
+            cache_server_ip="bear",
+        )
+        db.add(site)
+        db.commit()
+        direct_project = {
+            "settings": {
+                "canon": "casinos-pt.terrasdafeira.pt",
+                "domains": ["associacaojorgepina.pt", "casinos-pt.terrasdafeira.pt"],
+                "geo": "pt_PT",
+                "lang": "pt-PT",
+            },
+            "data": {"menu": {"header": [], "footer": []}, "pages": [{"slug": "/", "title": "Portugal"}]},
+        }
+        monkeypatch.setattr(project_cache_module, "fetch_project_cache", lambda names: (_ for _ in ()).throw(AssertionError("cache must not be queried after serverId succeeds")))
+        monkeypatch.setattr(project_cache_module, "_fetch_project_from_known_server", lambda target: direct_project)
+
+        assert project_cache_module.refresh_project_server_id(db, site) == "bear"
+        assert site.cache_server_ip == "bear"
+        assert site.cache_canon == "casinos-pt.terrasdafeira.pt"
+        assert site.cache_domains == ["associacaojorgepina.pt", "casinos-pt.terrasdafeira.pt"]
+        assert site.base_url == "https://casinos-pt.terrasdafeira.pt"
+        assert site.cache_language == "pt-PT"
+        assert site.cache_geo == "pt_PT"
+
+
+def test_direct_project_recovery_requires_network_membership_and_sends_origin(monkeypatch) -> None:
+    settings = SimpleNamespace(
+        project_cache_url="https://webdev.test",
+        project_cache_username="publisher",
+        project_cache_password="secret",
+        app_public_url="https://panel.test/",
+        alfan_url="servers.test",
+    )
+    monkeypatch.setattr(project_cache_module, "get_settings", lambda: settings)
+    seen_origins: list[str] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/auth/login":
+            seen_origins.append(request.headers["Origin"])
+            return httpx.Response(200, json={"token": "fresh-token"})
+        assert request.url.host == "bear.servers.test"
+        assert request.url.path == "/projects/one/associacaojorgepina.pt"
+        assert request.headers["Authorization"] == "Bearer fresh-token"
+        return httpx.Response(200, json={"settings": {"canon": "current.test", "domains": ["unrelated.test"]}})
+
+    real_client = httpx.Client
+    monkeypatch.setattr(
+        project_cache_module.httpx,
+        "Client",
+        lambda **kwargs: real_client(transport=httpx.MockTransport(respond), **kwargs),
+    )
+    site = models.Site(name="associacaojorgepina.pt", cache_server_ip="bear")
+
+    assert project_cache_module._fetch_project_from_known_server(site) is None
+    assert seen_origins == ["https://panel.test"]
+
+
+def test_inventory_accepts_real_webdev_project_after_original_domain_left_network(monkeypatch) -> None:
+    settings = SimpleNamespace(
+        project_cache_url="https://webdev.test",
+        project_cache_username="publisher",
+        project_cache_password="secret",
+        app_public_url="https://panel.test/",
+        alfan_url="servers.test",
+    )
+    monkeypatch.setattr(project_cache_module, "get_settings", lambda: settings)
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/auth/login":
+            return httpx.Response(200, json={"token": "fresh-token"})
+        assert request.url == "https://bear.servers.test/projects/one/old-project.example"
+        return httpx.Response(200, json={
+            "settings": {"canon": "current.example", "domains": ["current.example"]},
+            "data": {"menu": {"header": [], "footer": []}},
+        })
+
+    real_client = httpx.Client
+    monkeypatch.setattr(
+        project_cache_module.httpx,
+        "Client",
+        lambda **kwargs: real_client(transport=httpx.MockTransport(respond), **kwargs),
+    )
+
+    project = project_cache_module._fetch_project_from_server_id("bear", "old-project.example")
+
+    assert project is not None
+    assert project["settings"]["canon"] == "current.example"
+
+
+def test_server_refresh_uses_cache_only_when_saved_server_does_not_confirm(monkeypatch) -> None:
+    with make_session() as db:
+        site = models.Site(
+            name="moved.example",
+            base_url="https://moved.example",
+            publication_endpoint="https://moved.example/api/content",
+            cache_server_ip="old-server",
+        )
+        db.add(site)
+        db.commit()
+        monkeypatch.setattr(project_cache_module, "_fetch_project_from_known_server", lambda target: None)
+        monkeypatch.setattr(
+            project_cache_module,
+            "fetch_project_cache",
+            lambda names: [{"name": "moved.example", "serverId": "new-server"}],
+        )
+
+        assert project_cache_module.refresh_project_server_id(db, site) == "new-server"
+        assert site.cache_server_ip == "new-server"
+
+
+def test_server_inventory_imports_only_unique_missing_names_without_duplicates(monkeypatch) -> None:
+    with make_session() as db:
+        existing = models.Site(
+            name="existing.example",
+            base_url="https://existing.example",
+            publication_endpoint="https://existing.example/api/content",
+            cache_server_ip="bear",
+            cache_domains=["existing.example", "moved.example"],
+            external_project_id="existing",
+        )
+        db.add(existing)
+        db.commit()
+        monkeypatch.setattr(
+            project_cache_module,
+            "fetch_project_cache",
+            lambda names=None: [{"id": "existing", "name": "existing.example", "serverId": "bear"}],
+        )
+        monkeypatch.setattr(
+            project_cache_module,
+            "fetch_server_project_inventories",
+            lambda server_ids: (
+                {
+                    "bear": {"existing.example", "new.example", "moved.example", "ambiguous.example"},
+                    "zebra": {"existing.example", "ambiguous.example", "template-sample"},
+                },
+                {"fox": "HTTP 502"},
+            ),
+        )
+
+        def direct(server_id: str, name: str) -> dict | None:
+            assert server_id == "bear"
+            if name == "moved.example":
+                return None
+            assert name == "new.example"
+            return {
+                "settings": {
+                    "canon": "www.new.example",
+                    "domains": ["new.example", "www.new.example"],
+                    "geo": "en_US",
+                    "lang": "en-US",
+                },
+                "data": {"menu": {"header": [], "footer": []}, "pages": []},
+            }
+
+        monkeypatch.setattr(project_cache_module, "_fetch_project_from_server_id", direct)
+
+        result = project_cache_module.reconcile_server_project_inventory(db)
+
+        sites = db.scalars(select(models.Site).order_by(models.Site.name)).all()
+        assert [site.name for site in sites] == ["existing.example", "new.example"]
+        imported = next(site for site in sites if site.name == "new.example")
+        assert imported.cache_server_ip == "bear"
+        assert imported.cache_domains == ["new.example", "www.new.example"]
+        assert imported.network_state["domains"] == ["new.example", "www.new.example"]
+        assert result["imported_projects"] == ["new.example"]
+        assert result["imported_count"] == 1
+        assert result["deleted_count"] == 0
+        assert result["rejected_missing"] == {"ambiguous.example": "ambiguous servers: bear, zebra"}
+        assert result["transferred_domains"] == {"moved.example": ["existing.example"]}
+        assert result["failed_servers"] == {"fox": "HTTP 502"}
+
+
+def test_network_audit_replaces_stale_domains_with_saved_server_snapshot(monkeypatch) -> None:
+    with make_session() as db:
+        site = models.Site(
+            name="network.example",
+            base_url="https://old.example",
+            publication_endpoint="https://old.example/api/content",
+            cache_server_ip="bear",
+            cache_canon="old.example",
+            cache_domains=["old.example", "removed.example"],
+            network_state={"domains": ["old.example", "removed.example"]},
+        )
+        db.add(site)
+        db.commit()
+        settings = SimpleNamespace(
+            project_cache_url="https://webdev.test",
+            project_cache_username="publisher",
+            project_cache_password="secret",
+            app_public_url="https://panel.test/",
+            alfan_url="servers.test",
+        )
+        monkeypatch.setattr(project_cache_module, "get_settings", lambda: settings)
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            assert request.url.path == "/auth/login"
+            return httpx.Response(200, json={"token": "audit-token"})
+
+        real_client = httpx.Client
+        monkeypatch.setattr(
+            project_cache_module.httpx,
+            "Client",
+            lambda **kwargs: real_client(transport=httpx.MockTransport(respond), **kwargs),
+        )
+        monkeypatch.setattr(
+            project_cache_module,
+            "_fetch_server_network_snapshots",
+            lambda server_id, names, token: (
+                {
+                    "network.example": {
+                        "settings": {
+                            "canon": "current.example",
+                            "domains": ["network.example", "current.example"],
+                        },
+                        "data": {"menu": {"header": [], "footer": []}, "pages": []},
+                    }
+                },
+                {},
+            ),
+        )
+
+        result = project_cache_module.reconcile_all_project_networks(db)
+
+        db.refresh(site)
+        assert site.cache_canon == "current.example"
+        assert site.cache_domains == ["network.example", "current.example"]
+        assert site.network_state["domains"] == ["network.example", "current.example"]
+        assert "removed.example" not in site.cache_domains
+        assert [snapshot["domains"] for snapshot in site.network_snapshot_history] == [
+            ["old.example", "removed.example"],
+            ["network.example", "current.example"],
+        ]
+        assert result["projects_confirmed"] == 1
+        assert result["projects_unconfirmed"] == 0
+
+
+def test_domain_transfer_resets_destination_role_memory() -> None:
+    source = models.Site(
+        id="source",
+        name="source.example",
+        cache_domains=["moved.example"],
+    )
+    destination = models.Site(
+        id="destination",
+        name="destination.example",
+        cache_domains=["destination.example"],
+        main_domain_history=["moved.example", "destination.example"],
+        alternate_domain_history=["moved.example"],
+        x_default_history=["moved.example"],
+        domain_types={"moved.example": "amp", "destination.example": "main"},
+    )
+    owners = project_cache_module._domain_owners([source, destination])
+
+    reset_count = project_cache_module._reset_newly_transferred_domain_memory(
+        destination,
+        ["destination.example", "moved.example"],
+        owners,
+    )
+
+    assert reset_count == 1
+    assert destination.main_domain_history == ["destination.example"]
+    assert destination.alternate_domain_history == []
+    assert destination.x_default_history == []
+    assert destination.domain_types == {"destination.example": "main"}
 
 
 def test_main_history_survives_canon_changes_and_removed_domains() -> None:
@@ -210,6 +484,7 @@ def test_fresh_cache_confirms_publication_only_when_slug_is_present() -> None:
             slug="/guides/failed-but-present/",
             generated_json={"pages": []},
             status="publication_failed",
+            generation_error="Previous publication failure",
             idempotency_key="publish-failed-but-present",
         )
         db.add_all([absent, present, failed_but_present])
@@ -238,6 +513,7 @@ def test_fresh_cache_confirms_publication_only_when_slug_is_present() -> None:
         assert present.published_url == "https://publication-confirmation.example/guides/present/"
         assert present.indexing_status == "queued"
         assert failed_but_present.status == "published"
+        assert failed_but_present.generation_error is None
         assert failed_but_present.published_at is not None
         assert task.status != "published"
         confirmation_log = db.scalar(
@@ -313,6 +589,7 @@ def test_periodic_reconciliation_recovers_confirmation_missed_by_stream(monkeypa
                 },
             }]
 
+        monkeypatch.setattr(project_cache_module, "_fetch_project_from_known_server", lambda target: None)
         monkeypatch.setattr(project_cache_module, "fetch_project_cache", fake_fetch)
         result = reconcile_pending_publications(db, min_age_seconds=0)
 
@@ -330,6 +607,63 @@ def test_periodic_reconciliation_recovers_confirmation_missed_by_stream(monkeypa
         assert item.status == "published"
         assert item.indexing_status == "queued"
         assert item.published_at is not None
+        assert task.status == "published"
+
+
+def test_periodic_reconciliation_uses_saved_server_when_aggregate_cache_omits_project(monkeypatch) -> None:
+    with make_session() as db:
+        site = models.Site(
+            name="omitted.example",
+            base_url="https://current.example",
+            publication_endpoint="https://current.example/api/content",
+            cache_server_ip="bear",
+            external_project_id="omitted",
+        )
+        db.add(site)
+        db.flush()
+        task = models.GenerationTask(
+            title="Direct confirmation",
+            site_id=site.id,
+            geo="PT",
+            language="pt",
+            topics_count=1,
+            status="publishing",
+        )
+        db.add(task)
+        db.flush()
+        item = models.ContentItem(
+            task=task,
+            site_id=site.id,
+            topic="Privacidade",
+            slug="/privacidade/",
+            generated_json={"pages": []},
+            status="publication_pending_confirmation",
+            idempotency_key="direct-confirmation",
+            last_publication_status_code=201,
+            updated_at=datetime(2026, 9, 4, 8, 0, tzinfo=timezone.utc),
+        )
+        db.add(item)
+        db.commit()
+
+        direct_project = {
+            "settings": {"canon": "current.example", "domains": ["omitted.example", "current.example"]},
+            "data": {"menu": {"header": [], "footer": []}, "pages": [{"slug": "/privacidade/"}]},
+        }
+        monkeypatch.setattr(project_cache_module, "_fetch_project_from_known_server", lambda target: direct_project)
+        monkeypatch.setattr(
+            project_cache_module,
+            "fetch_project_cache",
+            lambda names: (_ for _ in ()).throw(AssertionError(f"aggregate cache must not be queried: {names}")),
+        )
+
+        result = reconcile_pending_publications(db, min_age_seconds=0)
+
+        db.refresh(item)
+        db.refresh(task)
+        assert result["checked_projects"] == 1
+        assert result["missing_projects"] == 0
+        assert result["confirmed"] == 1
+        assert item.status == "published"
         assert task.status == "published"
 
 
@@ -694,7 +1028,8 @@ def test_menu_capability_check_reauthenticates_after_unauthorized(monkeypatch) -
         def __exit__(self, exc_type, exc, tb):
             return False
 
-        def post(self, url: str, json: dict):
+        def post(self, url: str, json: dict, headers: dict | None = None):
+            assert headers == {"Origin": "https://ai-seo-content-panel.site"}
             token = f"token-{sum(1 for method, _ in calls if method == 'POST') + 1}"
             calls.append(("POST", token))
             return FakeResponse(200, {"token": token})

@@ -1089,7 +1089,7 @@ def analyze_content_quality(payload: dict) -> dict:
         lowered = page_text.lower()
         for phrase in RISKY_CONTENT_PHRASES:
             if phrase.lower() in lowered:
-                issues.append({"code": "risky_phrase", "page": page_index, "phrase": phrase, "message": "Risky legal or promotional phrase found."})
+                warnings.append({"code": "risky_phrase", "page": page_index, "phrase": phrase, "message": "Risky legal or promotional phrase found."})
         if "[muss geprüft werden" in lowered:
             warnings.append({"code": "unverified_marker", "page": page_index, "message": "Text contains facts that must be checked before publication."})
 
@@ -5189,6 +5189,7 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
         refresh_campaign_status(db, item.publication_campaign_id)
         db.commit()
         return
+    item.generation_error = None
     if is_technical(item):
         try:
             await sync_technical_menu(db, item, site, initiator_username)
@@ -5295,6 +5296,7 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
             )
         )
         item.status = "publication_failed"
+        item.generation_error = f"{type(exc).__name__}: {exc}"[:500]
         item.scheduled_at = None
         refresh_campaign_status(db, item.publication_campaign_id)
         db.commit()

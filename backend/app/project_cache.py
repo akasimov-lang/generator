@@ -1,5 +1,6 @@
 from app.project_access import external_projects
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import re
@@ -16,6 +17,7 @@ from sqlalchemy.orm import Session
 from app import models
 from app.network_state import observe_network
 from app.core.config import get_settings
+from app.webdev import webdev_origin_headers
 
 
 class ProjectCacheError(RuntimeError):
@@ -41,6 +43,7 @@ async def refresh_project_server_token(client: httpx.AsyncClient) -> str:
     response = await client.post(
         f"{settings.project_cache_url.rstrip('/')}/auth/login",
         json={"username": settings.project_cache_username, "pass": settings.project_cache_password},
+        headers=webdev_origin_headers(settings),
     )
     response.raise_for_status()
     token = str(response.json().get("token") or "").strip()
@@ -70,6 +73,7 @@ def fetch_project_template_capabilities(site: models.Site) -> dict[str, bool]:
                 login_response = client.post(
                     f"{settings.project_cache_url.rstrip('/')}/auth/login",
                     json={"username": settings.project_cache_username, "pass": settings.project_cache_password},
+                    headers=webdev_origin_headers(settings),
                 )
                 login_response.raise_for_status()
                 token = str(login_response.json().get("token") or "").strip()
@@ -343,6 +347,7 @@ def fetch_project_cache(names: list[str] | None = None) -> list[dict[str, Any]]:
             login_response = client.post(
                 "/auth/login",
                 json={"username": settings.project_cache_username, "pass": settings.project_cache_password},
+                headers=webdev_origin_headers(settings),
             )
             login_response.raise_for_status()
             token = login_response.json().get("token")
@@ -366,6 +371,303 @@ def fetch_project_cache(names: list[str] | None = None) -> list[dict[str, Any]]:
     if not isinstance(payload, list):
         raise ProjectCacheError("Project cache returned an unexpected response")
     return [project for project in payload if isinstance(project, dict)]
+
+
+def _server_id(project: dict[str, Any]) -> str:
+    return str(
+        project.get("serverId")
+        or project.get("server_id")
+        or project.get("serverIp")
+        or project.get("server_ip")
+        or ""
+    ).strip().split(".", 1)[0]
+
+
+def fetch_server_project_inventories(server_ids: set[str]) -> tuple[dict[str, set[str]], dict[str, str]]:
+    """Read project names from every known Webdev server without changing local state."""
+    settings = get_settings()
+    inventories: dict[str, set[str]] = {}
+    failures: dict[str, str] = {}
+    try:
+        with httpx.Client(timeout=45.0) as client:
+            login_response = client.post(
+                f"{settings.project_cache_url.rstrip('/')}/auth/login",
+                json={"username": settings.project_cache_username, "pass": settings.project_cache_password},
+                headers=webdev_origin_headers(settings),
+            )
+            login_response.raise_for_status()
+            token = str(login_response.json().get("token") or "").strip()
+            if not token:
+                raise ProjectCacheError("Project cache login did not return a token")
+            for server_id in sorted(server_ids):
+                if not re.fullmatch(r"[A-Za-z0-9-]+", server_id):
+                    failures[server_id] = "invalid serverId"
+                    continue
+                url = f"https://{server_id}.{settings.alfan_url.strip().strip('/')}/projects/all"
+                try:
+                    response = client.get(url, headers={"Authorization": f"Bearer {token}"})
+                    response.raise_for_status()
+                    payload = response.json()
+                    if not isinstance(payload, list):
+                        raise ValueError("unexpected response")
+                    inventories[server_id] = {
+                        str(item).strip() for item in payload if isinstance(item, str) and str(item).strip()
+                    }
+                except (httpx.HTTPError, ValueError, TypeError) as error:
+                    failures[server_id] = str(error)
+    except (httpx.HTTPError, ValueError, TypeError) as error:
+        raise ProjectCacheError(f"Project server inventory request failed: {error}") from error
+    return inventories, failures
+
+
+def _fetch_project_from_server_id(server_id: str, project_name: str) -> dict[str, Any] | None:
+    settings = get_settings()
+    if not re.fullmatch(r"[A-Za-z0-9-]+", server_id):
+        return None
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            login_response = client.post(
+                f"{settings.project_cache_url.rstrip('/')}/auth/login",
+                json={"username": settings.project_cache_username, "pass": settings.project_cache_password},
+                headers=webdev_origin_headers(settings),
+            )
+            login_response.raise_for_status()
+            token = str(login_response.json().get("token") or "").strip()
+            if not token:
+                return None
+            response = client.get(
+                f"https://{server_id}.{settings.alfan_url.strip().strip('/')}/projects/one/"
+                f"{quote(project_name, safe='')}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            response.raise_for_status()
+            project = response.json()
+    except (httpx.HTTPError, ValueError, TypeError):
+        return None
+    return project if isinstance(project, dict) and isinstance(project.get("settings"), dict) else None
+
+
+def _fetch_server_network_snapshots(
+    server_id: str,
+    project_names: list[str],
+    token: str,
+) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
+    settings = get_settings()
+    snapshots: dict[str, dict[str, Any]] = {}
+    failures: dict[str, str] = {}
+    base_url = f"https://{server_id}.{settings.alfan_url.strip().strip('/')}"
+    with httpx.Client(base_url=base_url, timeout=30.0) as client:
+        for project_name in project_names:
+            try:
+                response = client.get(
+                    f"/projects/one/{quote(project_name, safe='')}",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+                response.raise_for_status()
+                project = response.json()
+                if not isinstance(project, dict) or not isinstance(project.get("settings"), dict):
+                    failures[project_name] = "project detail response has no settings"
+                    continue
+                snapshots[project_name] = project
+            except (httpx.HTTPError, ValueError, TypeError) as error:
+                failures[project_name] = str(error)
+    return snapshots, failures
+
+
+def reconcile_all_project_networks(db: Session) -> dict[str, Any]:
+    """Refresh every network from its saved serverId without deleting unconfirmed data."""
+    sites = db.scalars(
+        select(models.Site).where(
+            models.Site.cache_server_ip.is_not(None),
+            models.Site.name.is_not(None),
+        )
+    ).all()
+    grouped: dict[str, list[str]] = {}
+    sites_by_key: dict[tuple[str, str], models.Site] = {}
+    for site in sites:
+        server_id = str(site.cache_server_ip or "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9-]+", server_id) or not site.name:
+            continue
+        grouped.setdefault(server_id, []).append(site.name)
+        sites_by_key[(server_id, site.name)] = site
+
+    settings = get_settings()
+    with httpx.Client(timeout=30.0) as client:
+        login_response = client.post(
+            f"{settings.project_cache_url.rstrip('/')}/auth/login",
+            json={"username": settings.project_cache_username, "pass": settings.project_cache_password},
+            headers=webdev_origin_headers(settings),
+        )
+        login_response.raise_for_status()
+        token = str(login_response.json().get("token") or "").strip()
+    if not token:
+        raise ProjectCacheError("Project cache login did not return a token")
+
+    snapshots: dict[tuple[str, str], dict[str, Any]] = {}
+    failures: dict[str, str] = {}
+    max_workers = min(8, max(1, len(grouped)))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(_fetch_server_network_snapshots, server_id, sorted(set(names)), token): server_id
+            for server_id, names in grouped.items()
+        }
+        for future in as_completed(futures):
+            server_id = futures[future]
+            try:
+                server_snapshots, server_failures = future.result()
+            except Exception as error:  # Keep other authoritative servers auditable.
+                failures[f"server:{server_id}"] = str(error)
+                continue
+            snapshots.update({(server_id, name): project for name, project in server_snapshots.items()})
+            failures.update({f"{server_id}:{name}": reason for name, reason in server_failures.items()})
+
+    previous_domain_owners = _domain_owners(sites)
+    transferred_domains = 0
+    for key, project in snapshots.items():
+        site = sites_by_key[key]
+        domains = _project_domains(project)
+        transferred_domains += _reset_newly_transferred_domain_memory(
+            site,
+            domains,
+            previous_domain_owners,
+        )
+        _apply_direct_project_snapshot(db, site, project, commit=False)
+    db.commit()
+
+    domain_owners: dict[str, set[str]] = {}
+    for site in sites:
+        for domain in site.cache_domains or []:
+            normalized = _normalize_domain(str(domain))
+            if normalized:
+                domain_owners.setdefault(normalized, set()).add(site.name)
+    conflicts = {
+        domain: sorted(owners) for domain, owners in domain_owners.items() if len(owners) > 1
+    }
+    return {
+        "projects_considered": len(sites_by_key),
+        "projects_confirmed": len(snapshots),
+        "projects_unconfirmed": len(failures),
+        "unconfirmed_projects": failures,
+        "cross_project_domain_conflicts": conflicts,
+        "cross_project_domain_conflict_count": len(conflicts),
+        "transferred_domains_reset": transferred_domains,
+    }
+
+
+def _domain_owners(sites: list[models.Site]) -> dict[str, set[str]]:
+    owners: dict[str, set[str]] = {}
+    for site in sites:
+        for domain in site.cache_domains or []:
+            if normalized := _normalize_domain(str(domain)):
+                owners.setdefault(normalized, set()).add(site.id)
+    return owners
+
+
+def _reset_newly_transferred_domain_memory(
+    site: models.Site,
+    new_domains: list[str],
+    previous_domain_owners: dict[str, set[str]],
+) -> int:
+    previous_here = {_normalize_domain(str(domain)) for domain in (site.cache_domains or [])}
+    transferred = {
+        domain
+        for raw_domain in new_domains
+        if (domain := _normalize_domain(raw_domain))
+        and domain not in previous_here
+        and any(owner_id != site.id for owner_id in previous_domain_owners.get(domain, set()))
+    }
+    if not transferred:
+        return 0
+    site.main_domain_history = [
+        domain for domain in (site.main_domain_history or []) if _normalize_domain(domain) not in transferred
+    ]
+    site.alternate_domain_history = [
+        domain for domain in (site.alternate_domain_history or []) if _normalize_domain(domain) not in transferred
+    ]
+    site.x_default_history = [
+        domain for domain in (site.x_default_history or []) if _normalize_domain(domain) not in transferred
+    ]
+    site.domain_types = {
+        domain: domain_type
+        for domain, domain_type in (site.domain_types or {}).items()
+        if _normalize_domain(domain) not in transferred
+    }
+    return len(transferred)
+
+
+def reconcile_server_project_inventory(db: Session) -> dict[str, Any]:
+    """Import only unambiguous projects missing entirely from PagePilot.
+
+    The inventory is additive. A server timeout never removes a project, and a
+    name already present locally is not imported again from a migration copy.
+    """
+    aggregate_projects = fetch_project_cache()
+    local_sites = db.scalars(select(models.Site)).all()
+    server_ids = {
+        *(site.cache_server_ip for site in local_sites if site.cache_server_ip),
+        *(_server_id(project) for project in aggregate_projects if _server_id(project)),
+    }
+    inventories, failures = fetch_server_project_inventories(server_ids)
+    local_names = {site.name for site in local_sites if site.name}
+    locations: dict[str, set[str]] = {}
+    for server_id, names in inventories.items():
+        for name in names:
+            locations.setdefault(name, set()).add(server_id)
+
+    missing_locations = {
+        name: servers for name, servers in locations.items()
+        if name not in local_names and not name.startswith("template-")
+    }
+    imported_projects: list[dict[str, Any]] = []
+    rejected_missing: dict[str, str] = {}
+    transferred_domains: dict[str, list[str]] = {}
+    current_domain_owners: dict[str, set[str]] = {}
+    for site in local_sites:
+        for domain in site.cache_domains or []:
+            if normalized := _normalize_domain(str(domain)):
+                current_domain_owners.setdefault(normalized, set()).add(site.name)
+    for name, servers in sorted(missing_locations.items()):
+        if len(servers) != 1:
+            rejected_missing[name] = f"ambiguous servers: {', '.join(sorted(servers))}"
+            continue
+        server_id = next(iter(servers))
+        project = _fetch_project_from_server_id(server_id, name)
+        if not project:
+            if owners := current_domain_owners.get(_normalize_domain(name)):
+                transferred_domains[name] = sorted(owners)
+                continue
+            rejected_missing[name] = "direct project lookup did not confirm a real Webdev project"
+            continue
+        imported_projects.append({
+            **project,
+            "id": project.get("id") or project.get("_id") or f"server:{server_id}:{name}",
+            "name": name,
+            "serverId": server_id,
+        })
+
+    sync_result = sync_project_cache(db, imported_projects) if imported_projects else {
+        "created_count": 0,
+        "updated_count": 0,
+        "deleted_duplicate_count": 0,
+    }
+    inventory_duplicates = {
+        name: sorted(servers) for name, servers in locations.items() if len(servers) > 1
+    }
+    return {
+        "known_servers": len(server_ids),
+        "checked_servers": len(inventories),
+        "failed_servers": failures,
+        "server_project_pairs": sum(len(names) for names in inventories.values()),
+        "unique_server_projects": len(locations),
+        "local_projects_before": len(local_names),
+        "missing_projects_found": len(missing_locations),
+        "imported_projects": sorted(project["name"] for project in imported_projects),
+        "imported_count": int(sync_result["created_count"]),
+        "rejected_missing": rejected_missing,
+        "transferred_domains": transferred_domains,
+        "names_on_multiple_servers": inventory_duplicates,
+        "deleted_count": int(sync_result["deleted_duplicate_count"]),
+    }
 
 
 def reconcile_pending_publications(
@@ -415,14 +717,31 @@ def reconcile_pending_publications(
             "reconciled_tasks": reconciled_tasks,
         }
 
-    projects = fetch_project_cache(project_names)
-    projects_by_name = {
-        str(project.get("name") or "").strip(): project
-        for project in projects
-        if str(project.get("name") or "").strip() in project_names
-    }
-    for project_name, project in projects_by_name.items():
-        sync_project_data_update(db, project_name, project)
+    projects_by_name: dict[str, dict[str, Any]] = {}
+    unresolved_names: list[str] = []
+    sites_by_name = {site.name: site for site in sites if site.name}
+    for project_name in project_names:
+        site = sites_by_name[project_name]
+        direct_project = _fetch_project_from_known_server(site)
+        if direct_project:
+            projects_by_name[project_name] = direct_project
+            sync_project_data_update(
+                db,
+                project_name,
+                direct_project,
+                server_host=site.cache_server_ip,
+            )
+        else:
+            unresolved_names.append(project_name)
+
+    if unresolved_names:
+        cached_projects = fetch_project_cache(unresolved_names)
+        for project in cached_projects:
+            project_name = str(project.get("name") or "").strip()
+            if project_name not in unresolved_names:
+                continue
+            projects_by_name[project_name] = project
+            sync_project_data_update(db, project_name, project)
 
     reconciled_tasks += _reconcile_completed_publication_tasks(db, limit=limit)
 
@@ -483,10 +802,14 @@ def refresh_project_server_id(db: Session, site: models.Site) -> str:
     """Resolve and persist the project's current server before a direct request."""
     if not site.name:
         raise ProjectCacheError("Project name is not configured")
+    direct_project = _fetch_project_from_known_server(site)
+    if direct_project:
+        _apply_direct_project_snapshot(db, site, direct_project)
+        return str(site.cache_server_ip)
     projects = external_projects(db, fetch_project_cache([site.name]))
     project = next((item for item in projects if str(item.get("name") or "").strip() == site.name), None)
     if not project:
-        raise ProjectCacheError(f"Project '{site.name}' was not found in cache")
+        raise ProjectCacheError(f"Project '{site.name}' was not found on its saved server or in cache")
     server_id = str(
         project.get("serverId")
         or project.get("server_id")
@@ -500,6 +823,103 @@ def refresh_project_server_id(db: Session, site: models.Site) -> str:
         site.cache_server_ip = server_id
         db.commit()
     return server_id
+
+
+def _fetch_project_from_known_server(site: models.Site) -> dict[str, Any] | None:
+    """Recover a project omitted by the aggregate cache from its last confirmed server."""
+    if not site.cache_server_ip:
+        return None
+    settings = get_settings()
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            login_response = client.post(
+                f"{settings.project_cache_url.rstrip('/')}/auth/login",
+                json={"username": settings.project_cache_username, "pass": settings.project_cache_password},
+                headers=webdev_origin_headers(settings),
+            )
+            login_response.raise_for_status()
+            token = str(login_response.json().get("token") or "").strip()
+            if not token:
+                return None
+            response = client.get(
+                f"{project_server_url(site, '/projects/one')}/{quote(site.name, safe='')}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            if not response.is_success:
+                return None
+            project = response.json()
+    except (httpx.HTTPError, ValueError, TypeError):
+        return None
+    if not isinstance(project, dict):
+        return None
+    project_domains = set(_project_domains(project))
+    settings_payload = project.get("settings") if isinstance(project.get("settings"), dict) else {}
+    canon = _normalize_domain(settings_payload.get("canon"))
+    if canon:
+        project_domains.add(canon)
+    return project if _normalize_domain(site.name) in project_domains else None
+
+
+def _apply_direct_project_snapshot(
+    db: Session,
+    site: models.Site,
+    project: dict[str, Any],
+    *,
+    commit: bool = True,
+) -> None:
+    settings = project.get("settings") if isinstance(project.get("settings"), dict) else {}
+    canon = _normalize_domain(settings.get("canon"))
+    domains = _project_domains(project)
+    menu = _project_menu(project)
+    synced_at = datetime.now(timezone.utc)
+    _record_network_snapshot(site, canon, domains, synced_at)
+    if canon:
+        site.base_url = f"https://{canon}"
+        site.publication_endpoint = f"https://{canon}/api/content"
+    observe_network(site, project)
+    site.cache_canon = canon or site.cache_canon
+    site.cache_language = str(settings.get("lang") or "").strip() or site.cache_language
+    site.cache_geo = str(settings.get("geo") or "").strip() or site.cache_geo
+    site.cache_domains = domains
+    site.domains_count = len(domains)
+    site.homepage_title = _homepage_title(project) or site.homepage_title
+    site.internal_pages_count = _internal_pages_count(project)
+    site.default_menu = menu
+    site.has_menu = bool(menu["header"] or menu["footer"])
+    site.cache_synced_at = synced_at
+    site.is_active = True
+    if commit:
+        db.commit()
+
+
+def _record_network_snapshot(
+    site: models.Site,
+    canon: str,
+    domains: list[str],
+    observed_at: datetime,
+) -> None:
+    """Keep an append-only history only when current Webdev membership changes."""
+    normalized_domains = list(dict.fromkeys(filter(None, (_normalize_domain(item) for item in domains))))
+    normalized_canon = _normalize_domain(canon)
+    history = list(site.network_snapshot_history or [])
+    if not history and (site.cache_canon or site.cache_domains):
+        history.append({
+            "observed_at": (site.cache_synced_at or observed_at).isoformat(),
+            "server_id": site.cache_server_ip,
+            "canon": _normalize_domain(site.cache_canon),
+            "domains": list(dict.fromkeys(_normalize_domain(item) for item in (site.cache_domains or []) if item)),
+        })
+    latest = history[-1] if history else {}
+    if latest.get("canon") == normalized_canon and latest.get("domains") == normalized_domains:
+        site.network_snapshot_history = history
+        return
+    history.append({
+        "observed_at": observed_at.isoformat(),
+        "server_id": site.cache_server_ip,
+        "canon": normalized_canon,
+        "domains": normalized_domains,
+    })
+    site.network_snapshot_history = history
 
 
 def _project_menu(project: dict[str, Any]) -> dict[str, list[Any]]:
@@ -595,6 +1015,7 @@ def _confirm_published_content(db: Session, site: models.Site, project: dict[str
         if not page:
             continue
         item.status = "published"
+        item.generation_error = None
         item.published_at = now
         site.core_update_notice = now.isoformat().replace("+00:00", "") + ":" + item.id
         item.scheduled_at = None
@@ -949,6 +1370,7 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
     )
     working_canons = _working_project_canons()
     existing_sites = db.scalars(select(models.Site).where(models.Site.external_project_id.is_not(None))).all()
+    previous_domain_owners = _domain_owners(existing_sites)
     sites_by_external_id = {site.external_project_id: site for site in existing_sites if site.external_project_id}
     now = datetime.now(timezone.utc)
     created_count = 0
@@ -1039,6 +1461,8 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
 
         site.name = name
         site.base_url = f"https://{canon}"
+        _reset_newly_transferred_domain_memory(site, domains, previous_domain_owners)
+        _record_network_snapshot(site, canon, domains, now)
         observe_network(site, project)
         site.cache_canon = canon
         site.cache_language = language

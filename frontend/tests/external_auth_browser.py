@@ -1,4 +1,4 @@
-"""External login, project cache isolation and removal of local credential UI."""
+"""External login, equal full access and removal of local credential UI."""
 import json
 import os
 from playwright.sync_api import sync_playwright, expect
@@ -8,24 +8,23 @@ base=os.environ.get('VITE_TEST_URL','http://127.0.0.1:5174')
 with sync_playwright() as p:
     browser=p.chromium.launch(executable_path=os.environ.get('CHROME'),headless=True)
     page=browser.new_page(viewport={'width':1280,'height':900})
-    errors=[]; calls=[]; state={'user':'editor','revoked':False,'unavailable':False}
+    errors=[]; calls=[]; state={'user':'editor','unavailable':False,'expired':False}
     page.on('pageerror',lambda e:errors.append(str(e)))
     def route(r):
         path=r.request.url.split('/api')[-1].split('?')[0]
         calls.append(path)
-        username=state['user'];admin=username=='anton'
-        user={'id':username,'username':username,'is_admin':admin,'is_active':True,'allowed_site_ids':None if admin else ([] if state['revoked'] else ['own'])}
+        username=state['user']
+        user={'id':username,'username':username,'is_admin':True,'is_active':True,'allowed_site_ids':None}
         data=[];status=200
         if path=='/auth/login':
             body=r.request.post_data_json
             assert body['password']=='external-password'
             state['user']=body['username'];data={'access_token':'external-'+state['user']}
             if state['unavailable']:status=503;data={'detail':'Сервис авторизации временно недоступен.'}
-        elif path=='/auth/me':data=user
-        elif path=='/sites/cache/sync':
-            assert r.request.method == 'POST'
-            data={}
-        elif path in ['/sites','/sites/cache/projects']:data=[site('own'),site('other')] if admin else ([] if state['revoked'] else [site('own')])
+        elif path=='/auth/me':
+            if state['expired']:status=401;data={'detail':'Срок действия токена Webdev истёк.'}
+            else:data=user
+        elif path in ['/sites','/sites/cache/projects']:data=[site('own'),site('other')]
         elif path=='/me/favorite-sites':data={'site_ids':[]}
         elif path.startswith('/admin/'):data=[]
         r.fulfill(status=status,content_type='application/json',body=json.dumps(data))
@@ -40,11 +39,7 @@ with sync_playwright() as p:
     state['unavailable']=False
     page.get_by_role('button',name='Войти',exact=True).click()
     expect(page.get_by_label('Бренд own.test',exact=True)).to_be_visible()
-    expect(page.get_by_label('Бренд other.test',exact=True)).to_have_count(0)
-    expect(page.get_by_role('link',name='Сайты',exact=True)).to_be_visible()
-    page.get_by_role('button',name='Обновить проекты',exact=True).click()
-    expect(page.get_by_role('button',name='Обновить проекты',exact=True)).to_be_enabled()
-    assert '/sites/cache/sync' in calls
+    expect(page.get_by_label('Бренд other.test',exact=True)).to_be_visible()
     # Seed both the legacy shared snapshot and a stale user snapshot with another user's project.
     page.evaluate('''async projects => {
       const db = await new Promise((resolve,reject) => { const r=indexedDB.open('pagepilot-projects',1);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error); });
@@ -52,16 +47,16 @@ with sync_playwright() as p:
     }''',[site('own'),site('other')])
     calls.clear();page.reload()
     expect(page.get_by_label('Бренд own.test',exact=True)).to_be_visible()
-    expect(page.get_by_label('Бренд other.test',exact=True)).to_have_count(0)
+    expect(page.get_by_label('Бренд other.test',exact=True)).to_be_visible()
     assert '/sites' not in calls
     page.goto(base+'/settings')
-    expect(page.get_by_text('Вход и пароль управляются в Webdev. Администратор панели — anton.',exact=True)).to_be_visible()
+    expect(page.get_by_text('Вход и пароль управляются в Webdev. Все авторизованные пользователи имеют одинаковый полный доступ.',exact=True)).to_be_visible()
     expect(page.locator('input[type=password]')).to_have_count(0)
     assert '/users' not in calls
     page.get_by_title('Выйти',exact=True).click()
     page.get_by_label('Логин',exact=True).fill('anton');page.get_by_label('Пароль',exact=True).fill('external-password')
     page.get_by_role('button',name='Войти',exact=True).click()
-    expect(page.get_by_text('Вход и пароль управляются в Webdev. Администратор панели — anton.',exact=True)).to_be_visible()
+    expect(page.get_by_text('Вход и пароль управляются в Webdev. Все авторизованные пользователи имеют одинаковый полный доступ.',exact=True)).to_be_visible()
     expect(page.locator('input[type=password]')).to_have_count(0)
     page.goto(base+'/sites')
     expect(page.get_by_label('Бренд other.test',exact=True)).to_be_visible()
@@ -69,9 +64,12 @@ with sync_playwright() as p:
     page.get_by_label('Логин',exact=True).fill('editor');page.get_by_label('Пароль',exact=True).fill('external-password')
     page.get_by_role('button',name='Войти',exact=True).click()
     expect(page.get_by_label('Бренд own.test',exact=True)).to_be_visible()
-    expect(page.get_by_label('Бренд other.test',exact=True)).to_have_count(0)
-    state['revoked']=True;page.evaluate('window.dispatchEvent(new Event("focus"))')
-    expect(page.get_by_label('Бренд own.test',exact=True)).to_have_count(0)
+    expect(page.get_by_label('Бренд other.test',exact=True)).to_be_visible()
+    page.wait_for_timeout(100)
+    state['expired']=True;page.evaluate('window.dispatchEvent(new Event("focus"))')
+    expect(page.get_by_role('button',name='Войти',exact=True)).to_be_visible()
+    expect(page.get_by_text('Срок действия токена истёк. Войдите заново, чтобы получить новый токен.',exact=True)).to_be_visible()
+    assert page.evaluate('localStorage.getItem("admin_token")') is None
     assert not errors,errors
     browser.close()
-    print('PASS: external login, unavailable auth, user/admin isolation, stale and shared cache, revoked rights, no local password/user controls.')
+    print('PASS: external login, unavailable auth, equal full access, expired-token logout, no local password/user controls.')

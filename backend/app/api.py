@@ -6,7 +6,7 @@ import httpx
 from typing import Any
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, load_only
 
@@ -365,9 +365,12 @@ def health() -> dict:
 
 
 @router.post("/auth/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
-    token = external_auth.login_external(payload.username, payload.password)
-    identity = external_auth.identity(token, fresh=True)
+def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse | Response:
+    try:
+        token, identity = external_auth.authenticate(payload.username, payload.password)
+    except external_auth.ExternalLoginResponse as error:
+        headers = {"content-type": error.content_type} if error.content_type else None
+        return Response(content=error.content, status_code=error.status_code, headers=headers)
     user = external_auth.local_profile(db, identity)
     return TokenResponse(access_token=token, user=user)
 
@@ -458,7 +461,7 @@ def validate_ai_provider(provider_id: str, _: AdminUser, db: Session = Depends(g
 @router.get("/sites", response_model=list[SiteResponse])
 def list_sites(_: AuthUser, db: Session = Depends(get_db)) -> Any:
     sites = db.scalars(
-        select(models.Site).order_by(
+        select(models.Site).where(models.Site.is_active.is_(True)).order_by(
             models.Site.is_test_project.desc(),
             models.Site.has_menu.desc(),
             models.Site.name.asc(),
@@ -472,7 +475,9 @@ def list_sites(_: AuthUser, db: Session = Depends(get_db)) -> Any:
 
 @router.get("/sites/lookup", response_model=SiteResponse)
 def lookup_site(_: AuthUser, name: str = "", site_id: str = "", db: Session = Depends(get_db)) -> Any:
-    site = db.scalar(select(models.Site).where(models.Site.name == name)) if name else db.get(models.Site, site_id)
+    lookup = select(models.Site).where(models.Site.is_active.is_(True))
+    lookup = lookup.where(models.Site.name == name) if name else lookup.where(models.Site.id == site_id)
+    site = db.scalar(lookup)
     if not site:
         raise HTTPException(status_code=404, detail="Project not found")
     from app.project_notices import refresh_and_commit_notices
@@ -483,7 +488,7 @@ def lookup_site(_: AuthUser, name: str = "", site_id: str = "", db: Session = De
 @router.get("/sites/cache/projects", response_model=list[SiteResponse])
 def list_cached_projects(_: AuthUser, db: Session = Depends(get_db)) -> Any:
     status_order = {"test": 0, "working": 1, "mass_actions": 2, "not_in_focus": 3, "duplicate": 4}
-    sites = db.scalars(select(models.Site)).all()
+    sites = db.scalars(select(models.Site).where(models.Site.is_active.is_(True))).all()
     from app.project_notices import refresh_and_commit_notices
     refresh_and_commit_notices(db, sites)
     return sorted(sites, key=lambda site: (status_order.get(site.project_status, 3), not site.has_menu, site.name.lower()))
@@ -2260,6 +2265,22 @@ def revise_content(content_id: str, payload: ContentRevisionRequest, user: AuthU
         raise HTTPException(status_code=400, detail=f"Content in status '{item.status}' cannot be revised")
     if not item.generated_json:
         raise HTTPException(status_code=400, detail="Generate the text before requesting a revision")
+    source_json = item.generated_json
+    source_generated_at = item.generated_at
+    if payload.source_revision_id:
+        source_revision = db.get(models.ContentRevision, payload.source_revision_id)
+        if not source_revision or source_revision.content_item_id != item.id:
+            raise HTTPException(status_code=404, detail="Selected content revision not found")
+        if payload.source_revision_side == "source":
+            source_json = source_revision.source_json
+            source_generated_at = source_revision.source_generated_at
+        elif payload.source_revision_side == "revised" and source_revision.revised_json:
+            source_json = source_revision.revised_json
+            source_generated_at = source_revision.revised_generated_at
+        else:
+            raise HTTPException(status_code=400, detail="Selected content revision version is unavailable")
+    elif payload.source_revision_side:
+        raise HTTPException(status_code=400, detail="Selected content revision is required")
     previous_status = item.status
     revision = models.ContentRevision(
         content_item_id=item.id,
@@ -2268,8 +2289,8 @@ def revise_content(content_id: str, payload: ContentRevisionRequest, user: AuthU
         generate_title=payload.generate_title,
         source_status=previous_status,
         is_published_replacement=previous_status == "published",
-        source_json=item.generated_json,
-        source_generated_at=item.generated_at,
+        source_json=source_json,
+        source_generated_at=source_generated_at,
         status="queued",
     )
     db.add(revision)

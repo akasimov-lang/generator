@@ -140,16 +140,76 @@ def test_external_contract(monkeypatch, server_fields):
         calls.append(request)
         if request.url.path=='/auth/login':
             assert __import__('json').loads(request.content)=={'username':'editor','pass':'secret'}
+            assert request.headers['Origin']=='https://ai-seo-content-panel.site'
+            assert request.headers['Cache-Control']=='no-cache'
+            assert request.headers['Pragma']=='no-cache'
             return httpx.Response(200,json={'token':'remote-token'})
         assert request.headers['Authorization']=='Bearer remote-token'
         if request.url.path=='/auth/me':return httpx.Response(200,json={'username':'editor','role':'admin','restricted':False,'foreign':'Editor','name':'Редактор'})
-        return httpx.Response(201,json=[{'name':name,**server_fields,'settings':settings} for name,settings in [('own.test',{'duty':'Editor'}),('second.test',{'secondDuty':'Editor'}),('dev.test',{'webdevDuty':{'developer':'Редактор'}}),('no.test',{'duty':'Other'})]])
+        raise AssertionError(f'Unexpected Webdev request: {request.url.path}')
     original=httpx.Client
     monkeypatch.setattr(external_auth.httpx,'Client',lambda **kwargs:original(transport=httpx.MockTransport(respond),**kwargs))
     token=external_auth.login_external('editor','secret');result=external_auth.identity(token,fresh=True)
-    assert not result['is_admin'] and result['projects']==frozenset({('own.test','one'),('second.test','one'),('dev.test','one')})
+    assert result['is_admin'] and result['projects'] is None
+    assert [request.url.path for request in calls] == ['/auth/login', '/auth/me']
     count=len(calls);assert external_auth.identity(token)==result and len(calls)==count
-    external_auth.identity(token,fresh=True);assert len(calls)==count+2
+    external_auth.identity(token,fresh=True);assert len(calls)==count+1
+
+
+def test_login_retries_with_a_new_token_when_webdev_rejects_the_first(monkeypatch):
+    tokens = iter(['expired-token', 'fresh-token'])
+    requested = []
+
+    def login(username, password):
+        requested.append((username, password))
+        return next(tokens)
+
+    def identity(token, fresh=False):
+        assert fresh is True
+        if token == 'expired-token':
+            raise HTTPException(401, 'expired')
+        return {'username': 'sergey', 'is_admin': False, 'projects': frozenset()}
+
+    monkeypatch.setattr(external_auth, 'login_external', login)
+    monkeypatch.setattr(external_auth, 'identity', identity)
+    token, profile = external_auth.authenticate('sergey', 'secret')
+
+    assert token == 'fresh-token'
+    assert profile['username'] == 'sergey'
+    assert requested == [('sergey', 'secret'), ('sergey', 'secret')]
+
+
+def test_login_does_not_retry_rejected_webdev_response(monkeypatch):
+    calls = []
+    upstream = external_auth.ExternalLoginResponse(
+        httpx.Response(403, content=b'{"code":"ACCOUNT_BLOCKED","message":"Access denied"}', headers={'content-type': 'application/json'})
+    )
+
+    def login(username, password):
+        calls.append((username, password))
+        raise upstream
+
+    monkeypatch.setattr(external_auth, 'login_external', login)
+    with pytest.raises(external_auth.ExternalLoginResponse) as error:
+        external_auth.authenticate('sergey', 'wrong')
+    assert error.value is upstream
+    assert calls == [('sergey', 'wrong')]
+
+
+def test_login_api_preserves_webdev_error_status_body_and_content_type(api, monkeypatch):
+    c, _, _ = api
+    body = b'{"code":"ACCOUNT_BLOCKED","message":"Access denied"}'
+
+    def authenticate(username, password):
+        response = httpx.Response(403, content=body, headers={'content-type': 'application/json; charset=utf-8'})
+        raise external_auth.ExternalLoginResponse(response)
+
+    monkeypatch.setattr(external_auth, 'authenticate', authenticate)
+    response = c.post('/api/auth/login', json={'username': 'sergey', 'password': 'secret'})
+
+    assert response.status_code == 403
+    assert response.content == body
+    assert response.headers['content-type'] == 'application/json; charset=utf-8'
 
 @pytest.mark.parametrize('status',[401,403,500])
 def test_external_failure_closed(monkeypatch,status):
@@ -201,3 +261,39 @@ def test_external_project_reads_preserve_server_scope(api,monkeypatch):
     r=c.get('/api/sites/own/pages/preview?slug=page')
     assert r.status_code==200,r.text
     assert r.json()['title']=='ALLOWED' and 'PRIVATE' not in r.text
+
+def test_user_refresh_imports_only_authorized_projects(api, monkeypatch):
+    from app import api as endpoints
+    c, engine, grants = api
+    grants['projects'] = frozenset({('own.test', 'one'), ('new.test', 'one')})
+    with Session(engine) as db:
+        db.get(models.Site, 'own').external_project_id = 'remote-own'
+        db.commit()
+    calls = []
+    rows = [dict(id=id, name=name, serverIp=server,
+                 settings={'canon':name, 'lang':'en'}, head={}, data={})
+            for id,name,server in [('remote-own','own.test','one'),
+                                    ('remote-new','new.test','one'),
+                                    ('private-duplicate','own.test','two'),
+                                    ('private-other','other.test','two')]]
+    monkeypatch.setattr(endpoints, 'fetch_project_cache', lambda names: calls.append(names) or rows)
+    for created in [1, 0]:
+        r = c.post('/api/sites/cache/sync', json={})
+        assert r.status_code == 200, r.text
+        assert r.json()['created_count'] == created
+        assert r.json()['cache_count'] == 2
+        assert {p['external_project_id'] for p in r.json()['projects']} == {'remote-own','remote-new'}
+    assert calls == [['new.test','own.test']] * 2
+    assert {s['name'] for s in c.get('/api/sites').json()} == {'own.test','new.test'}
+    with Session(engine) as db:
+        assert db.get(models.Site, 'own').cache_language == 'en'
+        assert db.get(models.Site, 'duplicate').cache_language is None
+        assert db.get(models.Site, 'other').cache_language is None
+        assert len(db.scalars(select(models.Site)).all()) == 4
+    assert c.post('/api/sites/cache/sync', json={'names':['other.test']}).status_code == 404
+    grants['projects'] = frozenset()
+    r = c.post('/api/sites/cache/sync', json={})
+    assert r.status_code == 200, r.text
+    assert r.json()['cache_count'] == 0
+    assert len(calls) == 2
+    assert c.get('/api/sites').json() == []
