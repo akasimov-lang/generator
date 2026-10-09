@@ -14,7 +14,7 @@ from sqlalchemy import select
 
 from app import models, project_network
 from app.subdomain_naming import next_subdomain
-from app.fake_main import normalize_fake_path, next_fake_path
+from app.fake_main import normalize_fake_path, next_fake_path, fake_canonical_markup
 from app.domain_classification import classify_domains
 from app.alternate_templates import template_catalog
 from app.alternate_language_pool import default_language_pool
@@ -313,6 +313,8 @@ def build_plan(site, state, global_cfg, cfg):
     markup = '\n'.join(f'<link rel="alternate" hreflang="{escape(x["hreflang"], quote=True)}" href="{escape(x["href"], quote=True)}" />' for x in links.values())
     validate_markup(markup)
     plan = {'create_fake_main_path': regional_path if cfg.create_fake_main else None, 'create_subdomain': language_host if cfg.create_subdomains else None, 'site_id': site.id, 'project': site.name, 'geo': geo, 'old_main': state['canon'], 'new_main': target,
+            'fake_main_path': regional_path if fake_enabled else None,
+            'canonicalFakeMainMarkup': fake_canonical_markup(regional_path) if fake_enabled else None,
             'drop_domain': cfg.drop_domain, 'domain_layout': cfg.domain_layout, 'language_domain': language_host, 'x_default_domain': x_default, 'x_default_use_newreg': cfg.x_default_use_newreg, 'parent_kind': cfg.parent_kind, 'scope': cfg.scope, 'scheme_mode': global_cfg.scheme_mode, 'alternateMarkup': markup,
             'required_page_urls': list(dict.fromkeys(x['href'] for x in links.values() if '{{reqPath}}' not in x['href'] and urlsplit(x['href']).path not in {'', '/'})),
             'added_hreflang': added_hreflang, 'pool_exhausted': global_cfg.scheme_mode == 'add_auxiliary' and added_hreflang is None,
@@ -406,11 +408,13 @@ def execute(db, run_id):
                 fake_path = plan['create_fake_main_path']
                 receipt = str(uuid5(UUID(run.id), 'create_fake_main'))
                 existing = db.get(models.NetworkOperation, receipt)
-                if not existing and (fake_path not in state.get('fake_main_paths', []) or not state.get('fake_main_enabled')):
+                if not existing:
+                    if fake_path in state.get('fake_main_paths', []) or fake_path in state.get('fake_main_history', []):
+                        raise ValueError('Путь новой фейковой страницы уже занят. Подготовьте новый план.')
                     if state['canon'] != plan['old_main']:
                         raise ValueError('Canonical изменился до создания фейковой страницы.')
                     run.phase = 'create_fake_main'; run.status = 'running'; db.commit()
-                    payload = project_network.NetworkChange(request_id=UUID(receipt), action='create_fake_main', revision=state['revision'], fake_main_path=fake_path)
+                    payload = project_network.NetworkChange(request_id=UUID(receipt), action='create_fake_main', revision=state['revision'], fake_main_path=fake_path, activate_fake_main=True)
                     project_network.change_network(db, site, payload, run.initiator, auto_run_id=run.id)
                     existing = db.get(models.NetworkOperation, receipt)
                 if existing:
@@ -460,6 +464,9 @@ def execute(db, run_id):
                 receipt = str(uuid5(UUID(run.id), action))
                 existing = db.get(models.NetworkOperation, receipt)
                 state = project_network.read_network(db, site)
+                if plan.get('fake_main_path') and (state.get('fake_main_current') != plan['fake_main_path']
+                        or not state.get('fake_main_enabled') or plan['fake_main_path'] not in state.get('fake_main_paths', [])):
+                    raise ValueError('Действующий фейковый внутряк изменился. Проверьте настройки проекта.')
                 if existing:
                     db.refresh(existing)
                     if existing.status == 'confirmed': continue
@@ -470,7 +477,8 @@ def execute(db, run_id):
                 expected = plan['new_main'] if action == 'alternates' else plan['old_main']
                 if state['canon'] != expected: raise ValueError('Canonical изменился вне этого запуска. Проверьте сетку.')
                 run.phase = action; db.commit()
-                payload = project_network.NetworkChange(request_id=UUID(receipt), action=action, revision=state['revision'], domain=plan['new_main'], alternate_markup=plan['alternateMarkup'], enable_alternates=True)
+                payload = project_network.NetworkChange(request_id=UUID(receipt), action=action, revision=state['revision'], domain=plan['new_main'], alternate_markup=plan['alternateMarkup'], enable_alternates=True,
+                    fake_main_path=(plan.get('fake_main_path') or '') if action == 'alternates' else '')
                 project_network.change_network(db, site, payload, run.initiator, auto_run_id=run.id)
                 operation = db.get(models.NetworkOperation, receipt); db.refresh(operation)
                 if operation.status == 'failed': raise ValueError(operation.message or 'Ошибка Webdev.')
@@ -478,9 +486,25 @@ def execute(db, run_id):
                     run.status = 'waiting'; run.message = operation.message; db.commit(); return
             from app.network_indexing import verified, queue_indexing
             state = project_network.read_network(db, site)
+            if plan.get('fake_main_path') and (not state.get('enableCanonical')
+                    or state.get('canonicalFakeMainMarkup') != plan['canonicalFakeMainMarkup']
+                    or not state.get('fake_main_enabled') or state.get('fake_main_current') != plan['fake_main_path']
+                    or plan['fake_main_path'] not in state.get('fake_main_paths', [])):
+                run.status = 'waiting'; run.message = 'Ждём подтверждения текущего фейкового внутряка и его canonical.'; db.commit(); return
             if not verified(state, {'canon': plan['new_main'], 'alternateMarkup': plan['alternateMarkup'], 'enableAlternates': True}):
                 run.status = 'waiting'; run.message = 'Ждём подтверждения canonical и альтернейтов перед индексацией.'; db.commit(); return
             queue_indexing(db, site, state, run.id, run.initiator)
+            # Immutable report snapshot of confirmed settings, not just the preview.
+            run.plan = {**plan, 'applied_result': {
+                'project': site.name, 'old_main': plan['old_main'], 'new_main': state['canon'],
+                'fake_main_path': state.get('fake_main_current') or None,
+                'alternateMarkup': state['alternateMarkup'],
+                'enableAlternates': state['enableAlternates'],
+                'enableCanonical': state.get('enableCanonical', False),
+                'canonicalFakeMainMarkup': state.get('canonicalFakeMainMarkup', ''),
+                'canonicalFakeMainResolved': (state.get('canonicalFakeMainMarkup') or '').replace('{{settings.canon}}', state['canon']),
+                'confirmed_at': datetime.now(timezone.utc).isoformat(),
+            }}
             run.status = 'completed'; run.phase = 'completed'; run.message = 'Новый Main и альтернейты подтверждены.'; db.commit()
         except Exception as error:
             db.rollback(); run = db.get(models.AutoReglueRun, run_id)

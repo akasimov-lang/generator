@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="520" viewBox="0 0 900 520" fill="none">
+  <rect width="900" height="520" rx="44" fill="#F6F8FC"/>
+  <rect x="272" y="72" width="356" height="356" rx="84" fill="#172033"/>
+  <path d="M378 154h105l51 51v140c0 12-10 22-22 22H378c-12 0-22-10-22-22V176c0-12 10-22 22-22Z" stroke="#4F7CFF" stroke-width="17" stroke-linejoin="round"/>
+  <path d="M483 155v50h50" stroke="#4F7CFF" stroke-width="17" stroke-linejoin="round"/>
+  <circle cx="445" cy="270" r="68" fill="#F6F8FC"/>
+  <path d="m471 234-15 47-38 24 15-47 38-24Z" fill="#32D1C6"/>
+  <path d="m419 306 15-48 38-24-15 48-38 24Z" fill="#4F7CFF"/>
+  <circle cx="445" cy="270" r="8" fill="#172033"/>
+  <text x="450" y="475" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="52" font-weight="750" letter-spacing="-2"><tspan fill="#172033">Page</tspan><tspan fill="#4F7CFF">Pilot</tspan></text>
+</svg>

@@ -21,6 +21,8 @@ def test_malformed_optional_cache_fields_do_not_break_sync():
 
 @pytest.fixture
 def env(monkeypatch):
+    from types import SimpleNamespace
+    monkeypatch.setattr(network, "get_settings", lambda: SimpleNamespace(project_cache_username="ai_seo_419"))
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)
     with Session(engine) as db:
@@ -46,7 +48,7 @@ def env(monkeypatch):
                     self.data["settings"]["prev"] = self.data["settings"]["canon"]
                     self.data["settings"]["canon"] = payload["reserve"]
                 else:
-                    self.data["head"].update({key: payload[key] for key in ("alternateMarkup", "enableAlternates")})
+                    self.data["head"].update({key: value for key, value in payload.items() if key != "folder"})
                 return 200, {"message": "ok"}
         remote = FakeRemote()
         monkeypatch.setattr(network, "Remote", lambda *_: nullcontext(remote))
@@ -90,9 +92,10 @@ def test_reserve_then_reglue_exact_contract(env):
     assert saved["operations"][0]["status"] == "confirmed"
     after = change(env, "reglue", saved["revision"], domain="next.test")
     assert not any(path.endswith("check-domain") for _, path, _ in remote.calls)
-    assert remote.calls[-1] == ("POST", "/projects/update-reglue", {"folder": "project.test", "reserve": "next.test", "trigger": "webdev:settings", "initiator": "anton"})
+    assert remote.calls[-1] == ("POST", "/projects/update-reglue", {"folder": "project.test", "reserve": "next.test", "trigger": "webdev:settings", "initiator": "ai_seo_419"})
     assert after["canon"] == "next.test"
     operation = next(op for op in after["operations"] if op["action"] == "reglue")
+    assert operation["initiator"] == "anton"
     assert operation["source_domain"] == "main.test"
     assert operation["domain"] == "next.test"
     remote.data["settings"]["canon"] = "reserve.test"

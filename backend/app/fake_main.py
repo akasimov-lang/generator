@@ -24,7 +24,7 @@ def fake_paths(alternate):
     return result
 
 
-def create_fake_settings(project, value):
+def create_fake_settings(project, value, *, activate=False):
     path = normalize_fake_path(value)
     settings = project.get('settings') or {}
     alternate = dict(settings.get('alternate') or {})
@@ -33,13 +33,13 @@ def create_fake_settings(project, value):
         if isinstance(page, dict) and '/' + str(page.get('slug') or '').strip('/') + '/' == path:
             raise ValueError('По этому пути уже есть обычная страница. Выберите другой путь.')
     current = alternate.get('currentFakeMain') or ''
-    if alternate.get('redirectFakeMainsToCurrent') and current and normalize_fake_path(current) != path:
+    if not activate and alternate.get('redirectFakeMainsToCurrent') and current and normalize_fake_path(current) != path:
         raise ValueError('Включён редирект фейковых страниц на другой текущий путь. Сначала измените эту настройку в Webdev.')
     existing = list(alternate.get('fakeMain') or [])
     if path not in fake_paths(alternate):
         existing.append(path)
     alternate.update(fakeMain=existing, enableDynamicRoutes=True)
-    if not current:
+    if activate or not current:
         alternate['currentFakeMain'] = path
     return alternate
 
@@ -60,20 +60,34 @@ def next_fake_path(site, state, cfg):
     language = (getattr(site, 'cache_language', None) or cfg.language).lower().replace('_', '-').split('-')[0]
     brand = (getattr(site, 'brand', None) or '').strip()
     generic = not brand or brand == GENERAL
+    has_casino = 'casino' in brand.lower()
+    if has_casino:
+        # Handles both "Ice Casino" and catalog spellings such as "CatCasino".
+        words = re.sub('casino', ' ', brand, flags=re.IGNORECASE).strip(' -_').split()
+        brand = words[0] if words else ''
+        generic = generic or not brand
     brand = re.sub(r'[^a-z0-9]', '', brand.lower())
     if not re.fullmatch('[a-z]{2}', geo) or not re.fullmatch('[a-z]{2,3}', language) or (not generic and not brand):
         raise ValueError('Для имени фейковой страницы нужны GEO, язык проекта и бренд латиницей (кроме общих ключей).')
     names = [geo, *(geo + str(i) for i in range(1, 11)), geo + '-' + language]
     if not generic:
-        names.extend([brand + '-' + geo, brand + '-' + language])
-        if 'casino' not in brand:
+        names.extend([brand + '-' + geo, brand + '-' + language, brand + language])
+        if not has_casino:
             names.extend([brand + '-casino-' + geo, brand + '-casino-' + language])
     occupied = set()
-    for value in [*state.get('fake_main_paths', []), *state.get('content_page_paths', []), state.get('fake_main_current')]:
+    for value in [*state.get('fake_main_history', []), *state.get('fake_main_paths', []), *state.get('content_page_paths', []), state.get('fake_main_current')]:
         if value:
             occupied.add(normalize_fake_path(value))
     for name in dict.fromkeys(names):
         candidate = normalize_fake_path(name)
         if candidate not in occupied:
             return candidate
-    raise ValueError('Все варианты имён фейковых страниц для GEO, языка и бренда заняты.')
+    # A finite set of occupied paths always leaves a free numeric suffix.
+    for number in range(11, len(occupied) + 12):
+        candidate = normalize_fake_path(f'{geo}{number}')
+        if candidate not in occupied:
+            return candidate
+
+
+def fake_canonical_markup(path):
+    return '<link rel="canonical" href="https://{{settings.canon}}' + normalize_fake_path(path) + '" />'

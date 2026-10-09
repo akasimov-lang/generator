@@ -1,3 +1,4 @@
+import { TemplateGenerator } from "./TemplateGenerator";
 import { readProjectSnapshot, writeProjectSnapshot, removeLegacyProjectSnapshot } from "./projectSnapshot";
 import React from "react";
 import ReactDOM from "react-dom/client";
@@ -6,7 +7,9 @@ import { LANGUAGE_OPTIONS, type LanguageOption } from "./languageOptions";
 import { getMenuLibrary, type MenuLibraryItem } from "./menuLibrary";
 import { matchesProjectSearch, projectSearchKeywords } from "./projectSearch";
 import { TechnicalPagesForm } from "./TechnicalPagesForm";
+import { FactualResearchPanel, factualResearchFromPayload } from "./FactualResearchPanel";
 import { workspaceRequestCache } from "./workspaceRequestCache";
+import { AutoLbPanel } from "./AutoLbPanel";
 import { ProjectNetworkPanel } from "./ProjectNetworkPanel";
 import { AutoReglueGuide } from "./AutoReglueGuide";
 const UserGuideView = React.lazy(() => import("./UserGuide"));
@@ -544,8 +547,8 @@ type PublicationCampaignQueue = {
 
 type ThemeMode = "light" | "dark";
 type InputStyle = "balanced" | "classic" | "soft" | "inset" | "underline" | "emerald" | "graphite" | "rounded" | "contrast" | "glass";
-type AppView = "autoReglueGuide" | "autoReglue" | "published" | "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "favorites" | "guide" | "settings";
-type WorkspaceTab = "overview" | "topics" | "content" | "publication" | "menu" | "network" | "redirects" | "autoReglue";
+type AppView = "templateGenerator" | "autoReglueGuide" | "autoReglue" | "published" | "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "favorites" | "guide" | "settings";
+type WorkspaceTab = "overview" | "topics" | "content" | "publication" | "menu" | "network" | "redirects" | "autoReglue" | "autoLb";
 
 type WorkspaceAccordionContextValue = {
   storagePrefix: string;
@@ -642,6 +645,7 @@ async function copyTextToClipboard(text: string) {
 }
 
 const MAIN_VIEW_PATHS: Record<Exclude<AppView, "workspace">, string> = {
+  templateGenerator: "/template-generator",
   autoReglue: "/auto-reglue",
   autoReglueGuide: "/auto-reglue/guide",
   dashboard: "/dashboard",
@@ -666,7 +670,8 @@ const WORKSPACE_TAB_PATHS: Record<WorkspaceTab, string> = {
   menu: "/project-menu",
   network: "/project-network",
   redirects: "/project-redirects",
-  autoReglue: "/project-auto-reglue"
+  autoReglue: "/project-auto-reglue",
+  autoLb: "/project-auto-lb"
 };
 
 function routeFromPath(pathname: string): AppRoute {
@@ -1346,6 +1351,7 @@ function App() {
               <NavButton href={pathForRoute("favorites")} icon={<Star className="favoriteNavIcon" fill="currentColor" />} label="Избранное" active={activeView === "favorites"} onClick={() => navigateTo("favorites")} />
             </>
           )}
+          <NavButton href={pathForRoute("templateGenerator")} icon={<Sparkles />} label="Генератор шаблона" active={activeView === "templateGenerator"} onClick={() => navigateTo("templateGenerator")} />
           {isAdmin && <NavButton href={pathForRoute("autoReglue")} icon={<RefreshCcw />} label="Автопереклей" active={activeView === "autoReglue"} onClick={() => navigateTo("autoReglue")} />}
           <NavButton href={pathForRoute("settings")} icon={<Settings />} label="Настройки" active={activeView === "settings"} onClick={() => navigateTo("settings")} />
           {isAdmin ? <NavButton href={pathForRoute("published")} icon={<CheckCircle2 />} label="Опубликовано" active={activeView === "published"} onClick={() => navigateTo("published")} /> : null}
@@ -1366,6 +1372,7 @@ function App() {
         {message ? <div className="notice">{message}</div> : null}
 
         {activeView === "workspace" && <ProjectWorkspaceView canManageAutomation={isAdmin} api={api} sites={sites} providers={providers} currentUsername={currentUser.username} activeTab={workspaceTab} contentOpenRequest={workspaceContentOpenRequest} onTabChange={(tab, projectName) => navigateTo("workspace", tab, false, projectName)} onChanged={loadAll} />}
+        {activeView === "templateGenerator" && <TemplateGenerator api={api} />}
         {activeView === "prompts" && <PromptsView api={api} sites={sites} isAdmin={isAdmin} onChanged={loadAll} />}
         {isAdmin && activeView === "dashboard" && dashboard && <DashboardView api={api} dashboard={dashboard} tasks={tasks} content={content} sites={sites} onOpenTask={(task) => {
           const site = sites.find((candidate) => candidate.id === task.site_id);
@@ -2016,7 +2023,7 @@ function ProjectWorkspaceView({
     const requestId = projectLoadRequestRef.current + 1;
     projectLoadRequestRef.current = requestId;
     setWorkspaceError("");
-    if (activeTab === "network" || activeTab === "redirects" || activeTab === "autoReglue") return { success: true, errorCode: "" };
+    if (activeTab === "network" || activeTab === "redirects" || activeTab === "autoReglue" || activeTab === "autoLb") return { success: true, errorCode: "" };
     const current = () => requestId === projectLoadRequestRef.current && selectedSiteIdRef.current === selectedSiteId;
     const read = async <T,>(path: string, publish: (value: T) => void) => {
       try {
@@ -2479,6 +2486,7 @@ function ProjectWorkspaceView({
             active={activeTab === "topics"}
             onClick={() => onTabChange("topics", selectedSite?.name)}
           />
+          <TabButton href={pathForRoute("workspace", "autoLb", selectedSite?.name)} icon={<Sparkles size={16} />} label="АвтоЛБ" active={activeTab === "autoLb"} onClick={() => onTabChange("autoLb", selectedSite?.name)} />
           <TabButton
             href={pathForRoute("workspace", "content", selectedSite?.name)}
             icon={<span className="tabButtonIcon document" aria-hidden="true"><FileText size={15} /></span>}
@@ -2535,6 +2543,7 @@ function ProjectWorkspaceView({
           <WorkspaceTabPane active={activeTab === "overview"} storagePrefix={`${currentUsername}:${selectedSite.id}:overview`}>
             {overview ? <FastProjectOverviewPanel key={selectedSite.id} overview={overview} content={siteContent} sections={sections} logs={logs} /> : null}
           </WorkspaceTabPane>
+          {activeTab === "autoLb" && <AutoLbPanel key={`auto-lb:${selectedSite.id}`} siteId={selectedSite.id} api={api} />}
           {canManageAutomation && activeTab === "autoReglue" && <ProjectAutoReglue key={`auto-reglue:${selectedSite.id}`} siteId={selectedSite.id} api={api} />}
           {activeTab === "network" || activeTab === "redirects" ? <ProjectNetworkPanel key={`network:${selectedSite.id}`} site={selectedSite} mode={activeTab} api={api} username={currentUsername} onChanged={refreshProject} /> : null}
           <WorkspaceTabPane active={activeTab === "topics"} storagePrefix={`${currentUsername}:${selectedSite.id}:topics`}>
@@ -3233,6 +3242,7 @@ function CompetitorResearchCard({
           </button>
         </div>
       </div>
+      <FactualResearchPanel value={item.generation_context?.factual_research} />
       {research?.results.length ? (
         <div className="competitorList">
           <strong>Найденные конкуренты</strong>
@@ -8541,10 +8551,17 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
 
   React.useEffect(() => { setManagedSites(sites); }, [sites]);
 
-  async function loadManagedSites() {
+  async function loadManagedSites(refresh = false) {
     if (favoritesOnly || routeFromPath(window.location.pathname).view !== "sites") return;
     setSyncing(true); setSyncError("");
     try {
+      if (refresh) {
+        await api<ProjectCacheSyncResult>("/sites/cache/sync", {
+          method: "POST", body: JSON.stringify({ names: [] })
+        });
+        setCacheResult(null);
+        setSyncMessage("");
+      }
       const result = await api<Site[]>("/sites");
       setManagedSites(result);
       onSitesChanged(result, true);
@@ -8849,7 +8866,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
             <button className={summaryFilter === "all" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("all")} aria-pressed={summaryFilter === "all"}><span>Всего сайтов</span><strong>{formatNumber(managedSites.length)}</strong></button>
           </div>
           <div className="siteCacheActions">
-          {!favoritesOnly && <button className="button primary siteCacheSyncButton" type="button" onClick={() => void loadManagedSites()} disabled={syncing}>
+          {!favoritesOnly && <button className="button primary siteCacheSyncButton" type="button" onClick={() => void loadManagedSites(true)} disabled={syncing}>
             <RefreshCcw size={18} className={syncing ? "spin" : ""} />{syncing ? "Обновляем…" : "Обновить проекты"}
           </button>}
           {!readOnly && !favoritesOnly ? (
@@ -10447,6 +10464,7 @@ function ContentPreviewModal({ item, promptName, actions, api, onChanged, onClos
         <span className="previewGenerationLabel">Генерация</span>
         <GenerationProgressCell item={currentItem} />
       </div>
+      <FactualResearchPanel value={(!selectedVersion && currentItem.generation_context?.factual_research) || factualResearchFromPayload(previewItem.generated_json)} />
       {api && (revisionAllowed || revisionActive) ? (
         <section className="revisionAccordion open">
           <div className="revisionAccordionToggle revisionAccordionHeading"><span><Sparkles size={15} /> Доработать текст</span></div>
@@ -10668,6 +10686,7 @@ function viewTitle(view: AppView, _workspaceTab: WorkspaceTab) {
   }
 
   const titles: Record<Exclude<AppView, "workspace">, string> = {
+    templateGenerator: "Генератор шаблона",
     dashboard: "Dashboard",
     prompts: "Промпты",
     tasks: "Задачи генерации",

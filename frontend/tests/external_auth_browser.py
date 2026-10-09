@@ -22,6 +22,9 @@ with sync_playwright() as p:
             state['user']=body['username'];data={'access_token':'external-'+state['user']}
             if state['unavailable']:status=503;data={'detail':'Сервис авторизации временно недоступен.'}
         elif path=='/auth/me':data=user
+        elif path=='/sites/cache/sync':
+            assert r.request.method == 'POST'
+            data={}
         elif path in ['/sites','/sites/cache/projects']:data=[site('own'),site('other')] if admin else ([] if state['revoked'] else [site('own')])
         elif path=='/me/favorite-sites':data={'site_ids':[]}
         elif path.startswith('/admin/'):data=[]
@@ -38,6 +41,10 @@ with sync_playwright() as p:
     page.get_by_role('button',name='Войти',exact=True).click()
     expect(page.get_by_label('Бренд own.test',exact=True)).to_be_visible()
     expect(page.get_by_label('Бренд other.test',exact=True)).to_have_count(0)
+    expect(page.get_by_role('link',name='Сайты',exact=True)).to_be_visible()
+    page.get_by_role('button',name='Обновить проекты',exact=True).click()
+    expect(page.get_by_role('button',name='Обновить проекты',exact=True)).to_be_enabled()
+    assert '/sites/cache/sync' in calls
     # Seed both the legacy shared snapshot and a stale user snapshot with another user's project.
     page.evaluate('''async projects => {
       const db = await new Promise((resolve,reject) => { const r=indexedDB.open('pagepilot-projects',1);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error); });

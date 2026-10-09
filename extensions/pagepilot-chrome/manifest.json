@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "PagePilot — HTML из Google",
+  "version": "1.0.0",
+  "description": "Передача проверенного Google HTML в задачу PagePilot из вашего Chrome.",
+  "permissions": ["storage", "scripting"],
+  "host_permissions": ["https://search.google.com/*"],
+  "background": {"service_worker": "worker.js"},
+  "action": {"default_popup": "popup.html"},
+  "content_scripts": [
+    {"matches": ["https://ai-seo-content-panel.site/*", "https://www.ai-seo-content-panel.site/*", "http://localhost:5173/*", "http://localhost:8080/*"], "js": ["pagepilot.js"]},
+    {"matches": ["https://search.google.com/test/rich-results*"], "js": ["google.js"]}
+  ]
+}

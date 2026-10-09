@@ -65,12 +65,13 @@ def identity(token, fresh=False):
             admin = profile['username'] == 'anton'
             projects = None
             if not admin:
-                rows = _json(client.post(base + '/projects/cache', json={'fields': {'settings': True, 'head': False, 'data': False}}))
+                rows = _json(client.post(base + '/projects/cache', json={'fields': {'settings': True, 'head': False, 'data': False, 'serverId': True}}))
                 if not isinstance(rows, list):
                     raise HTTPException(503, "Не удалось проверить права на проекты.")
                 # Names alone are ambiguous: the same project may exist on different servers.
-                projects = frozenset((row['name'], row['serverIp']) for row in rows
-                    if isinstance(row, dict) and isinstance(row.get('name'), str) and isinstance(row.get('serverIp'), str)
+                projects = frozenset((row['name'].strip(), str(row.get('serverId') or row.get('server_id') or row.get('serverIp') or row.get('server_ip') or '').strip()) for row in rows
+                    if isinstance(row, dict) and isinstance(row.get('name'), str)
+                    and (row.get('serverId') or row.get('server_id') or row.get('serverIp') or row.get('server_ip'))
                     and isinstance(row.get('settings'), dict) and assigned_to(row['settings'], profile))
             result = {'username': profile['username'], 'is_admin': admin, 'projects': projects}
     except httpx.HTTPError:

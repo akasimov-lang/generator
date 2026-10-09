@@ -63,10 +63,14 @@ def setup_run(monkeypatch, unknown_action=None, create=False, fake=False):
         calls.append(payload.action)
         if payload.action=='create_fake_main':
             state['fake_main_paths']=[payload.fake_main_path];state['fake_main_enabled']=True
+            if payload.activate_fake_main: state['fake_main_current']=payload.fake_main_path
         elif payload.action=='create_subdomains': pass
         elif payload.action=='reserve':state['reserve']=payload.domain
         elif payload.action=='reglue':state['canon']=payload.domain
-        else:state['alternateMarkup']=payload.alternate_markup
+        else:
+            state['alternateMarkup']=payload.alternate_markup
+            if payload.fake_main_path:
+                state.update(enableCanonical=True, canonicalFakeMainMarkup=auto.fake_canonical_markup(payload.fake_main_path))
         op=models.NetworkOperation(id=str(payload.request_id),site_id=site.id,action=payload.action,status='unknown' if payload.action==unknown_action else 'confirmed',initiator=username,request_payload={},message='test')
         db.add(op);db.commit()
     monkeypatch.setattr(auto.project_network,'read_network',read)
@@ -157,6 +161,86 @@ def test_real_receipts_confirm_entire_automatic_sequence(env,monkeypatch):
     assert 'hreflang="x-default" href="https://project.test/"' in remote.data['head']['alternateMarkup']
     assert 'next.project.test' in site.main_domain_history
     assert remote.data['settings']['alternate']['fakeMain']==['/cz/']
+
+
+def prepare_fake_run(env, monkeypatch):
+    monkeypatch.setattr(auto, 'verify_pages', lambda urls: None)
+    db, site, remote = env
+    site.project_status = 'mass_actions'; site.cache_geo = 'PL'; site.cache_language = 'pl'
+    remote.data['settings']['domains'] = ['main.test', 'next.project.test', 'last.project.test']
+    remote.data['settings']['alternate']['redirectFakeMainsToCurrent'] = True
+    remote.data['data'] = {'pages': [{'slug': 'pl'}]}
+    remote.data['head']['alternateMarkup'] = ''
+    remote.data['head']['canonicalDefaultMarkup'] = '<link rel="canonical" href="https://{{settings.canon}}{{reqPath}}" />'
+    db.commit()
+    auto.save_config(db, auto.GlobalConfig(enabled=True))
+    auto.save_config(db, auto.ProjectConfig(enabled=True, create_fake_main=True, drop_domain='project.test', language='pl'), site.id)
+    plan = auto.preview(db, site)
+    run, _ = auto.prepare_run(db, site, uuid4(), plan['preview_token'], 'admin')
+    return run
+
+
+def test_new_fake_is_current_in_scheme_canonical_and_confirmed_report(env, monkeypatch):
+    db, site, remote = env
+    run = prepare_fake_run(env, monkeypatch)
+    assert run.plan['create_fake_main_path'] == '/pl1/'  # /pl/ is an ordinary page.
+    auto.execute(db, run.id); db.refresh(run)
+    assert run.status == 'completed', run.message
+    alternate = remote.data['settings']['alternate']
+    assert alternate['fakeMain'] == ['/cz/', '/pl1/']
+    assert alternate['currentFakeMain'] == '/pl1/'
+    assert alternate['enableDynamicRoutes'] and alternate['redirectFakeMainsToCurrent']
+    from app.network_state import alternate_links
+    assert {x['hreflang']: x['href'] for x in alternate_links(remote.data['head']['alternateMarkup'])} == {
+        'pl-PL': 'https://next.project.test/pl1/', 'pl': 'https://next.project.test/', 'x-default': 'https://project.test/'}
+    assert remote.data['head']['canonicalFakeMainMarkup'] == auto.fake_canonical_markup('/pl1/')
+    assert remote.data['head']['enableCanonical'] is True
+    assert remote.data['head']['customHeaders'] == [{'key': 'X-Test', 'value': 'keep'}]
+    report = dict(run.plan['applied_result'])
+    assert report['old_main'] == 'main.test' and report['new_main'] == 'next.project.test'
+    assert report['alternateMarkup'] == remote.data['head']['alternateMarkup']
+    assert report['canonicalFakeMainResolved'] == '<link rel="canonical" href="https://next.project.test/pl1/" />'
+    writes = len(remote.calls)
+    auto.execute(db, run.id)
+    assert len(remote.calls) == writes
+    plan = auto.preview(db, site)
+    assert plan['create_fake_main_path'] == '/pl2/'
+    next_run, _ = auto.prepare_run(db, site, uuid4(), plan['preview_token'], 'admin')
+    auto.execute(db, next_run.id); db.refresh(next_run); db.refresh(run)
+    assert next_run.status == 'completed', next_run.message
+    assert remote.data['settings']['alternate']['currentFakeMain'] == '/pl2/'
+    assert run.plan['applied_result'] == report  # Later runs cannot rewrite the report.
+
+
+def test_head_without_canonical_confirmation_cannot_complete_or_resend(env, monkeypatch):
+    db, site, remote = env
+    run = prepare_fake_run(env, monkeypatch)
+    request = remote.request
+    def ignore_canonical(method, path, payload):
+        result = request(method, path, payload)
+        if path.endswith('update-head'):
+            remote.data['head'].pop('canonicalFakeMainMarkup', None)
+        return result
+    monkeypatch.setattr(remote, 'request', ignore_canonical)
+    auto.execute(db, run.id); db.refresh(run)
+    assert run.status == 'waiting'
+    assert 'applied_result' not in run.plan
+    writes = len(remote.calls)
+    auto.execute(db, run.id)
+    assert len(remote.calls) == writes
+    assert not db.scalar(select(models.NetworkOperation).where(models.NetworkOperation.action == 'indexing'))
+    remote.data['head']['canonicalFakeMainMarkup'] = auto.fake_canonical_markup('/pl1/')
+    auto.execute(db, run.id); db.refresh(run)
+    assert run.status == 'completed', run.message
+
+
+def test_fake_history_remembers_removed_paths(env):
+    from app import project_network
+    db, site, remote = env
+    project_network.read_network(db, site)
+    remote.data['settings']['alternate'].update(fakeMain=[], currentFakeMain='')
+    state = project_network.read_network(db, site)
+    assert '/cz/' in state['fake_main_history']
 
 
 def test_scheme_modes_add_one_then_preserve_when_exhausted():
@@ -693,14 +777,33 @@ def test_fake_path_templates_exhaustion_and_brand(brand):
     state['fake_main_paths'] = []; state['content_page_paths'] = []; state['fake_main_current'] = ''
     expected = ['/cz/', *[f'/cz{i}/' for i in range(1, 11)], '/cz-cs/']
     if brand == 'Pin-Up':
-        expected += ['/pinup-cz/', '/pinup-cs/', '/pinup-casino-cz/', '/pinup-casino-cs/']
-    elif brand == 'Casino':
-        expected += ['/casino-cz/', '/casino-cs/']
+        expected += ['/pinup-cz/', '/pinup-cs/', '/pinupcs/', '/pinup-casino-cz/', '/pinup-casino-cs/']
     for path in expected:
         assert next_fake_path(site, state, cfg) == path
         state['fake_main_paths'].append(path)
-    with pytest.raises(ValueError, match='заняты'):
-        next_fake_path(site, state, cfg)
+    assert next_fake_path(site, state, cfg) == '/cz11/'
+    state['fake_main_history'] = ['/cz11/', '/cz12/']
+    assert next_fake_path(site, state, cfg) == '/cz13/'
+
+
+@pytest.mark.parametrize('brand,slug', [
+    ('Ice Casino', 'ice'), ('Nine CASINO', 'nine'), ('888 Casino', '888'),
+    ('King Billy Casino', 'king'), ('CatCasino', 'cat'), ('JoyCasino', 'joy'),
+    ('Casino-X', 'x'), ('  Verde   Casino  ', 'verde'),
+])
+def test_fake_path_casino_brands_use_first_word_without_casino(brand, slug):
+    from app.fake_main import next_fake_path
+    site, state, _, cfg = fixture()
+    site.brand = brand; site.cache_geo = 'CZ'; site.cache_language = 'cs'
+    state['fake_main_paths'] = ['/cz/', *[f'/cz{i}/' for i in range(1, 11)], '/cz-cs/']
+    state['content_page_paths'] = []; state['fake_main_current'] = ''
+    assert next_fake_path(site, state, cfg) == f'/{slug}-cz/'
+    state['fake_main_paths'].append(f'/{slug}-cz/')
+    assert next_fake_path(site, state, cfg) == f'/{slug}-cs/'
+    state['fake_main_paths'].append(f'/{slug}-cs/')
+    assert next_fake_path(site, state, cfg) == f'/{slug}cs/'
+    state['fake_main_paths'].append(f'/{slug}cs/')
+    assert next_fake_path(site, state, cfg) == '/cz11/'
 
 
 def test_fake_path_skips_normalized_content_and_current_and_validates_metadata():

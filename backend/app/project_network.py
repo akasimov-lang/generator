@@ -18,7 +18,7 @@ from app.network_state import alternate_links, domain_name, observe_network, sta
 from app.project_cache import ProjectCacheError, project_server_url, refresh_project_server_id
 
 
-from app.fake_main import create_fake_settings, select_fake_settings
+from app.fake_main import create_fake_settings, select_fake_settings, normalize_fake_path, fake_canonical_markup
 
 
 class NetworkConflict(ValueError):
@@ -43,6 +43,7 @@ class NetworkChange(BaseModel):
     alternate_markup: str = Field(default="", max_length=100000)
     enable_alternates: bool = True
     fake_main_path: str = Field(default="", max_length=250)
+    activate_fake_main: bool = False
     domains: list[str] = Field(default_factory=list, max_length=100)
 
 
@@ -136,7 +137,10 @@ def operation_matches(operation, state):
         return state["reserve"] == payload["reserve"]
     if operation.action == "reglue":
         return state["canon"] == payload["reserve"]
-    return state["has_head"] and state["alternateMarkup"] == payload["alternateMarkup"] and state["enableAlternates"] == payload["enableAlternates"]
+    return (state["has_head"] and state["alternateMarkup"] == payload["alternateMarkup"]
+            and state["enableAlternates"] == payload["enableAlternates"]
+            and all(state.get(key) == payload[key] for key in
+                    ("enableCanonical", "canonicalDefaultMarkup", "canonicalFakeMainMarkup") if key in payload))
 
 
 def observe(db, site, project):
@@ -329,8 +333,11 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
             }
         elif payload.action in {"create_fake_main", "select_fake_main"}:
             path = "/projects/update-value"
-            prepare = create_fake_settings if payload.action == "create_fake_main" else select_fake_settings
-            request["alternate"] = prepare(project, payload.fake_main_path)
+            if payload.action == 'create_fake_main' and payload.activate_fake_main:
+                if normalize_fake_path(payload.fake_main_path) in state.get('fake_main_history', []):
+                    raise ValueError('Путь новой фейковой страницы уже использован. Подготовьте новый план.')
+            request["alternate"] = (create_fake_settings(project, payload.fake_main_path, activate=payload.activate_fake_main)
+                                    if payload.action == "create_fake_main" else select_fake_settings(project, payload.fake_main_path))
         elif payload.action in {"reserve", "reglue"}:
             domain = require_domain(state, payload.domain)
             request["reserve"] = domain
@@ -345,13 +352,21 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
                     if not isinstance(check, dict) or check.get("reachable") is not True:
                         raise ValueError("Резервный домен не подтвердил доступность. Проверьте домен перед переклеем.")
                 path = "/projects/update-reglue"
-                request.update(trigger="webdev:settings", initiator=username)
+                request.update(trigger="webdev:settings", initiator=get_settings().project_cache_username)
         else:
             if not state["has_head"]:
                 raise ValueError("У проекта отсутствует head; сохранение альтернейтов недоступно.")
             validate_markup(payload.alternate_markup)
             method, path = "PATCH", "/projects/update-head"
             request.update(alternateMarkup=payload.alternate_markup, enableAlternates=payload.enable_alternates)
+            if payload.fake_main_path:
+                fake_path = normalize_fake_path(payload.fake_main_path)
+                if (not payload.enable_alternates or not state['fake_main_enabled']
+                        or state['fake_main_current'] != fake_path or fake_path not in state['fake_main_paths']):
+                    raise ValueError('Для canonical выберите действующий включённый фейковый внутряк и включите альтернейты.')
+                request.update(enableCanonical=True, canonicalFakeMainMarkup=fake_canonical_markup(fake_path))
+                if not state['canonicalDefaultMarkup']:
+                    request['canonicalDefaultMarkup'] = '<link rel="canonical" href="https://{{settings.canon}}{{reqPath}}" />'
         stored_request = dict(request)
         if payload.action == "reglue":
             stored_request["source_domain"] = state["canon"]
@@ -364,6 +379,9 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
             stored_request["alternates_before"] = {
                 "markup": state["alternateMarkup"], "enabled": state["enableAlternates"],
             }
+            if payload.fake_main_path:
+                stored_request['canonical_before'] = {key: state[key] for key in
+                    ('enableCanonical', 'canonicalDefaultMarkup', 'canonicalFakeMainMarkup')}
         operation = models.NetworkOperation(id=str(payload.request_id), site_id=site.id, action=payload.action,
                                             initiator=username, request_payload=stored_request, status="pending")
         db.add(operation)

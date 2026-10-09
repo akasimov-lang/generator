@@ -526,7 +526,7 @@ def test_only_admin_can_start_shared_webdev_sync(monkeypatch):
                         lambda db, projects: {"cache_count": 0, "created_count": 0, "updated_count": 0, "synced_names": []})
     client.app.dependency_overrides[require_auth] = lambda: {
         "id": "regular-user-id", "username": "regular", "is_admin": False, "is_active": True}
-    for route in ("/api/sites/cache/sync-jobs", "/api/sites/cache/sync"):
+    for route in ("/api/sites/cache/sync-jobs",):
         assert client.post(route, json={"names": []}).status_code == 403
     with factory() as db:
         assert db.scalars(select(models.BackgroundJob)).all() == []

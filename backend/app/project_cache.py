@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 import threading
 import time
+import uuid
 from typing import Any
 from urllib.parse import quote
 
@@ -348,7 +349,7 @@ def fetch_project_cache(names: list[str] | None = None) -> list[dict[str, Any]]:
             if not token:
                 raise ProjectCacheError("Project cache login did not return a token")
             request_payload: dict[str, Any] = {
-                "fields": {"settings": True, "head": True, "data": True, "serverId": True}
+                "fields": {"settings": True, "head": True, "data": True}
             }
             if names:
                 request_payload["names"] = names
@@ -1014,7 +1015,9 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
         site = sites_by_external_id.get(external_project_id)
         if site is None:
             site = models.Site(
+                id=str(uuid.uuid4()),
                 name=name,
+                cache_server_ip=server_ip,
                 base_url=f"https://{canon}",
                 publication_endpoint=f"https://{canon}/api/content",
                 payload_mode="full_site",
@@ -1022,6 +1025,10 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
                 is_test_project=False,
                 project_status="duplicate" if is_duplicate else "working" if is_working_project else "not_in_focus",
             )
+            # The external rows were filtered by current authorization grants above.
+            # Include newly imported projects in this request's write/read scope.
+            if db.info.get("allowed_site_ids") is not None:
+                db.info["allowed_site_ids"] = db.info["allowed_site_ids"] | {site.id}
             db.add(site)
             sites_by_external_id[external_project_id] = site
             created_count += 1

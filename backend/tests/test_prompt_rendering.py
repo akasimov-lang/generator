@@ -1,6 +1,9 @@
 import asyncio
 
+import pytest
+
 from app import models, services as service_module
+from app.editorial_skill import AI_NEUTRALIZER_MARKER, AI_NEUTRALIZER_TEXT
 from app.services import (
     CASINO_RATING_PROMPT_MARKER,
     PROMPT_FORMAT_CONTRACT_MARKER,
@@ -11,6 +14,33 @@ from app.services import (
     call_gemini,
     variation_profile_for_position,
 )
+
+
+@pytest.mark.parametrize("template", [None, "", "Custom brief: {{TOPIC}}"])
+@pytest.mark.parametrize("content_kind", ["article", "casino_review", "menu_page", "technical_page"])
+def test_editorial_skill_precedes_rendered_brief(template, content_kind) -> None:
+    prompt = build_gemini_prompt(
+        topic="Test topic",
+        geo="DE",
+        language="de",
+        target_words=1600,
+        site=None,
+        prompt_template=template,
+        shortcode=None,
+        include_toc=False,
+        include_faq=False,
+        generation_context={"content_kind": content_kind},
+    )
+
+    assert prompt.startswith(f"{AI_NEUTRALIZER_MARKER}\n{AI_NEUTRALIZER_TEXT}\n")
+    assert prompt.count(AI_NEUTRALIZER_MARKER) == 1
+    brief = prompt.split("=== ТЗ И КОНТЕКСТ ГЕНЕРАЦИИ ===\n", 1)[1]
+    assert PROMPT_FORMAT_CONTRACT_MARKER in brief
+    assert "- Topic: Test topic" in brief
+    assert "- Include FAQ: no" in brief
+    assert "- Language: de" in brief
+    if template:
+        assert brief.startswith("Custom brief: Test topic")
 
 
 def test_gemini_request_retries_transient_http_errors(monkeypatch) -> None:
@@ -54,6 +84,25 @@ def test_gemini_request_retries_transient_http_errors(monkeypatch) -> None:
     assert response == {"status": "ok"}
     assert len(calls) == 3
     assert sleeps == [2, 4]
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_url_context_tool_is_explicitly_enabled_in_api_body(monkeypatch, enabled):
+    import httpx
+
+    def respond(request):
+        import json
+        body = json.loads(request.content)
+        if enabled:
+            assert body["tools"] == [{"url_context": {}}]
+        else:
+            assert "tools" not in body
+        return httpx.Response(200, json={"candidates": []})
+
+    client_class = httpx.AsyncClient
+    monkeypatch.setattr(service_module.httpx, "AsyncClient", lambda **kwargs: client_class(transport=httpx.MockTransport(respond), **kwargs))
+    provider = models.AiProvider(name="Gemini", provider_type="gemini", api_key="test-key")
+    asyncio.run(call_gemini(provider, "Read https://example.com", url_context=enabled))
 
 
 def test_casino_rating_requirement_is_optional_and_idempotent() -> None:
@@ -269,6 +318,8 @@ def test_gemini_content_generation_passes_competitor_brief_to_prompt(monkeypatch
     )
 
     assert "Example Casino Page" in captured["prompt"]
+    assert captured["prompt"].startswith(AI_NEUTRALIZER_MARKER)
+    assert AI_NEUTRALIZER_TEXT in captured["prompt"]
     assert "Mehr Details zu KYC und Limits" in captured["prompt"]
     assert generated["pages"][0]["title"] == "Beste Online Casinos in Deutschland 2026: Legale Anbieter im Vergleich"
     assert generated["pages"][0]["content"]["blocks"][0]["data"]["text"] == "Beste Online Casinos in Deutschland 2026"

@@ -112,6 +112,9 @@ def project_network_state(project: dict) -> dict:
         "domains": list(dict.fromkeys(domains)),
         "alternateMarkup": head.get("alternateMarkup") if isinstance(head.get("alternateMarkup"), str) else "",
         "enableAlternates": bool(head.get("enableAlternates")),
+        "enableCanonical": bool(head.get("enableCanonical")),
+        "canonicalDefaultMarkup": head.get("canonicalDefaultMarkup") or "",
+        "canonicalFakeMainMarkup": head.get("canonicalFakeMainMarkup") or "",
         "has_head": isinstance(project.get("head"), dict),
     }
 
@@ -132,8 +135,12 @@ def observe_network(site, project: dict) -> dict:
     ])))
     # Partial cache events must not clear head observations.
     if not state["has_head"]:
-        for key in ("alternateMarkup", "enableAlternates", "has_head"):
+        for key in ("alternateMarkup", "enableAlternates", "has_head", "enableCanonical", "canonicalDefaultMarkup", "canonicalFakeMainMarkup"):
             state[key] = (site.network_state or {}).get(key, state[key])
+    state['fake_main_history'] = list(dict.fromkeys([
+        *(site.network_state or {}).get('fake_main_history', []),
+        *state['fake_main_paths'], *filter(None, [state['fake_main_current']]),
+    ]))
     links = alternate_links(state["alternateMarkup"].replace("{{settings.canon}}", state["canon"]).replace("{{reqPath}}", "/"))
     site.alternate_domain_history = list(dict.fromkeys([
         *(site.alternate_domain_history or []), *(link["domain"] for link in links if link["domain"]),

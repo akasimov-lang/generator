@@ -1,0 +1,20 @@
+.autoLb { min-width: 0; }
+.autoLbHeader, .autoLbCardTitle, .autoLbResultBar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.autoLbHeader { margin-bottom: 18px; }
+.autoLbHeader h2, .autoLbCard h3 { margin: 0; }
+.autoLbContext { display: flex; flex-direction: column; gap: 4px; font-size: 13px; overflow-wrap: anywhere; }
+.autoLbColumns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.autoLbCard { min-width: 0; padding: 20px; border: 1px solid var(--border); background: var(--surface); border-radius: 14px; display: flex; flex-direction: column; gap: 14px; }
+.autoLbCard p { margin: 0; }
+.autoLbDescription { min-height: 42px; font-size: 13px; line-height: 1.6; }
+.autoLbCount { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.autoLbActions { display: flex; gap: 6px; flex-wrap: wrap; }
+.autoLbResultBar { font-size: 12px; }
+.autoLbResult { width: 100%; min-height: 420px; resize: vertical; box-sizing: border-box; line-height: 1.65; }
+.autoLbPrompt { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; font-size: 12px; }
+.autoLbHistory { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.autoLbCard summary { cursor: pointer; font-size: 13px; }
+.autoLbSpinner { animation: autoLbSpin 1s linear infinite; }
+@keyframes autoLbSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .autoLbSpinner { animation: none; } }
+@media (max-width: 900px) { .autoLbColumns { grid-template-columns: minmax(0, 1fr); } .autoLbCard { padding: 16px; } }
