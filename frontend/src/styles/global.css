@@ -9899,3 +9899,6 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .workspaceProjectStatus .siteStatusSearchable { display: inline-block; width: 200px; max-width: 100%; }
 .workspaceProjectStatus .searchableSelectControl { height: 32px; min-height: 32px; padding: 0 10px; font-size: 12px; }
 .workspaceProjectStatus .formError { flex-basis: 100%; font-size: 12px; }
+
+.siteStatusSearchable.geo_ru .searchableSelectControl,
+.siteStatusReadonly.geo_ru { color: var(--primary); border-color: var(--primary); background: var(--primary-soft); }
