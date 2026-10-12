@@ -20,7 +20,7 @@ async function api(path,options={}) {
   if(payload.action==='select_fake_main'){window.fixture.fake_main_current=payload.fake_main_path;}
   if(payload.action==='create_fake_main'){window.fixture.fake_main_paths=['/cz/','/'+payload.fake_main_path.replace(/^\/+|\/+$/g,'')+'/'];window.fixture.fake_main_enabled=true;}
   if(payload.action==='delete_domain')window.fixture.domains=window.fixture.domains.filter(d=>d!==payload.domain);
-  if(payload.action==='create_subdomains')window.fixture.domains.push(...payload.domains);
+  if(['create_subdomains','create_domains'].includes(payload.action))window.fixture.domains.push(...payload.domains);
   if(payload.action==='reserve')window.fixture.reserve=payload.domain;
   if(payload.action==='reglue'){window.fixture.canon=payload.domain;window.fixture.operations.unshift({id:'index-task',action:'indexing',status:'index_submitted',task_id:'task-123',domains:['https://main.test/','https://next.test/'],message:'Задача создана',created_at:new Date().toISOString(),initiator:'test'});}
   if(payload.action==='alternates'){window.fixture.alternateMarkup=payload.alternate_markup;window.fixture.enableAlternates=payload.enable_alternates;}

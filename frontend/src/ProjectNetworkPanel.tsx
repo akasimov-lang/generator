@@ -2,7 +2,7 @@ import React from "react";
 import { Trash2 } from "lucide-react";
 
 type AlternatesSnapshot = { markup: string; enabled: boolean };
-type NetworkOperation = { id: string; action: "reserve" | "reglue" | "alternates" | "create_subdomains" | "delete_domain" | "create_fake_main" | "select_fake_main" | "indexing"; task_id?: string; domains?: string[]; status: string; message: string | null; domain: string | null; source_domain?: string | null; alternates_before?: AlternatesSnapshot | null; alternates_after?: AlternatesSnapshot | null; initiator: string; created_at: string };
+type NetworkOperation = { id: string; action: "reserve" | "reglue" | "alternates" | "create_domains" | "create_subdomains" | "delete_domain" | "create_fake_main" | "select_fake_main" | "indexing"; task_id?: string; domains?: string[]; status: string; message: string | null; domain: string | null; source_domain?: string | null; alternates_before?: AlternatesSnapshot | null; alternates_after?: AlternatesSnapshot | null; initiator: string; created_at: string };
 type DomainClassification = { is_subdomain: boolean; parent_domain: string | null; parent_type: "drop" | "newreg" | null; unused_as_main: boolean };
 type Network = {
   fake_main_paths?: string[]; fake_main_current?: string; fake_main_enabled?: boolean;
@@ -20,7 +20,7 @@ type Props = {
   api: <T>(path: string, options?: RequestInit) => Promise<T>; onChanged: () => void;
 };
 type Draft = { markup: string; enabled: boolean; originalMarkup: string; originalEnabled: boolean };
-const actionLabels = { select_fake_main: "Выбор текущей фейковой страницы", indexing: "Индексация проекта", create_fake_main: "Создание фейковой главной", delete_domain: "Удаление домена", create_subdomains: "Создание поддоменов", reserve: "Сохранение резерва", reglue: "Переклей", alternates: "Альтернейты" };
+const actionLabels = { create_domains: "Добавление доменов", select_fake_main: "Выбор текущей фейковой страницы", indexing: "Индексация проекта", create_fake_main: "Создание фейковой главной", delete_domain: "Удаление домена", create_subdomains: "Создание поддоменов", reserve: "Сохранение резерва", reglue: "Переклей", alternates: "Альтернейты" };
 const statusLabels: Record<string, string> = { index_queued: "В очереди", index_submitting: "Отправляется", index_submitted: "Задача создана", index_unknown: "Отправка не подтверждена", confirmed: "Подтверждено", pending: "Ожидает подтверждения", unknown: "Результат пока неизвестен", failed: "Ошибка" };
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Не удалось выполнить запрос";
 
@@ -45,6 +45,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
   const [fakeMainSelection, setFakeMainSelection] = React.useState("");
   const [fakeMainInput, setFakeMainInput] = React.useState("");
   const [subdomainsInput, setSubdomainsInput] = React.useState("");
+  const [removeDomainInput, setRemoveDomainInput] = React.useState("");
   const mounted = React.useRef(true);
   const uncertain = data?.operations.some((op) => ["pending", "unknown"].includes(op.status)) || false;
   const dirty = Boolean(draft && (draft.markup !== draft.originalMarkup || draft.enabled !== draft.originalEnabled));
@@ -109,15 +110,14 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
 
   const subdomains = [...new Set(subdomainsInput.toLowerCase().split(/[\s,;]+/).map((value) => value.trim().replace(/\.$/, "")).filter(Boolean))];
   const subdomainErrors = subdomains.flatMap((domain) => {
-    if (domain.length > 253 || !domain.split(".").every((label) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) return [domain + ": некорректное имя"];
+    if (!domain.includes(".") || domain.length > 253 || !domain.split(".").every((label) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) return [domain + ": некорректное имя"];
     if (data?.domains.includes(domain)) return [domain + ": уже есть в сетке"];
-    if (!data?.domains.some((parent) => domain.endsWith("." + parent.replace(/^www\./, "")) && domain !== "www." + parent.replace(/^www\./, ""))) return [domain + ": родительского домена нет в сетке"];
     return [];
   });
   async function mutate(action: Exclude<NetworkOperation["action"], "indexing">, targetDomain?: string) {
     if (!data || !draft || busyRef.current) return;
     busyRef.current = true; setBusy(action); setError(""); setMessage("");
-    const payload = { action, fake_main_path: action === "select_fake_main" ? fakeMainSelection : fakeMainInput, revision: data.revision, domain: targetDomain || reserve, alternate_markup: draft.markup, enable_alternates: draft.enabled, ...(action === "create_subdomains" ? { domains: subdomains } : {}) };
+    const payload = { action, fake_main_path: action === "select_fake_main" ? fakeMainSelection : fakeMainInput, revision: data.revision, domain: targetDomain || reserve, alternate_markup: draft.markup, enable_alternates: draft.enabled, ...((action === "create_subdomains" || action === "create_domains") ? { domains: subdomains } : {}) };
     const receiptKey = `network-request:${username}:${site.id}`;
     let requestId = crypto.randomUUID();
     try {
@@ -130,7 +130,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
       if (!mounted.current) return;
       accept(next);
       const operation = next.operations.find((op) => op.id === requestId);
-      if (action === "create_subdomains" && operation && operation.status !== "failed") setSubdomainsInput("");
+      if ((action === "create_subdomains" || action === "create_domains") && operation && operation.status !== "failed") setSubdomainsInput("");
       if (operation?.status === "confirmed") {
         if (action === "alternates") setDraft({ markup: next.alternateMarkup, enabled: next.enableAlternates, originalMarkup: next.alternateMarkup, originalEnabled: next.enableAlternates });
         setMessage(`${actionLabels[action]}: подтверждено.`);
@@ -168,6 +168,9 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
   const ampDomains = new Set(data?.amp_domains || []);
   const visibleDomains = known.filter((domain) => networkView === "amp" ? ampDomains.has(domain) : !ampDomains.has(domain));
   const disabled = Boolean(busy) || uncertain;
+  const removeDomain = removeDomainInput.trim().toLowerCase().replace(/\.$/, "");
+  const protectedDomains = [data?.canon, data?.reserve, site.name, data?.amp].filter(Boolean).map(value => value!.replace(/^www\./, ""));
+  const removeError = !removeDomain ? "" : !data?.domains.includes(removeDomain) ? "Домен отсутствует в сетке." : protectedDomains.includes(removeDomain.replace(/^www\./, "")) ? "Домен проекта, Main, AMP и резерв защищены от удаления." : "";
   const reserveValid = Boolean(data && reserve && reserve !== data.canon && data.domains.includes(reserve) && !ampDomains.has(reserve));
   return <section className="dataPanel projectNetworkPanel">
     <div className="panelHeader"><h2>{mode === "network" ? "Сетка проекта" : "Переклей"}</h2>
@@ -201,16 +204,23 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
             </tr>)}</tbody>
           </table></div>
           {!visibleDomains.length && <p>{networkView === "amp" ? "В кеше проекта AMP-домены не указаны." : "В основной сетке нет доменов."}</p>}
-          {networkView === "main" && <div className="networkSection networkSubdomains">
-            <h3>Создание поддоменов</h3>
-            <p>Укажите полные имена через запятую, пробел или новую строку. Родительский домен должен быть в сохранённой сетке проекта.</p>
-            <label className="networkSubdomainsField">Поддомены<textarea aria-label="Поддомены" rows={2} value={subdomainsInput} disabled={disabled} placeholder="test1.example.com, test2.example.com" onChange={(event) => setSubdomainsInput(event.target.value)} /></label>
+          {networkView === "main" && <div className="networkDomainManagement"><div className="networkSection networkSubdomains">
+            <h3>Добавление в сетку</h3>
+            <p>Укажите домены и поддомены через запятую, пробел или новую строку.</p>
+            <label className="networkSubdomainsField">Домены и поддомены<textarea aria-label="Домены и поддомены" rows={2} value={subdomainsInput} disabled={disabled} placeholder="example.com, test.example.com" onChange={(event) => setSubdomainsInput(event.target.value)} /></label>
             {subdomains.length > 0 && <><p>Будет создано: {subdomains.length}</p><ul>{subdomains.map((domain) => <li key={domain}>{domain}</li>)}</ul></>}
             {!!subdomainErrors.length && <div className="notice" role="alert">{subdomainErrors.map((text) => <p key={text}>{text}</p>)}</div>}
-            {subdomains.length > 100 && <p role="alert">За один запуск можно создать до 100 поддоменов.</p>}
-            <div className="networkActions"><button type="button" className="button compact" disabled={disabled || !subdomains.length || subdomains.length > 100 || !!subdomainErrors.length} onClick={() => void mutate("create_subdomains")}>{busy === "create_subdomains" ? "Запускаем создание…" : "Создать конфиги"}</button></div>
-            <p className="muted">Перед запуском сервер проверит домены по нашей базе и актуальной сетке Webdev. Поддомены добавятся в сетку автоматически; появление в списке ещё не подтверждает готовность HTTPS.</p>
-          </div>}
+            {subdomains.length > 100 && <p role="alert">За один запуск можно создать до 100 доменов.</p>}
+            <div className="networkActions"><button type="button" className="button compact" disabled={disabled || !subdomains.length || subdomains.length > 100 || !!subdomainErrors.length} onClick={() => void mutate("create_domains")}>{busy === "create_domains" ? "Добавляем…" : "Добавить в сетку"}</button></div>
+            <p className="muted">Перед запуском сервер проверит домены по нашей базе и актуальной сетке Webdev. Домены добавятся в сетку автоматически; появление в списке ещё не подтверждает готовность HTTPS.</p>
+          </div><div className="networkSection networkRemoveDomains">
+            <h3>Удаление из сетки</h3>
+            <p>Укажите домен или поддомен, который нужно удалить из этой сетки.</p>
+            <label className="networkSubdomainsField">Домен для удаления<textarea aria-label="Домен для удаления" rows={2} value={removeDomainInput} disabled={disabled} placeholder="test.example.com" onChange={event => setRemoveDomainInput(event.target.value)} /></label>
+            {removeError && <p role="alert">{removeError}</p>}
+            <div className="networkActions"><button type="button" className="button secondary compact" disabled={disabled || !removeDomain || !!removeError} onClick={() => void mutate("delete_domain", removeDomain)}>{busy === "delete_domain" ? "Удаляем…" : "Удалить из сетки"}</button></div>
+            <p className="muted">Домен проекта, Main, AMP и резерв защищены от удаления.</p>
+          </div></div>}
         </>}
         {mode === "redirects" && <div className="networkSection">
           <h3>Резервный домен</h3>

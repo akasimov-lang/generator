@@ -38,7 +38,7 @@ class DomainCheck(BaseModel):
 
 class NetworkChange(BaseModel):
     request_id: UUID
-    action: Literal["reserve", "reglue", "alternates", "create_subdomains", "delete_domain", "create_fake_main", "select_fake_main"]
+    action: Literal["reserve", "reglue", "alternates", "create_subdomains", "create_domains", "delete_domain", "create_fake_main", "select_fake_main"]
     revision: str = Field(min_length=1, max_length=64)
     domain: str = Field(default="", max_length=253)
     alternate_markup: str = Field(default="", max_length=100000)
@@ -130,7 +130,7 @@ def operation_matches(operation, state):
     payload = operation.request_payload
     if operation.action in {"create_fake_main", "select_fake_main"}:
         return all(state.get("fake_main_settings", {}).get(key) == value for key, value in payload["alternate"].items())
-    if operation.action == "create_subdomains":
+    if operation.action in {"create_subdomains", "create_domains"}:
         return all(item["domain"] in state["domains"] for item in payload["domains"])
     if operation.action == "delete_domain":
         return all(domain not in state["domains"] for domain in payload["domains"])
@@ -163,7 +163,7 @@ def observe(db, site, project):
     )):
         if operation_matches(operation, state):
             operation.status = "confirmed"
-            operation.message = ("Поддомены появились в сетке. Завершение настройки HTTPS проверяйте отдельно." if operation.action == "create_subdomains" else "Изменение подтверждено чтением настроек проекта.")
+            operation.message = ("Домены появились в сетке. Завершение настройки HTTPS проверяйте отдельно." if operation.action in {"create_subdomains", "create_domains"} else "Изменение подтверждено чтением настроек проекта.")
     from app.network_indexing import confirm_manual_indexing
     db.flush()
     confirm_manual_indexing(db, site, {**state, "head_verified": isinstance(project.get("head"), dict) and "alternateMarkup" in project["head"]})
@@ -215,7 +215,7 @@ def read_network(db, site):
         state = observe(db, site, project)
         for operation in db.scalars(select(models.NetworkOperation).where(
             models.NetworkOperation.site_id == site.id,
-            models.NetworkOperation.action.in_(["delete_domain", "create_subdomains"]),
+            models.NetworkOperation.action.in_(["delete_domain", "create_subdomains", "create_domains"]),
             models.NetworkOperation.status.in_(["pending", "unknown"]),
         )):
             job_id = operation.request_payload.get("job_id")
@@ -245,12 +245,12 @@ def check_domain(db, site, payload):
         return {"domain": domain, "reachable": response["reachable"], "reason": str(response.get("reason") or "")}
 
 
-def validate_subdomains(values, cached_domains):
+def validate_subdomains(values, cached_domains, require_parent=True):
     if not values:
         raise ValueError("Укажите поддомены для создания.")
     known = {domain_name(value) for value in cached_domains}
     known.discard("")
-    if not known:
+    if require_parent and not known:
         raise ValueError("В базе нет сохранённой сетки. Сначала загрузите кэш проекта.")
     parents = {value.removeprefix("www.") for value in known}
     domains = []
@@ -260,11 +260,11 @@ def validate_subdomains(values, cached_domains):
             domain = raw.encode("idna").decode()
         except UnicodeError:
             raise ValueError("Некорректное имя поддомена.") from None
-        if len(domain) > 253 or not all(re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label) for label in domain.split(".")):
+        if "." not in domain or len(domain) > 253 or not all(re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label) for label in domain.split(".")):
             raise ValueError("Укажите имена поддоменов без протокола, пути и wildcard.")
         if domain in known:
             raise ValueError(f"Поддомен {domain} уже есть в сетке.")
-        if not any(domain.endswith("." + parent) and domain != "www." + parent for parent in parents):
+        if require_parent and not any(domain.endswith("." + parent) and domain != "www." + parent for parent in parents):
             raise ValueError(f"Родительский домен для {domain} отсутствует в сохранённой сетке проекта.")
         if domain not in domains:
             domains.append(domain)
@@ -277,8 +277,8 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
     if payload.action == "delete_domain" and not existing_receipt:
         if domain_name(payload.domain) not in (site.cache_domains or []):
             raise ValueError("Домен отсутствует в сохранённой сетке проекта.")
-    if payload.action == "create_subdomains" and not existing_receipt:
-        validate_subdomains(payload.domains, site.cache_domains or [])
+    if payload.action in {"create_subdomains", "create_domains"} and not existing_receipt:
+        validate_subdomains(payload.domains, site.cache_domains or [], require_parent=payload.action == "create_subdomains")
     with network_lock(db, site.id), Remote(db, site) as remote:
         active_auto = db.scalar(select(models.AutoReglueRun).where(
             models.AutoReglueRun.site_id == site.id,
@@ -301,8 +301,8 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
             raise NetworkConflict("Предыдущая операция ещё не подтверждена. Обновите данные сетки; повторная отправка заблокирована.")
         request = {"folder": site.name.encode("idna").decode()}
         method = "POST"
-        if payload.action == "create_subdomains":
-            domains = validate_subdomains(payload.domains, state["domains"])
+        if payload.action in {"create_subdomains", "create_domains"}:
+            domains = validate_subdomains(payload.domains, state["domains"], require_parent=payload.action == "create_subdomains")
             port = str(project["settings"].get("port") or "")
             if not port.isdigit() or not 0 < int(port) <= 65535:
                 raise ValueError("В настройках проекта отсутствует корректный port.")
@@ -393,14 +393,14 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
             if isinstance(response, dict) and (response.get("errors") or response.get("success") is False or response.get("error")):
                 operation.status = "failed"
                 operation.message = str(response.get("message") or response.get("errors") or response.get("error"))[:2000]
-            elif payload.action in {"create_subdomains", "delete_domain"}:
+            elif payload.action in {"create_subdomains", "create_domains", "delete_domain"}:
                 if not isinstance(response, dict) or not response.get("jobId"):
                     operation.status = "unknown"
                     operation.message = "Webdev не вернул номер задачи. Повторная отправка заблокирована; обновите сетку."
                 else:
                     operation.request_payload = {**operation.request_payload, "job_id": str(response["jobId"])}
                     operation.message = (f"Задача удаления {response['jobId']} запущена. Ожидаем удаления домена из сетки."
-                        if payload.action == "delete_domain" else f"Задача создания {response['jobId']} запущена. Ожидаем появления поддоменов в сетке.")
+                        if payload.action == "delete_domain" else f"Задача создания {response['jobId']} запущена. Ожидаем появления доменов в сетке.")
                     if response.get("skipped"):
                         operation.message += " Webdev пропустил часть доменов: " + str(response["skipped"])[:1000]
             else:

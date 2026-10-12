@@ -9897,3 +9897,7 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 
 .siteStatusSearchable.geo_ru .searchableSelectControl,
 .siteStatusReadonly.geo_ru { color: var(--primary); border-color: var(--primary); background: var(--primary-soft); }
+
+.networkDomainManagement { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.networkDomainManagement .networkSubdomainsField { width: 100%; }
+@media (max-width: 760px) { .networkDomainManagement { grid-template-columns: minmax(0, 1fr); } }

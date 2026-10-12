@@ -462,3 +462,41 @@ def test_select_fake_main_requires_existing_path_and_confirmation(env):
     result = change(env, 'select_fake_main', state['revision'], fake_main_path='/test1/')
     assert result['operations'][0]['status'] != 'confirmed'
     assert result['fake_main_current'] == '/cz/'
+
+
+def test_root_domain_creation_contract_confirmation_and_retry(env):
+    db, site, remote = env
+    site.cache_server_ip = "dolphin"
+    remote.data["settings"]["port"] = 1141
+    state = network.read_network(db, site)
+    original = remote.request
+    def request(method, path, payload):
+        if path == "/site-config/create":
+            remote.calls.append((method, path, copy.deepcopy(payload)))
+            return 201, {"jobId": "1504", "skipped": []}
+        return original(method, path, payload)
+    remote.request = request
+    payload = network.NetworkChange(request_id=uuid4(), action="create_domains", revision=state["revision"], domains=["new-domain.test", "child.new-domain.test", "new-domain.test"])
+    result = network.change_network(db, site, payload, "anton")
+    assert result["operations"][0]["status"] == "pending"
+    method, path, body = remote.calls[0]
+    assert (method, path) == ("POST", "/site-config/create")
+    assert body["server"] == "dolphin.slf-hostesting.com"
+    assert body["project"] == "project.test" and body["port"] == "1141"
+    assert [item["domain"] for item in body["domains"]] == ["new-domain.test", "child.new-domain.test"]
+    assert all(item["wwwPrimary"] is False for item in body["domains"])
+    network.change_network(db, site, payload, "anton")
+    assert len(remote.calls) == 1
+    remote.data["settings"]["domains"] += ["new-domain.test", "child.new-domain.test"]
+    confirmed = network.read_network(db, site)
+    assert confirmed["operations"][0]["status"] == "confirmed"
+    assert "new-domain.test" in site.cache_domains
+    assert confirmed["canon"] == state["canon"]
+    assert confirmed["alternateMarkup"] == state["alternateMarkup"]
+
+
+
+def test_create_domains_rejects_invalid_or_existing_names():
+    for values in [[], ['localhost'], ['https://new.test'], ['main.test'], ['*.new.test']]:
+        with pytest.raises(ValueError):
+            network.validate_subdomains(values, ['main.test'], require_parent=False)
