@@ -459,9 +459,12 @@ def validate_ai_provider(provider_id: str, _: AdminUser, db: Session = Depends(g
 
 
 @router.get("/sites", response_model=list[SiteResponse])
-def list_sites(_: AuthUser, db: Session = Depends(get_db)) -> Any:
+def list_sites(_: AuthUser, db: Session = Depends(get_db), include_grouped_inactive: bool = False) -> Any:
+    visible = models.Site.is_active.is_(True)
+    if include_grouped_inactive:
+        visible = visible | models.Site.project_status.in_(["mass_actions", "vitalina", "hands_only"])
     sites = db.scalars(
-        select(models.Site).where(models.Site.is_active.is_(True)).order_by(
+        select(models.Site).where(visible).order_by(
             models.Site.is_test_project.desc(),
             models.Site.has_menu.desc(),
             models.Site.name.asc(),

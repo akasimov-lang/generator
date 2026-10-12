@@ -268,6 +268,7 @@ type Site = {
   cache_server_host: string | null;
   project_status: "test" | "working" | "mass_actions" | "vitalina" | "hands_only" | "not_in_focus" | "duplicate";
   is_test_project: boolean;
+  is_active?: boolean;
   has_menu: boolean;
   cache_synced_at: string | null;
   menu_capabilities_checked_at: string | null;
@@ -932,7 +933,7 @@ function App() {
   const initialSitesFlight = React.useRef<Promise<void> | null>(null);
   const mergeSites = React.useCallback((updates: Site[], replace = false) => {
     const byId = new Map(updates.map(site => [site.id, site]));
-    setSites(current => replace ? updates : [...current.filter(site => !byId.has(site.id)), ...updates]);
+    setSites(current => (replace ? updates : [...current.filter(site => !byId.has(site.id)), ...updates]).filter(site => site.is_active !== false));
     const next = replace ? updates : snapshotRef.current.map(site => byId.get(site.id) || site);
     snapshotRef.current = next;
     setSiteSnapshot(next);
@@ -1035,7 +1036,7 @@ function App() {
     const promise = (async () => {
       if (["sites", "favorites"].includes(view) || (view === "workspace" && !snapshotTimeRef.current)) {
         if (!initialSitesFlight.current) {
-          initialSitesFlight.current = api<Site[]>("/sites")
+          initialSitesFlight.current = api<Site[]>(["sites", "favorites"].includes(view) ? "/sites?include_grouped_inactive=true" : "/sites")
             .then(result => { if (userRef.current?.id === user.id) mergeSites(result, true); })
             .finally(() => { initialSitesFlight.current = null; });
         }
@@ -1120,7 +1121,7 @@ function App() {
       snapshotRef.current = saved.projects;
       snapshotTimeRef.current = saved.updatedAt;
       setSiteSnapshot(saved.projects);
-      setSites(saved.projects);
+      setSites(saved.projects.filter(site => site.is_active !== false));
       setSitesUpdatedAt(saved.updatedAt);
       selectedProjectRef.current = "";
       providersLoadedRef.current = false;
@@ -8563,7 +8564,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
         setCacheResult(null);
         setSyncMessage("");
       }
-      const result = await api<Site[]>("/sites");
+      const result = await api<Site[]>("/sites?include_grouped_inactive=true");
       setManagedSites(result);
       onSitesChanged(result, true);
     } catch (error) {
@@ -8653,6 +8654,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       brand: site.brand || "Общие ключи",
       baseUrl: site.base_url,
       isFavorite: favoriteSiteIds.includes(site.id),
+      isActive: site.is_active !== false,
       canon: site.cache_canon || site.base_url.replace(/^https?:\/\//, "").replace(/\/$/, ""),
       language: site.cache_language,
       geo: site.cache_geo,
@@ -8750,7 +8752,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
     .filter((value): value is string => Boolean(value))
     .sort((left, right) => Date.parse(right) - Date.parse(left))[0] || null;
   const selectedNames = new Set(selectedProjectNames);
-  const selectableFilteredNames = filteredRows.filter((row) => row.externalProjectId).map((row) => row.name);
+  const selectableFilteredNames = filteredRows.filter((row) => row.externalProjectId && row.isActive).map((row) => row.name);
   const allFilteredSelected = Boolean(selectableFilteredNames.length) && selectableFilteredNames.every((name) => selectedNames.has(name));
   const statusFilterActive = statusFilters.length !== statusFilterOptions.length;
   const menuTypeFilterActive = menuTypeFilters.length !== menuTypeFilterOptions.length;
@@ -8874,7 +8876,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       <DataPanel title={readOnly ? "Обзор сайтов" : "Панель управления сайтами"}>
         <div className="siteCacheToolbar">
           <div className="siteCacheStats">
-            <button className={summaryFilter === "projects" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("projects")} aria-pressed={summaryFilter === "projects"}><span>Проекты</span><strong>{formatNumber(cacheResult?.cache_count || managedSites.filter((site) => site.external_project_id).length)}</strong></button>
+            <button className={summaryFilter === "projects" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("projects")} aria-pressed={summaryFilter === "projects"}><span>Проекты</span><strong>{formatNumber(managedSites.filter((site) => site.external_project_id).length)}</strong></button>
             <button className={summaryFilter === "working" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("working")} aria-pressed={summaryFilter === "working"}><span>Рабочие</span><strong>{formatNumber(workingCount)}</strong></button>
             <button className={summaryFilter === "menu" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("menu")} aria-pressed={summaryFilter === "menu"}><span>С меню</span><strong>{formatNumber(menuCount)}</strong></button>
             <button className={summaryFilter === "mass_actions" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("mass_actions")} aria-pressed={summaryFilter === "mass_actions"}><span>Массовые действия</span><strong>{formatNumber(managedSites.filter((site) => site.project_status === "mass_actions").length)}</strong></button>
@@ -9059,12 +9061,12 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
             const cells: Record<SiteTableColumn, React.ReactNode> = {
               brand: <SiteBrandField key={row.id + row.brand} name={row.name} value={row.brand} save={(brand) => updateProjectBrand(row.id, brand)} />,
               rowNumber: formatNumber(pageStart + rowIndex + 1),
-              select: <input type="checkbox" checked={selectedNames.has(row.name)} disabled={!row.externalProjectId} onChange={() => toggleSelectedProject(row.name)} aria-label={`Выбрать проект ${row.name}`} />,
+              select: <input type="checkbox" checked={selectedNames.has(row.name)} disabled={!row.externalProjectId || !row.isActive} onChange={() => toggleSelectedProject(row.name)} aria-label={`Выбрать проект ${row.name}`} />,
               name: (
                 <span className="siteNameCell">
                   <span className="siteNameWithFlag">
                     {localeFlag(localeCountryCode(row.geo || row.language || "")) ? <span aria-hidden="true">{localeFlag(localeCountryCode(row.geo || row.language || ""))}</span> : null}
-                    <a
+                    {row.isActive ? <a
                       className="siteProjectDomainLink"
                       href={pathForRoute("workspace", "topics", row.name)}
                       onClick={() => {
@@ -9074,7 +9076,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
                       title={`Открыть проект ${row.name}`}
                     >
                       <strong>{row.name}</strong>
-                    </a>
+                    </a> : <span className="siteProjectDomainLink"><strong>{row.name}</strong><small className="siteInactiveLabel">Неактивен · сохранённые данные</small></span>}
                     <ProjectVerificationMedal status={row.medalStatus} />
                   </span>
                   <span className="siteNameActions">
@@ -9097,7 +9099,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
                     >
                       <Globe2 size={15} />
                     </a>
-                    <a
+                    {row.isActive ? <a
                       className="siteRowActionButton"
                       href={pathForRoute("workspace", "topics", row.name)}
                       onClick={() => {
@@ -9108,7 +9110,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
                       aria-label={`Открыть задачи проекта ${row.name}`}
                     >
                       <FolderKanban size={15} />
-                    </a>
+                    </a> : null}
                   </span>
                 </span>
               ),
@@ -9142,7 +9144,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
                 </button>
               ) : "0",
               fiberyName: row.fiberyName ? <span className="siteFiberyName" title={row.fiberyNameManual ? `Проверьте имя из исходного списка: ${row.fiberyName}. Сохранено только в PagePilot.` : row.fiberyName}>{row.fiberyName}{row.fiberyNameManual && <small className="siteFiberyReviewLabel">Проверить имя</small>}</span> : "—",
-              domainsCount: <a href={pathForRoute("workspace", "network", row.name)} aria-label={`Открыть сетку проекта ${row.name}`}>{formatNumber(row.domainsCount)}</a>
+              domainsCount: row.isActive ? <a href={pathForRoute("workspace", "network", row.name)} aria-label={`Открыть сетку проекта ${row.name}`}>{formatNumber(row.domainsCount)}</a> : <span title="Сохранённое число доменов неактивного проекта">{formatNumber(row.domainsCount)}</span>
             };
             return visibleColumnOrder.map((column) => cells[column]);
           })}

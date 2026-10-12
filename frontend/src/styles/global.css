@@ -9891,3 +9891,5 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 @media (max-width: 640px) {
   .workspaceFiberyName { flex-basis: 100%; font-size: 12px; }
 }
+
+.siteInactiveLabel { display: block; color: var(--muted); font-size: 10px; font-weight: 500; }

@@ -39,3 +39,20 @@ def test_mass_actions_requires_admin_and_rejects_unknown_status():
     assert client.patch(f'/api/sites/{site_id}/status', json={'project_status': 'mass_actions'}).status_code == 403
     with sessions() as db:
         assert db.get(models.Site, site_id).project_status == 'working'
+
+
+def test_sites_panel_can_include_grouped_inactive_without_activating_them():
+    client, sessions = make_client()
+    with sessions() as db:
+        for status in ['mass_actions', 'vitalina', 'hands_only', 'not_in_focus']:
+            db.add(models.Site(name=f'inactive-{status}', base_url='https://example.test',
+                               publication_endpoint='/', is_active=False, project_status=status))
+        db.commit()
+    assert len(client.get('/api/sites').json()) == 1
+    rows = client.get('/api/sites?include_grouped_inactive=true').json()
+    inactive = [s for s in rows if not s['is_active']]
+    assert {s['project_status'] for s in inactive} == {'mass_actions', 'vitalina', 'hands_only'}
+    assert len(rows) == 4
+    with sessions() as db:
+        assert all(not s.is_active for s in db.scalars(select(models.Site).where(models.Site.name.like('inactive-%'))))
+    assert len(client.get('/api/sites').json()) == 1
