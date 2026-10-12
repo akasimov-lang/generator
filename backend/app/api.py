@@ -463,7 +463,7 @@ def validate_ai_provider(provider_id: str, _: AdminUser, db: Session = Depends(g
 def list_sites(_: AuthUser, db: Session = Depends(get_db), include_grouped_inactive: bool = False) -> Any:
     visible = models.Site.is_active.is_(True)
     if include_grouped_inactive:
-        visible = visible | models.Site.project_status.in_(["mass_actions", "vitalina", "hands_only", "geo_ru", "inactive"])
+        visible = visible | models.Site.project_status.in_(["mass_actions", "vitalina", "hands_only", "geo_ru", "geo_kz", "inactive"])
     sites = db.scalars(
         select(models.Site).where(visible, models.Site.hidden_from_projects.is_(False)).order_by(
             models.Site.is_test_project.desc(),
@@ -491,7 +491,7 @@ def lookup_site(_: AuthUser, name: str = "", site_id: str = "", db: Session = De
 
 @router.get("/sites/cache/projects", response_model=list[SiteResponse])
 def list_cached_projects(_: AuthUser, db: Session = Depends(get_db)) -> Any:
-    status_order = {"test": 0, "working": 1, "mass_actions": 2, "vitalina": 3, "hands_only": 4, "geo_ru": 5, "inactive": 6, "not_in_focus": 7, "duplicate": 8}
+    status_order = {"test": 0, "working": 1, "mass_actions": 2, "vitalina": 3, "hands_only": 4, "geo_ru": 5, "geo_kz": 6, "inactive": 7, "not_in_focus": 8, "duplicate": 9}
     sites = db.scalars(select(models.Site).where(models.Site.is_active.is_(True), models.Site.hidden_from_projects.is_(False))).all()
     from app.project_notices import refresh_and_commit_notices
     refresh_and_commit_notices(db, sites)

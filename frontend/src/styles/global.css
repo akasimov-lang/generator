@@ -9896,7 +9896,9 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .workspaceProjectStatus .formError { flex-basis: 100%; font-size: 12px; }
 
 .siteStatusSearchable.geo_ru .searchableSelectControl,
-.siteStatusReadonly.geo_ru { color: var(--primary); border-color: var(--primary); background: var(--primary-soft); }
+.siteStatusReadonly.geo_ru,
+.siteStatusSearchable.geo_kz .searchableSelectControl,
+.siteStatusReadonly.geo_kz { color: var(--primary); border-color: var(--primary); background: var(--primary-soft); }
 
 .networkDomainManagement { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
 .networkDomainManagement .networkSubdomainsField { width: 100%; }

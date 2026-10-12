@@ -267,7 +267,7 @@ type Site = {
   cache_server_ip: string | null;
   cache_server_host: string | null;
   site_type?: "monobrand" | "general" | null;
-  project_status: "test" | "working" | "mass_actions" | "vitalina" | "hands_only" | "geo_ru" | "inactive" | "not_in_focus" | "duplicate";
+  project_status: "test" | "working" | "mass_actions" | "vitalina" | "hands_only" | "geo_ru" | "geo_kz" | "inactive" | "not_in_focus" | "duplicate";
   is_test_project: boolean;
   is_active?: boolean;
   has_menu: boolean;
@@ -288,6 +288,7 @@ const PROJECT_STATUS_OPTIONS: Array<{ value: Site["project_status"]; label: stri
   { value: "vitalina", label: "Vitalina" },
   { value: "hands_only", label: "hands only" },
   { value: "geo_ru", label: "GEO RU" },
+  { value: "geo_kz", label: "GEO KZ" },
   { value: "inactive", label: "Неактивные" },
   { value: "not_in_focus", label: "Не в фокусе" },
   { value: "duplicate", label: "Дубликат" }
@@ -8364,7 +8365,7 @@ function ProvidersView({ api, providers, onChanged }: ViewProps & { providers: A
 }
 
 type SiteTableColumn = "brand" | "rowNumber" | "select" | "name" | "title" | "canon" | "language" | "status" | "internalPages" | "menuType" | "menuCount" | "domainsCount" | "fiberyName";
-type SiteSummaryFilter = "projects" | "working" | "menu" | "mass_actions" | "vitalina" | "hands_only" | "geo_ru" | "inactive" | "duplicate" | "all";
+type SiteSummaryFilter = "projects" | "working" | "menu" | "mass_actions" | "vitalina" | "hands_only" | "geo_ru" | "geo_kz" | "inactive" | "duplicate" | "all";
 
 const DEFAULT_SITE_COLUMN_ORDER: SiteTableColumn[] = ["rowNumber", "select", "name", "brand", "title", "canon", "language", "status", "internalPages", "menuType", "menuCount", "domainsCount", "fiberyName"];
 const SITE_COLUMN_LABELS: Record<SiteTableColumn, string> = {
@@ -8564,10 +8565,11 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
   const [statusFilters, setStatusFilters] = React.useState<Site["project_status"][]>(() => {
     const stored = storedPreferences.statusFilters;
     const previousVersions = [
-      allStatusFilters.filter(value => value !== "inactive"),
-      allStatusFilters.filter(value => value !== "geo_ru" && value !== "inactive"),
-      allStatusFilters.filter(value => value !== "hands_only" && value !== "geo_ru" && value !== "inactive"),
-      allStatusFilters.filter(value => value !== "hands_only" && value !== "vitalina" && value !== "geo_ru" && value !== "inactive")
+      allStatusFilters.filter(value => value !== "geo_kz"),
+      allStatusFilters.filter(value => value !== "inactive" && value !== "geo_kz"),
+      allStatusFilters.filter(value => value !== "geo_ru" && value !== "inactive" && value !== "geo_kz"),
+      allStatusFilters.filter(value => value !== "hands_only" && value !== "geo_ru" && value !== "inactive" && value !== "geo_kz"),
+      allStatusFilters.filter(value => value !== "hands_only" && value !== "vitalina" && value !== "geo_ru" && value !== "inactive" && value !== "geo_kz")
     ];
     if (Array.isArray(stored) && previousVersions.some(previousAll => stored.length === previousAll.length && previousAll.every(value => stored.includes(value)))) return allStatusFilters;
     return Array.isArray(stored) && stored.every((value) => allStatusFilters.includes(value)) ? stored : allStatusFilters;
@@ -8690,9 +8692,10 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
     if (status === "vitalina") return 3;
     if (status === "hands_only") return 4;
     if (status === "geo_ru") return 5;
-    if (status === "inactive") return 6;
-    if (status === "not_in_focus") return 7;
-    return 8;
+    if (status === "geo_kz") return 6;
+    if (status === "inactive") return 7;
+    if (status === "not_in_focus") return 8;
+    return 9;
   };
   const domainRows = managedSites.map((site) => {
     const headerMenuCount = Array.isArray(site.default_menu.header) ? site.default_menu.header.length : 0;
@@ -8767,7 +8770,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
     if (summaryFilter === "working") return row.projectStatus === "working";
     if (summaryFilter === "menu") return row.hasMenu;
     if (summaryFilter === "mass_actions") return row.projectStatus === "mass_actions";
-    if (summaryFilter === "vitalina" || summaryFilter === "hands_only" || summaryFilter === "geo_ru" || summaryFilter === "inactive") return row.projectStatus === summaryFilter;
+    if (summaryFilter === "vitalina" || summaryFilter === "hands_only" || summaryFilter === "geo_ru" | "geo_kz" || summaryFilter === "inactive") return row.projectStatus === summaryFilter;
     return row.projectStatus === "duplicate";
   };
   const filteredRows = domainRows.filter((row) => {
@@ -8811,7 +8814,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
   }, [brandFilter, geoFilter, medalFilter, menuTypeFilters, rowsPerPage, searchQuery, siteSort, statusFilters, summaryFilter]);
 
   function toggleSummaryFilter(filter: SiteSummaryFilter) {
-    if ((filter === "mass_actions" || filter === "vitalina" || filter === "hands_only" || filter === "geo_ru" || filter === "inactive") && summaryFilter !== filter && !statusFilters.includes(filter)) {
+    if ((filter === "mass_actions" || filter === "vitalina" || filter === "hands_only" || filter === "geo_ru" | "geo_kz" || filter === "inactive") && summaryFilter !== filter && !statusFilters.includes(filter)) {
       setStatusFilters(current => [...current, filter]);
     }
     setSummaryFilter((current) => current === filter ? null : filter);
@@ -8930,6 +8933,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
             <button className={summaryFilter === "mass_actions" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("mass_actions")} aria-pressed={summaryFilter === "mass_actions"}><span>Массовые действия</span><strong>{formatNumber(managedSites.filter((site) => site.project_status === "mass_actions").length)}</strong></button>
             <button className={summaryFilter === "vitalina" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("vitalina")} aria-pressed={summaryFilter === "vitalina"}><span>Vitalina</span><strong>{formatNumber(managedSites.filter((site) => site.project_status === "vitalina").length)}</strong></button>
             <button className={summaryFilter === "geo_ru" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("geo_ru")} aria-pressed={summaryFilter === "geo_ru"}><span>GEO RU</span><strong>{formatNumber(managedSites.filter((site) => site.project_status === "geo_ru").length)}</strong></button>
+            <button className={summaryFilter === "geo_kz" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("geo_kz")} aria-pressed={summaryFilter === "geo_kz"}><span>GEO KZ</span><strong>{formatNumber(managedSites.filter((site) => site.project_status === "geo_kz").length)}</strong></button>
             <button className={summaryFilter === "inactive" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("inactive")} aria-pressed={summaryFilter === "inactive"}><span>Неактивные</span><strong>{formatNumber(managedSites.filter((site) => site.project_status === "inactive").length)}</strong></button>
             <button className={summaryFilter === "duplicate" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("duplicate")} aria-pressed={summaryFilter === "duplicate"}><span>Дубликаты</span><strong>{formatNumber(duplicateCount)}</strong></button>
             <button className={summaryFilter === "all" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("all")} aria-pressed={summaryFilter === "all"}><span>Всего сайтов</span><strong>{formatNumber(managedSites.length)}</strong></button>
@@ -9016,7 +9020,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
             <strong><ListChecks size={16} /> Включены фильтры</strong>
             {summaryFilter ? (
               <button type="button" onClick={() => setSummaryFilter(null)}>
-                Панель: {{ projects: "Проекты", working: "Рабочие", menu: "С меню", mass_actions: "Массовые действия", vitalina: "Vitalina", hands_only: "hands only", geo_ru: "GEO RU", inactive: "Неактивные", duplicate: "Дубликаты", all: "Все сайты" }[summaryFilter]}
+                Панель: {{ projects: "Проекты", working: "Рабочие", menu: "С меню", mass_actions: "Массовые действия", vitalina: "Vitalina", hands_only: "hands only", geo_ru: "GEO RU", geo_kz: "GEO KZ", inactive: "Неактивные", duplicate: "Дубликаты", all: "Все сайты" }[summaryFilter]}
                 <X size={13} />
               </button>
             ) : null}
