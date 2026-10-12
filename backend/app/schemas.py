@@ -75,6 +75,10 @@ class SiteCreate(BaseModel):
     showcase_payload: dict[str, Any] | None = None
 
 
+class SiteTypeUpdate(BaseModel):
+    site_type: Literal["monobrand", "general"]
+
+
 class SiteBrandUpdate(BaseModel):
     brand: str = Field(max_length=160)
 
@@ -82,6 +86,7 @@ class SiteBrandUpdate(BaseModel):
 class SiteResponse(BaseModel):
     menu_warning: str | None = None
     core_update_notice: str | None = None
+    site_type: Literal["monobrand", "general"] | None = None
     brand: str = "Общие ключи"
     brand_source: str = "generic"
     model_config = ConfigDict(from_attributes=True)

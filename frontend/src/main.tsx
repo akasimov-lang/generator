@@ -266,6 +266,7 @@ type Site = {
   alternate_domain_history: string[];
   cache_server_ip: string | null;
   cache_server_host: string | null;
+  site_type?: "monobrand" | "general" | null;
   project_status: "test" | "working" | "mass_actions" | "vitalina" | "hands_only" | "geo_ru" | "inactive" | "not_in_focus" | "duplicate";
   is_test_project: boolean;
   is_active?: boolean;
@@ -1973,6 +1974,19 @@ function ProjectWorkspaceView({
   const projectLoadRequestRef = React.useRef(0);
   const loadedWorkspaceTabRef = React.useRef("");
   const selectedSite = sites.find((site) => site.id === selectedSiteId) || null;
+  const [typeSavingId, setTypeSavingId] = React.useState<string | null>(null);
+  const [typeError, setTypeError] = React.useState<{siteId: string; message: string} | null>(null);
+  async function changeWorkspaceType(value: string) {
+    if (!selectedSite || typeSavingId) return;
+    const siteId = selectedSite.id;
+    setTypeSavingId(siteId); setTypeError(null);
+    try {
+      const updated = await api<Site>(`/sites/${siteId}/type`, { method: "PATCH", body: JSON.stringify({site_type: value}) });
+      onSiteChanged(updated);
+    } catch (error) {
+      setTypeError({siteId, message: error instanceof Error ? error.message : "Не удалось сохранить тип сайта"});
+    } finally { setTypeSavingId(null); }
+  }
   async function changeWorkspaceStatus(value: string) {
     if (!selectedSite || statusSavingId || value === selectedSite.project_status) return;
     const siteId = selectedSite.id;
@@ -2355,6 +2369,13 @@ function ProjectWorkspaceView({
               {statusError?.siteId === selectedSite.id ? <span className="formError" role="alert">{statusError.message}</span> : null}
             </span>
           ) : null}
+          {selectedSite ? <span className="workspaceProjectStatus">
+            <small>{typeSavingId === selectedSite.id ? "Сохраняем…" : "Тип сайта"}</small>
+            <SearchableSelect value={selectedSite.site_type || (selectedSite.brand && selectedSite.brand.trim().toLowerCase() !== "общие ключи" ? "monobrand" : "general")}
+              options={[{value: "monobrand", label: "Монобренд"}, {value: "general", label: "Общие ключи"}]}
+              onChange={changeWorkspaceType} disabled={typeSavingId !== null} ariaLabel="Тип текущего сайта" searchPlaceholder="Найти тип сайта" compact />
+            {typeError?.siteId === selectedSite.id ? <span className="formError" role="alert">{typeError.message}</span> : null}
+          </span> : null}
         </span>
       )}>
         <div className="projectHeader">

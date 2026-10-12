@@ -92,3 +92,25 @@ def test_hidden_project_stays_out_of_lists_after_sync():
         assert all(row['id'] != site_id for row in client.get(endpoint).json())
     with sessions() as db:
         assert db.get(models.Site, site_id) is not None
+
+
+@pytest.mark.parametrize('site_type', ['monobrand', 'general'])
+def test_manual_site_type_survives_sync_without_changing_brand(site_type):
+    client, sessions = make_client()
+    with sessions() as db:
+        site = db.scalar(select(models.Site))
+        site_id = site.id
+        site.external_project_id = 'type-project'
+        site.brand = 'Pin-Up'
+        site.brand_source = 'manual'
+        db.commit()
+    response = client.patch(f'/api/sites/{site_id}/type', json={'site_type':site_type})
+    assert response.status_code == 200
+    assert response.json()['site_type'] == site_type
+    assert response.json()['brand'] == 'Pin-Up'
+    with sessions() as db:
+        sync_project_cache(db, [{'id':'type-project','name':'Type project','settings':{'canon':'type.test','domains':['type.test']}}])
+        db.commit()
+        assert db.get(models.Site, site_id).site_type == site_type
+    assert client.get(f'/api/sites/lookup?site_id={site_id}').json()['site_type'] == site_type
+    assert client.patch(f'/api/sites/{site_id}/type', json={'site_type':'unknown'}).status_code == 422
