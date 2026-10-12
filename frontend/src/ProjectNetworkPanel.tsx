@@ -12,6 +12,7 @@ type Network = {
   canon: string; reserve: string; domains: string[]; revision: string;
   main_history: string[]; x_default_history: string[]; alternate_history: string[];
   alternateMarkup: string; enableAlternates: boolean; has_head: boolean;
+  enableCanonical?: boolean; canonicalDefaultMarkup?: string; canonicalFakeMainMarkup?: string;
   alternates: { hreflang: string; href: string; domain: string }[];
   operations: NetworkOperation[];
 };
@@ -238,6 +239,13 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
           {reserveValid && <p>Смена canonical: <strong>{data.canon}</strong> → <strong>{reserve}</strong></p>}
           {dirty && <p>В альтернейтах есть несохранённые изменения. Сохраните их перед запуском переклея.</p>}
           <button type="button" className="button primary compact networkReglueButton" disabled={disabled || dirty || !reserveValid || reserve !== data.reserve} onClick={() => void mutate("reglue")}>{busy === "reglue" ? "Запускаем переклей…" : "Переклеить на резервный домен"}</button>
+        </div>}
+        {(mode !== "network" || networkView === "main") && <div className="networkSection networkCanonical">
+          <h3>Каноникл</h3>
+          <p>Состояние: <strong>{typeof data.enableCanonical === "boolean" ? data.enableCanonical ? "Включён" : "Выключен" : "Нет сохранённых данных — обновите данные сетки"}</strong></p>
+          <label>Каноникл всех страниц<textarea aria-label="Каноникл всех страниц" className="networkMarkup" rows={2} readOnly value={data.canonicalDefaultMarkup ?? ""} placeholder={data.canonicalDefaultMarkup === undefined ? "Нет сохранённых данных" : "Не задан"} /></label>
+          <label>Каноникл главной и фейковых внутренних страниц<textarea aria-label="Каноникл главной и фейковых внутренних страниц" className="networkMarkup" rows={2} readOnly value={data.canonicalFakeMainMarkup ?? ""} placeholder={data.canonicalFakeMainMarkup === undefined ? "Нет сохранённых данных" : "Не задан"} /></label>
+          {data.fake_main_current && <p className="muted">Текущая фейковая внутренняя страница: {data.fake_main_current}</p>}
         </div>}
         {draft && (mode !== "network" || networkView === "main") && <div className="networkSection">
           <h3>Альтернейты</h3>
