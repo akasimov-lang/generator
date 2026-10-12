@@ -257,6 +257,7 @@ type Site = {
   cache_geo: string | null;
   homepage_title: string | null;
   fibery_name?: string | null;
+  fibery_name_manual?: boolean;
   internal_pages_count: number;
   domains_count: number;
   cache_domains: string[];
@@ -1032,7 +1033,7 @@ function App() {
     const key = `${view}:${name || savedId}`;
     if (refreshFlight.current?.key === key) return refreshFlight.current.promise;
     const promise = (async () => {
-      if (["sites", "workspace", "favorites"].includes(view) && !snapshotTimeRef.current) {
+      if (["sites", "favorites"].includes(view) || (view === "workspace" && !snapshotTimeRef.current)) {
         if (!initialSitesFlight.current) {
           initialSitesFlight.current = api<Site[]>("/sites")
             .then(result => { if (userRef.current?.id === user.id) mergeSites(result, true); })
@@ -8656,6 +8657,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       menuCount: headerMenuCount + footerMenuCount,
       internalPagesCount: site.internal_pages_count + 1,
       fiberyName: site.fibery_name || "",
+      fiberyNameManual: Boolean(site.fibery_name_manual),
       domainsCount: site.domains_count,
       domains: Array.isArray(site.cache_domains) ? site.cache_domains : [],
       syncedAt: site.cache_synced_at
@@ -9123,14 +9125,14 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
                   {formatNumber(row.menuCount)}
                 </button>
               ) : "0",
-              fiberyName: row.fiberyName ? <span className="siteFiberyName" title={row.fiberyName}>{row.fiberyName}</span> : "—",
+              fiberyName: row.fiberyName ? <span className="siteFiberyName" title={row.fiberyNameManual ? `Проверьте имя из исходного списка: ${row.fiberyName}. Сохранено только в PagePilot.` : row.fiberyName}>{row.fiberyName}{row.fiberyNameManual && <small className="siteFiberyReviewLabel">Проверить имя</small>}</span> : "—",
               domainsCount: <a href={pathForRoute("workspace", "network", row.name)} aria-label={`Открыть сетку проекта ${row.name}`}>{formatNumber(row.domainsCount)}</a>
             };
             return visibleColumnOrder.map((column) => cells[column]);
           })}
           rowClassNames={visibleRows.map((row) => {
             const statusClass = row.projectStatus === "mass_actions" ? "massActions" : row.projectStatus === "duplicate" ? "duplicate" : row.isTest ? "test" : row.isWorking ? "working" : "unfocused";
-            return `siteDomainRow ${statusClass} ${row.hasMenu ? "hasMenu" : ""} ${row.isFavorite ? "favorite" : ""}`.trim();
+            return `siteDomainRow ${statusClass} ${row.hasMenu ? "hasMenu" : ""} ${row.isFavorite ? "favorite" : ""} ${row.fiberyNameManual ? "fiberyReview" : ""}`.trim();
           })}
           wrapperClassName="siteDomainsTable"
           sortableColumnIndexes={visibleColumnOrder.map((column, index) => SITE_COLUMN_SORT_KEYS[column] && !["status", "menuType"].includes(column) ? index : -1).filter((index) => index >= 0)}

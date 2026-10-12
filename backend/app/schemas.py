@@ -103,6 +103,7 @@ class SiteResponse(BaseModel):
     cache_geo: str | None
     homepage_title: str | None
     fibery_name: str | None = None
+    fibery_name_manual: bool = False
     internal_pages_count: int
     domains_count: int
     cache_domains: list[str]

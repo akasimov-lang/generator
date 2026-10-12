@@ -191,6 +191,22 @@ def test_fibery_name_keeps_value_when_snapshot_omits_field_and_clears_explicit_e
     assert site.fibery_name is None
 
 
+def test_manual_fibery_name_survives_webdev_sync(setup):
+    from app.project_cache import _apply_fibery_name
+    client, db, site, state = setup
+    site.fibery_name = '#736_savaspin_IT'
+    site.fibery_name_manual = True
+    db.commit()
+    db.refresh(site)
+    for settings in ({}, {'webdevDuty': {'fibery': ''}},
+                     {'webdevDuty': {'fibery': '#999_other_IT'}}):
+        _apply_fibery_name(site, settings)
+        assert site.fibery_name == '#736_savaspin_IT'
+    site.fibery_name_manual = False
+    _apply_fibery_name(site, {'webdevDuty': {'fibery': '#999_other_IT'}})
+    assert site.fibery_name == '#999_other_IT'
+
+
 def test_page_dates_from_webdev_with_publication_fallback():
     row = pages.page_summary({'id': '1', 'slug': '/', 'createdTime': '2025-01-01', 'publishedTime': '2025-01-02', 'updatedTime': '2026-10-09'})
     assert row['created_at'] == '2025-01-01' and row['created_at_source'] == 'createdTime'

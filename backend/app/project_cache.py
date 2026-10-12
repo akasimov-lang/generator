@@ -932,6 +932,8 @@ def _project_menu(project: dict[str, Any]) -> dict[str, list[Any]]:
 
 
 def _apply_fibery_name(site, settings):
+    if site.fibery_name_manual:
+        return
     duty = settings.get("webdevDuty")
     if isinstance(duty, dict) and "fibery" in duty:
         value = duty["fibery"]
