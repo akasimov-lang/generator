@@ -8770,7 +8770,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
     if (summaryFilter === "working") return row.projectStatus === "working";
     if (summaryFilter === "menu") return row.hasMenu;
     if (summaryFilter === "mass_actions") return row.projectStatus === "mass_actions";
-    if (summaryFilter === "vitalina" || summaryFilter === "hands_only" || summaryFilter === "geo_ru" | "geo_kz" || summaryFilter === "inactive") return row.projectStatus === summaryFilter;
+    if (summaryFilter === "vitalina" || summaryFilter === "hands_only" || summaryFilter === "geo_ru" || summaryFilter === "geo_kz" || summaryFilter === "inactive") return row.projectStatus === summaryFilter;
     return row.projectStatus === "duplicate";
   };
   const filteredRows = domainRows.filter((row) => {
@@ -8814,7 +8814,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
   }, [brandFilter, geoFilter, medalFilter, menuTypeFilters, rowsPerPage, searchQuery, siteSort, statusFilters, summaryFilter]);
 
   function toggleSummaryFilter(filter: SiteSummaryFilter) {
-    if ((filter === "mass_actions" || filter === "vitalina" || filter === "hands_only" || filter === "geo_ru" | "geo_kz" || filter === "inactive") && summaryFilter !== filter && !statusFilters.includes(filter)) {
+    if ((filter === "mass_actions" || filter === "vitalina" || filter === "hands_only" || filter === "geo_ru" || filter === "geo_kz" || filter === "inactive") && summaryFilter !== filter && !statusFilters.includes(filter)) {
       setStatusFilters(current => [...current, filter]);
     }
     setSummaryFilter((current) => current === filter ? null : filter);
