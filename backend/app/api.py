@@ -464,7 +464,7 @@ def list_sites(_: AuthUser, db: Session = Depends(get_db), include_grouped_inact
     if include_grouped_inactive:
         visible = visible | models.Site.project_status.in_(["mass_actions", "vitalina", "hands_only", "geo_ru", "inactive"])
     sites = db.scalars(
-        select(models.Site).where(visible).order_by(
+        select(models.Site).where(visible, models.Site.hidden_from_projects.is_(False)).order_by(
             models.Site.is_test_project.desc(),
             models.Site.has_menu.desc(),
             models.Site.name.asc(),
@@ -491,7 +491,7 @@ def lookup_site(_: AuthUser, name: str = "", site_id: str = "", db: Session = De
 @router.get("/sites/cache/projects", response_model=list[SiteResponse])
 def list_cached_projects(_: AuthUser, db: Session = Depends(get_db)) -> Any:
     status_order = {"test": 0, "working": 1, "mass_actions": 2, "vitalina": 3, "hands_only": 4, "geo_ru": 5, "inactive": 6, "not_in_focus": 7, "duplicate": 8}
-    sites = db.scalars(select(models.Site).where(models.Site.is_active.is_(True))).all()
+    sites = db.scalars(select(models.Site).where(models.Site.is_active.is_(True), models.Site.hidden_from_projects.is_(False))).all()
     from app.project_notices import refresh_and_commit_notices
     refresh_and_commit_notices(db, sites)
     return sorted(sites, key=lambda site: (status_order.get(site.project_status, 3), not site.has_menu, site.name.lower()))

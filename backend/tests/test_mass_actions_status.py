@@ -74,3 +74,21 @@ def test_lookup_reads_inactive_project_from_cache_without_activating():
         assert response.json()['is_active'] is False
         assert response.json()['domains_count'] == 4
     assert client.get('/api/sites/lookup?name=does-not-exist.test').status_code == 404
+
+
+def test_hidden_project_stays_out_of_lists_after_sync():
+    client, sessions = make_client()
+    with sessions() as db:
+        site = db.scalar(select(models.Site))
+        site_id = site.id
+        site.external_project_id = 'hidden-project'
+        site.hidden_from_projects = True
+        site.project_status = 'mass_actions'
+        db.commit()
+        sync_project_cache(db, [{'id': 'hidden-project', 'name': 'Hidden project', 'settings': {'canon': 'hidden.test', 'domains': ['hidden.test']}}])
+        db.commit()
+        assert db.get(models.Site, site_id).hidden_from_projects is True
+    for endpoint in ['/api/sites', '/api/sites?include_grouped_inactive=true', '/api/sites/cache/projects']:
+        assert all(row['id'] != site_id for row in client.get(endpoint).json())
+    with sessions() as db:
+        assert db.get(models.Site, site_id) is not None
