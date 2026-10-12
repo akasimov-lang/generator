@@ -126,6 +126,7 @@ class Site(Base, TimestampMixin):
     cache_geo: Mapped[str | None] = mapped_column(String(40), nullable=True)
     homepage_title: Mapped[str | None] = mapped_column(Text, nullable=True)
     fibery_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    project_team: Mapped[str | None] = mapped_column(String(160), nullable=True)
     site_type: Mapped[str | None] = mapped_column(String(24), nullable=True)
     hidden_from_projects: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     fibery_name_manual: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")

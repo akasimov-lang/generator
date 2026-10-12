@@ -932,9 +932,11 @@ def _project_menu(project: dict[str, Any]) -> dict[str, list[Any]]:
 
 
 def _apply_fibery_name(site, settings):
+    duty = settings.get("webdevDuty")
+    if isinstance(duty, dict) and "team" in duty and (duty["team"] is None or isinstance(duty["team"], str)):
+        site.project_team = (duty["team"] or "").strip()
     if site.fibery_name_manual:
         return
-    duty = settings.get("webdevDuty")
     if isinstance(duty, dict) and "fibery" in duty:
         value = duty["fibery"]
         site.fibery_name = value.strip() or None if isinstance(value, str) else None

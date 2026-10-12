@@ -114,3 +114,14 @@ def test_manual_site_type_survives_sync_without_changing_brand(site_type):
         assert db.get(models.Site, site_id).site_type == site_type
     assert client.get(f'/api/sites/lookup?site_id={site_id}').json()['site_type'] == site_type
     assert client.patch(f'/api/sites/{site_id}/type', json={'site_type':'unknown'}).status_code == 422
+
+
+@pytest.mark.parametrize('team', ['', ' Rankomen ', 'Kalendula', None])
+def test_team_cache_updates_even_with_manual_fibery_name(team):
+    from app.project_cache import _apply_fibery_name
+    site = models.Site(name='team.test', fibery_name='#1_Manual', fibery_name_manual=True)
+    _apply_fibery_name(site, {'webdevDuty':{'team':team,'fibery':'overwrite'}})
+    assert site.project_team == (team or '').strip()
+    assert site.fibery_name == '#1_Manual'
+    _apply_fibery_name(site, {'webdevDuty':{'fibery':'still no team'}})
+    assert site.project_team == (team or '').strip()

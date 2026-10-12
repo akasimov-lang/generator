@@ -266,6 +266,7 @@ type Site = {
   alternate_domain_history: string[];
   cache_server_ip: string | null;
   cache_server_host: string | null;
+  project_team?: string | null;
   site_type?: "monobrand" | "general" | null;
   project_status: "test" | "working" | "mass_actions" | "vitalina" | "hands_only" | "geo_ru" | "geo_kz" | "inactive" | "not_in_focus" | "duplicate";
   is_test_project: boolean;
@@ -8728,6 +8729,8 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       internalPagesCount: site.internal_pages_count + 1,
       fiberyName: site.fibery_name || "",
       fiberyNameManual: Boolean(site.fibery_name_manual),
+      projectTeam: site.project_team,
+      needsTeamReview: typeof site.project_team === "string" && ["", "rankomen"].includes(site.project_team.trim().toLowerCase()),
       domainsCount: site.domains_count,
       domains: Array.isArray(site.cache_domains) ? site.cache_domains : [],
       syncedAt: site.cache_synced_at
@@ -9176,7 +9179,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
                   {formatNumber(row.menuCount)}
                 </button>
               ) : "0",
-              fiberyName: row.fiberyName ? <span className="siteFiberyName" title={row.fiberyNameManual ? `Проверьте имя из исходного списка: ${row.fiberyName}. Сохранено только в PagePilot.` : row.fiberyName}><span className="siteFiberyNameText">{row.fiberyName}</span>{row.fiberyNameManual && <a className="siteFiberyReviewButton" href={`https://webdev-alfasearch.ru/projects/${encodeURIComponent(row.name)}`} target="_blank" rel="noopener noreferrer" aria-label={`Проверить имя проекта ${row.name} в Webdev`}>Проверить</a>}</span> : "—",
+              fiberyName: <span className="siteFiberyName" title={row.projectTeam == null ? "Нет сохранённых данных о команде" : `Команда: ${row.projectTeam || "не заполнена"}`}><span className="siteFiberyNameText">{row.fiberyName || "—"}</span>{row.needsTeamReview && <a className="siteFiberyReviewButton" href={`https://webdev-alfasearch.ru/projects/${encodeURIComponent(row.name)}`} target="_blank" rel="noopener noreferrer" aria-label={`Проверить команду проекта ${row.name} в Webdev`}>Проверить</a>}</span>,
               domainsCount: row.isActive ? <a href={pathForRoute("workspace", "network", row.name)} aria-label={`Открыть сетку проекта ${row.name}`}>{formatNumber(row.domainsCount)}</a> : <span title="Сохранённое число доменов неактивного проекта">{formatNumber(row.domainsCount)}</span>
             };
             return visibleColumnOrder.map((column) => cells[column]);

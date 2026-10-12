@@ -84,6 +84,7 @@ class SiteBrandUpdate(BaseModel):
 
 
 class SiteResponse(BaseModel):
+    project_team: str | None = None
     menu_warning: str | None = None
     core_update_notice: str | None = None
     site_type: Literal["monobrand", "general"] | None = None
