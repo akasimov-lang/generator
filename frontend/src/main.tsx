@@ -8543,7 +8543,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
   const [syncError, setSyncError] = React.useState("");
   const [selectedProjectNames, setSelectedProjectNames] = React.useState<string[]>([]);
   const [syncMessage, setSyncMessage] = React.useState("");
-  const [summaryFilter, setSummaryFilter] = React.useState<SiteSummaryFilter | null>(() => ["test", "menu"].includes(String(storedPreferences.summaryFilter)) ? null : storedPreferences.summaryFilter === "working" ? "hands_only" : storedPreferences.summaryFilter || null);
+  const [summaryFilter, setSummaryFilter] = React.useState<SiteSummaryFilter | null>(() => ["test", "menu"].includes(String(storedPreferences.summaryFilter)) ? null : storedPreferences.summaryFilter === "working" ? "hands_only" : storedPreferences.summaryFilter === "projects" ? "all" : storedPreferences.summaryFilter || null);
   const [medalFilter, setMedalFilter] = React.useState<ProjectMedalStatus | null>(null);
   const [siteSort, setSiteSort] = React.useState<{ key: string; direction: "asc" | "desc" } | null>(["geo", "menuType", "menuCount"].includes(storedPreferences.siteSort?.key || "") ? null : storedPreferences.siteSort || null);
   const [deletingDuplicates, setDeletingDuplicates] = React.useState(false);
@@ -8931,7 +8931,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       <DataPanel title={readOnly ? "Обзор сайтов" : "Панель управления сайтами"}>
         <div className="siteCacheToolbar">
           <div className="siteCacheStats">
-            <button className={summaryFilter === "projects" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("projects")} aria-pressed={summaryFilter === "projects"}><span>Проекты</span><strong>{formatNumber(managedSites.filter((site) => site.external_project_id).length)}</strong></button>
+            <button className={summaryFilter === "all" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("all")} aria-pressed={summaryFilter === "all"}><span>Всего сайтов</span><strong>{formatNumber(managedSites.length)}</strong></button>
             <button className={summaryFilter === "hands_only" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("hands_only")} aria-pressed={summaryFilter === "hands_only"}><span>hands only</span><strong>{formatNumber(managedSites.filter((site) => site.project_status === "hands_only").length)}</strong></button>
             <button className={summaryFilter === "mass_actions" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("mass_actions")} aria-pressed={summaryFilter === "mass_actions"}><span>Массовые действия</span><strong>{formatNumber(managedSites.filter((site) => site.project_status === "mass_actions").length)}</strong></button>
             <button className={summaryFilter === "vitalina" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("vitalina")} aria-pressed={summaryFilter === "vitalina"}><span>Vitalina</span><strong>{formatNumber(managedSites.filter((site) => site.project_status === "vitalina").length)}</strong></button>
@@ -8939,7 +8939,6 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
             <button className={summaryFilter === "geo_kz" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("geo_kz")} aria-pressed={summaryFilter === "geo_kz"}><span>GEO KZ</span><strong>{formatNumber(managedSites.filter((site) => site.project_status === "geo_kz").length)}</strong></button>
             <button className={summaryFilter === "inactive" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("inactive")} aria-pressed={summaryFilter === "inactive"}><span>Неактивные</span><strong>{formatNumber(managedSites.filter((site) => site.project_status === "inactive").length)}</strong></button>
             <button className={summaryFilter === "duplicate" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("duplicate")} aria-pressed={summaryFilter === "duplicate"}><span>Дубликаты</span><strong>{formatNumber(duplicateCount)}</strong></button>
-            <button className={summaryFilter === "all" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("all")} aria-pressed={summaryFilter === "all"}><span>Всего сайтов</span><strong>{formatNumber(managedSites.length)}</strong></button>
           </div>
           <div className="siteCacheActions">
           {!favoritesOnly && <button className="button primary siteCacheSyncButton" type="button" onClick={() => void loadManagedSites(true)} disabled={syncing}>
