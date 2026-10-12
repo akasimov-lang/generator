@@ -9182,14 +9182,14 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
                   {formatNumber(row.menuCount)}
                 </button>
               ) : "0",
-              fiberyName: row.fiberyName ? <span className="siteFiberyName" title={row.fiberyNameManual ? `Проверьте имя из исходного списка: ${row.fiberyName}. Сохранено только в PagePilot.` : row.fiberyName}>{row.fiberyName}{row.fiberyNameManual && <small className="siteFiberyReviewLabel">Проверить имя</small>}</span> : "—",
+              fiberyName: row.fiberyName ? <span className="siteFiberyName" title={row.fiberyNameManual ? `Проверьте имя из исходного списка: ${row.fiberyName}. Сохранено только в PagePilot.` : row.fiberyName}><span className="siteFiberyNameText">{row.fiberyName}</span>{row.fiberyNameManual && <a className="siteFiberyReviewButton" href={`https://webdev-alfasearch.ru/projects/${encodeURIComponent(row.name)}`} target="_blank" rel="noopener noreferrer" aria-label={`Проверить имя проекта ${row.name} в Webdev`}>Проверить</a>}</span> : "—",
               domainsCount: row.isActive ? <a href={pathForRoute("workspace", "network", row.name)} aria-label={`Открыть сетку проекта ${row.name}`}>{formatNumber(row.domainsCount)}</a> : <span title="Сохранённое число доменов неактивного проекта">{formatNumber(row.domainsCount)}</span>
             };
             return visibleColumnOrder.map((column) => cells[column]);
           })}
           rowClassNames={visibleRows.map((row) => {
             const statusClass = row.projectStatus === "mass_actions" ? "massActions" : row.projectStatus === "duplicate" ? "duplicate" : row.isTest ? "test" : row.isWorking ? "working" : "unfocused";
-            return `siteDomainRow ${statusClass} ${row.hasMenu ? "hasMenu" : ""} ${row.isFavorite ? "favorite" : ""} ${row.fiberyNameManual ? "fiberyReview" : ""}`.trim();
+            return `siteDomainRow ${statusClass} ${row.hasMenu ? "hasMenu" : ""} ${row.isFavorite ? "favorite" : ""}`.trim();
           })}
           wrapperClassName="siteDomainsTable"
           sortableColumnIndexes={visibleColumnOrder.map((column, index) => SITE_COLUMN_SORT_KEYS[column] && !["status", "menuType"].includes(column) ? index : -1).filter((index) => index >= 0)}
