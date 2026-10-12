@@ -2775,7 +2775,7 @@ h2 {
   flex: 1 1 680px;
   min-width: 0;
   gap: 10px;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .siteCacheStats > button {
@@ -9861,6 +9861,8 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .siteStatusSearchable.vitalina .searchableSelectControl,
 .siteStatusReadonly.vitalina { color: #9333ea; border-color: #a855f7; background: color-mix(in srgb, #a855f7 10%, var(--surface)); }
 .siteStatusSearchable.not_in_focus .searchableSelectControl { color: var(--muted); }
+.siteStatusSearchable.hands_only .searchableSelectControl,
+.siteStatusReadonly.hands_only { color: var(--warning); border-color: var(--warning); background: color-mix(in srgb, var(--warning) 10%, var(--surface)); }
 .siteStatusSearchable.duplicate .searchableSelectControl { color: var(--danger); border-color: var(--danger); }
 @media (max-width: 640px) {
   .siteDomainsTable .siteStatusSearchable { width: 82px; flex: 0 0 82px; }

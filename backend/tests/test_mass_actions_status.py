@@ -7,7 +7,7 @@ from app.security import require_auth
 from test_api_serialization import make_client
 
 
-@pytest.mark.parametrize('status', ['mass_actions', 'vitalina'])
+@pytest.mark.parametrize('status', ['mass_actions', 'vitalina', 'hands_only'])
 def test_mass_actions_status_persists_and_survives_canonical_sync(status):
     client, sessions = make_client()
     with sessions() as db:
