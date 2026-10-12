@@ -945,7 +945,7 @@ function App() {
   const mergeSites = React.useCallback((updates: Site[], replace = false) => {
     const byId = new Map(updates.map(site => [site.id, site]));
     setSites(current => (replace ? updates : [...current.filter(site => !byId.has(site.id)), ...updates]).filter(site => site.is_active !== false));
-    const next = (replace ? updates : snapshotRef.current.map(site => byId.get(site.id) || site)).filter(site => site.is_active !== false);
+    const next = replace ? updates : snapshotRef.current.map(site => byId.get(site.id) || site);
     snapshotRef.current = next;
     setSiteSnapshot(next);
     if (replace) {
@@ -1047,7 +1047,7 @@ function App() {
     const promise = (async () => {
       if (["sites", "favorites"].includes(view) || (view === "workspace" && !snapshotTimeRef.current)) {
         if (!initialSitesFlight.current) {
-          initialSitesFlight.current = api<Site[]>("/sites")
+          initialSitesFlight.current = api<Site[]>(["sites", "favorites"].includes(view) ? "/sites?include_grouped_inactive=true" : "/sites")
             .then(result => { if (userRef.current?.id === user.id) mergeSites(result, true); })
             .finally(() => { initialSitesFlight.current = null; });
         }
@@ -1126,8 +1126,6 @@ function App() {
       const user = await api<User>("/auth/me");
       await removeLegacyProjectSnapshot().catch(() => {});
       const saved = await readProjectSnapshot<Site>(`webdev-projects-v2:${user.id}`).catch(() => ({ projects: [], updatedAt: null }));
-      saved.projects = saved.projects.filter(site => site.is_active !== false);
-      await writeProjectSnapshot(`webdev-projects-v2:${user.id}`, saved).catch(() => {});
       if (!user.is_admin) saved.projects = saved.projects.filter(site => user.allowed_site_ids?.includes(site.id));
       if (cancelled) return;
       userRef.current = user;
@@ -8601,7 +8599,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
         setCacheResult(null);
         setSyncMessage("");
       }
-      const result = await api<Site[]>("/sites");
+      const result = await api<Site[]>("/sites?include_grouped_inactive=true");
       setManagedSites(result);
       onSitesChanged(result, true);
     } catch (error) {
