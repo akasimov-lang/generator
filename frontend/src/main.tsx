@@ -280,6 +280,16 @@ type Site = {
   footer_menu_nested: boolean | null;
 };
 
+const PROJECT_STATUS_OPTIONS: Array<{ value: Site["project_status"]; label: string }> = [
+  { value: "test", label: "Тестовый" },
+  { value: "working", label: "Рабочий" },
+  { value: "mass_actions", label: "Массовые действия" },
+  { value: "vitalina", label: "Vitalina" },
+  { value: "hands_only", label: "hands only" },
+  { value: "not_in_focus", label: "Не в фокусе" },
+  { value: "duplicate", label: "Дубликат" }
+];
+
 type MenuCapabilities = {
   checked_at: string | null;
   header_menu_template_rendered: boolean | null;
@@ -1353,7 +1363,7 @@ function App() {
 
         {message ? <div className="notice">{message}</div> : null}
 
-        {activeView === "workspace" && <ProjectWorkspaceView canManageAutomation api={api} sites={sites} providers={providers} currentUsername={currentUser.username} activeTab={workspaceTab} contentOpenRequest={workspaceContentOpenRequest} onTabChange={(tab, projectName) => navigateTo("workspace", tab, false, projectName)} onChanged={loadAll} />}
+        {activeView === "workspace" && <ProjectWorkspaceView canManageAutomation api={api} sites={sites} providers={providers} currentUsername={currentUser.username} activeTab={workspaceTab} contentOpenRequest={workspaceContentOpenRequest} onTabChange={(tab, projectName) => navigateTo("workspace", tab, false, projectName)} onSiteChanged={site => mergeSites([site])} onChanged={loadAll} />}
         {activeView === "prompts" && <PromptsView api={api} sites={sites} isAdmin={isAdmin} onChanged={loadAll} />}
         {isAdmin && activeView === "dashboard" && dashboard && <DashboardView api={api} dashboard={dashboard} tasks={tasks} content={content} sites={sites} onOpenTask={(task) => {
           const site = sites.find((candidate) => candidate.id === task.site_id);
@@ -1914,6 +1924,7 @@ function ProjectWorkspaceView({
   activeTab,
   contentOpenRequest,
   onTabChange,
+  onSiteChanged,
   onChanged
 }: ViewProps & {
   sites: Site[];
@@ -1923,6 +1934,7 @@ function ProjectWorkspaceView({
   activeTab: WorkspaceTab;
   contentOpenRequest: number;
   onTabChange: (tab: WorkspaceTab, projectName?: string) => void;
+  onSiteChanged: (site: Site) => void;
 }) {
   const workspaceSiteStorageKey = `workspace_site_id:${currentUsername}`;
   const [selectedSiteId, setSelectedSiteId] = React.useState(() => {
@@ -1942,6 +1954,8 @@ function ProjectWorkspaceView({
   const [logs, setLogs] = React.useState<PublicationLog[]>([]);
   const [campaigns, setCampaigns] = React.useState<PublicationCampaign[]>([]);
   const [workspaceError, setWorkspaceError] = React.useState("");
+  const [statusSavingId, setStatusSavingId] = React.useState<string | null>(null);
+  const [statusError, setStatusError] = React.useState<{ siteId: string; message: string } | null>(null);
   const [canonCopied, setCanonCopied] = React.useState(false);
   const [favoriteSiteIds, setFavoriteSiteIds] = React.useState<string[]>([]);
   const [favoritesOnly, setFavoritesOnly] = React.useState(false);
@@ -1957,6 +1971,22 @@ function ProjectWorkspaceView({
   const projectLoadRequestRef = React.useRef(0);
   const loadedWorkspaceTabRef = React.useRef("");
   const selectedSite = sites.find((site) => site.id === selectedSiteId) || null;
+  async function changeWorkspaceStatus(value: string) {
+    if (!selectedSite || statusSavingId || value === selectedSite.project_status) return;
+    const siteId = selectedSite.id;
+    setStatusSavingId(siteId);
+    setStatusError(null);
+    try {
+      const updated = await api<Site>(`/sites/${siteId}/status`, {
+        method: "PATCH", body: JSON.stringify({ project_status: value })
+      });
+      onSiteChanged(updated);
+    } catch (error) {
+      setStatusError({ siteId, message: error instanceof Error ? error.message : "Не удалось сохранить статус" });
+    } finally {
+      setStatusSavingId(null);
+    }
+  }
   const routeProjectName = workspaceProjectNameFromPath(window.location.pathname);
   const pendingSectionsCount = sections.filter((section) => section.sync_status === "pending").length;
   const unpublishedGeneratedContentCount = siteContent.filter((item) => Boolean(item.generated_at) && !["published", "deleted", "deletion_pending"].includes(item.status)).length;
@@ -2311,6 +2341,17 @@ function ProjectWorkspaceView({
             <span className="workspaceFiberyName">
               <small>Имя проекта</small>
               <span>{selectedSite.fibery_name || "Не задано"}</span>
+            </span>
+          ) : null}
+          {selectedSite ? (
+            <span className="workspaceProjectStatus">
+              <small>{statusSavingId === selectedSite.id ? "Сохраняем…" : "Статус"}</small>
+              <span className={`siteStatusSearchable ${selectedSite.project_status}`}>
+                <SearchableSelect value={selectedSite.project_status} options={PROJECT_STATUS_OPTIONS}
+                  onChange={changeWorkspaceStatus} disabled={statusSavingId !== null}
+                  ariaLabel="Статус текущего проекта" searchPlaceholder="Найти статус" compact />
+              </span>
+              {statusError?.siteId === selectedSite.id ? <span className="formError" role="alert">{statusError.message}</span> : null}
             </span>
           ) : null}
         </span>
@@ -8495,15 +8536,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
     const stored = storedPreferences.rowsPerPage;
     return stored === "all" || [25, 50, 100, 250].includes(Number(stored)) ? stored as number | "all" : 50;
   });
-  const statusFilterOptions: Array<{ value: Site["project_status"]; label: string }> = [
-    { value: "test", label: "Тестовый" },
-    { value: "working", label: "Рабочий" },
-    { value: "mass_actions", label: "Массовые действия" },
-    { value: "vitalina", label: "Vitalina" },
-    { value: "hands_only", label: "hands only" },
-    { value: "not_in_focus", label: "Не в фокусе" },
-    { value: "duplicate", label: "Дубликат" }
-  ];
+  const statusFilterOptions = PROJECT_STATUS_OPTIONS;
   const menuTypeFilterOptions = [
     { value: "header_footer", label: "Header + Footer" },
     { value: "header", label: "Только Header" },

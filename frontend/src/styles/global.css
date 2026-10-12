@@ -9893,3 +9893,9 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 }
 
 .siteInactiveLabel { display: block; color: var(--muted); font-size: 10px; font-weight: 500; }
+
+.workspaceProjectStatus { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px; max-width: 100%; }
+.workspaceProjectStatus > small { color: var(--muted); font-size: 11px; font-weight: 500; }
+.workspaceProjectStatus .siteStatusSearchable { display: inline-block; width: 200px; max-width: 100%; }
+.workspaceProjectStatus .searchableSelectControl { height: 32px; min-height: 32px; padding: 0 10px; font-size: 12px; }
+.workspaceProjectStatus .formError { flex-basis: 100%; font-size: 12px; }
