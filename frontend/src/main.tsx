@@ -2306,6 +2306,12 @@ function ProjectWorkspaceView({
               <span>{menuCapabilitiesLoading || menuCheckPending ? "Проверка…" : "Проверить"}</span>
             </button>
           ) : null}
+          {selectedSite ? (
+            <span className="workspaceFiberyName">
+              <small>Имя проекта</small>
+              <span>{selectedSite.fibery_name || "Не задано"}</span>
+            </span>
+          ) : null}
         </span>
       )}>
         <div className="projectHeader">
