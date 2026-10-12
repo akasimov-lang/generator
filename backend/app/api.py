@@ -487,7 +487,7 @@ def lookup_site(_: AuthUser, name: str = "", site_id: str = "", db: Session = De
 
 @router.get("/sites/cache/projects", response_model=list[SiteResponse])
 def list_cached_projects(_: AuthUser, db: Session = Depends(get_db)) -> Any:
-    status_order = {"test": 0, "working": 1, "mass_actions": 2, "not_in_focus": 3, "duplicate": 4}
+    status_order = {"test": 0, "working": 1, "mass_actions": 2, "vitalina": 3, "not_in_focus": 4, "duplicate": 5}
     sites = db.scalars(select(models.Site).where(models.Site.is_active.is_(True))).all()
     from app.project_notices import refresh_and_commit_notices
     refresh_and_commit_notices(db, sites)

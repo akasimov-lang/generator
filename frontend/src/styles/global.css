@@ -9843,3 +9843,25 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
   .projectWorkspaceView .projectRefreshButton { grid-column: 2; grid-row: 1; }
   .projectWorkspaceView .projectTopDetails { grid-template-columns: minmax(130px, .9fr) minmax(160px, 1.3fr) repeat(2, minmax(65px, .45fr)) repeat(2, minmax(100px, .7fr)); }
 }
+
+.siteStatusSearchable .searchableSelectControl {
+  min-height: 22px;
+  height: 22px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 800;
+  gap: 3px;
+}
+.siteStatusSearchable .searchableSelectControlLabel { font-size: inherit; }
+.siteStatusSearchable .searchableSelectChevron { width: 12px; flex-shrink: 0; }
+.siteStatusSearchable.test .searchableSelectControl { color: var(--warning); border-color: var(--warning); }
+.siteStatusSearchable.working .searchableSelectControl { color: var(--primary); border-color: var(--primary); }
+.siteStatusSearchable.mass_actions .searchableSelectControl { color: var(--blue); background: var(--blue-soft); border-color: var(--blue); }
+.siteStatusSearchable.vitalina .searchableSelectControl,
+.siteStatusReadonly.vitalina { color: #9333ea; border-color: #a855f7; background: color-mix(in srgb, #a855f7 10%, var(--surface)); }
+.siteStatusSearchable.not_in_focus .searchableSelectControl { color: var(--muted); }
+.siteStatusSearchable.duplicate .searchableSelectControl { color: var(--danger); border-color: var(--danger); }
+@media (max-width: 640px) {
+  .siteDomainsTable .siteStatusSearchable { width: 82px; flex: 0 0 82px; }
+}

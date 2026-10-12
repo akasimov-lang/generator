@@ -266,7 +266,7 @@ type Site = {
   alternate_domain_history: string[];
   cache_server_ip: string | null;
   cache_server_host: string | null;
-  project_status: "test" | "working" | "mass_actions" | "not_in_focus" | "duplicate";
+  project_status: "test" | "working" | "mass_actions" | "vitalina" | "not_in_focus" | "duplicate";
   is_test_project: boolean;
   has_menu: boolean;
   cache_synced_at: string | null;
@@ -8492,6 +8492,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
     { value: "test", label: "Тестовый" },
     { value: "working", label: "Рабочий" },
     { value: "mass_actions", label: "Массовые действия" },
+    { value: "vitalina", label: "Vitalina" },
     { value: "not_in_focus", label: "Не в фокусе" },
     { value: "duplicate", label: "Дубликат" }
   ];
@@ -8505,6 +8506,8 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
   const allMenuTypeFilters = menuTypeFilterOptions.map((option) => option.value);
   const [statusFilters, setStatusFilters] = React.useState<Site["project_status"][]>(() => {
     const stored = storedPreferences.statusFilters;
+    const previousAll = allStatusFilters.filter(value => value !== "vitalina");
+    if (Array.isArray(stored) && stored.length === previousAll.length && previousAll.every(value => stored.includes(value))) return allStatusFilters;
     return Array.isArray(stored) && stored.every((value) => allStatusFilters.includes(value)) ? stored : allStatusFilters;
   });
   const [menuTypeFilters, setMenuTypeFilters] = React.useState<string[]>(() => {
@@ -8625,8 +8628,9 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
     if (status === "test") return 0;
     if (status === "working") return 1;
     if (status === "mass_actions") return 2;
-    if (status === "not_in_focus") return 3;
-    return 4;
+    if (status === "vitalina") return 3;
+    if (status === "not_in_focus") return 4;
+    return 5;
   };
   const domainRows = managedSites.map((site) => {
     const headerMenuCount = Array.isArray(site.default_menu.header) ? site.default_menu.header.length : 0;
@@ -9101,16 +9105,14 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
               language: <LocaleCode value={row.language} />,
               status: readOnly ? (
                 <span className={`siteStatusReadonly ${row.projectStatus}`}>
-                  {{ test: "Тестовый", working: "Рабочий", mass_actions: "Массовые действия", not_in_focus: "Не в фокусе", duplicate: "Дубликат" }[row.projectStatus]}
+                  {statusFilterOptions.find(option => option.value === row.projectStatus)?.label}
                 </span>
               ) : (
-                <select className={`siteStatusSelect ${row.projectStatus}`} value={row.projectStatus} onChange={(event) => updateProjectStatus(row.id, event.target.value as Site["project_status"])}>
-                  <option value="test">Тестовый</option>
-                  <option value="working">Рабочий</option>
-                  <option value="mass_actions">Массовые действия</option>
-                  <option value="not_in_focus">Не в фокусе</option>
-                  <option value="duplicate">Дубликат</option>
-                </select>
+                <div className={`siteStatusSearchable ${row.projectStatus}`}>
+                  <SearchableSelect value={row.projectStatus} options={statusFilterOptions} compact
+                    ariaLabel={`Статус проекта ${row.name}`} searchPlaceholder="Найти статус"
+                    onChange={(value) => updateProjectStatus(row.id, value as Site["project_status"])} />
+                </div>
               ),
               internalPages: formatNumber(row.internalPagesCount),
               menuType: row.headerMenuCount && row.footerMenuCount
@@ -9967,7 +9969,7 @@ function SearchableSelect({
       searchRef.current?.focus();
       dropdownRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
     });
-    const handlePointerDown = (event: MouseEvent) => {
+    const handlePointerDown = (event: Event) => {
       const target = event.target as Node;
       if (!controlRef.current?.contains(target) && !dropdownRef.current?.contains(target)) {
         setOpen(false);
@@ -9976,10 +9978,12 @@ function SearchableSelect({
     window.addEventListener("resize", updateDropdownPosition);
     window.addEventListener("scroll", updateDropdownPosition, true);
     document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("focusin", handlePointerDown);
     return () => {
       window.removeEventListener("resize", updateDropdownPosition);
       window.removeEventListener("scroll", updateDropdownPosition, true);
       document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("focusin", handlePointerDown);
     };
   }, [open, updateDropdownPosition]);
 
