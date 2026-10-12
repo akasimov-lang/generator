@@ -478,7 +478,7 @@ def list_sites(_: AuthUser, db: Session = Depends(get_db), include_grouped_inact
 
 @router.get("/sites/lookup", response_model=SiteResponse)
 def lookup_site(_: AuthUser, name: str = "", site_id: str = "", db: Session = Depends(get_db)) -> Any:
-    lookup = select(models.Site).where(models.Site.is_active.is_(True))
+    lookup = select(models.Site)
     lookup = lookup.where(models.Site.name == name) if name else lookup.where(models.Site.id == site_id)
     site = db.scalar(lookup)
     if not site:

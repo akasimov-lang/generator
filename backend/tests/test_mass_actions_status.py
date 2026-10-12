@@ -56,3 +56,21 @@ def test_sites_panel_can_include_grouped_inactive_without_activating_them():
     with sessions() as db:
         assert all(not s.is_active for s in db.scalars(select(models.Site).where(models.Site.name.like('inactive-%'))))
     assert len(client.get('/api/sites').json()) == 1
+
+
+def test_lookup_reads_inactive_project_from_cache_without_activating():
+    client, sessions = make_client()
+    with sessions() as db:
+        site = models.Site(name='inactive-cached.test', base_url='https://cached.test',
+                           publication_endpoint='/', is_active=False, project_status='vitalina',
+                           cache_canon='cached.test', domains_count=4)
+        db.add(site)
+        db.commit()
+        site_id = site.id
+    for query in [f'name=inactive-cached.test', f'site_id={site_id}']:
+        response = client.get('/api/sites/lookup?' + query)
+        assert response.status_code == 200
+        assert response.json()['cache_canon'] == 'cached.test'
+        assert response.json()['is_active'] is False
+        assert response.json()['domains_count'] == 4
+    assert client.get('/api/sites/lookup?name=does-not-exist.test').status_code == 404

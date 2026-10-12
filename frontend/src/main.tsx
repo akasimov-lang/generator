@@ -946,7 +946,7 @@ function App() {
   const mergeSites = React.useCallback((updates: Site[], replace = false) => {
     const byId = new Map(updates.map(site => [site.id, site]));
     setSites(current => (replace ? updates : [...current.filter(site => !byId.has(site.id)), ...updates]).filter(site => site.is_active !== false));
-    const next = replace ? updates : snapshotRef.current.map(site => byId.get(site.id) || site);
+    const next = replace ? updates : [...snapshotRef.current.map(site => byId.get(site.id) || site), ...updates.filter(site => !snapshotRef.current.some(saved => saved.id === site.id))];
     snapshotRef.current = next;
     setSiteSnapshot(next);
     if (replace) {
@@ -1365,7 +1365,7 @@ function App() {
 
         {message ? <div className="notice">{message}</div> : null}
 
-        {activeView === "workspace" && <ProjectWorkspaceView canManageAutomation api={api} sites={sites} providers={providers} currentUsername={currentUser.username} activeTab={workspaceTab} contentOpenRequest={workspaceContentOpenRequest} onTabChange={(tab, projectName) => navigateTo("workspace", tab, false, projectName)} onSiteChanged={site => mergeSites([site])} onChanged={loadAll} />}
+        {activeView === "workspace" && <ProjectWorkspaceView canManageAutomation api={api} sites={siteSnapshot} providers={providers} currentUsername={currentUser.username} activeTab={workspaceTab} contentOpenRequest={workspaceContentOpenRequest} onTabChange={(tab, projectName) => navigateTo("workspace", tab, false, projectName)} onSiteChanged={site => mergeSites([site])} onChanged={loadAll} />}
         {activeView === "prompts" && <PromptsView api={api} sites={sites} isAdmin={isAdmin} onChanged={loadAll} />}
         {isAdmin && activeView === "dashboard" && dashboard && <DashboardView api={api} dashboard={dashboard} tasks={tasks} content={content} sites={sites} onOpenTask={(task) => {
           const site = sites.find((candidate) => candidate.id === task.site_id);
@@ -9075,7 +9075,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
                 <span className="siteNameCell">
                   <span className="siteNameWithFlag">
                     {localeFlag(localeCountryCode(row.geo || row.language || "")) ? <span aria-hidden="true">{localeFlag(localeCountryCode(row.geo || row.language || ""))}</span> : null}
-                    {row.isActive ? <a
+                    {<a
                       className="siteProjectDomainLink"
                       href={pathForRoute("workspace", "topics", row.name)}
                       onClick={() => {
@@ -9085,7 +9085,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
                       title={`Открыть проект ${row.name}`}
                     >
                       <strong>{row.name}</strong>
-                    </a> : <span className="siteProjectDomainLink"><strong>{row.name}</strong></span>}
+                    </a>}
                   </span>
                   <span className="siteNameActions">
                     <button
