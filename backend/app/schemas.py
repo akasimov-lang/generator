@@ -193,7 +193,7 @@ class ProjectCacheSyncRequest(BaseModel):
 
 
 class SiteStatusUpdate(BaseModel):
-    project_status: Literal["test", "working", "mass_actions", "vitalina", "hands_only", "geo_ru", "not_in_focus", "duplicate"]
+    project_status: Literal["test", "working", "mass_actions", "vitalina", "hands_only", "geo_ru", "inactive", "not_in_focus", "duplicate"]
 
 
 class DuplicateSitesDeleteResponse(BaseModel):

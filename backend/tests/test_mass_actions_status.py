@@ -7,7 +7,7 @@ from app.security import require_auth
 from test_api_serialization import make_client
 
 
-@pytest.mark.parametrize('status', ['mass_actions', 'vitalina', 'hands_only', 'geo_ru'])
+@pytest.mark.parametrize('status', ['mass_actions', 'vitalina', 'hands_only', 'geo_ru', 'inactive'])
 def test_mass_actions_status_persists_and_survives_canonical_sync(status):
     client, sessions = make_client()
     with sessions() as db:
@@ -44,15 +44,15 @@ def test_mass_actions_requires_admin_and_rejects_unknown_status():
 def test_sites_panel_can_include_grouped_inactive_without_activating_them():
     client, sessions = make_client()
     with sessions() as db:
-        for status in ['mass_actions', 'vitalina', 'hands_only', 'geo_ru', 'not_in_focus']:
+        for status in ['mass_actions', 'vitalina', 'hands_only', 'geo_ru', 'inactive', 'not_in_focus']:
             db.add(models.Site(name=f'inactive-{status}', base_url='https://example.test',
                                publication_endpoint='/', is_active=False, project_status=status))
         db.commit()
     assert len(client.get('/api/sites').json()) == 1
     rows = client.get('/api/sites?include_grouped_inactive=true').json()
     inactive = [s for s in rows if not s['is_active']]
-    assert {s['project_status'] for s in inactive} == {'mass_actions', 'vitalina', 'hands_only', 'geo_ru'}
-    assert len(rows) == 5
+    assert {s['project_status'] for s in inactive} == {'mass_actions', 'vitalina', 'hands_only', 'geo_ru', 'inactive'}
+    assert len(rows) == 6
     with sessions() as db:
         assert all(not s.is_active for s in db.scalars(select(models.Site).where(models.Site.name.like('inactive-%'))))
     assert len(client.get('/api/sites').json()) == 1
