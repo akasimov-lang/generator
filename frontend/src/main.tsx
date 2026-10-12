@@ -2325,7 +2325,6 @@ function ProjectWorkspaceView({
             </button>
           ) : null}
           <strong>{selectedSite?.name || "Выберите проект"}</strong>
-          {selectedSite ? <ProjectVerificationMedal status={selectedProjectMedalStatus} /> : null}
           {selectedSite ? (
             <button
               className="workspaceMenuCheckButton"
@@ -7883,7 +7882,6 @@ function ContentView({ api, sites, content: allContent, onChanged }: ViewProps &
                   <span className="contentProjectIdentity">
                     <span className="contentProjectName">
                       <strong>{group.name}</strong>
-                      {group.id !== "__unassigned__" ? <ProjectVerificationMedal status={group.medalStatus} /> : null}
                     </span>
                     <span>{group.baseUrl || "Проект не назначен"}</span>
                   </span>
@@ -8178,7 +8176,6 @@ function PublicationsView({ api, sites, content, onOpenProject, onChanged }: Vie
                     <span className="publicationProjectIdentity">
                       <span className="publicationProjectIdentityTitle">
                         <strong>{site.name}</strong>
-                        <ProjectVerificationMedal status={projectMenuMedalStatus(site)} />
                       </span>
                       <small title={canon}>Main: {canon}</small>
                     </span>
@@ -8468,7 +8465,6 @@ function projectSearchOption(site: Site): SearchableSelectOption {
     value: site.id,
     label: site.name,
     leading: flag ? <span className="projectSelectFlag" aria-hidden="true">{flag}</span> : undefined,
-    indicator: <ProjectVerificationMedal status={projectMenuMedalStatus(site)} />,
     keywords: projectSearchKeywords([site.name, site.cache_canon || "", site.base_url, ...networkDomains])
   };
 }
@@ -8524,12 +8520,9 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
   const [syncError, setSyncError] = React.useState("");
   const [selectedProjectNames, setSelectedProjectNames] = React.useState<string[]>([]);
   const [syncMessage, setSyncMessage] = React.useState("");
-  const [summaryFilter, setSummaryFilter] = React.useState<SiteSummaryFilter | null>(() => String(storedPreferences.summaryFilter) === "test" ? null : storedPreferences.summaryFilter === "working" ? "hands_only" : storedPreferences.summaryFilter || null);
-  const [medalFilter, setMedalFilter] = React.useState<ProjectMedalStatus | null>(() => {
-    const stored = storedPreferences.medalFilter;
-    return stored && (["gold", "verified", "missing", "unchecked"] as ProjectMedalStatus[]).includes(stored) ? stored : null;
-  });
-  const [siteSort, setSiteSort] = React.useState<{ key: string; direction: "asc" | "desc" } | null>(storedPreferences.siteSort?.key === "geo" ? null : storedPreferences.siteSort || null);
+  const [summaryFilter, setSummaryFilter] = React.useState<SiteSummaryFilter | null>(() => ["test", "menu"].includes(String(storedPreferences.summaryFilter)) ? null : storedPreferences.summaryFilter === "working" ? "hands_only" : storedPreferences.summaryFilter || null);
+  const [medalFilter, setMedalFilter] = React.useState<ProjectMedalStatus | null>(null);
+  const [siteSort, setSiteSort] = React.useState<{ key: string; direction: "asc" | "desc" } | null>(["geo", "menuType", "menuCount"].includes(storedPreferences.siteSort?.key || "") ? null : storedPreferences.siteSort || null);
   const [deletingDuplicates, setDeletingDuplicates] = React.useState(false);
   const [menuPreview, setMenuPreview] = React.useState<{ name: string; header: unknown[]; footer: unknown[] } | null>(null);
   const [columnsSettingsOpen, setColumnsSettingsOpen] = React.useState(false);
@@ -8558,10 +8551,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
     if (Array.isArray(stored) && previousVersions.some(previousAll => stored.length === previousAll.length && previousAll.every(value => stored.includes(value)))) return allStatusFilters;
     return Array.isArray(stored) && stored.every((value) => allStatusFilters.includes(value)) ? stored : allStatusFilters;
   });
-  const [menuTypeFilters, setMenuTypeFilters] = React.useState<string[]>(() => {
-    const stored = storedPreferences.menuTypeFilters;
-    return Array.isArray(stored) && stored.every((value) => allMenuTypeFilters.includes(value)) ? stored : allMenuTypeFilters;
-  });
+  const [menuTypeFilters, setMenuTypeFilters] = React.useState<string[]>(allMenuTypeFilters);
   const [columnOrder, setColumnOrder] = React.useState<SiteTableColumn[]>(() => {
     const previous = Array.isArray(storedPreferences.columnOrder) ? storedPreferences.columnOrder.map(column => (column as string) === "xDefault" ? "fiberyName" as SiteTableColumn : column) : storedPreferences.columnOrder;
     const stored = Array.isArray(previous) && !previous.includes("brand")
@@ -8576,7 +8566,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
     return Array.isArray(stored) && stored.every((column) => DEFAULT_SITE_COLUMN_ORDER.includes(column)) ? stored : [];
   });
   const [favoriteSiteIds, setFavoriteSiteIds] = React.useState<string[]>([]);
-  const visibleColumnOrder = columnOrder.filter((column) => !hiddenColumns.includes(column) && (!readOnly || column !== "select"));
+  const visibleColumnOrder = columnOrder.filter((column) => !["menuType", "menuCount"].includes(column) && !hiddenColumns.includes(column) && (!readOnly || column !== "select"));
 
   React.useEffect(() => {
     localStorage.setItem(preferencesKey, JSON.stringify({ statusFilters, menuTypeFilters, siteSort, columnOrder, hiddenColumns, rowsPerPage, summaryFilter, medalFilter, geoFilter, brandFilter }));
@@ -8916,7 +8906,6 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
           <div className="siteCacheStats">
             <button className={summaryFilter === "projects" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("projects")} aria-pressed={summaryFilter === "projects"}><span>Проекты</span><strong>{formatNumber(managedSites.filter((site) => site.external_project_id).length)}</strong></button>
             <button className={summaryFilter === "hands_only" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("hands_only")} aria-pressed={summaryFilter === "hands_only"}><span>hands only</span><strong>{formatNumber(managedSites.filter((site) => site.project_status === "hands_only").length)}</strong></button>
-            <button className={summaryFilter === "menu" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("menu")} aria-pressed={summaryFilter === "menu"}><span>С меню</span><strong>{formatNumber(menuCount)}</strong></button>
             <button className={summaryFilter === "mass_actions" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("mass_actions")} aria-pressed={summaryFilter === "mass_actions"}><span>Массовые действия</span><strong>{formatNumber(managedSites.filter((site) => site.project_status === "mass_actions").length)}</strong></button>
             <button className={summaryFilter === "vitalina" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("vitalina")} aria-pressed={summaryFilter === "vitalina"}><span>Vitalina</span><strong>{formatNumber(managedSites.filter((site) => site.project_status === "vitalina").length)}</strong></button>
             <button className={summaryFilter === "geo_ru" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("geo_ru")} aria-pressed={summaryFilter === "geo_ru"}><span>GEO RU</span><strong>{formatNumber(managedSites.filter((site) => site.project_status === "geo_ru").length)}</strong></button>
@@ -8952,25 +8941,6 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
         {syncMessage ? <div className="siteCacheResult">{syncMessage}</div> : null}
         {syncError ? <div className="formError siteCacheError">{syncError}</div> : null}
       </DataPanel>
-      <aside className="siteMedalLegend" aria-label="Обозначения статусов проверки меню">
-        <strong className="siteMedalLegendTitle">Статусы проверки меню</strong>
-        <button className={`siteMedalLegendItem ${medalFilter === "gold" ? "active" : ""}`} type="button" onClick={() => toggleMedalFilter("gold")} aria-pressed={medalFilter === "gold"}>
-          <ProjectVerificationMedal status="gold" />
-          <span><b>Золотая</b> — Header и Footer реализованы</span>
-        </button>
-        <button className={`siteMedalLegendItem ${medalFilter === "verified" ? "active" : ""}`} type="button" onClick={() => toggleMedalFilter("verified")} aria-pressed={medalFilter === "verified"}>
-          <ProjectVerificationMedal status="verified" />
-          <span><b>Зелёная</b> — Header реализован</span>
-        </button>
-        <button className={`siteMedalLegendItem ${medalFilter === "missing" ? "active" : ""}`} type="button" onClick={() => toggleMedalFilter("missing")} aria-pressed={medalFilter === "missing"}>
-          <ProjectVerificationMedal status="missing" />
-          <span><b>Красная</b> — рендеринг меню не реализован</span>
-        </button>
-        <button className={`siteMedalLegendItem ${medalFilter === "unchecked" ? "active" : ""}`} type="button" onClick={() => toggleMedalFilter("unchecked")} aria-pressed={medalFilter === "unchecked"}>
-          <ProjectVerificationMedal status="unchecked" />
-          <span><b>Серая</b> — проверка ещё не выполнена</span>
-        </button>
-      </aside>
       <DataPanel
         title={(
           <span className="siteDomainsTitle">
@@ -9115,8 +9085,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
                       title={`Открыть проект ${row.name}`}
                     >
                       <strong>{row.name}</strong>
-                    </a> : <span className="siteProjectDomainLink"><strong>{row.name}</strong><small className="siteInactiveLabel">Неактивен · сохранённые данные</small></span>}
-                    <ProjectVerificationMedal status={row.medalStatus} />
+                    </a> : <span className="siteProjectDomainLink"><strong>{row.name}</strong></span>}
                   </span>
                   <span className="siteNameActions">
                     <button
@@ -9189,7 +9158,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
           })}
           rowClassNames={visibleRows.map((row) => {
             const statusClass = row.projectStatus === "mass_actions" ? "massActions" : row.projectStatus === "duplicate" ? "duplicate" : row.isTest ? "test" : row.isWorking ? "working" : "unfocused";
-            return `siteDomainRow ${statusClass} ${row.hasMenu ? "hasMenu" : ""} ${row.isFavorite ? "favorite" : ""}`.trim();
+            return `siteDomainRow ${statusClass} ${row.isFavorite ? "favorite" : ""}`.trim();
           })}
           wrapperClassName="siteDomainsTable"
           sortableColumnIndexes={visibleColumnOrder.map((column, index) => SITE_COLUMN_SORT_KEYS[column] && !["status", "menuType"].includes(column) ? index : -1).filter((index) => index >= 0)}
