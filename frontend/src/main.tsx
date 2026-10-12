@@ -9177,7 +9177,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       {columnsSettingsOpen ? (
         <Modal title="Порядок столбцов" subtitle="Настройка сохранится для текущего пользователя" onClose={() => setColumnsSettingsOpen(false)} className="siteColumnsModal">
           <div className="siteColumnsOrderList">
-            {columnOrder.map((column) => {
+            {columnOrder.filter(column => !["menuType", "menuCount"].includes(column)).map((column) => {
               const index = columnOrder.indexOf(column);
               const visible = !hiddenColumns.includes(column);
               return (
