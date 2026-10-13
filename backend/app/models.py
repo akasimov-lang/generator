@@ -100,6 +100,11 @@ class AutoLbGeneration(Base, TimestampMixin):
 
 
 class Site(Base, TimestampMixin):
+    @property
+    def network_domain_counts(self):
+        from app.site_statistics import network_domain_counts
+        return network_domain_counts(self)
+
     __tablename__ = "sites"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))

@@ -9934,3 +9934,5 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .massStatisticsScopes { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
 .massStatisticsScope { padding: 10px 16px; border: 1px solid var(--border); border-radius: 10px; color: inherit; background: var(--surface); cursor: pointer; font: inherit; }
 .massStatisticsScope.active { color: #205b43; background: #e4f5eb; border-color: #25825c; }
+
+.projectMetricCard .projectDomainBreakdown { font-size: 11px; line-height: 1.4; font-weight: 600; text-transform: none; white-space: nowrap; }

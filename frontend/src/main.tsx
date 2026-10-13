@@ -237,6 +237,7 @@ type CompetitorResearch = {
 };
 
 type Site = {
+  network_domain_counts?: { drop: number; newreg: number; subdomains: number; amp: number; unknown: number };
   menu_warning?: string | null;
   core_update_notice?: string | null;
   id: string;
@@ -2463,7 +2464,7 @@ function ProjectWorkspaceView({
                     </span>
                   </span>
                   <span className="projectTitleCard"><small>Title</small><b title={selectedSite.homepage_title || "Title не указан"}>{selectedSite.homepage_title || "—"}</b></span>
-                  <button type="button" className={`projectMetricCard ${activeTab === "network" ? "isActive" : ""}`} aria-pressed={activeTab === "network"} onClick={() => onTabChange("network", selectedSite.name)} aria-label="Открыть сетку проекта"><small>Доменов в сетке</small><b>{formatNumber(selectedSite.domains_count)}</b></button>
+                  <button type="button" className={`projectMetricCard ${activeTab === "network" ? "isActive" : ""}`} aria-pressed={activeTab === "network"} onClick={() => onTabChange("network", selectedSite.name)} aria-label="Открыть сетку проекта"><small>Доменов в сетке</small><b>{formatNumber(selectedSite.domains_count)}</b><span className="projectDomainBreakdown" title="Поддомены и AMP учитываются отдельно от дропов и новорегов">Дропы: {selectedSite.network_domain_counts ? formatNumber(selectedSite.network_domain_counts.drop) : "—"}<br />Новореги: {selectedSite.network_domain_counts ? formatNumber(selectedSite.network_domain_counts.newreg) : "—"}</span></button>
                   <span className="projectMetricCard"><small>Страниц</small><b>{formatNumber(pageCounts[selectedSite.id] ?? (selectedSite.internal_pages_count + 1))}</b></span>
                   <MenuCapabilityCard label="Header" templateRendered={menuCapabilities?.header_menu_template_rendered} rendered={menuCapabilities?.header_menu_rendered} nested={menuCapabilities?.header_menu_nested} nestedRequired={headerNestingRequired} icon="header" loading={menuCapabilitiesLoading || templateCapabilitiesLoading || menuCheckPending} error={menuCapabilitiesError} onRetry={refreshTemplateMenuCapabilities} />
                   <MenuCapabilityCard label="Footer" templateRendered={menuCapabilities?.footer_menu_template_rendered} rendered={menuCapabilities?.footer_menu_rendered} nested={menuCapabilities?.footer_menu_nested} icon="footer" loading={menuCapabilitiesLoading || templateCapabilitiesLoading || menuCheckPending} error={menuCapabilitiesError} onRetry={refreshTemplateMenuCapabilities} />

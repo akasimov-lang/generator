@@ -84,6 +84,7 @@ class SiteBrandUpdate(BaseModel):
 
 
 class SiteResponse(BaseModel):
+    network_domain_counts: dict[str, int] = Field(default_factory=dict)
     project_team: str | None = None
     menu_warning: str | None = None
     core_update_notice: str | None = None
