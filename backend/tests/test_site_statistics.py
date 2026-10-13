@@ -23,3 +23,10 @@ def test_manual_type_unknown_geo_and_no_domains():
     row=mass_action_statistics([site(site_type='general',cache_geo=None,cache_domains=[])])['projects'][0]
     assert row['site_type']=='general' and row['brand']=='Общие ключи'
     assert row['geo']=='UNKNOWN' and row['domains']==0
+
+
+def test_separate_ru_kz_scopes():
+    sites = [site(id='ru', project_status='geo_ru', cache_geo='RU'), site(id='kz', project_status='geo_kz'), site(id='mass'), site(id='hidden', project_status='geo_ru', hidden_from_projects=True)]
+    assert [r['id'] for r in mass_action_statistics(sites, 'geo_ru')['projects']] == ['ru']
+    assert [r['id'] for r in mass_action_statistics(sites, 'geo_kz')['projects']] == ['kz']
+    assert [r['id'] for r in mass_action_statistics(sites)['projects']] == ['mass']

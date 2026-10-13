@@ -4,11 +4,12 @@ from app.domain_classification import classify_domains
 from app.network_state import domain_name
 
 
-def mass_action_statistics(sites):
+def mass_action_statistics(sites, scope="mass_actions"):
+    statuses = {scope} if scope in {"geo_ru", "geo_kz"} else {"mass_actions"}
     rows = []
     seen = set()
     for site in sites:
-        if site.hidden_from_projects or site.project_status != 'mass_actions' or site.id in seen:
+        if site.hidden_from_projects or site.project_status not in statuses or site.id in seen:
             continue
         seen.add(site.id)
         geo = (site.cache_geo or '').strip().upper()

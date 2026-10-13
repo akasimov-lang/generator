@@ -8529,17 +8529,20 @@ function useStatisticsSort(defaultColumn = 0) {
 }
 
 function MassActionStatistics({ api }: { api: ViewProps["api"] }) {
+  const [scope, setScope] = React.useState("mass_actions");
+  const requestSequence = React.useRef(0);
   const [projects, setProjects] = React.useState<StatisticsProject[]>([]);
   const [geo, setGeo] = React.useState("");
   const [typeFilter, setTypeFilter] = React.useState("");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
   const load = React.useCallback(async () => {
+    const request = ++requestSequence.current;
     setLoading(true); setError("");
-    try { setProjects((await api<{ projects: StatisticsProject[] }>("/sites/statistics")).projects); }
-    catch (e) { setError(e instanceof Error ? e.message : "Не удалось загрузить статистику"); }
-    finally { setLoading(false); }
-  }, [api]);
+    try { const result = await api<{ projects: StatisticsProject[] }>(`/sites/statistics?scope=${scope}`); if (request === requestSequence.current) setProjects(result.projects); }
+    catch (e) { if (request === requestSequence.current) setError(e instanceof Error ? e.message : "Не удалось загрузить статистику"); }
+    finally { if (request === requestSequence.current) setLoading(false); }
+  }, [api, scope]);
   React.useEffect(() => { void load(); }, [load]);
   const geos = [...new Set(projects.map(p => p.geo))].sort();
   const selected = projects.filter(p => (!geo || p.geo === geo) && (!typeFilter || p.site_type === typeFilter));
@@ -8554,7 +8557,10 @@ function MassActionStatistics({ api }: { api: ViewProps["api"] }) {
   const typeLabel = (kind: string) => kind === "monobrand" ? "Монобренды" : "Общие ключи";
   const geoSortLabel = (code: string) => COUNTRIES.find(c => c.code.toUpperCase() === code)?.name || code;
   const headers = ["GEO", "Тип проекта", "Проектов", "Доменов в сетках", "Дропов", "Новорегов", "Поддоменов", "AMP"];
-  return <DataPanel title="Статистика · Массовые действия">
+  return <DataPanel title={`Статистика · ${scope === "geo_ru" ? "RU проекты" : scope === "geo_kz" ? "KZ проекты" : "Массовые действия"}`}>
+    <div className="massStatisticsScopes" aria-label="Подборка для статистики">
+      {[{ value: "mass_actions", label: "Массовые действия" }, { value: "geo_ru", label: "RU проекты" }, { value: "geo_kz", label: "KZ проекты" }].map(option => <button type="button" key={option.value} className={`massStatisticsScope ${scope === option.value ? "active" : ""}`} aria-pressed={scope === option.value} onClick={() => { if (scope !== option.value) { requestSequence.current += 1; setLoading(true); setGeo(""); setTypeFilter(""); setScope(option.value); } }}>{option.label}</button>)}
+    </div>
     <div className="massStatisticsControls">
       <label>GEO<SearchableSelect value={geo} onChange={setGeo} options={[{ value: "", label: "Все GEO" }, ...geos.map(g => ({ value: g, label: geoLabel(g) }))]} searchPlaceholder="Введите страну или код" /></label>
       <button className="secondary" type="button" onClick={() => void load()} disabled={loading}>{loading ? "Загрузка…" : "Обновить статистику"}</button>
@@ -8568,7 +8574,7 @@ function MassActionStatistics({ api }: { api: ViewProps["api"] }) {
         })}
       </div>
       {typeFilter ? <button type="button" className="secondary" onClick={() => setTypeFilter("")} aria-label="Сбросить фильтр типа проекта">{typeFilter === "monobrand" ? "Монобренды" : "Общие ключи"} ×</button> : null}
-      <p className="muted">Только проекты со статусом «Массовые действия», без исключённых из системы. Дропы и новореги считаются по сохранённым типам доменов; поддомены и AMP показаны отдельно. Домен, входящий в разные сетки, учитывается в каждой сетке.</p>
+      <p className="muted">{scope === "geo_ru" ? "Проекты со статусом «GEO RU»" : scope === "geo_kz" ? "Проекты со статусом «GEO KZ»" : "Только проекты со статусом «Массовые действия»"}, без исключённых из системы. Дропы и новореги считаются по сохранённым типам доменов; поддомены и AMP показаны отдельно. Домен, входящий в разные сетки, учитывается в каждой сетке.</p>
       <div className="massStatisticsTable"><table><thead><tr>{geoSort.header(headers)}</tr></thead><tbody>
         {geoSort.ordered(geoRows, group => [geoSortLabel(group.g), typeLabel(group.kind), ...metrics(group.rows)]).map(({ g, kind, rows }) => <tr key={`${g}-${kind}`}><td><span className="massStatisticsGeoCell"><button type="button" className="secondary" onClick={() => setGeo(g)}>{geoLabel(g)}</button>{geo === g ? <button type="button" className="massStatisticsGeoClear" aria-label="Сбросить фильтр GEO" title="Показать все GEO" onClick={() => setGeo("")}>×</button> : null}</span></td><td>{typeLabel(kind)}</td><td>{rows.length}</td>{(["domains", "drop", "newreg", "subdomains", "amp"] as const).map(k => <td key={k}>{formatNumber(sum(rows, k))}</td>)}</tr>)}
         {!selected.length ? <tr><td colSpan={8}>Нет проектов для выбранного GEO.</td></tr> : null}
@@ -8999,7 +9005,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
   return (
     <section className="viewStack sitesManagementView">
       {!favoritesOnly ? <>
-        <a className="secondary massStatisticsLink" href="#mass-action-statistics" onClick={() => setShowStatistics(true)}>Статистика массовых действий →</a>
+        <a className="secondary massStatisticsLink" href="#mass-action-statistics" onClick={() => setShowStatistics(true)}>Статистика проектов →</a>
         {showStatistics ? <div id="mass-action-statistics"><MassActionStatistics api={api} /><button className="secondary" type="button" onClick={() => { setShowStatistics(false); window.history.replaceState(null, "", window.location.pathname); }}>Скрыть статистику</button></div> : null}
       </> : null}
       <DataPanel title={readOnly ? "Обзор сайтов" : "Панель управления сайтами"}>

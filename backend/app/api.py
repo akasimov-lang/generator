@@ -478,12 +478,12 @@ def list_sites(_: AuthUser, db: Session = Depends(get_db), include_grouped_inact
 
 
 @router.get("/sites/statistics")
-def site_statistics(_: AuthUser, db: Session = Depends(get_db)) -> Any:
+def site_statistics(_: AuthUser, db: Session = Depends(get_db), scope: str = Query("mass_actions", pattern="^(mass_actions|geo_ru|geo_kz)$")) -> Any:
     from app.site_statistics import mass_action_statistics
     sites = db.scalars(select(models.Site).where(
-        models.Site.hidden_from_projects.is_(False), models.Site.project_status == "mass_actions"
+        models.Site.hidden_from_projects.is_(False), models.Site.project_status == scope
     )).all()
-    return mass_action_statistics(sites)
+    return mass_action_statistics(sites, scope)
 
 
 @router.get("/sites/lookup", response_model=SiteResponse)

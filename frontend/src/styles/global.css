@@ -9930,3 +9930,7 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .massStatisticsTypeCard { color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .massStatisticsTypeCard.active { border-color: #25825c; background: var(--success-soft, #e4f5eb); color: #205b43; }
 .massStatisticsTypeCard:focus-visible { outline: 2px solid var(--primary, #3155d9); outline-offset: 3px; }
+
+.massStatisticsScopes { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+.massStatisticsScope { padding: 10px 16px; border: 1px solid var(--border); border-radius: 10px; color: inherit; background: var(--surface); cursor: pointer; font: inherit; }
+.massStatisticsScope.active { color: #205b43; background: #e4f5eb; border-color: #25825c; }
