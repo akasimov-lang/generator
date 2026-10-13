@@ -8547,12 +8547,12 @@ function MassActionStatistics({ api }: { api: ViewProps["api"] }) {
   const geoSort = useStatisticsSort();
   const brandSort = useStatisticsSort();
   const projectSort = useStatisticsSort();
-  const metrics = (rows: StatisticsProject[]) => [rows.length, ...(["domains", "drop", "newreg", "subdomains", "amp", "unknown"] as const).map(k => sum(rows, k))];
+  const metrics = (rows: StatisticsProject[]) => [rows.length, ...(["domains", "drop", "newreg", "subdomains", "amp"] as const).map(k => sum(rows, k))];
   const geoRows = geos.flatMap(g => ["monobrand", "general"].map(kind => ({ g, kind, rows: selected.filter(p => p.geo === g && p.site_type === kind) }))).filter(group => group.rows.length);
   const brandRows = [...new Set(selected.map(p => p.brand || "Бренд не указан"))].map(brand => ({ brand, rows: selected.filter(p => (p.brand || "Бренд не указан") === brand) }));
   const typeLabel = (kind: string) => kind === "monobrand" ? "Монобренды" : "Общие ключи";
   const geoSortLabel = (code: string) => COUNTRIES.find(c => c.code.toUpperCase() === code)?.name || code;
-  const headers = ["GEO", "Тип проекта", "Проектов", "Доменов в сетках", "Дропов", "Новорегов", "Поддоменов", "AMP", "Тип не указан"];
+  const headers = ["GEO", "Тип проекта", "Проектов", "Доменов в сетках", "Дропов", "Новорегов", "Поддоменов", "AMP"];
   return <DataPanel title="Статистика · Массовые действия">
     <div className="massStatisticsControls">
       <label>GEO<SearchableSelect value={geo} onChange={setGeo} options={[{ value: "", label: "Все GEO" }, ...geos.map(g => ({ value: g, label: geoLabel(g) }))]} searchPlaceholder="Введите страну или код" /></label>
@@ -8565,14 +8565,14 @@ function MassActionStatistics({ api }: { api: ViewProps["api"] }) {
       </div>
       <p className="muted">Только проекты со статусом «Массовые действия», без исключённых из системы. Дропы и новореги считаются по сохранённым типам доменов; поддомены и AMP показаны отдельно. Домен, входящий в разные сетки, учитывается в каждой сетке.</p>
       <div className="massStatisticsTable"><table><thead><tr>{geoSort.header(headers)}</tr></thead><tbody>
-        {geoSort.ordered(geoRows, group => [geoSortLabel(group.g), typeLabel(group.kind), ...metrics(group.rows)]).map(({ g, kind, rows }) => <tr key={`${g}-${kind}`}><td><button type="button" className="secondary" onClick={() => setGeo(g)}>{geoLabel(g)}</button></td><td>{typeLabel(kind)}</td><td>{rows.length}</td>{(["domains", "drop", "newreg", "subdomains", "amp", "unknown"] as const).map(k => <td key={k}>{formatNumber(sum(rows, k))}</td>)}</tr>)}
-        {!selected.length ? <tr><td colSpan={9}>Нет проектов для выбранного GEO.</td></tr> : null}
-      </tbody><tfoot><tr><th colSpan={2}>Итого</th><th>{selected.length}</th>{(["domains", "drop", "newreg", "subdomains", "amp", "unknown"] as const).map(k => <th key={k}>{formatNumber(sum(selected, k))}</th>)}</tr></tfoot></table></div>
-      <h3>По брендам</h3>
-      <div className="massStatisticsTable"><table><thead><tr>{brandSort.header(["Бренд", "Проектов", "Доменов в сетках", "Дропов", "Новорегов", "Поддоменов", "AMP", "Тип не указан"])}</tr></thead><tbody>
-        {brandSort.ordered(brandRows, group => [group.brand, ...metrics(group.rows)]).map(({ brand, rows }) => <tr key={brand}><td>{brand}</td><td>{rows.length}</td>{(["domains", "drop", "newreg", "subdomains", "amp", "unknown"] as const).map(k => <td key={k}>{formatNumber(sum(rows, k))}</td>)}</tr>)}
+        {geoSort.ordered(geoRows, group => [geoSortLabel(group.g), typeLabel(group.kind), ...metrics(group.rows)]).map(({ g, kind, rows }) => <tr key={`${g}-${kind}`}><td><button type="button" className="secondary" onClick={() => setGeo(g)}>{geoLabel(g)}</button></td><td>{typeLabel(kind)}</td><td>{rows.length}</td>{(["domains", "drop", "newreg", "subdomains", "amp"] as const).map(k => <td key={k}>{formatNumber(sum(rows, k))}</td>)}</tr>)}
         {!selected.length ? <tr><td colSpan={8}>Нет проектов для выбранного GEO.</td></tr> : null}
-      </tbody><tfoot><tr><th>Итого</th><th>{selected.length}</th>{(["domains", "drop", "newreg", "subdomains", "amp", "unknown"] as const).map(k => <th key={k}>{formatNumber(sum(selected, k))}</th>)}</tr></tfoot></table></div>
+      </tbody><tfoot><tr><th colSpan={2}>Итого</th><th>{selected.length}</th>{(["domains", "drop", "newreg", "subdomains", "amp"] as const).map(k => <th key={k}>{formatNumber(sum(selected, k))}</th>)}</tr></tfoot></table></div>
+      <h3>По брендам</h3>
+      <div className="massStatisticsTable"><table><thead><tr>{brandSort.header(["Бренд", "Проектов", "Доменов в сетках", "Дропов", "Новорегов", "Поддоменов", "AMP"])}</tr></thead><tbody>
+        {brandSort.ordered(brandRows, group => [group.brand, ...metrics(group.rows)]).map(({ brand, rows }) => <tr key={brand}><td>{brand}</td><td>{rows.length}</td>{(["domains", "drop", "newreg", "subdomains", "amp"] as const).map(k => <td key={k}>{formatNumber(sum(rows, k))}</td>)}</tr>)}
+        {!selected.length ? <tr><td colSpan={7}>Нет проектов для выбранного GEO.</td></tr> : null}
+      </tbody><tfoot><tr><th>Итого</th><th>{selected.length}</th>{(["domains", "drop", "newreg", "subdomains", "amp"] as const).map(k => <th key={k}>{formatNumber(sum(selected, k))}</th>)}</tr></tfoot></table></div>
       <details className="massStatisticsDetails"><summary>Проекты в выборке · {selected.length}</summary><div className="massStatisticsTable"><table><thead><tr>{projectSort.header(["Имя проекта", "GEO", "Тип", "Доменов", "Кеш обновлён"])}</tr></thead><tbody>{projectSort.ordered(selected, p => [p.project_name, geoSortLabel(p.geo), typeLabel(p.site_type), p.domains, p.cache_synced_at ? new Date(p.cache_synced_at).getTime() : 0]).map(p => <tr key={p.id}><td><a href={`/project-generation/${encodeURIComponent(p.name)}/`}>{p.project_name}</a></td><td>{geoLabel(p.geo)}</td><td>{p.site_type === "monobrand" ? "Монобренд" : "Общие ключи"}</td><td>{p.domains}</td><td>{p.cache_synced_at ? new Date(p.cache_synced_at).toLocaleString("ru-RU") : "Нет данных"}</td></tr>)}</tbody></table></div></details>
     </> : null}
   </DataPanel>;
