@@ -8528,7 +8528,7 @@ function useStatisticsSort(defaultColumn = 0) {
   return { header, ordered };
 }
 
-function MassActionStatistics({ api }: { api: ViewProps["api"] }) {
+function MassActionStatistics({ api, renderProjects }: { api: ViewProps["api"]; renderProjects: (ids: string[], refresh: () => void) => React.ReactNode }) {
   const [scope, setScope] = React.useState("mass_actions");
   const requestSequence = React.useRef(0);
   const [projects, setProjects] = React.useState<StatisticsProject[]>([]);
@@ -8555,7 +8555,6 @@ function MassActionStatistics({ api }: { api: ViewProps["api"] }) {
   const geoLabel = (code: string) => code === "UNKNOWN" ? "GEO не указано" : `${localeFlag(code)} ${COUNTRIES.find(c => c.code.toUpperCase() === code)?.name || code} (${code})`;
   const geoSort = useStatisticsSort();
   const brandSort = useStatisticsSort();
-  const projectSort = useStatisticsSort();
   const metrics = (rows: StatisticsProject[]) => [rows.length, ...(["domains", "drop", "newreg", "subdomains", "amp"] as const).map(k => sum(rows, k))];
   const geoRows = geos.flatMap(g => ["monobrand", "general"].map(kind => ({ g, kind, rows: selected.filter(p => p.geo === g && p.site_type === kind) }))).filter(group => group.rows.length);
   const brandRows = [...new Set(selected.map(p => p.brand || "Бренд не указан"))].map(brand => ({ brand, rows: selected.filter(p => (p.brand || "Бренд не указан") === brand) }));
@@ -8589,16 +8588,17 @@ function MassActionStatistics({ api }: { api: ViewProps["api"] }) {
         {brandSort.ordered(brandRows, group => [group.brand, ...metrics(group.rows)]).map(({ brand, rows }) => <tr key={brand}><td>{brand}</td><td>{rows.length}</td>{(["domains", "drop", "newreg", "subdomains", "amp"] as const).map(k => <td key={k}>{formatNumber(sum(rows, k))}</td>)}</tr>)}
         {!selected.length ? <tr><td colSpan={7}>Нет проектов для выбранного GEO.</td></tr> : null}
       </tbody><tfoot><tr><th>Итого</th><th>{selected.length}</th>{(["domains", "drop", "newreg", "subdomains", "amp"] as const).map(k => <th key={k}>{formatNumber(sum(selected, k))}</th>)}</tr></tfoot></table></div>
-      <details ref={projectDetailsRef} className="massStatisticsDetails"><summary>Проекты в выборке · {selected.length}</summary><div className="massStatisticsTable"><table><thead><tr>{projectSort.header(["Имя проекта", "GEO", "Тип", "Доменов", "Кеш обновлён"])}</tr></thead><tbody>{projectSort.ordered(selected, p => [p.project_name, geoSortLabel(p.geo), typeLabel(p.site_type), p.domains, p.cache_synced_at ? new Date(p.cache_synced_at).getTime() : 0]).map(p => <tr key={p.id}><td><a href={`/project-generation/${encodeURIComponent(p.name)}/`}>{p.project_name}</a></td><td>{geoLabel(p.geo)}</td><td>{p.site_type === "monobrand" ? "Монобренд" : "Общие ключи"}</td><td>{p.domains}</td><td>{p.cache_synced_at ? new Date(p.cache_synced_at).toLocaleString("ru-RU") : "Нет данных"}</td></tr>)}</tbody></table></div></details>
+      <details ref={projectDetailsRef} className="massStatisticsDetails"><summary>Проекты в выборке · {selected.length}</summary>{renderProjects(selected.map(p => p.id), () => { void load(); })}</details>
     </> : null}
   </DataPanel>;
 }
 
-function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsername, favoritesOnly = false, readOnly = false, onChanged }: ViewProps & { sites: Site[]; snapshotUpdatedAt: string | null; onSitesChanged: (sites: Site[], replace?: boolean) => void; currentUsername: string; favoritesOnly?: boolean; readOnly?: boolean }) {
+function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsername, favoritesOnly = false, readOnly = false, embedded = false, onChanged }: ViewProps & { sites: Site[]; snapshotUpdatedAt: string | null; onSitesChanged: (sites: Site[], replace?: boolean) => void; currentUsername: string; favoritesOnly?: boolean; readOnly?: boolean; embedded?: boolean }) {
   const [showStatistics, setShowStatistics] = React.useState(() => window.location.hash === "#mass-action-statistics");
   const preferencesKey = `sites-table-preferences:${currentUsername}`;
   const storedPreferences = React.useMemo(() => {
     try {
+      if (embedded) return {};
       return JSON.parse(localStorage.getItem(preferencesKey) || "{}") as {
         statusFilters?: Site["project_status"][];
         menuTypeFilters?: string[];
@@ -8674,6 +8674,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
   const visibleColumnOrder = columnOrder.filter((column) => !["menuType", "menuCount"].includes(column) && !hiddenColumns.includes(column) && (!readOnly || column !== "select"));
 
   React.useEffect(() => {
+    if (embedded) return;
     localStorage.setItem(preferencesKey, JSON.stringify({ statusFilters, menuTypeFilters, siteSort, columnOrder, hiddenColumns, rowsPerPage, summaryFilter, medalFilter, geoFilter, brandFilter }));
   }, [brandFilter, columnOrder, geoFilter, hiddenColumns, medalFilter, menuTypeFilters, preferencesKey, rowsPerPage, siteSort, statusFilters, summaryFilter]);
 
@@ -8686,7 +8687,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
   React.useEffect(() => { setManagedSites(sites); }, [sites]);
 
   async function loadManagedSites(refresh = false) {
-    if (favoritesOnly || routeFromPath(window.location.pathname).view !== "sites") return;
+    if (embedded || favoritesOnly || routeFromPath(window.location.pathname).view !== "sites") return;
     setSyncing(true); setSyncError("");
     try {
       if (refresh) {
@@ -8714,7 +8715,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
   React.useEffect(() => {
     cacheViewMounted.current = true;
     const saved = localStorage.getItem("pagepilot-cache-sync-job");
-    if (saved && !favoritesOnly && !readOnly) {
+    if (saved && !embedded && !favoritesOnly && !readOnly) {
       try { const job = JSON.parse(saved); void syncCache(job.names || [], job.id); } catch { /* Invalid local pointer; no remote action. */ }
     }
     return () => { cacheViewMounted.current = false; };
@@ -9009,11 +9010,11 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
 
   return (
     <section className="viewStack sitesManagementView">
-      {!favoritesOnly ? <>
+      {!embedded && !favoritesOnly ? <>
         <a className="secondary massStatisticsLink" href="#mass-action-statistics" onClick={() => setShowStatistics(true)}>Статистика проектов →</a>
-        {showStatistics ? <div id="mass-action-statistics"><MassActionStatistics api={api} /><button className="secondary" type="button" onClick={() => { setShowStatistics(false); window.history.replaceState(null, "", window.location.pathname); }}>Скрыть статистику</button></div> : null}
+        {showStatistics ? <div id="mass-action-statistics"><MassActionStatistics api={api} renderProjects={(ids, refresh) => <SitesView embedded api={api} sites={managedSites.filter(site => ids.includes(site.id))} snapshotUpdatedAt={snapshotUpdatedAt} onSitesChanged={updates => { applySiteUpdates(updates); refresh(); }} currentUsername={currentUsername} readOnly={readOnly} onChanged={onChanged} />} /><button className="secondary" type="button" onClick={() => { setShowStatistics(false); window.history.replaceState(null, "", window.location.pathname); }}>Скрыть статистику</button></div> : null}
       </> : null}
-      <DataPanel title={readOnly ? "Обзор сайтов" : "Панель управления сайтами"}>
+      {!embedded ? <DataPanel title={readOnly ? "Обзор сайтов" : "Панель управления сайтами"}>
         <div className="siteCacheToolbar">
           <div className="siteCacheStats">
             <button className={summaryFilter === "all" ? "active" : ""} type="button" onClick={() => toggleSummaryFilter("all")} aria-pressed={summaryFilter === "all"}><span>Всего сайтов</span><strong>{formatNumber(managedSites.length)}</strong></button>
@@ -9052,7 +9053,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
         </div>
         {syncMessage ? <div className="siteCacheResult">{syncMessage}</div> : null}
         {syncError ? <div className="formError siteCacheError">{syncError}</div> : null}
-      </DataPanel>
+      </DataPanel> : syncError ? <div className="formError">{syncError}</div> : null}
       <DataPanel
         title={(
           <span className="siteDomainsTitle">
