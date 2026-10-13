@@ -8514,7 +8514,58 @@ function SiteBrandField({ name, value, save }: { name: string; value: string; sa
   </span>;
 }
 
+type StatisticsProject = { brand: string; id: string; name: string; project_name: string; geo: string; site_type: string; domains: number; drop: number; newreg: number; subdomains: number; amp: number; unknown: number; cache_synced_at: string | null };
+function MassActionStatistics({ api }: { api: ViewProps["api"] }) {
+  const [projects, setProjects] = React.useState<StatisticsProject[]>([]);
+  const [geo, setGeo] = React.useState("");
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState("");
+  const load = React.useCallback(async () => {
+    setLoading(true); setError("");
+    try { setProjects((await api<{ projects: StatisticsProject[] }>("/sites/statistics")).projects); }
+    catch (e) { setError(e instanceof Error ? e.message : "Не удалось загрузить статистику"); }
+    finally { setLoading(false); }
+  }, [api]);
+  React.useEffect(() => { void load(); }, [load]);
+  const geos = [...new Set(projects.map(p => p.geo))].sort();
+  const selected = projects.filter(p => !geo || p.geo === geo);
+  const sum = (rows: StatisticsProject[], key: "domains" | "drop" | "newreg" | "subdomains" | "amp" | "unknown") => rows.reduce((n, p) => n + p[key], 0);
+  const geoLabel = (code: string) => code === "UNKNOWN" ? "GEO не указано" : `${localeFlag(code)} ${COUNTRIES.find(c => c.code.toUpperCase() === code)?.name || code} (${code})`;
+  const headers = ["GEO", "Тип проекта", "Проектов", "Доменов в сетках", "Дропов", "Новорегов", "Поддоменов", "AMP", "Тип не указан"];
+  return <DataPanel title="Статистика · Массовые действия">
+    <div className="massStatisticsControls">
+      <label>GEO<SearchableSelect value={geo} onChange={setGeo} options={[{ value: "", label: "Все GEO" }, ...geos.map(g => ({ value: g, label: geoLabel(g) }))]} searchPlaceholder="Введите страну или код" /></label>
+      <button className="secondary" type="button" onClick={() => void load()} disabled={loading}>{loading ? "Загрузка…" : "Обновить статистику"}</button>
+    </div>
+    {error ? <p role="alert">{error}</p> : null}
+    {!loading && !error ? <>
+      <div className="massStatisticsCards">
+        {[["Уникальных проектов", selected.length], ["Монобренды", selected.filter(p => p.site_type === "monobrand").length], ["Общие ключи", selected.filter(p => p.site_type === "general").length], ["Дропов", sum(selected, "drop")], ["Новорегов", sum(selected, "newreg")], ["Доменов в сетках", sum(selected, "domains")]].map(([label, value]) => <div key={label}><span>{label}</span><strong>{formatNumber(Number(value))}</strong></div>)}
+      </div>
+      <p className="muted">Только проекты со статусом «Массовые действия», без исключённых из системы. Дропы и новореги считаются по сохранённым типам доменов; поддомены и AMP показаны отдельно. Домен, входящий в разные сетки, учитывается в каждой сетке.</p>
+      <div className="massStatisticsTable"><table><thead><tr>{headers.map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>
+        {geos.filter(g => !geo || geo === g).flatMap(g => ["monobrand", "general"].map(kind => {
+          const rows = selected.filter(p => p.geo === g && p.site_type === kind);
+          if (!rows.length) return null;
+          return <tr key={`${g}-${kind}`}><td><button type="button" className="secondary" onClick={() => setGeo(g)}>{geoLabel(g)}</button></td><td>{kind === "monobrand" ? "Монобренды" : "Общие ключи"}</td><td>{rows.length}</td>{(["domains", "drop", "newreg", "subdomains", "amp", "unknown"] as const).map(k => <td key={k}>{formatNumber(sum(rows, k))}</td>)}</tr>;
+        }))}
+        {!selected.length ? <tr><td colSpan={9}>Нет проектов для выбранного GEO.</td></tr> : null}
+      </tbody><tfoot><tr><th colSpan={2}>Итого</th><th>{selected.length}</th>{(["domains", "drop", "newreg", "subdomains", "amp", "unknown"] as const).map(k => <th key={k}>{formatNumber(sum(selected, k))}</th>)}</tr></tfoot></table></div>
+      <h3>По брендам</h3>
+      <div className="massStatisticsTable"><table><thead><tr>{["Бренд", "Проектов", "Доменов в сетках", "Дропов", "Новорегов", "Поддоменов", "AMP", "Тип не указан"].map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>
+        {[...new Set(selected.map(p => p.brand || "Бренд не указан"))].sort((a, b) => a.localeCompare(b, "ru")).map(brand => {
+          const rows = selected.filter(p => (p.brand || "Бренд не указан") === brand);
+          return <tr key={brand}><td>{brand}</td><td>{rows.length}</td>{(["domains", "drop", "newreg", "subdomains", "amp", "unknown"] as const).map(k => <td key={k}>{formatNumber(sum(rows, k))}</td>)}</tr>;
+        })}
+        {!selected.length ? <tr><td colSpan={8}>Нет проектов для выбранного GEO.</td></tr> : null}
+      </tbody><tfoot><tr><th>Итого</th><th>{selected.length}</th>{(["domains", "drop", "newreg", "subdomains", "amp", "unknown"] as const).map(k => <th key={k}>{formatNumber(sum(selected, k))}</th>)}</tr></tfoot></table></div>
+      <details className="massStatisticsDetails"><summary>Проекты в выборке · {selected.length}</summary><div className="massStatisticsTable"><table><thead><tr><th>Имя проекта</th><th>GEO</th><th>Тип</th><th>Доменов</th><th>Кеш обновлён</th></tr></thead><tbody>{selected.map(p => <tr key={p.id}><td><a href={`/project-generation/${encodeURIComponent(p.name)}/`}>{p.project_name}</a></td><td>{geoLabel(p.geo)}</td><td>{p.site_type === "monobrand" ? "Монобренд" : "Общие ключи"}</td><td>{p.domains}</td><td>{p.cache_synced_at ? new Date(p.cache_synced_at).toLocaleString("ru-RU") : "Нет данных"}</td></tr>)}</tbody></table></div></details>
+    </> : null}
+  </DataPanel>;
+}
+
 function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsername, favoritesOnly = false, readOnly = false, onChanged }: ViewProps & { sites: Site[]; snapshotUpdatedAt: string | null; onSitesChanged: (sites: Site[], replace?: boolean) => void; currentUsername: string; favoritesOnly?: boolean; readOnly?: boolean }) {
+  const [showStatistics, setShowStatistics] = React.useState(() => window.location.hash === "#mass-action-statistics");
   const preferencesKey = `sites-table-preferences:${currentUsername}`;
   const storedPreferences = React.useMemo(() => {
     try {
@@ -8928,6 +8979,10 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
 
   return (
     <section className="viewStack sitesManagementView">
+      {!favoritesOnly ? <>
+        <a className="secondary massStatisticsLink" href="#mass-action-statistics" onClick={() => setShowStatistics(true)}>Статистика массовых действий →</a>
+        {showStatistics ? <div id="mass-action-statistics"><MassActionStatistics api={api} /><button className="secondary" type="button" onClick={() => { setShowStatistics(false); window.history.replaceState(null, "", window.location.pathname); }}>Скрыть статистику</button></div> : null}
+      </> : null}
       <DataPanel title={readOnly ? "Обзор сайтов" : "Панель управления сайтами"}>
         <div className="siteCacheToolbar">
           <div className="siteCacheStats">

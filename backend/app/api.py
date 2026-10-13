@@ -477,6 +477,15 @@ def list_sites(_: AuthUser, db: Session = Depends(get_db), include_grouped_inact
     return sites
 
 
+@router.get("/sites/statistics")
+def site_statistics(_: AuthUser, db: Session = Depends(get_db)) -> Any:
+    from app.site_statistics import mass_action_statistics
+    sites = db.scalars(select(models.Site).where(
+        models.Site.hidden_from_projects.is_(False), models.Site.project_status == "mass_actions"
+    )).all()
+    return mass_action_statistics(sites)
+
+
 @router.get("/sites/lookup", response_model=SiteResponse)
 def lookup_site(_: AuthUser, name: str = "", site_id: str = "", db: Session = Depends(get_db)) -> Any:
     lookup = select(models.Site)
