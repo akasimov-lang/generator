@@ -8533,6 +8533,11 @@ function MassActionStatistics({ api }: { api: ViewProps["api"] }) {
   const requestSequence = React.useRef(0);
   const [projects, setProjects] = React.useState<StatisticsProject[]>([]);
   const [geo, setGeo] = React.useState("");
+  const projectDetailsRef = React.useRef<HTMLDetailsElement>(null);
+  const selectGeo = (value: string) => {
+    setGeo(value);
+    if (value && projectDetailsRef.current) projectDetailsRef.current.open = true;
+  };
   const [typeFilter, setTypeFilter] = React.useState("");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
@@ -8562,7 +8567,7 @@ function MassActionStatistics({ api }: { api: ViewProps["api"] }) {
       {[{ value: "mass_actions", label: "Массовые действия" }, { value: "geo_ru", label: "RU проекты" }, { value: "geo_kz", label: "KZ проекты" }].map(option => <button type="button" key={option.value} className={`massStatisticsScope ${scope === option.value ? "active" : ""}`} aria-pressed={scope === option.value} onClick={() => { if (scope !== option.value) { requestSequence.current += 1; setLoading(true); setGeo(""); setTypeFilter(""); setScope(option.value); } }}>{option.label}</button>)}
     </div>
     <div className="massStatisticsControls">
-      <label>GEO<SearchableSelect value={geo} onChange={setGeo} options={[{ value: "", label: "Все GEO" }, ...geos.map(g => ({ value: g, label: geoLabel(g) }))]} searchPlaceholder="Введите страну или код" /></label>
+      <label>GEO<SearchableSelect value={geo} onChange={selectGeo} options={[{ value: "", label: "Все GEO" }, ...geos.map(g => ({ value: g, label: geoLabel(g) }))]} searchPlaceholder="Введите страну или код" /></label>
       <button className="secondary" type="button" onClick={() => void load()} disabled={loading}>{loading ? "Загрузка…" : "Обновить статистику"}</button>
     </div>
     {error ? <p role="alert">{error}</p> : null}
@@ -8576,7 +8581,7 @@ function MassActionStatistics({ api }: { api: ViewProps["api"] }) {
       {typeFilter ? <button type="button" className="secondary" onClick={() => setTypeFilter("")} aria-label="Сбросить фильтр типа проекта">{typeFilter === "monobrand" ? "Монобренды" : "Общие ключи"} ×</button> : null}
       <p className="muted">{scope === "geo_ru" ? "Проекты со статусом «GEO RU»" : scope === "geo_kz" ? "Проекты со статусом «GEO KZ»" : "Только проекты со статусом «Массовые действия»"}, без исключённых из системы. Дропы и новореги считаются по сохранённым типам доменов; поддомены и AMP показаны отдельно. Домен, входящий в разные сетки, учитывается в каждой сетке.</p>
       <div className="massStatisticsTable"><table><thead><tr>{geoSort.header(headers)}</tr></thead><tbody>
-        {geoSort.ordered(geoRows, group => [geoSortLabel(group.g), typeLabel(group.kind), ...metrics(group.rows)]).map(({ g, kind, rows }) => <tr key={`${g}-${kind}`}><td><span className="massStatisticsGeoCell"><button type="button" className="secondary" onClick={() => setGeo(g)}>{geoLabel(g)}</button>{geo === g ? <button type="button" className="massStatisticsGeoClear" aria-label="Сбросить фильтр GEO" title="Показать все GEO" onClick={() => setGeo("")}>×</button> : null}</span></td><td>{typeLabel(kind)}</td><td>{rows.length}</td>{(["domains", "drop", "newreg", "subdomains", "amp"] as const).map(k => <td key={k}>{formatNumber(sum(rows, k))}</td>)}</tr>)}
+        {geoSort.ordered(geoRows, group => [geoSortLabel(group.g), typeLabel(group.kind), ...metrics(group.rows)]).map(({ g, kind, rows }) => <tr key={`${g}-${kind}`}><td><span className="massStatisticsGeoCell"><button type="button" className="secondary" onClick={() => selectGeo(g)}>{geoLabel(g)}</button>{geo === g ? <button type="button" className="massStatisticsGeoClear" aria-label="Сбросить фильтр GEO" title="Показать все GEO" onClick={() => setGeo("")}>×</button> : null}</span></td><td>{typeLabel(kind)}</td><td>{rows.length}</td>{(["domains", "drop", "newreg", "subdomains", "amp"] as const).map(k => <td key={k}>{formatNumber(sum(rows, k))}</td>)}</tr>)}
         {!selected.length ? <tr><td colSpan={8}>Нет проектов для выбранного GEO.</td></tr> : null}
       </tbody><tfoot><tr><th colSpan={2}>Итого</th><th>{selected.length}</th>{(["domains", "drop", "newreg", "subdomains", "amp"] as const).map(k => <th key={k}>{formatNumber(sum(selected, k))}</th>)}</tr></tfoot></table></div>
       <h3>По брендам</h3>
@@ -8584,7 +8589,7 @@ function MassActionStatistics({ api }: { api: ViewProps["api"] }) {
         {brandSort.ordered(brandRows, group => [group.brand, ...metrics(group.rows)]).map(({ brand, rows }) => <tr key={brand}><td>{brand}</td><td>{rows.length}</td>{(["domains", "drop", "newreg", "subdomains", "amp"] as const).map(k => <td key={k}>{formatNumber(sum(rows, k))}</td>)}</tr>)}
         {!selected.length ? <tr><td colSpan={7}>Нет проектов для выбранного GEO.</td></tr> : null}
       </tbody><tfoot><tr><th>Итого</th><th>{selected.length}</th>{(["domains", "drop", "newreg", "subdomains", "amp"] as const).map(k => <th key={k}>{formatNumber(sum(selected, k))}</th>)}</tr></tfoot></table></div>
-      <details className="massStatisticsDetails"><summary>Проекты в выборке · {selected.length}</summary><div className="massStatisticsTable"><table><thead><tr>{projectSort.header(["Имя проекта", "GEO", "Тип", "Доменов", "Кеш обновлён"])}</tr></thead><tbody>{projectSort.ordered(selected, p => [p.project_name, geoSortLabel(p.geo), typeLabel(p.site_type), p.domains, p.cache_synced_at ? new Date(p.cache_synced_at).getTime() : 0]).map(p => <tr key={p.id}><td><a href={`/project-generation/${encodeURIComponent(p.name)}/`}>{p.project_name}</a></td><td>{geoLabel(p.geo)}</td><td>{p.site_type === "monobrand" ? "Монобренд" : "Общие ключи"}</td><td>{p.domains}</td><td>{p.cache_synced_at ? new Date(p.cache_synced_at).toLocaleString("ru-RU") : "Нет данных"}</td></tr>)}</tbody></table></div></details>
+      <details ref={projectDetailsRef} className="massStatisticsDetails"><summary>Проекты в выборке · {selected.length}</summary><div className="massStatisticsTable"><table><thead><tr>{projectSort.header(["Имя проекта", "GEO", "Тип", "Доменов", "Кеш обновлён"])}</tr></thead><tbody>{projectSort.ordered(selected, p => [p.project_name, geoSortLabel(p.geo), typeLabel(p.site_type), p.domains, p.cache_synced_at ? new Date(p.cache_synced_at).getTime() : 0]).map(p => <tr key={p.id}><td><a href={`/project-generation/${encodeURIComponent(p.name)}/`}>{p.project_name}</a></td><td>{geoLabel(p.geo)}</td><td>{p.site_type === "monobrand" ? "Монобренд" : "Общие ключи"}</td><td>{p.domains}</td><td>{p.cache_synced_at ? new Date(p.cache_synced_at).toLocaleString("ru-RU") : "Нет данных"}</td></tr>)}</tbody></table></div></details>
     </> : null}
   </DataPanel>;
 }
