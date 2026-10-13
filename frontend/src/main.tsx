@@ -8561,7 +8561,7 @@ function MassActionStatistics({ api }: { api: ViewProps["api"] }) {
     {error ? <p role="alert">{error}</p> : null}
     {!loading && !error ? <>
       <div className="massStatisticsCards">
-        {[["Уникальных проектов", selected.length], ["Монобренды", selected.filter(p => p.site_type === "monobrand").length], ["Общие ключи", selected.filter(p => p.site_type === "general").length], ["Дропов", sum(selected, "drop")], ["Новорегов", sum(selected, "newreg")], ["Доменов в сетках", sum(selected, "domains")]].map(([label, value]) => <div key={label}><span>{label}</span><strong>{formatNumber(Number(value))}</strong></div>)}
+        {[["Уникальных проектов", selected.length], ["Уникальных GEO", new Set(selected.map(p => p.geo).filter(g => g && g !== "UNKNOWN")).size], ["Монобренды", selected.filter(p => p.site_type === "monobrand").length], ["Общие ключи", selected.filter(p => p.site_type === "general").length], ["Дропов", sum(selected, "drop")], ["Новорегов", sum(selected, "newreg")], ["Доменов в сетках", sum(selected, "domains")]].map(([label, value]) => <div key={label}><span>{label}</span><strong>{formatNumber(Number(value))}</strong></div>)}
       </div>
       <p className="muted">Только проекты со статусом «Массовые действия», без исключённых из системы. Дропы и новореги считаются по сохранённым типам доменов; поддомены и AMP показаны отдельно. Домен, входящий в разные сетки, учитывается в каждой сетке.</p>
       <div className="massStatisticsTable"><table><thead><tr>{geoSort.header(headers)}</tr></thead><tbody>
