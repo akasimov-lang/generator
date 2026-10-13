@@ -9908,7 +9908,7 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .massStatisticsControls { display: flex; align-items: end; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }
 .massStatisticsControls label { width: min(340px, 100%); }
 .massStatisticsCards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 20px; }
-.massStatisticsCards > div { padding: 18px; border: 1px solid var(--border, #d8e1ee); border-radius: 12px; background: var(--surface, #f6f8fb); }
+.massStatisticsCards > div, .massStatisticsTypeCard { padding: 18px; border: 1px solid var(--border, #d8e1ee); border-radius: 12px; background: var(--surface, #f6f8fb); }
 .massStatisticsCards span { display: block; font-weight: 600; }
 .massStatisticsCards strong { display: block; margin-top: 8px; font-size: 28px; }
 .massStatisticsTable { overflow-x: auto; margin: 16px 0; }
@@ -9926,3 +9926,7 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .massStatisticsGeoClear { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: inherit; font-size: 22px; cursor: pointer; }
 .massStatisticsGeoClear:hover { color: var(--primary, #3155d9); }
 .massStatisticsGeoClear:focus-visible { outline: 2px solid var(--primary, #3155d9); outline-offset: 2px; }
+
+.massStatisticsTypeCard { color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.massStatisticsTypeCard.active { border-color: #25825c; background: var(--success-soft, #e4f5eb); color: #205b43; }
+.massStatisticsTypeCard:focus-visible { outline: 2px solid var(--primary, #3155d9); outline-offset: 3px; }

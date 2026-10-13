@@ -8531,6 +8531,7 @@ function useStatisticsSort(defaultColumn = 0) {
 function MassActionStatistics({ api }: { api: ViewProps["api"] }) {
   const [projects, setProjects] = React.useState<StatisticsProject[]>([]);
   const [geo, setGeo] = React.useState("");
+  const [typeFilter, setTypeFilter] = React.useState("");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
   const load = React.useCallback(async () => {
@@ -8541,7 +8542,7 @@ function MassActionStatistics({ api }: { api: ViewProps["api"] }) {
   }, [api]);
   React.useEffect(() => { void load(); }, [load]);
   const geos = [...new Set(projects.map(p => p.geo))].sort();
-  const selected = projects.filter(p => !geo || p.geo === geo);
+  const selected = projects.filter(p => (!geo || p.geo === geo) && (!typeFilter || p.site_type === typeFilter));
   const sum = (rows: StatisticsProject[], key: "domains" | "drop" | "newreg" | "subdomains" | "amp" | "unknown") => rows.reduce((n, p) => n + p[key], 0);
   const geoLabel = (code: string) => code === "UNKNOWN" ? "GEO не указано" : `${localeFlag(code)} ${COUNTRIES.find(c => c.code.toUpperCase() === code)?.name || code} (${code})`;
   const geoSort = useStatisticsSort();
@@ -8561,8 +8562,12 @@ function MassActionStatistics({ api }: { api: ViewProps["api"] }) {
     {error ? <p role="alert">{error}</p> : null}
     {!loading && !error ? <>
       <div className="massStatisticsCards">
-        {[["Уникальных проектов", selected.length], ["Уникальных GEO", new Set(selected.map(p => p.geo).filter(g => g && g !== "UNKNOWN")).size], ["Монобренды", selected.filter(p => p.site_type === "monobrand").length], ["Общие ключи", selected.filter(p => p.site_type === "general").length], ["Дропов", sum(selected, "drop")], ["Новорегов", sum(selected, "newreg")], ["Доменов в сетках", sum(selected, "domains")]].map(([label, value]) => <div key={label}><span>{label}</span><strong>{formatNumber(Number(value))}</strong></div>)}
+        {[["Уникальных проектов", selected.length], ["Уникальных GEO", new Set(selected.map(p => p.geo).filter(g => g && g !== "UNKNOWN")).size], ["Монобренды", selected.filter(p => p.site_type === "monobrand").length], ["Общие ключи", selected.filter(p => p.site_type === "general").length], ["Дропов", sum(selected, "drop")], ["Новорегов", sum(selected, "newreg")], ["Доменов в сетках", sum(selected, "domains")]].map(([label, value]) => {
+          const filter = label === "Монобренды" ? "monobrand" : label === "Общие ключи" ? "general" : null;
+          return filter ? <button key={label} type="button" className={`massStatisticsTypeCard ${typeFilter === filter ? "active" : ""}`} aria-pressed={typeFilter === filter} onClick={() => setTypeFilter(previous => previous === filter ? "" : filter)}><span>{label}</span><strong>{formatNumber(Number(value))}</strong></button> : <div key={label}><span>{label}</span><strong>{formatNumber(Number(value))}</strong></div>;
+        })}
       </div>
+      {typeFilter ? <button type="button" className="secondary" onClick={() => setTypeFilter("")} aria-label="Сбросить фильтр типа проекта">{typeFilter === "monobrand" ? "Монобренды" : "Общие ключи"} ×</button> : null}
       <p className="muted">Только проекты со статусом «Массовые действия», без исключённых из системы. Дропы и новореги считаются по сохранённым типам доменов; поддомены и AMP показаны отдельно. Домен, входящий в разные сетки, учитывается в каждой сетке.</p>
       <div className="massStatisticsTable"><table><thead><tr>{geoSort.header(headers)}</tr></thead><tbody>
         {geoSort.ordered(geoRows, group => [geoSortLabel(group.g), typeLabel(group.kind), ...metrics(group.rows)]).map(({ g, kind, rows }) => <tr key={`${g}-${kind}`}><td><span className="massStatisticsGeoCell"><button type="button" className="secondary" onClick={() => setGeo(g)}>{geoLabel(g)}</button>{geo === g ? <button type="button" className="massStatisticsGeoClear" aria-label="Сбросить фильтр GEO" title="Показать все GEO" onClick={() => setGeo("")}>×</button> : null}</span></td><td>{typeLabel(kind)}</td><td>{rows.length}</td>{(["domains", "drop", "newreg", "subdomains", "amp"] as const).map(k => <td key={k}>{formatNumber(sum(rows, k))}</td>)}</tr>)}
