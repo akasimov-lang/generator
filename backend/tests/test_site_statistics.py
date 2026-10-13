@@ -30,3 +30,8 @@ def test_separate_ru_kz_scopes():
     assert [r['id'] for r in mass_action_statistics(sites, 'geo_ru')['projects']] == ['ru']
     assert [r['id'] for r in mass_action_statistics(sites, 'geo_kz')['projects']] == ['kz']
     assert [r['id'] for r in mass_action_statistics(sites)['projects']] == ['mass']
+
+
+def test_hands_only_scope():
+    rows = mass_action_statistics([site(id='hands', project_status='hands_only'), site(id='mass'), site(id='hidden', project_status='hands_only', hidden_from_projects=True)], 'hands_only')['projects']
+    assert [r['id'] for r in rows] == ['hands']

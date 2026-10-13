@@ -5,7 +5,7 @@ from app.network_state import domain_name
 
 
 def mass_action_statistics(sites, scope="mass_actions"):
-    statuses = {scope} if scope in {"geo_ru", "geo_kz"} else {"mass_actions"}
+    statuses = {scope} if scope in {"geo_ru", "geo_kz", "hands_only"} else {"mass_actions"}
     rows = []
     seen = set()
     for site in sites:

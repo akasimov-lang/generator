@@ -8561,9 +8561,9 @@ function MassActionStatistics({ api, renderProjects }: { api: ViewProps["api"]; 
   const typeLabel = (kind: string) => kind === "monobrand" ? "Монобренды" : "Общие ключи";
   const geoSortLabel = (code: string) => COUNTRIES.find(c => c.code.toUpperCase() === code)?.name || code;
   const headers = ["GEO", "Тип проекта", "Проектов", "Доменов в сетках", "Дропов", "Новорегов", "Поддоменов", "AMP"];
-  return <DataPanel title={`Статистика · ${scope === "geo_ru" ? "RU проекты" : scope === "geo_kz" ? "KZ проекты" : "Массовые действия"}`}>
+  return <DataPanel title={`Статистика · ${scope === "geo_ru" ? "RU проекты" : scope === "geo_kz" ? "KZ проекты" : scope === "hands_only" ? "hands only" : "Массовые действия"}`}>
     <div className="massStatisticsScopes" aria-label="Подборка для статистики">
-      {[{ value: "mass_actions", label: "Массовые действия" }, { value: "geo_ru", label: "RU проекты" }, { value: "geo_kz", label: "KZ проекты" }].map(option => <button type="button" key={option.value} className={`massStatisticsScope ${scope === option.value ? "active" : ""}`} aria-pressed={scope === option.value} onClick={() => { if (scope !== option.value) { requestSequence.current += 1; setLoading(true); setGeo(""); setTypeFilter(""); setScope(option.value); } }}>{option.label}</button>)}
+      {[{ value: "mass_actions", label: "Массовые действия" }, { value: "geo_ru", label: "RU проекты" }, { value: "geo_kz", label: "KZ проекты" }, { value: "hands_only", label: "hands only" }].map(option => <button type="button" key={option.value} className={`massStatisticsScope ${scope === option.value ? "active" : ""}`} aria-pressed={scope === option.value} onClick={() => { if (scope !== option.value) { requestSequence.current += 1; setLoading(true); setGeo(""); setTypeFilter(""); setScope(option.value); } }}>{option.label}</button>)}
     </div>
     <div className="massStatisticsControls">
       <label>GEO<SearchableSelect value={geo} onChange={selectGeo} options={[{ value: "", label: "Все GEO" }, ...geos.map(g => ({ value: g, label: geoLabel(g) }))]} searchPlaceholder="Введите страну или код" /></label>
@@ -8578,7 +8578,7 @@ function MassActionStatistics({ api, renderProjects }: { api: ViewProps["api"]; 
         })}
       </div>
       {typeFilter ? <button type="button" className="secondary" onClick={() => setTypeFilter("")} aria-label="Сбросить фильтр типа проекта">{typeFilter === "monobrand" ? "Монобренды" : "Общие ключи"} ×</button> : null}
-      <p className="muted">{scope === "geo_ru" ? "Проекты со статусом «GEO RU»" : scope === "geo_kz" ? "Проекты со статусом «GEO KZ»" : "Только проекты со статусом «Массовые действия»"}, без исключённых из системы. Дропы и новореги считаются по сохранённым типам доменов; поддомены и AMP показаны отдельно. Домен, входящий в разные сетки, учитывается в каждой сетке.</p>
+      <p className="muted">{scope === "geo_ru" ? "Проекты со статусом «GEO RU»" : scope === "geo_kz" ? "Проекты со статусом «GEO KZ»" : scope === "hands_only" ? "Проекты со статусом «hands only»" : "Только проекты со статусом «Массовые действия»"}, без исключённых из системы. Дропы и новореги считаются по сохранённым типам доменов; поддомены и AMP показаны отдельно. Домен, входящий в разные сетки, учитывается в каждой сетке.</p>
       <div className="massStatisticsTable"><table><thead><tr>{geoSort.header(headers)}</tr></thead><tbody>
         {geoSort.ordered(geoRows, group => [geoSortLabel(group.g), typeLabel(group.kind), ...metrics(group.rows)]).map(({ g, kind, rows }) => <tr key={`${g}-${kind}`}><td><span className="massStatisticsGeoCell"><button type="button" className="secondary" onClick={() => selectGeo(g)}>{geoLabel(g)}</button>{geo === g ? <button type="button" className="massStatisticsGeoClear" aria-label="Сбросить фильтр GEO" title="Показать все GEO" onClick={() => setGeo("")}>×</button> : null}</span></td><td>{typeLabel(kind)}</td><td>{rows.length}</td>{(["domains", "drop", "newreg", "subdomains", "amp"] as const).map(k => <td key={k}>{formatNumber(sum(rows, k))}</td>)}</tr>)}
         {!selected.length ? <tr><td colSpan={8}>Нет проектов для выбранного GEO.</td></tr> : null}
