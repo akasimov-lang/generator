@@ -9921,3 +9921,8 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .massStatisticsSort { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; text-align: left; }
 .massStatisticsSort:hover { color: var(--primary, #3155d9); }
 .massStatisticsSort:focus-visible { outline: 2px solid var(--primary, #3155d9); outline-offset: 4px; border-radius: 2px; }
+
+.massStatisticsGeoCell { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.massStatisticsGeoClear { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: inherit; font-size: 22px; cursor: pointer; }
+.massStatisticsGeoClear:hover { color: var(--primary, #3155d9); }
+.massStatisticsGeoClear:focus-visible { outline: 2px solid var(--primary, #3155d9); outline-offset: 2px; }
