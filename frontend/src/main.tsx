@@ -8515,6 +8515,19 @@ function SiteBrandField({ name, value, save }: { name: string; value: string; sa
 }
 
 type StatisticsProject = { brand: string; id: string; name: string; project_name: string; geo: string; site_type: string; domains: number; drop: number; newreg: number; subdomains: number; amp: number; unknown: number; cache_synced_at: string | null };
+function useStatisticsSort(defaultColumn = 0) {
+  const [sort, setSort] = React.useState({ column: defaultColumn, descending: false });
+  const header = (labels: string[]) => labels.map((label, column) => <th key={label} aria-sort={sort.column === column ? (sort.descending ? "descending" : "ascending") : "none"}><button type="button" className="massStatisticsSort" onClick={() => setSort(previous => ({ column, descending: previous.column === column ? !previous.descending : false }))}>{label}<span aria-hidden="true">{sort.column === column ? (sort.descending ? " ↓" : " ↑") : " ↕"}</span></button></th>);
+  function ordered<T>(rows: T[], values: (row: T) => (string | number)[]): T[] {
+    return [...rows].sort((a, b) => {
+      const left = values(a)[sort.column], right = values(b)[sort.column];
+      const comparison = typeof left === "number" && typeof right === "number" ? left - right : String(left).localeCompare(String(right), "ru", { numeric: true });
+      return sort.descending ? -comparison : comparison;
+    });
+  }
+  return { header, ordered };
+}
+
 function MassActionStatistics({ api }: { api: ViewProps["api"] }) {
   const [projects, setProjects] = React.useState<StatisticsProject[]>([]);
   const [geo, setGeo] = React.useState("");
@@ -8531,6 +8544,14 @@ function MassActionStatistics({ api }: { api: ViewProps["api"] }) {
   const selected = projects.filter(p => !geo || p.geo === geo);
   const sum = (rows: StatisticsProject[], key: "domains" | "drop" | "newreg" | "subdomains" | "amp" | "unknown") => rows.reduce((n, p) => n + p[key], 0);
   const geoLabel = (code: string) => code === "UNKNOWN" ? "GEO не указано" : `${localeFlag(code)} ${COUNTRIES.find(c => c.code.toUpperCase() === code)?.name || code} (${code})`;
+  const geoSort = useStatisticsSort();
+  const brandSort = useStatisticsSort();
+  const projectSort = useStatisticsSort();
+  const metrics = (rows: StatisticsProject[]) => [rows.length, ...(["domains", "drop", "newreg", "subdomains", "amp", "unknown"] as const).map(k => sum(rows, k))];
+  const geoRows = geos.flatMap(g => ["monobrand", "general"].map(kind => ({ g, kind, rows: selected.filter(p => p.geo === g && p.site_type === kind) }))).filter(group => group.rows.length);
+  const brandRows = [...new Set(selected.map(p => p.brand || "Бренд не указан"))].map(brand => ({ brand, rows: selected.filter(p => (p.brand || "Бренд не указан") === brand) }));
+  const typeLabel = (kind: string) => kind === "monobrand" ? "Монобренды" : "Общие ключи";
+  const geoSortLabel = (code: string) => COUNTRIES.find(c => c.code.toUpperCase() === code)?.name || code;
   const headers = ["GEO", "Тип проекта", "Проектов", "Доменов в сетках", "Дропов", "Новорегов", "Поддоменов", "AMP", "Тип не указан"];
   return <DataPanel title="Статистика · Массовые действия">
     <div className="massStatisticsControls">
@@ -8543,23 +8564,16 @@ function MassActionStatistics({ api }: { api: ViewProps["api"] }) {
         {[["Уникальных проектов", selected.length], ["Монобренды", selected.filter(p => p.site_type === "monobrand").length], ["Общие ключи", selected.filter(p => p.site_type === "general").length], ["Дропов", sum(selected, "drop")], ["Новорегов", sum(selected, "newreg")], ["Доменов в сетках", sum(selected, "domains")]].map(([label, value]) => <div key={label}><span>{label}</span><strong>{formatNumber(Number(value))}</strong></div>)}
       </div>
       <p className="muted">Только проекты со статусом «Массовые действия», без исключённых из системы. Дропы и новореги считаются по сохранённым типам доменов; поддомены и AMP показаны отдельно. Домен, входящий в разные сетки, учитывается в каждой сетке.</p>
-      <div className="massStatisticsTable"><table><thead><tr>{headers.map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>
-        {geos.filter(g => !geo || geo === g).flatMap(g => ["monobrand", "general"].map(kind => {
-          const rows = selected.filter(p => p.geo === g && p.site_type === kind);
-          if (!rows.length) return null;
-          return <tr key={`${g}-${kind}`}><td><button type="button" className="secondary" onClick={() => setGeo(g)}>{geoLabel(g)}</button></td><td>{kind === "monobrand" ? "Монобренды" : "Общие ключи"}</td><td>{rows.length}</td>{(["domains", "drop", "newreg", "subdomains", "amp", "unknown"] as const).map(k => <td key={k}>{formatNumber(sum(rows, k))}</td>)}</tr>;
-        }))}
+      <div className="massStatisticsTable"><table><thead><tr>{geoSort.header(headers)}</tr></thead><tbody>
+        {geoSort.ordered(geoRows, group => [geoSortLabel(group.g), typeLabel(group.kind), ...metrics(group.rows)]).map(({ g, kind, rows }) => <tr key={`${g}-${kind}`}><td><button type="button" className="secondary" onClick={() => setGeo(g)}>{geoLabel(g)}</button></td><td>{typeLabel(kind)}</td><td>{rows.length}</td>{(["domains", "drop", "newreg", "subdomains", "amp", "unknown"] as const).map(k => <td key={k}>{formatNumber(sum(rows, k))}</td>)}</tr>)}
         {!selected.length ? <tr><td colSpan={9}>Нет проектов для выбранного GEO.</td></tr> : null}
       </tbody><tfoot><tr><th colSpan={2}>Итого</th><th>{selected.length}</th>{(["domains", "drop", "newreg", "subdomains", "amp", "unknown"] as const).map(k => <th key={k}>{formatNumber(sum(selected, k))}</th>)}</tr></tfoot></table></div>
       <h3>По брендам</h3>
-      <div className="massStatisticsTable"><table><thead><tr>{["Бренд", "Проектов", "Доменов в сетках", "Дропов", "Новорегов", "Поддоменов", "AMP", "Тип не указан"].map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>
-        {[...new Set(selected.map(p => p.brand || "Бренд не указан"))].sort((a, b) => a.localeCompare(b, "ru")).map(brand => {
-          const rows = selected.filter(p => (p.brand || "Бренд не указан") === brand);
-          return <tr key={brand}><td>{brand}</td><td>{rows.length}</td>{(["domains", "drop", "newreg", "subdomains", "amp", "unknown"] as const).map(k => <td key={k}>{formatNumber(sum(rows, k))}</td>)}</tr>;
-        })}
+      <div className="massStatisticsTable"><table><thead><tr>{brandSort.header(["Бренд", "Проектов", "Доменов в сетках", "Дропов", "Новорегов", "Поддоменов", "AMP", "Тип не указан"])}</tr></thead><tbody>
+        {brandSort.ordered(brandRows, group => [group.brand, ...metrics(group.rows)]).map(({ brand, rows }) => <tr key={brand}><td>{brand}</td><td>{rows.length}</td>{(["domains", "drop", "newreg", "subdomains", "amp", "unknown"] as const).map(k => <td key={k}>{formatNumber(sum(rows, k))}</td>)}</tr>)}
         {!selected.length ? <tr><td colSpan={8}>Нет проектов для выбранного GEO.</td></tr> : null}
       </tbody><tfoot><tr><th>Итого</th><th>{selected.length}</th>{(["domains", "drop", "newreg", "subdomains", "amp", "unknown"] as const).map(k => <th key={k}>{formatNumber(sum(selected, k))}</th>)}</tr></tfoot></table></div>
-      <details className="massStatisticsDetails"><summary>Проекты в выборке · {selected.length}</summary><div className="massStatisticsTable"><table><thead><tr><th>Имя проекта</th><th>GEO</th><th>Тип</th><th>Доменов</th><th>Кеш обновлён</th></tr></thead><tbody>{selected.map(p => <tr key={p.id}><td><a href={`/project-generation/${encodeURIComponent(p.name)}/`}>{p.project_name}</a></td><td>{geoLabel(p.geo)}</td><td>{p.site_type === "monobrand" ? "Монобренд" : "Общие ключи"}</td><td>{p.domains}</td><td>{p.cache_synced_at ? new Date(p.cache_synced_at).toLocaleString("ru-RU") : "Нет данных"}</td></tr>)}</tbody></table></div></details>
+      <details className="massStatisticsDetails"><summary>Проекты в выборке · {selected.length}</summary><div className="massStatisticsTable"><table><thead><tr>{projectSort.header(["Имя проекта", "GEO", "Тип", "Доменов", "Кеш обновлён"])}</tr></thead><tbody>{projectSort.ordered(selected, p => [p.project_name, geoSortLabel(p.geo), typeLabel(p.site_type), p.domains, p.cache_synced_at ? new Date(p.cache_synced_at).getTime() : 0]).map(p => <tr key={p.id}><td><a href={`/project-generation/${encodeURIComponent(p.name)}/`}>{p.project_name}</a></td><td>{geoLabel(p.geo)}</td><td>{p.site_type === "monobrand" ? "Монобренд" : "Общие ключи"}</td><td>{p.domains}</td><td>{p.cache_synced_at ? new Date(p.cache_synced_at).toLocaleString("ru-RU") : "Нет данных"}</td></tr>)}</tbody></table></div></details>
     </> : null}
   </DataPanel>;
 }

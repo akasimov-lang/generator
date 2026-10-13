@@ -9917,3 +9917,7 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .massStatisticsTable th { white-space: nowrap; }
 .massStatisticsDetails summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
 #mass-action-statistics { scroll-margin-top: 24px; }
+
+.massStatisticsSort { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+.massStatisticsSort:hover { color: var(--primary, #3155d9); }
+.massStatisticsSort:focus-visible { outline: 2px solid var(--primary, #3155d9); outline-offset: 4px; border-radius: 2px; }
