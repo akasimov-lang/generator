@@ -9936,3 +9936,8 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .massStatisticsScope.active { color: #205b43; background: #e4f5eb; border-color: #25825c; }
 
 .projectMetricCard .projectDomainBreakdown { font-size: 11px; line-height: 1.4; font-weight: 600; text-transform: none; white-space: nowrap; }
+
+.workspaceDomainSearch { display: grid; gap: 6px; max-width: 720px; }
+.workspaceDomainSearch > span { font-size: 13px; font-weight: 600; }
+.workspaceDomainResults { padding: 20px; overflow-x: auto; }
+.workspaceDomainResults h2 { margin: 0 0 16px; }

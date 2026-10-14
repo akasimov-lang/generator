@@ -1942,6 +1942,12 @@ function ProjectWorkspaceView({
   onTabChange: (tab: WorkspaceTab, projectName?: string) => void;
   onSiteChanged: (site: Site) => void;
 }) {
+  const [domainQuery, setDomainQuery] = React.useState("");
+  const normalizedDomainQuery = domainQuery.trim().toLowerCase().replace(/^https?:\/\//, "").split(/[/?#]/, 1)[0];
+  const domainResults = normalizedDomainQuery ? sites.filter(site =>
+    [site.name, site.cache_canon || "", ...(site.cache_domains || [])]
+      .some(domain => matchesProjectSearch(domain, normalizedDomainQuery))
+  ) : [];
   const workspaceSiteStorageKey = `workspace_site_id:${currentUsername}`;
   const [selectedSiteId, setSelectedSiteId] = React.useState(() => {
     const name = workspaceProjectNameFromPath(window.location.pathname);
@@ -2328,6 +2334,10 @@ function ProjectWorkspaceView({
   return (
     <WorkspaceAccordionContext.Provider value={accordionContextValue}>
     <section className="viewStack projectWorkspaceView">
+      <label className="workspaceDomainSearch">
+        <span>Поиск по домену</span>
+        <input type="search" value={domainQuery} onChange={event => setDomainQuery(event.target.value)} placeholder="Домен проекта или домен в сетке" aria-controls="workspace-domain-results" />
+      </label>
       <DataPanel title={(
         <span className="workspaceProjectTitle">
           {selectedSite ? (
@@ -2635,6 +2645,16 @@ function ProjectWorkspaceView({
           </WorkspaceTabPane>
         </>
       ) : null}
+      {domainQuery.trim() ? <div id="workspace-domain-results" className="panel workspaceDomainResults">
+        <h2 aria-live="polite">Результаты поиска · {domainResults.length}</h2>
+        {domainResults.length ? <div className="tableScroll"><table>
+          <thead><tr><th>Проект</th><th>Имя проекта</th><th>Главный домен</th><th>Доменов в сетке</th></tr></thead>
+          <tbody>{domainResults.map(site => <tr key={site.id}>
+            <td><button type="button" className="secondary" onClick={() => { selectWorkspaceSite(site.id); window.scrollTo({ top: 0, behavior: "smooth" }); }}>{site.name}</button></td>
+            <td>{site.fibery_name || "—"}</td><td>{site.cache_canon || "—"}</td><td>{site.domains_count}</td>
+          </tr>)}</tbody>
+        </table></div> : <p>Проекты не найдены. Поиск выполняется по доступным проектам и доменам их сеток.</p>}
+      </div> : null}
     </section>
     </WorkspaceAccordionContext.Provider>
   );
