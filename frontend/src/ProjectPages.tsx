@@ -9,7 +9,7 @@ type Api = <T>(path: string, init?: RequestInit) => Promise<T>;
 type Value = string | number | boolean | null | Value[] | { [key: string]: Value };
 type Block = { id?: string; type: string; data: Value; [key: string]: unknown };
 type PageRow = { key: string; title: string; slug: string; is_home: boolean; created_at?: string; created_at_source?: string; updated_at?: string };
-type Page = PageRow & { description: string; content: { blocks: Block[]; [key: string]: unknown }; revision: string };
+type Page = PageRow & { source?: string; warning?: string; description: string; content: { blocks: Block[]; [key: string]: unknown }; revision: string };
 type Result = { id: string; status: string; error?: string; page?: Page };
 const errorText = (e: unknown) => e instanceof Error ? e.message : "Не удалось выполнить запрос";
 const blockNames: Record<string, string> = { paragraph: "Абзац", header: "Заголовок", list: "Список", table: "Таблица", faq: "Вопросы и ответы", image: "Изображение", button: "Кнопка", shortcode: "Шорткод", raw: "HTML", quote: "Цитата", delimiter: "Разделитель" };
@@ -28,20 +28,23 @@ export function ProjectPages({ siteId, api, onCount }: { siteId: string; api: Ap
   const [rows, setRows] = React.useState<PageRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
+  const [source, setSource] = React.useState("");
+  const [warning, setWarning] = React.useState("");
   const [query, setQuery] = React.useState("");
   const [selected, setSelected] = React.useState<PageRow | null>(null);
-  const load = React.useCallback(async () => {
+  const load = React.useCallback(async (refresh = false) => {
     setLoading(true); setError("");
-    try { const result = await api<{ pages: PageRow[] }>(`/sites/${siteId}/pages`); setRows(result.pages); onCount?.(siteId, result.pages.length); }
+    try { const result = await api<{ pages: PageRow[]; source?: string; warning?: string }>(`/sites/${siteId}/pages${refresh ? "?refresh=true" : ""}`); setSource(result.source || "webdev"); setWarning(result.warning || ""); setRows(result.pages); onCount?.(siteId, result.pages.length); }
     catch (e) { setError(errorText(e)); }
     finally { setLoading(false); }
   }, [siteId, api, onCount]);
   React.useEffect(() => { void load(); }, [load]);
   const filtered = [...rows].sort((a, b) => Number(b.is_home) - Number(a.is_home)).filter(row => `${row.title} ${row.slug} ${row.is_home ? "главная" : ""}`.toLowerCase().includes(query.toLowerCase()));
-  return <section className="pp-pages"><header><div><h2>Все страницы <small>{loading ? "" : rows.length}</small></h2><p>Страницы из Webdev. Нажмите на заголовок, чтобы открыть редактор.</p></div><button className="button secondary" disabled={loading} onClick={() => void load()}><RefreshCcw size={16} />Обновить список</button></header>
+  return <section className="pp-pages"><header><div><h2>Все страницы <small>{loading ? "" : rows.length}</small></h2><p>{source === "cache" ? "Страницы из серверного кеша." : "Страницы из Webdev."} Нажмите на заголовок, чтобы открыть редактор.</p></div><button className="button secondary" disabled={loading} onClick={() => void load(true)}><RefreshCcw size={16} />Обновить список</button></header>
     <label className="pp-page-search"><Search size={18} /><input aria-label="Поиск страниц" placeholder="Заголовок или адрес страницы" value={query} onChange={e => setQuery(e.target.value)} /></label>
+    {warning && <p role="status">{warning}</p>}
     {error && <p className="pp-page-error" role="alert">{error}</p>}
-    {loading ? <p role="status">Загружаем страницы из Webdev…</p> : !error && <div className="pp-page-list">{filtered.map(row => <button key={row.key} className="pp-page-row" onClick={() => setSelected(row)}>{row.is_home ? <Home size={21} /> : <FileText size={21} />}<span className="pp-page-title"><strong>{row.title}</strong><small>{row.is_home && <b>Главная</b>}{row.slug}</small></span><span className="pp-page-date" title={row.created_at_source === "publishedTime" ? "Дата публикации из Webdev: отдельная дата создания не передана" : "Дата создания из Webdev"}><small>Дата создания</small><time>{pageDate(row.created_at)}</time></span><span className="pp-page-date"><small>Дата обновления</small><time>{pageDate(row.updated_at)}</time></span><ChevronRight size={18} /></button>)}{!filtered.length && <p>{rows.length ? "Страницы не найдены. Измените запрос." : "В Webdev пока нет страниц этого проекта."}</p>}</div>}
+    {loading ? <p role="status">Загружаем страницы из Webdev…</p> : (!error || rows.length > 0) && <div className="pp-page-list">{filtered.map(row => <button key={row.key} className="pp-page-row" onClick={() => setSelected(row)}>{row.is_home ? <Home size={21} /> : <FileText size={21} />}<span className="pp-page-title"><strong>{row.title}</strong><small>{row.is_home && <b>Главная</b>}{row.slug}</small></span><span className="pp-page-date" title={row.created_at_source === "publishedTime" ? "Дата публикации из Webdev: отдельная дата создания не передана" : "Дата создания из Webdev"}><small>Дата создания</small><time>{pageDate(row.created_at)}</time></span><span className="pp-page-date"><small>Дата обновления</small><time>{pageDate(row.updated_at)}</time></span><ChevronRight size={18} /></button>)}{!filtered.length && <p>{rows.length ? "Страницы не найдены. Измените запрос." : "В Webdev пока нет страниц этого проекта."}</p>}</div>}
     {selected && <PageEditor key={selected.key} siteId={siteId} row={selected} api={api} onClose={() => setSelected(null)} onSaved={page => setRows(current => current.map(row => row.key === page.key ? page : row))} />}
   </section>;
 }
@@ -136,9 +139,9 @@ function PageEditor({ siteId, row, api, onClose, onSaved }: { siteId: string; ro
   const dirty = !!page && JSON.stringify(page) !== original;
   const path = `/sites/${siteId}/pages/${row.key}`;
   const unresolved = operation && ["pending", "unknown"].includes(operation.status);
-  const load = React.useCallback(async () => {
+  const load = React.useCallback(async (refresh = false) => {
     setLoading(true); setError(""); setMessage("");
-    try { const next = await api<Page>(path); setPage(next); setOriginal(JSON.stringify(next)); setOperation(null); }
+    try { const next = await api<Page>(path + (refresh ? "?refresh=true" : "")); setPage(next); setOriginal(JSON.stringify(next)); setOperation(null); }
     catch (e) { setError(errorText(e)); }
     finally { setLoading(false); }
   }, [api, path]);
@@ -190,9 +193,10 @@ function PageEditor({ siteId, row, api, onClose, onSaved }: { siteId: string; ro
   function blocks(next: Block[]) { if (page) setPage({ ...page, content: { ...page.content, blocks: next } }); }
   const validContent = page?.content && Array.isArray(page.content.blocks);
   return createPortal(<div className={`pp-page-editor ${documentMode ? "pp-document-mode" : ""}`} ref={dialog} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`Редактор страницы: ${row.title}`} onKeyDown={handleKeys}>
-    <header className="pp-editor-header"><div><button type="button" className="pp-editor-back" disabled={busy} onClick={close}><ArrowLeft size={16} />Назад</button><span>{row.is_home ? "Главная страница" : "Редактор страницы"}</span><h2>{page?.title || row.title}</h2><small>{row.slug}</small></div><div className="pp-editor-actions"><button type="button" className="button secondary" disabled={busy} onClick={() => { if (!dirty || window.confirm("Загрузить актуальную страницу из Webdev? Несохранённые изменения будут потеряны.")) void load(); }}><RefreshCcw size={16} />Загрузить заново</button><button type="button" className="button primary" disabled={!dirty || busy || loading || !!unresolved || !validContent} onClick={() => void save()}><Save size={16} />{busy ? "Проверяем…" : "Сохранить на сайте"}</button><button className="pp-icon" type="button" aria-label="Закрыть редактор" disabled={busy} onClick={close}><X size={24} /></button></div></header>
+    <header className="pp-editor-header"><div><button type="button" className="pp-editor-back" disabled={busy} onClick={close}><ArrowLeft size={16} />Назад</button><span>{row.is_home ? "Главная страница" : "Редактор страницы"}</span><h2>{page?.title || row.title}</h2><small>{row.slug}</small></div><div className="pp-editor-actions"><button type="button" className="button secondary" disabled={busy} onClick={() => { if (!dirty || window.confirm("Загрузить актуальную страницу из Webdev? Несохранённые изменения будут потеряны.")) void load(true); }}><RefreshCcw size={16} />Загрузить заново</button><button type="button" className="button primary" disabled={!dirty || busy || loading || !!unresolved || !validContent} onClick={() => void save()}><Save size={16} />{busy ? "Проверяем…" : "Сохранить на сайте"}</button><button className="pp-icon" type="button" aria-label="Закрыть редактор" disabled={busy} onClick={close}><X size={24} /></button></div></header>
     <main className="pp-editor-main">{loading && <p role="status">Загрузка страницы…</p>}{error && <div className="pp-page-error" role="alert">{error}{unresolved && <button className="button secondary" disabled={busy} onClick={() => void check()}>Проверить сохранение</button>}</div>}{message && <p role="status" className="pp-page-success"><Check size={18} />{message}</p>}
       {!loading && page && <><div className="pp-editor-info"><span>{dirty ? "Есть несохранённые изменения" : "Загружена сохранённая версия"} · Изменения публикуются кнопкой «Сохранить на сайте».</span><button type="button" className="button secondary compact" onClick={() => void navigator.clipboard.writeText(JSON.stringify({ title: page.title, description: page.description, content: page.content }, null, 2)).then(() => setMessage("Черновик скопирован")).catch(() => setError("Браузер не разрешил копирование."))}><Copy size={14} />Скопировать черновик</button></div>
+      {page?.source === "cache" && <p className="muted" role="status">{page.warning || "Сохранённая версия из серверного кеша. При сохранении проверяется актуальная версия в Webdev."}</p>}
       {validContent && <details className="pp-editor-tools-disclosure"><summary>Инструменты · AI, перелинковка и история версий</summary><PageContentTools api={api} path={path} isHome={row.is_home} content={page.content} revision={page.revision} disabled={busy || !!unresolved}
         applyContent={content => setPage(current => current ? { ...current, content: content as Page["content"] } : current)}
         applyVersion={snapshot => setPage(current => current ? { ...current, title: snapshot.title, description: snapshot.description, content: snapshot.content as Page["content"] } : current)} /></details>}

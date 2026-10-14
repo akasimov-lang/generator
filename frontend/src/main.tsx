@@ -2269,11 +2269,22 @@ function ProjectWorkspaceView({
     setMenuCapabilitiesLoading(true);
     setMenuCapabilitiesError("");
     try {
+      setProjectRefreshStatus("loading");
+      try {
+        const result = await refreshProject(true);
+        setProjectRefreshStatus(result.success ? "success" : "error");
+        setProjectRefreshResponseCode(result.statusCode ? String(result.statusCode) : result.errorCode);
+        if (!result.success) setWorkspaceError("Не все данные проекта удалось сверить с Webdev. Проверка меню продолжается.");
+      } catch (error) {
+        setProjectRefreshStatus("error");
+        setWorkspaceError(error instanceof Error ? error.message : "Не удалось обновить данные проекта. Проверка меню продолжается.");
+      }
       const refreshedCapabilities = await api<MenuCapabilities>(`/sites/${selectedSite.id}/menu-capabilities/check`, { method: "POST" });
       setMenuCapabilities(refreshedCapabilities);
       await onChanged();
     } catch (error) {
-      setMenuCapabilitiesError(error instanceof Error ? error.message : "Не удалось проверить меню");
+      setProjectRefreshStatus("error");
+      setMenuCapabilitiesError(error instanceof Error ? error.message : "Не удалось обновить проект и проверить меню");
     } finally {
       setMenuCapabilitiesLoading(false);
     }
@@ -2359,7 +2370,7 @@ function ProjectWorkspaceView({
               type="button"
               onClick={() => void retryMenuCapabilities()}
               disabled={menuCapabilitiesLoading || menuCheckPending}
-              title={menuCheckError || "Точная проверка отображения меню на сайте — Desktop 1440×1000"}
+              title={menuCheckError || "Мощнейшая серия ударов в ритуальный бубен, да окажутся домены из этого проекта в желаемом топе"}
               aria-label={`Запустить точную desktop-проверку меню проекта ${selectedSite.name}`}
             >
               <img className="workspaceDrumGraffiti" src="/icons/drum-graffiti.svg" alt="" aria-hidden="true" />

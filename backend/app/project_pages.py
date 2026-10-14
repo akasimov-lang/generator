@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app import models
 from app.core.config import get_settings
 from app.db import get_db
-from app.project_cache import ProjectCacheError
+from app.project_cache import ProjectCacheError, fetch_project_cache
 from app.project_network import Remote, network_lock, NetworkConflict
 from app.security import AuthUser
 
@@ -109,20 +109,49 @@ def remote_errors():
         raise HTTPException(502, "Не удалось подключиться к Webdev. Повторите загрузку.") from error
 
 
+def cached_pages_project(site):
+    try:
+        matches = [p for p in fetch_project_cache([site.name]) if p.get("name") == site.name]
+        if len(matches) == 1:
+            pages(matches[0])
+            return matches[0]
+    except (ProjectCacheError, HTTPException):
+        pass
+    return None
+
+
+def read_project(db, site, refresh=False):
+    if not refresh:
+        cached = cached_pages_project(site)
+        if cached is not None:
+            return cached, "cache", None
+    try:
+        with remote_errors(), Remote(db, site) as remote:
+            project = remote.project()
+            pages(project)
+            return project, "webdev", None
+    except HTTPException:
+        if refresh:
+            cached = cached_pages_project(site)
+            if cached is not None:
+                return cached, "cache", "Webdev недоступен. Показана сохранённая версия из серверного кеша."
+        raise
+
+
 @router.get("")
-def list_pages(site_id: str, user: AuthUser, db: Session = Depends(get_db)):
+def list_pages(site_id: str, user: AuthUser, db: Session = Depends(get_db), refresh: bool = False):
     site = site_for(db, site_id)
-    with remote_errors(), Remote(db, site) as remote:
-        result = [page_summary(p) for p in pages(remote.project())]
+    project, source, warning = read_project(db, site, refresh)
+    result = [page_summary(p) for p in pages(project)]
     result.sort(key=lambda p: (not p["is_home"], p["title"].casefold(), p["slug"]))
-    return {"pages": result, "total": len(result)}
+    return {"pages": result, "total": len(result), "source": source, "warning": warning}
 
 
 @router.get("/{key}")
-def read_page(site_id: str, key: str, user: AuthUser, db: Session = Depends(get_db)):
+def read_page(site_id: str, key: str, user: AuthUser, db: Session = Depends(get_db), refresh: bool = False):
     site = site_for(db, site_id)
-    with remote_errors(), Remote(db, site) as remote:
-        return page_detail(find_page(remote.project(), key))
+    project, source, warning = read_project(db, site, refresh)
+    return {**page_detail(find_page(project, key)), "source": source, "warning": warning}
 
 
 def operation_result(operation, page=None):

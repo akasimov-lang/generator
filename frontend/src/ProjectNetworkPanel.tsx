@@ -1,4 +1,5 @@
 import React from "react";
+import { TemplateCombobox } from "./TemplateCombobox";
 import { Trash2 } from "lucide-react";
 
 type AlternatesSnapshot = { markup: string; enabled: boolean };
@@ -21,7 +22,7 @@ type Props = {
   api: <T>(path: string, options?: RequestInit) => Promise<T>; onChanged: () => void;
 };
 type Draft = { markup: string; enabled: boolean; originalMarkup: string; originalEnabled: boolean };
-const actionLabels = { create_domains: "Добавление доменов", select_fake_main: "Выбор текущей фейковой страницы", indexing: "Индексация проекта", create_fake_main: "Создание фейковой главной", delete_domain: "Удаление домена", create_subdomains: "Создание поддоменов", reserve: "Сохранение резерва", reglue: "Переклей", alternates: "Альтернейты" };
+const actionLabels = { create_domains: "Добавление доменов", select_fake_main: "Выбор текущей фейковой страницы", indexing: "Индексация проекта", create_fake_main: "Создание фейковой главной", delete_domain: "Удаление домена", create_subdomains: "Создание поддоменов", reserve: "Сохранение резерва", reglue: "Ручной переклей", alternates: "Альтернейты" };
 const statusLabels: Record<string, string> = { index_queued: "В очереди", index_submitting: "Отправляется", index_submitted: "Задача создана", index_unknown: "Отправка не подтверждена", confirmed: "Подтверждено", pending: "Ожидает подтверждения", unknown: "Результат пока неизвестен", failed: "Ошибка" };
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Не удалось выполнить запрос";
 
@@ -191,6 +192,20 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
         </div>}
         {mode === "network" && networkView === "amp" ? <p>Текущий AMP: <strong>{data.amp || "не задан"}</strong> · Предыдущий AMP: <strong>{data.prev_amp || "не задан"}</strong></p> : <p>Текущий Main: <strong>{data.canon || "не задан"}</strong> · Резерв: <strong>{data.reserve || "не выбран"}</strong></p>}
         {uncertain && <div className="notice" role="status">Проверяем результат отправленной операции. Новые изменения станут доступны после подтверждения. Запрос на изменение повторно не отправляется.</div>}
+        {(mode === "redirects" || networkView === "main") && <div className="networkSection">
+          <h3>Резервный домен</h3>
+          <label><input type="checkbox" checked={onlyFormer} onChange={(event) => setOnlyFormer(event.target.checked)} /> Показывать только бывшие Main в сетке</label>
+          <fieldset disabled={disabled} className="networkReserveField"><TemplateCombobox label="Резервный домен" value={reserve} placeholder="Введите домен для поиска" onChange={value => { setReserve(value); setCheck(null); }} options={[{ value: "", label: "Выберите резервный домен" }, ...data.domains.filter(domain => !ampDomains.has(domain) && domain !== data.canon && (!onlyFormer || data.main_history.includes(domain) || domain === reserve)).map(domain => ({ value: domain, label: domain + (data.main_history.includes(domain) ? " — был Main" : "") }))]} /></fieldset>
+          <div className="networkActions">
+            <button type="button" className="button secondary" disabled={disabled || !reserveValid || reserve === data.reserve} onClick={() => void mutate("reserve")}>{busy === "reserve" ? "Сохраняем…" : "Сохранить резерв"}</button>
+            <button type="button" className="button secondary" disabled={disabled || !reserveValid || reserve !== data.reserve} onClick={() => void checkReserve()}>{busy === "check" ? "Проверяем…" : "Проверить домен"}</button>
+          </div>
+          {check && <p role="status">{check.reachable ? "Домен доступен" : `Домен недоступен: ${check.reason || "нет ответа"}`}</p>}
+          <p className="muted">Ручной переклей на сохранённый резерв. Проверка домена необязательна; автопереклей и его расписание не запускаются.</p>
+          {reserveValid && <p>Смена canonical: <strong>{data.canon}</strong> → <strong>{reserve}</strong></p>}
+          {dirty && <p>В альтернейтах есть несохранённые изменения. Сохраните их перед запуском переклея.</p>}
+          <button type="button" className="button primary compact networkReglueButton" disabled={disabled || dirty || !reserveValid || reserve !== data.reserve} onClick={() => void mutate("reglue")}>{busy === "reglue" ? "Запускаем переклей…" : "Переклей"}</button>
+        </div>}
         {mode === "network" && <>
           <button type="button" className="secondary compact" aria-expanded={showDomainList} onClick={() => { if (showDomainList) { domainListRef.current?.focus(); domainListRef.current?.select(); } else setShowDomainList(true); }}>Выделить домены</button>
           {showDomainList && <div className="networkDomainList"><label>Домены — по одному в строке<textarea ref={domainListRef} readOnly aria-label="Домены для копирования" value={visibleDomains.join("\n")} rows={Math.min(12, Math.max(3, visibleDomains.length))} /></label><small>Ctrl+C / ⌘C — скопировать. Можно выделить только нужные строки.</small><button type="button" className="secondary compact" onClick={() => setShowDomainList(false)}>Скрыть список</button></div>}
@@ -228,23 +243,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
             <p className="muted">Домен проекта, Main, AMP и резерв защищены от удаления.</p>
           </div></div>}
         </>}
-        {mode === "redirects" && <div className="networkSection">
-          <h3>Резервный домен</h3>
-          <label><input type="checkbox" checked={onlyFormer} onChange={(event) => setOnlyFormer(event.target.checked)} /> Показывать только бывшие Main в сетке</label>
-          <label>Домен для переклея<select aria-label="Домен для переклея" value={reserve} disabled={disabled} onChange={(event) => { setReserve(event.target.value); setCheck(null); }}>
-            <option value="">Выберите резервный домен</option>
-            {data.domains.filter((domain) => !ampDomains.has(domain) && domain !== data.canon && (!onlyFormer || data.main_history.includes(domain) || domain === reserve)).map((domain) => <option key={domain} value={domain}>{domain}{data.main_history.includes(domain) ? " — был Main" : ""}</option>)}
-          </select></label>
-          <div className="networkActions">
-            <button type="button" className="button secondary" disabled={disabled || !reserveValid || reserve === data.reserve} onClick={() => void mutate("reserve")}>{busy === "reserve" ? "Сохраняем…" : "Сохранить резерв"}</button>
-            <button type="button" className="button secondary" disabled={disabled || !reserveValid || reserve !== data.reserve} onClick={() => void checkReserve()}>{busy === "check" ? "Проверяем…" : "Проверить домен"}</button>
-          </div>
-          {check && <p role="status">{check.reachable ? "Домен доступен" : `Домен недоступен: ${check.reason || "нет ответа"}`}</p>}
-          <p className="muted">Ручной переклей на сохранённый резерв. Проверка домена необязательна; автопереклей и его расписание не запускаются.</p>
-          {reserveValid && <p>Смена canonical: <strong>{data.canon}</strong> → <strong>{reserve}</strong></p>}
-          {dirty && <p>В альтернейтах есть несохранённые изменения. Сохраните их перед запуском переклея.</p>}
-          <button type="button" className="button primary compact networkReglueButton" disabled={disabled || dirty || !reserveValid || reserve !== data.reserve} onClick={() => void mutate("reglue")}>{busy === "reglue" ? "Запускаем переклей…" : "Переклеить на резервный домен"}</button>
-        </div>}
+
         {(mode !== "network" || networkView === "main") && <div className="networkSection networkCanonical">
           <h3>Каноникл</h3>
           <p>Состояние: <strong>{typeof data.enableCanonical === "boolean" ? data.enableCanonical ? "Включён" : "Выключен" : "Нет сохранённых данных — обновите данные сетки"}</strong></p>

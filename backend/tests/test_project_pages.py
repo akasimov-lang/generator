@@ -42,6 +42,7 @@ def setup(monkeypatch):
                 state['project']['data']['pages'] = [copy.deepcopy(payload['page']) if p['id']==payload['page']['id'] else p for p in state['project']['data']['pages']]
             return 200, {'success':True}
     monkeypatch.setattr(pages,'Remote',Remote)
+    monkeypatch.setattr(pages,'fetch_project_cache',lambda names: [])
     monkeypatch.setattr(pages,'get_settings',lambda: type('Settings',(),{'project_cache_username':'service-account'})())
     app = FastAPI(); app.include_router(pages.router)
     app.dependency_overrides[get_db]=lambda:db
@@ -213,3 +214,40 @@ def test_page_dates_from_webdev_with_publication_fallback():
     assert row['updated_at'] == '2026-10-09'
     assert pages.page_summary({'publishedTime': '2025-01-02'})['created_at'] == '2025-01-02'
     assert pages.page_summary({})['created_at'] is None
+
+
+def test_reads_server_cache_without_contacting_project_host(setup, monkeypatch):
+    client, db, site, state = setup
+    cached = dict(copy.deepcopy(state['project']), name=site.name)
+    monkeypatch.setattr(pages, 'fetch_project_cache', lambda names: [cached])
+    class Unavailable:
+        def __init__(self, *args): raise AssertionError('Must use server cache')
+    monkeypatch.setattr(pages, 'Remote', Unavailable)
+    result = client.get(f'/sites/{site.id}/pages').json()
+    assert result['source'] == 'cache'
+    assert result['pages'][0]['is_home']
+    detail = client.get(f"/sites/{site.id}/pages/{result['pages'][0]['key']}")
+    assert detail.status_code == 200
+    assert detail.json()['content']['blocks']
+
+
+def test_refresh_falls_back_to_cache_when_host_is_down(setup, monkeypatch):
+    client, db, site, state = setup
+    monkeypatch.setattr(pages, 'fetch_project_cache', lambda names: [dict(state['project'], name=site.name)])
+    class Unavailable:
+        def __init__(self, *args): pass
+        def __enter__(self): raise httpx.ConnectError('offline')
+        def __exit__(self, *args): pass
+    monkeypatch.setattr(pages, 'Remote', Unavailable)
+    result = client.get(f'/sites/{site.id}/pages?refresh=true')
+    assert result.status_code == 200
+    assert result.json()['source'] == 'cache'
+    assert result.json()['warning']
+
+
+def test_cache_for_another_project_is_not_used(setup, monkeypatch):
+    client, db, site, state = setup
+    monkeypatch.setattr(pages, 'fetch_project_cache', lambda names: [dict(state['project'], name='other.test')])
+    result = client.get(f'/sites/{site.id}/pages')
+    assert result.status_code == 200
+    assert result.json()['source'] == 'webdev'
