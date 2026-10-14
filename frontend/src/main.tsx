@@ -8404,10 +8404,10 @@ function ProvidersView({ api, providers, onChanged }: ViewProps & { providers: A
   );
 }
 
-type SiteTableColumn = "brand" | "rowNumber" | "select" | "name" | "title" | "canon" | "language" | "status" | "internalPages" | "menuType" | "menuCount" | "domainsCount" | "fiberyName";
+type SiteTableColumn = "brand" | "rowNumber" | "select" | "name" | "title" | "canon" | "language" | "status" | "internalPages" | "menuType" | "menuCount" | "domainsCount" | "subdomainsCount" | "fiberyName";
 type SiteSummaryFilter = "projects" | "working" | "menu" | "mass_actions" | "vitalina" | "hands_only" | "geo_ru" | "geo_kz" | "inactive" | "duplicate" | "all";
 
-const DEFAULT_SITE_COLUMN_ORDER: SiteTableColumn[] = ["rowNumber", "select", "name", "brand", "title", "canon", "language", "status", "internalPages", "menuType", "menuCount", "domainsCount", "fiberyName"];
+const DEFAULT_SITE_COLUMN_ORDER: SiteTableColumn[] = ["rowNumber", "select", "name", "brand", "title", "canon", "language", "status", "internalPages", "menuType", "menuCount", "domainsCount", "subdomainsCount", "fiberyName"];
 const SITE_COLUMN_LABELS: Record<SiteTableColumn, string> = {
   brand: "Бренд",
   rowNumber: "№",
@@ -8421,6 +8421,7 @@ const SITE_COLUMN_LABELS: Record<SiteTableColumn, string> = {
   menuType: "Тип меню",
   menuCount: "Пункты меню",
   fiberyName: "Имя проекта",
+  subdomainsCount: "Поддоменов",
   domainsCount: "Доменов в сетке"
 };
 const SITE_COLUMN_SORT_KEYS: Record<SiteTableColumn, string | null> = {
@@ -8436,6 +8437,7 @@ const SITE_COLUMN_SORT_KEYS: Record<SiteTableColumn, string | null> = {
   menuType: "menuType",
   menuCount: "menuCount",
   fiberyName: "fiberyName",
+  subdomainsCount: "subdomainsCount",
   domainsCount: "domainsCount"
 };
 
@@ -8705,9 +8707,11 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
   const [menuTypeFilters, setMenuTypeFilters] = React.useState<string[]>(allMenuTypeFilters);
   const [columnOrder, setColumnOrder] = React.useState<SiteTableColumn[]>(() => {
     const previous = Array.isArray(storedPreferences.columnOrder) ? storedPreferences.columnOrder.map(column => (column as string) === "xDefault" ? "fiberyName" as SiteTableColumn : column) : storedPreferences.columnOrder;
-    const stored = Array.isArray(previous) && !previous.includes("brand")
-      ? previous.flatMap(column => column === "name" ? [column, "brand" as SiteTableColumn] : [column])
-      : previous;
+    const withSubdomains = Array.isArray(previous) && !previous.includes("subdomainsCount")
+      ? previous.flatMap(column => column === "domainsCount" ? [column, "subdomainsCount" as SiteTableColumn] : [column]) : previous;
+    const stored = Array.isArray(withSubdomains) && !withSubdomains.includes("brand")
+      ? withSubdomains.flatMap(column => column === "name" ? [column, "brand" as SiteTableColumn] : [column])
+      : withSubdomains;
     return Array.isArray(stored) && stored.every((column) => DEFAULT_SITE_COLUMN_ORDER.includes(column))
       ? [...new Set([...stored, ...DEFAULT_SITE_COLUMN_ORDER])]
       : DEFAULT_SITE_COLUMN_ORDER;
@@ -8859,6 +8863,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       fiberyNameManual: Boolean(site.fibery_name_manual),
       projectTeam: site.project_team,
       needsTeamReview: typeof site.project_team === "string" && ["", "rankomen"].includes(site.project_team.trim().toLowerCase()),
+      subdomainsCount: site.network_domain_counts?.subdomains ?? null,
       domainsCount: site.domains_count,
       domains: Array.isArray(site.cache_domains) ? site.cache_domains : [],
       syncedAt: site.cache_synced_at
@@ -8883,6 +8888,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       internalPages: [left.internalPagesCount, right.internalPagesCount],
       menuType: [left.menuType, right.menuType],
       menuCount: [left.menuCount, right.menuCount],
+      subdomainsCount: [left.subdomainsCount ?? -1, right.subdomainsCount ?? -1],
       domainsCount: [left.domainsCount, right.domainsCount]
     };
     const [leftValue, rightValue] = values[siteSort.key];
@@ -9311,6 +9317,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
                 </button>
               ) : "0",
               fiberyName: <span className="siteFiberyName" title={row.projectTeam == null ? "Нет сохранённых данных о команде" : `Команда: ${row.projectTeam || "не заполнена"}`}><span className="siteFiberyNameText">{row.fiberyName || "—"}</span>{row.needsTeamReview && <a className="siteFiberyReviewButton" href={`https://webdev-alfasearch.ru/projects/${encodeURIComponent(row.name)}`} target="_blank" rel="noopener noreferrer" aria-label={`Проверить команду проекта ${row.name} в Webdev`}>Проверить</a>}</span>,
+              subdomainsCount: row.subdomainsCount === null ? "—" : formatNumber(row.subdomainsCount),
               domainsCount: row.isActive ? <a href={pathForRoute("workspace", "network", row.name)} aria-label={`Открыть сетку проекта ${row.name}`}>{formatNumber(row.domainsCount)}</a> : <span title="Сохранённое число доменов неактивного проекта">{formatNumber(row.domainsCount)}</span>
             };
             return visibleColumnOrder.map((column) => cells[column]);
