@@ -41,8 +41,6 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
   const [showDomainList, setShowDomainList] = React.useState(false);
   const domainListRef = React.useRef<HTMLTextAreaElement>(null);
   React.useEffect(() => { if (showDomainList) { domainListRef.current?.focus(); domainListRef.current?.select(); } }, [showDomainList]);
-  const [onlyFormer, setOnlyFormer] = React.useState(false);
-  const [check, setCheck] = React.useState<{ domain: string; reachable: boolean; reason: string } | null>(null);
   const [busy, setBusy] = React.useState("");
   const busyRef = React.useRef(false);
   const [error, setError] = React.useState("");
@@ -143,7 +141,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
         onChanged();
       } else if (operation?.status === "failed") { setError(operation.message || "Webdev сообщил об ошибке."); sessionStorage.removeItem(receiptKey); }
       else setMessage(operation?.message || "Запрос отправлен. Ожидается подтверждение.");
-      setCheck(null);
+
     } catch (err) { if (mounted.current) setError(`${errorText(err)} Обновите данные перед повторной отправкой.`); }
     finally { busyRef.current = false; if (mounted.current) setBusy(""); }
   }
@@ -157,15 +155,6 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
       if (!mounted.current) return;
       const next = { ...dataRef.current!, domain_types: saved.domain_types, domain_classification: saved.domain_classification };
       dataRef.current = next; setData(next);
-    } catch (err) { if (mounted.current) setError(errorText(err)); }
-    finally { busyRef.current = false; if (mounted.current) setBusy(""); }
-  }
-  async function checkReserve() {
-    if (!data || !reserve || busyRef.current) return;
-    busyRef.current = true; setBusy("check"); setError(""); setCheck(null);
-    try {
-      const value = await api<{ domain: string; reachable: boolean; reason: string }>(`/sites/${site.id}/network/check-domain`, { method: "POST", body: JSON.stringify({ domain: reserve, revision: data.revision }) });
-      if (mounted.current) setCheck(value);
     } catch (err) { if (mounted.current) setError(errorText(err)); }
     finally { busyRef.current = false; if (mounted.current) setBusy(""); }
   }
@@ -190,22 +179,13 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
           <button type="button" aria-pressed={networkView === "main"} onClick={() => setNetworkView("main")}>Основная сетка</button>
           <button type="button" aria-pressed={networkView === "amp"} onClick={() => setNetworkView("amp")}>Ампы</button>
         </div>}
-        {mode === "network" && networkView === "amp" ? <p>Текущий AMP: <strong>{data.amp || "не задан"}</strong> · Предыдущий AMP: <strong>{data.prev_amp || "не задан"}</strong></p> : <p>Текущий Main: <strong>{data.canon || "не задан"}</strong> · Резерв: <strong>{data.reserve || "не выбран"}</strong></p>}
-        {uncertain && <div className="notice" role="status">Проверяем результат отправленной операции. Новые изменения станут доступны после подтверждения. Запрос на изменение повторно не отправляется.</div>}
-        {(mode === "redirects" || networkView === "main") && <div className="networkSection">
-          <h3>Резервный домен</h3>
-          <label><input type="checkbox" checked={onlyFormer} onChange={(event) => setOnlyFormer(event.target.checked)} /> Показывать только бывшие Main в сетке</label>
-          <fieldset disabled={disabled} className="networkReserveField"><TemplateCombobox label="Резервный домен" value={reserve} placeholder="Введите домен для поиска" onChange={value => { setReserve(value); setCheck(null); }} options={[{ value: "", label: "Выберите резервный домен" }, ...data.domains.filter(domain => !ampDomains.has(domain) && domain !== data.canon && (!onlyFormer || data.main_history.includes(domain) || domain === reserve)).map(domain => ({ value: domain, label: domain + (data.main_history.includes(domain) ? " — был Main" : "") }))]} /></fieldset>
-          <div className="networkActions">
-            <button type="button" className="button secondary" disabled={disabled || !reserveValid || reserve === data.reserve} onClick={() => void mutate("reserve")}>{busy === "reserve" ? "Сохраняем…" : "Сохранить резерв"}</button>
-            <button type="button" className="button secondary" disabled={disabled || !reserveValid || reserve !== data.reserve} onClick={() => void checkReserve()}>{busy === "check" ? "Проверяем…" : "Проверить домен"}</button>
-          </div>
-          {check && <p role="status">{check.reachable ? "Домен доступен" : `Домен недоступен: ${check.reason || "нет ответа"}`}</p>}
-          <p className="muted">Ручной переклей на сохранённый резерв. Проверка домена необязательна; автопереклей и его расписание не запускаются.</p>
-          {reserveValid && <p>Смена canonical: <strong>{data.canon}</strong> → <strong>{reserve}</strong></p>}
-          {dirty && <p>В альтернейтах есть несохранённые изменения. Сохраните их перед запуском переклея.</p>}
-          <button type="button" className="button primary compact networkReglueButton" disabled={disabled || dirty || !reserveValid || reserve !== data.reserve} onClick={() => void mutate("reglue")}>{busy === "reglue" ? "Запускаем переклей…" : "Переклей"}</button>
+        {mode === "network" && networkView === "amp" ? <p>Текущий AMP: <strong>{data.amp || "не задан"}</strong> · Предыдущий AMP: <strong>{data.prev_amp || "не задан"}</strong></p> : <div className="networkMainReserveRow">
+          <span>Текущий Main: <strong>{data.canon || "не задан"}</strong></span>
+          <fieldset disabled={disabled} className="networkReserveField networkReserveInline"><TemplateCombobox label="Резервный домен" value={reserve} placeholder="Выберите резерв" onChange={value => { setReserve(value); }} options={[{ value: "", label: "Выберите резерв" }, ...data.domains.filter(domain => !ampDomains.has(domain) && domain !== data.canon).map(domain => ({ value: domain, label: domain }))]} /></fieldset>
+          <button type="button" className="button secondary compact" disabled={disabled || !reserveValid || reserve === data.reserve} onClick={() => void mutate("reserve")}>{busy === "reserve" ? "Сохраняем…" : "Сохранить резерв"}</button>
+          <button type="button" className="button primary compact networkReglueButton" disabled={disabled || dirty || !reserveValid || reserve !== data.reserve} title={dirty ? "Сначала сохраните изменения альтернейтов" : reserve !== data.reserve ? "Сначала сохраните выбранный резерв" : "Ручной переклей на резервный домен"} onClick={() => void mutate("reglue")}>{busy === "reglue" ? "Запускаем…" : "Переклей"}</button>
         </div>}
+        {uncertain && <div className="notice" role="status">Проверяем результат отправленной операции. Новые изменения станут доступны после подтверждения. Запрос на изменение повторно не отправляется.</div>}
         {mode === "network" && <>
           <button type="button" className="secondary compact" aria-expanded={showDomainList} onClick={() => { if (showDomainList) { domainListRef.current?.focus(); domainListRef.current?.select(); } else setShowDomainList(true); }}>Выделить домены</button>
           {showDomainList && <div className="networkDomainList"><label>Домены — по одному в строке<textarea ref={domainListRef} readOnly aria-label="Домены для копирования" value={visibleDomains.join("\n")} rows={Math.min(12, Math.max(3, visibleDomains.length))} /></label><small>Ctrl+C / ⌘C — скопировать. Можно выделить только нужные строки.</small><button type="button" className="secondary compact" onClick={() => setShowDomainList(false)}>Скрыть список</button></div>}

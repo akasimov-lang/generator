@@ -10075,3 +10075,9 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .workspaceDrumIcon img { object-fit: contain; filter: drop-shadow(0 1px 1px rgba(50, 30, 10, .32)); }
 .workspaceDrumGraffiti { position: absolute; width: 100px; max-width: none; height: 50px; left: 50%; top: -29px; transform: translateX(-50%); pointer-events: none; z-index: 2; }
 .networkReserveField { border: 0; padding: 0; margin: 12px 0; min-width: 0; }
+.networkMainReserveRow { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 18px 0; }
+.networkMainReserveRow > span { overflow-wrap: anywhere; }
+.networkMainReserveRow .networkReserveInline { width: 320px; max-width: 100%; margin: 0; flex: 0 1 320px; }
+.networkReserveInline .tg-combobox > label { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+.networkReserveInline .tg-combobox-control input { min-height: 34px; height: 34px; font-size: 13px; }
+.networkMainReserveRow > .button { width: auto; margin: 0; flex: 0 0 auto; }
