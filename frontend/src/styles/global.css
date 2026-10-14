@@ -9948,3 +9948,10 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .workspaceTopbarTitle .eyebrow { grid-column: 1 / -1; }
 .workspaceHeadingSearch { width: 100%; min-width: 0; max-width: 520px; }
 @media (max-width: 1200px) { .workspaceTopbarTitle { grid-template-columns: 1fr; } }
+/* Shared pill styling for the project identity controls. */
+.workspaceProjectTitle .workspaceMenuCheckButton { width: 34px; height: 34px; padding: 0; border-radius: 999px; }
+.workspaceProjectTitle .workspaceFiberyName { padding: 0; border: 0; background: transparent; align-items: center; }
+.workspaceFiberyName > span { display: inline-flex; align-items: center; min-height: 32px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-3); font-size: 12px; font-weight: 700; }
+.workspaceProjectStatus .workspaceTypeSelect { display: inline-block; width: 180px; max-width: 100%; }
+.workspaceTypeSelect .searchableSelectControl { border-radius: 999px; font-weight: 800; }
+.workspaceTypeSelect .searchableSelectControlLabel { font-size: inherit; }
