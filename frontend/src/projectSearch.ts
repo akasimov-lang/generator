@@ -23,11 +23,17 @@ export function matchesProjectSearch(value: string, query: string): boolean {
   return keywords.includes(normalizedQuery) || keywords.includes(normalizeProjectSearch(normalizedQuery));
 }
 
+/** Accept pasted URLs without changing ordinary project-name searches. */
+export function normalizeDomainQuery(value: string): string {
+  const query = value.trim().toLowerCase().replace(/^(?:https?|htpps):\/\//, "").replace(/^\/\//, "");
+  if (/^[^\s/?#]+\.[^\s/?#]+/.test(query)) {
+    return query.split(/[/?#]/, 1)[0].replace(/\.$/, "");
+  }
+  return query.replace(/\/+$/, "");
+}
+
 function domainSearchKey(value: string): string {
-  return normalizeProjectSearch(value.trim())
-    .replace(/^https?:\/\//, "")
-    .split(/[/?#]/, 1)[0]
-    .replace(/\.$/, "");
+  return normalizeProjectSearch(normalizeDomainQuery(value));
 }
 
 export function isExactNetworkDomainSearch(domains: string[], query: string): boolean {

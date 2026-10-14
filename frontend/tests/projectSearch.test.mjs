@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isExactNetworkDomainSearch, matchesProjectSearch, projectSearchKeywords } from "../src/projectSearch.ts";
+import { normalizeDomainQuery, isExactNetworkDomainSearch, matchesProjectSearch, projectSearchKeywords } from "../src/projectSearch.ts";
 
 const encoded = "xn--80ae9b7b.xn--p1ai";
 
@@ -37,4 +37,13 @@ test("recognizes an exact domain as a member of its current project network", ()
   assert.equal(isExactNetworkDomainSearch(domains, "https://1xslots-casino-online.com/path"), true);
   assert.equal(isExactNetworkDomainSearch(domains, "авсэ.рф"), true);
   assert.equal(isExactNetworkDomainSearch(domains, "casino-online.com"), false);
+});
+
+test("normalizes pasted URLs in both domain search fields without truncating project names", () => {
+  for (const query of ["http://example.com", "https://example.com/", "htpps://example.com/", "example.com/", " HTTPS://EXAMPLE.COM/path?q=1#part ", "//example.com/"]) {
+    assert.equal(normalizeDomainQuery(query), "example.com", query);
+    assert.equal(isExactNetworkDomainSearch(["example.com"], query), true, query);
+  }
+  assert.equal(normalizeDomainQuery("#1313_Pin Up_AZ"), "#1313_pin up_az");
+  assert.equal(normalizeDomainQuery("Example project"), "example project");
 });

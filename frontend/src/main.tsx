@@ -6,7 +6,7 @@ import ReactDOM from "react-dom/client";
 import { createPortal } from "react-dom";
 import { LANGUAGE_OPTIONS, type LanguageOption } from "./languageOptions";
 import { getMenuLibrary, type MenuLibraryItem } from "./menuLibrary";
-import { isExactNetworkDomainSearch, matchesProjectSearch, projectSearchKeywords } from "./projectSearch";
+import { normalizeDomainQuery, isExactNetworkDomainSearch, matchesProjectSearch, projectSearchKeywords } from "./projectSearch";
 import { TechnicalPagesForm } from "./TechnicalPagesForm";
 import { FactualResearchPanel, factualResearchFromPayload } from "./FactualResearchPanel";
 import { workspaceRequestCache } from "./workspaceRequestCache";
@@ -1946,7 +1946,7 @@ function ProjectWorkspaceView({
   onTabChange: (tab: WorkspaceTab, projectName?: string) => void;
   onSiteChanged: (site: Site) => void;
 }) {
-  const normalizedDomainQuery = domainQuery.trim().toLowerCase().replace(/^https?:\/\//, "").split(/[/?#]/, 1)[0];
+  const normalizedDomainQuery = normalizeDomainQuery(domainQuery);
   const domainResults = normalizedDomainQuery ? sites.filter(site =>
     [site.name, site.cache_canon || "", ...(site.cache_domains || [])]
       .some(domain => matchesProjectSearch(domain, normalizedDomainQuery))
@@ -8873,7 +8873,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       : String(leftValue).localeCompare(String(rightValue), "ru", { numeric: true, sensitivity: "base" });
     return comparison * (siteSort.direction === "asc" ? 1 : -1) || left.name.localeCompare(right.name);
   });
-  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const normalizedQuery = normalizeDomainQuery(searchQuery);
   const normalizedBrandFilter = brandFilter.trim().toLowerCase();
   const geoOptions = Array.from(new Set(domainRows.map((row) => siteGeoFilterCode(row.geo)).filter(Boolean)))
     .sort((left, right) => left.localeCompare(right));
