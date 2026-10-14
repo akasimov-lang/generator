@@ -2362,6 +2362,7 @@ function ProjectWorkspaceView({
               title={menuCheckError || "Точная проверка отображения меню на сайте — Desktop 1440×1000"}
               aria-label={`Запустить точную desktop-проверку меню проекта ${selectedSite.name}`}
             >
+              <img className="workspaceDrumGraffiti" src="/icons/drum-graffiti.svg" alt="" aria-hidden="true" />
               <span className="workspaceDrumIcon"><img src="/icons/shaman-drum.png" width="28" height="28" alt="" aria-hidden="true" /></span>
             </button>
           ) : null}

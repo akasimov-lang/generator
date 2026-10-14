@@ -10073,3 +10073,4 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 }
 
 .workspaceDrumIcon img { object-fit: contain; filter: drop-shadow(0 1px 1px rgba(50, 30, 10, .32)); }
+.workspaceDrumGraffiti { position: absolute; width: 100px; max-width: none; height: 50px; left: 50%; top: -29px; transform: translateX(-50%); pointer-events: none; z-index: 2; }
