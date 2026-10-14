@@ -10089,8 +10089,13 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .networkFakeSelectorRow { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin: 0 0 18px; }
 .networkFakeSelectorRow fieldset { margin: 0; width: 320px; max-width: 100%; }
 
-.projectWorkspaceView .projectCanonActions { flex-wrap: wrap; }
+.projectWorkspaceView .projectCanonActions { flex-wrap: nowrap; gap: 4px; }
 .projectWorkspaceView .projectCanonActions > a,
-.projectWorkspaceView .projectCanonActions > button { width: 48px; height: 48px; border-radius: 8px; }
-.projectWorkspaceView .projectCanonActions svg { width: 28px; height: 28px; }
-.projectWorkspaceView .projectWebDevButton .projectWebDevLabel { font-size: 14px; }
+.projectWorkspaceView .projectCanonActions > button { width: 28px; height: 28px; border-radius: 6px; }
+.projectWorkspaceView .projectCanonActions svg { width: 18px; height: 18px; }
+.projectWorkspaceView .projectWebDevButton .projectWebDevLabel { font-size: 9px; }
+
+.networkCanonical > label { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 14px 0; color: var(--text); font-size: 16px; font-weight: 700; }
+.networkCanonical textarea.networkMarkup { min-height: 0; height: 44px; max-width: 100%; padding: 10px 12px; font-size: 13px; line-height: 22px; resize: vertical; white-space: pre; overflow: auto; }
+
+.networkAddedAt { white-space: nowrap; font-size: 12px; }

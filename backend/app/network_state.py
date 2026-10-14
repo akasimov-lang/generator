@@ -2,6 +2,7 @@
 import hashlib
 import json
 import re
+from datetime import datetime, timezone
 from html.parser import HTMLParser
 from app.fake_main import fake_paths
 from urllib.parse import urlsplit
@@ -150,6 +151,16 @@ def observe_network(site, project: dict) -> dict:
         *(link["domain"] for link in links if link["hreflang"].lower() == "x-default" and link["domain"]),
     ]))
     site.domain_types = {**(site.domain_types or {}), **{domain: "amp" for domain in state["amp_domains"]}}
+    previous = site.network_state or {}
+    added_at = dict(previous.get("domain_added_at") or {})
+    # Establish a baseline without inventing dates for pre-existing domains.
+    if "domains" in previous and isinstance(settings.get("domains"), list):
+        known = set(previous.get("domains") or []) | set(previous.get("amp_domains") or [])
+        observed_at = datetime.now(timezone.utc).isoformat()
+        for domain in [*state["domains"], *state["amp_domains"]]:
+            if domain not in known and domain not in added_at:
+                added_at[domain] = observed_at
+    state["domain_added_at"] = added_at
     site.network_state = state
     return state
 

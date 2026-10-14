@@ -6,6 +6,7 @@ type AlternatesSnapshot = { markup: string; enabled: boolean };
 type NetworkOperation = { id: string; action: "reserve" | "reglue" | "alternates" | "create_domains" | "create_subdomains" | "delete_domain" | "create_fake_main" | "select_fake_main" | "indexing"; task_id?: string; domains?: string[]; status: string; message: string | null; domain: string | null; source_domain?: string | null; alternates_before?: AlternatesSnapshot | null; alternates_after?: AlternatesSnapshot | null; initiator: string; created_at: string };
 type DomainClassification = { is_subdomain: boolean; parent_domain: string | null; parent_type: "drop" | "newreg" | null; unused_as_main: boolean };
 type Network = {
+  domain_added_at?: Record<string, string>;
   fake_main_paths?: string[]; fake_main_current?: string; fake_main_enabled?: boolean;
   amp?: string; prev_amp?: string; amp_domains?: string[];
   domain_classification?: Record<string, DomainClassification>;
@@ -199,7 +200,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
         {mode === "network" && <>
           <button type="button" className="secondary compact" aria-expanded={showDomainList} onClick={() => setShowDomainList(value => !value)}>Выделить домены</button>
           {showDomainList && <div className="networkDomainList"><label>Домены — по одному в строке<textarea ref={domainListRef} readOnly aria-label="Домены для копирования" value={visibleDomains.join("\n")} rows={Math.min(12, Math.max(3, visibleDomains.length))} /></label><small>Ctrl+C / ⌘C — скопировать. Можно выделить только нужные строки.</small><button type="button" className="secondary compact" onClick={() => setShowDomainList(false)}>Скрыть список</button></div>}
-          <div className="networkTableWrap" tabIndex={0} role="region" aria-label="Домены сетки"><table className="networkTable"><thead><tr><th scope="col">Домен</th><th scope="col">Тип домена</th><th scope="col">Поддомен</th><th scope="col">Статус</th><th scope="col">Был Main</th><th scope="col">Был в альтернейтах</th><th scope="col">x-default</th><th scope="col">Действия</th></tr></thead>
+          <div className="networkTableWrap" tabIndex={0} role="region" aria-label="Домены сетки"><table className="networkTable"><thead><tr><th scope="col">Домен</th><th scope="col">Тип домена</th><th scope="col">Поддомен</th><th scope="col">Статус</th><th scope="col">Был Main</th><th scope="col">Был в альтернейтах</th><th scope="col">x-default</th><th scope="col">Действия</th><th scope="col">Дата добавления</th></tr></thead>
             <tbody>{visibleDomains.map((domain) => <tr key={domain}><td data-label="Домен">{domain}</td><td data-label="Тип домена">{ampDomains.has(domain) ? <span className="networkAmpType">AMP</span> : data.domain_classification?.[domain]?.is_subdomain ? <span title="Тип задаётся у родительского домена">{data.domain_classification[domain].parent_type === "drop" ? "Дроп (родитель)" : data.domain_classification[domain].parent_type === "newreg" ? "Новорег (родитель)" : "Не указан у родителя"}</span> : <select className="networkDomainType" aria-label={`Тип домена ${domain}`} value={data.domain_types?.[domain] || ""} disabled={Boolean(busy)} onChange={(event) => void saveDomainType(domain, event.target.value)}><option value="" disabled>Не указан</option><option value="drop">Дроп</option><option value="newreg">Новорег</option></select>}</td><td data-label="Поддомен">
                 <span className="networkSubdomain"><input type="checkbox" className="networkHistoryCheck" disabled checked={!!data.domain_classification?.[domain]?.is_subdomain} aria-label={domain + ": поддомен"} />
                 {data.domain_classification?.[domain]?.is_subdomain && <span title={"Родитель: " + data.domain_classification[domain].parent_domain}>
@@ -212,6 +213,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
                 title={domain === data.canon || domain === data.reserve || domain === site.name || domain === data.amp ? "Домен проекта, Main, AMP и резерв защищены от удаления" : "Удалить домен из сетки"}
                 disabled={disabled || !data.domains.includes(domain) || [data.canon, data.reserve, site.name, data.amp].includes(domain)}
                 onClick={() => void mutate("delete_domain", domain)}><Trash2 size={15} /></button></td>
+              <td data-label="Дата добавления" className="networkAddedAt" title={data.domain_added_at?.[domain] ? "Первое подтверждённое появление в сетке (МСК)" : "Дата добавления не сохранена"}>{data.domain_added_at?.[domain] ? new Date(data.domain_added_at[domain]).toLocaleString("ru-RU", { timeZone: "Europe/Moscow", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
             </tr>)}</tbody>
           </table></div>
           {!visibleDomains.length && <p>{networkView === "amp" ? "В кеше проекта AMP-домены не указаны." : "В основной сетке нет доменов."}</p>}
@@ -237,8 +239,8 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
         {(mode !== "network" || networkView === "main") && <div className="networkSection networkCanonical">
           <h3>Каноникл</h3>
           <p>Состояние: <strong>{typeof data.enableCanonical === "boolean" ? data.enableCanonical ? "Включён" : "Выключен" : "Нет сохранённых данных — обновите данные сетки"}</strong></p>
-          <label>Каноникл всех страниц<textarea aria-label="Каноникл всех страниц" className="networkMarkup" rows={2} readOnly value={data.canonicalDefaultMarkup ?? ""} placeholder={data.canonicalDefaultMarkup === undefined ? "Нет сохранённых данных" : "Не задан"} /></label>
-          <label>Каноникл главной и фейковых внутренних страниц<textarea aria-label="Каноникл главной и фейковых внутренних страниц" className="networkMarkup" rows={2} readOnly value={data.canonicalFakeMainMarkup ?? ""} placeholder={data.canonicalFakeMainMarkup === undefined ? "Нет сохранённых данных" : "Не задан"} /></label>
+          <label>Каноникл всех страниц<textarea aria-label="Каноникл всех страниц" className="networkMarkup" rows={1} style={{ width: `${Math.max(28, ...(data.canonicalDefaultMarkup || "").split("\n").map(line => line.length)) + 4}ch` }} readOnly value={data.canonicalDefaultMarkup ?? ""} placeholder={data.canonicalDefaultMarkup === undefined ? "Нет сохранённых данных" : "Не задан"} /></label>
+          <label>Каноникл главной и фейковых внутренних страниц<textarea aria-label="Каноникл главной и фейковых внутренних страниц" className="networkMarkup" rows={1} style={{ width: `${Math.max(28, ...(data.canonicalFakeMainMarkup || "").split("\n").map(line => line.length)) + 4}ch` }} readOnly value={data.canonicalFakeMainMarkup ?? ""} placeholder={data.canonicalFakeMainMarkup === undefined ? "Нет сохранённых данных" : "Не задан"} /></label>
           {data.fake_main_current && <p className="muted">Текущая фейковая внутренняя страница: {data.fake_main_current}</p>}
         </div>}
         {draft && (mode !== "network" || networkView === "main") && <div className="networkSection">

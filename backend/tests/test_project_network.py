@@ -500,3 +500,20 @@ def test_create_domains_rejects_invalid_or_existing_names():
     for values in [[], ['localhost'], ['https://new.test'], ['main.test'], ['*.new.test']]:
         with pytest.raises(ValueError):
             network.validate_subdomains(values, ['main.test'], require_parent=False)
+
+
+def test_domain_added_dates_persist_without_dating_old_domains(env):
+    db, site, remote = env
+    initial = network.read_network(db, site)
+    assert initial["domain_added_at"] == {}
+    remote.data["settings"]["domains"].extend(["new.test", "sub.new.test"])
+    added = network.read_network(db, site)
+    dates = added["domain_added_at"]
+    assert set(dates) == {"new.test", "sub.new.test"}
+    from datetime import datetime
+    assert datetime.fromisoformat(dates["new.test"]).tzinfo is not None
+    assert network.read_network(db, site)["domain_added_at"] == dates
+    remote.data["settings"]["domains"].remove("sub.new.test")
+    assert network.read_network(db, site)["domain_added_at"] == dates
+    remote.data["settings"]["domains"].append("sub.new.test")
+    assert network.read_network(db, site)["domain_added_at"] == dates
