@@ -568,7 +568,7 @@ type PublicationCampaignQueue = {
 
 type ThemeMode = "light" | "dark";
 type InputStyle = "balanced" | "classic" | "soft" | "inset" | "underline" | "emerald" | "graphite" | "rounded" | "contrast" | "glass";
-type AppView = "templateGenerator" | "autoReglueGuide" | "autoReglue" | "published" | "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "favorites" | "guide" | "settings";
+type AppView = "templateGenerator" | "autoReglueGuide" | "autoReglue" | "published" | "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "massActionReport" | "favorites" | "guide" | "settings";
 type WorkspaceTab = "overview" | "topics" | "content" | "publication" | "menu" | "network" | "redirects" | "autoReglue" | "autoLb";
 
 type WorkspaceAccordionContextValue = {
@@ -678,6 +678,7 @@ const MAIN_VIEW_PATHS: Record<Exclude<AppView, "workspace">, string> = {
   published: "/published",
   providers: "/ai-providers",
   sites: "/sites",
+  massActionReport: "/mass-actions-report",
   favorites: "/favorites",
   guide: "/guide",
   settings: "/settings"
@@ -1051,9 +1052,9 @@ function App() {
     const key = `${view}:${name || savedId}`;
     if (refreshFlight.current?.key === key) return refreshFlight.current.promise;
     const promise = (async () => {
-      if (["sites", "favorites"].includes(view) || (view === "workspace" && !snapshotTimeRef.current)) {
+      if (["sites", "favorites", "massActionReport"].includes(view) || (view === "workspace" && !snapshotTimeRef.current)) {
         if (!initialSitesFlight.current) {
-          initialSitesFlight.current = api<Site[]>(["sites", "favorites"].includes(view) ? "/sites?include_grouped_inactive=true" : "/sites")
+          initialSitesFlight.current = api<Site[]>(["sites", "favorites", "massActionReport"].includes(view) ? "/sites?include_grouped_inactive=true" : "/sites")
             .then(result => { if (userRef.current?.id === user.id) mergeSites(result, true); })
             .finally(() => { initialSitesFlight.current = null; });
         }
@@ -1338,6 +1339,7 @@ function App() {
               <NavButton href={pathForRoute("workspace", "content")} icon={<Send />} label="Контент и публикации" active={activeView === "workspace" && (workspaceTab === "content" || workspaceTab === "publication")} onClick={openWorkspaceContent} />
               <NavButton href={pathForRoute("providers")} icon={<Bot />} label="API Providers" active={activeView === "providers"} onClick={() => navigateTo("providers")} />
               <NavButton href={pathForRoute("sites")} icon={<Globe2 />} label="Сайты" active={activeView === "sites"} onClick={() => navigateTo("sites")} />
+              <NavButton href={pathForRoute("massActionReport")} icon={<FileText />} label="Массовые действия Отчет" active={activeView === "massActionReport"} onClick={() => navigateTo("massActionReport")} />
               <NavButton href={pathForRoute("favorites")} icon={<Star className="favoriteNavIcon" fill="currentColor" />} label="Избранное" active={activeView === "favorites"} onClick={() => navigateTo("favorites")} />
             </>
           ) : (
@@ -1347,6 +1349,7 @@ function App() {
               <NavButton href={pathForRoute("taskArchive")} icon={<Archive />} label="Архив" active={activeView === "taskArchive"} onClick={() => navigateTo("taskArchive")} />
               <NavButton href={pathForRoute("workspace", "content")} icon={<Send />} label="Контент и публикации" active={activeView === "workspace" && (workspaceTab === "content" || workspaceTab === "publication")} onClick={openWorkspaceContent} />
               <NavButton href={pathForRoute("sites")} icon={<Globe2 />} label="Сайты" active={activeView === "sites"} onClick={() => navigateTo("sites")} />
+              <NavButton href={pathForRoute("massActionReport")} icon={<FileText />} label="Массовые действия Отчет" active={activeView === "massActionReport"} onClick={() => navigateTo("massActionReport")} />
               <NavButton href={pathForRoute("favorites")} icon={<Star className="favoriteNavIcon" fill="currentColor" />} label="Избранное" active={activeView === "favorites"} onClick={() => navigateTo("favorites")} />
             </>
           )}
@@ -1396,6 +1399,7 @@ function App() {
           navigateTo("workspace", "content", false, site.name);
         }} onChanged={loadAll} />}
         {isAdmin && activeView === "providers" && <ProvidersView api={api} providers={providers} onChanged={loadAll} />}
+        {activeView === "massActionReport" && <MassActionStatistics api={api} renderProjects={(ids, refresh) => <SitesView embedded api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={updates => { mergeSites(updates); refresh(); }} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll} />} />}
         {activeView === "sites" && <SitesView api={api} sites={siteSnapshot} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll} />}
         {activeView === "favorites" && <SitesView api={api} sites={siteSnapshot} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} favoritesOnly readOnly={!isAdmin} onChanged={loadAll} />}
         {activeView === "templateGenerator" && <TemplateGenerator api={api} />}
@@ -9053,7 +9057,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
   return (
     <section className="viewStack sitesManagementView">
       {!embedded && !favoritesOnly ? <>
-        <a className="secondary massStatisticsLink" href="#mass-action-statistics" onClick={() => setShowStatistics(true)}>Статистика проектов →</a>
+        <a className="secondary massStatisticsLink" href="/mass-actions-report">Массовые действия Отчет →</a>
         {showStatistics ? <div id="mass-action-statistics"><MassActionStatistics api={api} renderProjects={(ids, refresh) => <SitesView embedded api={api} sites={managedSites.filter(site => ids.includes(site.id))} snapshotUpdatedAt={snapshotUpdatedAt} onSitesChanged={updates => { applySiteUpdates(updates); refresh(); }} currentUsername={currentUsername} readOnly={readOnly} onChanged={onChanged} />} /><button className="secondary" type="button" onClick={() => { setShowStatistics(false); window.history.replaceState(null, "", window.location.pathname); }}>Скрыть статистику</button></div> : null}
       </> : null}
       {!embedded ? <DataPanel title={readOnly ? "Обзор сайтов" : "Панель управления сайтами"}>
@@ -10886,6 +10890,7 @@ function viewTitle(view: AppView, _workspaceTab: WorkspaceTab) {
     published: "Опубликовано",
     providers: "API Providers",
     sites: "Сайты",
+    massActionReport: "Массовые действия Отчет",
     favorites: "Избранное",
     guide: "Инструкции",
     autoReglue: "Автопереклей",
