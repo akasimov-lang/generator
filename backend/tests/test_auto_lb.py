@@ -253,3 +253,13 @@ def test_incorrect_unique_count_retries_with_saved_requirement(env, monkeypatch)
     assert len(prompts) == 2 and 'Ожидалось 40 уникальных анкоров, получено 1' in prompts[1]
     saved = db.get(models.AutoLbGeneration, row['id'])
     assert auto_lb.serialize(saved)['unique_count'] == 40
+
+
+@pytest.mark.parametrize("count", [299, 313])
+def test_anchor_output_keeps_all_rows_without_exact_count(env, count):
+    db, site, _ = env
+    configure(db, site)
+    ctx = auto_lb.project_context(site)
+    ctx.update(prompt_version=2, unique_anchor_count=30)
+    lines = [f"Brand phrase {n % 30}" for n in range(count)]
+    assert auto_lb.normalize_result("anchors", "\n".join(lines), ctx).splitlines() == lines

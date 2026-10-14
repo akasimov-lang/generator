@@ -78,7 +78,9 @@ def normalized_key(value):
 def normalize_result(kind, text, context):
     lines = parse_lines(text)
     expected = context.get("output_count", len(ANCHORS) if kind == "anchors" else 100)
-    if len(lines) != expected:
+    if not lines:
+        raise ValueError("Gemini вернул пустой список.")
+    if (kind != "anchors" or context.get("prompt_version", 1) < 2) and len(lines) != expected:
         raise ValueError(f"Ожидалось {expected} строк, Gemini вернул {len(lines)}.")
     if any(len(line) > 500 or line.startswith(("#", "{")) for line in lines):
         raise ValueError("Gemini вернул неверный формат списка.")
