@@ -2227,6 +2227,7 @@ function ProjectWorkspaceView({
     } finally { activityFlight.current = false; }
   }, [api, onChanged, selectedSiteId]);
 
+  const [networkRefreshToken, setNetworkRefreshToken] = React.useState(0);
   const refreshProject = React.useCallback(async (syncExternal = false) => {
     requestCache.clear();
     let changesResult: ProjectChangesSyncResult | null = null;
@@ -2238,6 +2239,7 @@ function ProjectWorkspaceView({
       changesResult = await api<ProjectChangesSyncResult>(`/sites/${selectedSite.id}/sync-changes`, { method: "POST" });
       const refreshedCapabilities = await api<MenuCapabilities>(`/sites/${selectedSite.id}/menu-capabilities`);
       setMenuCapabilities(refreshedCapabilities);
+      if (selectedSiteIdRef.current === selectedSite.id) setNetworkRefreshToken(value => value + 1);
     }
     await onChanged();
     const loaded = await loadProject();
@@ -2624,7 +2626,7 @@ function ProjectWorkspaceView({
           </WorkspaceTabPane>
           {activeTab === "autoLb" && <AutoLbPanel key={`auto-lb:${selectedSite.id}`} siteId={selectedSite.id} api={api} />}
           {canManageAutomation && activeTab === "autoReglue" && <ProjectAutoReglue key={`auto-reglue:${selectedSite.id}`} siteId={selectedSite.id} api={api} />}
-          {activeTab === "network" || activeTab === "redirects" ? <ProjectNetworkPanel key={`network:${selectedSite.id}`} site={selectedSite} mode={activeTab} api={api} username={currentUsername} onChanged={refreshProject} /> : null}
+          {activeTab === "network" || activeTab === "redirects" ? <ProjectNetworkPanel key={`network:${selectedSite.id}`} site={selectedSite} mode={activeTab} api={api} username={currentUsername} refreshToken={networkRefreshToken} onChanged={refreshProject} /> : null}
           <WorkspaceTabPane active={activeTab === "topics"} storagePrefix={`${currentUsername}:${selectedSite.id}:topics`}>
             <FastTasksView
               key={selectedSite.id}

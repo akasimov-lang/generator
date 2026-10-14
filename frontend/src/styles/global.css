@@ -10081,3 +10081,16 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .networkReserveInline .tg-combobox > label { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
 .networkReserveInline .tg-combobox-control input { min-height: 34px; height: 34px; font-size: 13px; }
 .networkMainReserveRow > .button { width: auto; margin: 0; flex: 0 0 auto; }
+
+.networkCurrentDomains { display: flex; flex-direction: column; gap: 5px; overflow-wrap: anywhere; }
+.networkRefreshStatus { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+.networkRefreshStatus small { color: #28764d; font-size: 12px; font-weight: 700; text-align: right; max-width: 340px; }
+
+.networkFakeSelectorRow { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin: 0 0 18px; }
+.networkFakeSelectorRow fieldset { margin: 0; width: 320px; max-width: 100%; }
+
+.projectWorkspaceView .projectCanonActions { flex-wrap: wrap; }
+.projectWorkspaceView .projectCanonActions > a,
+.projectWorkspaceView .projectCanonActions > button { width: 48px; height: 48px; border-radius: 8px; }
+.projectWorkspaceView .projectCanonActions svg { width: 28px; height: 28px; }
+.projectWorkspaceView .projectWebDevButton .projectWebDevLabel { font-size: 14px; }
