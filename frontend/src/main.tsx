@@ -2354,14 +2354,15 @@ function ProjectWorkspaceView({
           <strong>{selectedSite?.name || "Выберите проект"}</strong>
           {selectedSite ? (
             <button
-              className="workspaceMenuCheckButton"
+              className={`workspaceMenuCheckButton ${menuCapabilitiesLoading || menuCheckPending ? "isChecking" : ""}`}
+              aria-busy={menuCapabilitiesLoading || menuCheckPending}
               type="button"
               onClick={() => void retryMenuCapabilities()}
               disabled={menuCapabilitiesLoading || menuCheckPending}
               title={menuCheckError || "Точная проверка отображения меню на сайте — Desktop 1440×1000"}
               aria-label={`Запустить точную desktop-проверку меню проекта ${selectedSite.name}`}
             >
-              {menuCapabilitiesLoading || menuCheckPending ? <RefreshCcw className="spin" size={19} /> : <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="10" cy="9" r="6.5" /><circle cx="10" cy="9" r="4.5" /><path d="m10 5 1 3 3 1-3 1-1 3-1-3-3-1 3-1zM6 15l-1 5m5-4v6m4-7 1 5m1-8 5 7M4 18l1 2 2-2m2 2 1 2 1-2m2-2 2 2 1-2" /><ellipse cx="17" cy="13" rx="1.5" ry="2" transform="rotate(-38 17 13)" /></svg>}
+              <span className="workspaceDrumIcon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="10" cy="9" r="6.5" /><circle cx="10" cy="9" r="4.5" /><path d="m10 5 1 3 3 1-3 1-1 3-1-3-3-1 3-1zM6 15l-1 5m5-4v6m4-7 1 5m1-8 5 7M4 18l1 2 2-2m2 2 1 2 1-2m2-2 2 2 1-2" /><ellipse cx="17" cy="13" rx="1.5" ry="2" transform="rotate(-38 17 13)" /></svg></span>
             </button>
           ) : null}
           {selectedSite ? (

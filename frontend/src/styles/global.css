@@ -9955,3 +9955,25 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .workspaceProjectStatus .workspaceTypeSelect { display: inline-block; width: 180px; max-width: 100%; }
 .workspaceTypeSelect .searchableSelectControl { border-radius: 999px; font-weight: 800; }
 .workspaceTypeSelect .searchableSelectControlLabel { font-size: inherit; }
+.workspaceMenuCheckButton { position: relative; isolation: isolate; overflow: visible; }
+.workspaceDrumIcon { position: relative; display: inline-flex; align-items: center; justify-content: center; }
+.workspaceMenuCheckButton::before, .workspaceMenuCheckButton::after,
+.workspaceDrumIcon::before, .workspaceDrumIcon::after {
+  content: ""; position: absolute; border: 1.5px solid currentColor; border-radius: 50%;
+  pointer-events: none; opacity: 0;
+}
+.workspaceMenuCheckButton::before, .workspaceMenuCheckButton::after { inset: -2px; }
+.workspaceDrumIcon::before, .workspaceDrumIcon::after { inset: 3px; }
+.workspaceMenuCheckButton.isChecking .workspaceDrumIcon::before { animation: drumSoundWave 1.8s ease-out infinite; }
+.workspaceMenuCheckButton.isChecking .workspaceDrumIcon::after { animation: drumSoundWave 1.8s ease-out .2s infinite; }
+.workspaceMenuCheckButton.isChecking::before { animation: drumSoundWave 1.8s ease-out .4s infinite; }
+.workspaceMenuCheckButton.isChecking::after { animation: drumSoundWave 1.8s ease-out .6s infinite; }
+.workspaceMenuCheckButton.isChecking .workspaceDrumIcon svg { animation: drumBeat .9s ease-in-out infinite; }
+@keyframes drumSoundWave { 0% { transform: scale(.85); opacity: .65; } 100% { transform: scale(2); opacity: 0; } }
+@keyframes drumBeat { 0%, 50%, 100% { transform: scale(1) rotate(0deg); } 15% { transform: scale(.9) rotate(-7deg); } 30% { transform: scale(1.06) rotate(4deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .workspaceMenuCheckButton.isChecking::before, .workspaceMenuCheckButton.isChecking::after,
+  .workspaceMenuCheckButton.isChecking .workspaceDrumIcon::before, .workspaceMenuCheckButton.isChecking .workspaceDrumIcon::after,
+  .workspaceMenuCheckButton.isChecking .workspaceDrumIcon svg { animation: none; }
+  .workspaceMenuCheckButton.isChecking { outline: 2px solid currentColor; outline-offset: 3px; }
+}
