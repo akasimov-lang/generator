@@ -9964,13 +9964,107 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 }
 .workspaceMenuCheckButton::before, .workspaceMenuCheckButton::after { inset: -2px; }
 .workspaceDrumIcon::before, .workspaceDrumIcon::after { inset: 3px; }
-.workspaceMenuCheckButton.isChecking .workspaceDrumIcon::before { animation: drumSoundWave 1.8s ease-out infinite; }
-.workspaceMenuCheckButton.isChecking .workspaceDrumIcon::after { animation: drumSoundWave 1.8s ease-out .2s infinite; }
-.workspaceMenuCheckButton.isChecking::before { animation: drumSoundWave 1.8s ease-out .4s infinite; }
-.workspaceMenuCheckButton.isChecking::after { animation: drumSoundWave 1.8s ease-out .6s infinite; }
-.workspaceMenuCheckButton.isChecking .workspaceDrumIcon img { animation: drumBeat .9s ease-in-out infinite; }
-@keyframes drumSoundWave { 0% { transform: scale(.85); opacity: .65; } 100% { transform: scale(2); opacity: 0; } }
-@keyframes drumBeat { 0%, 50%, 100% { transform: scale(1) rotate(0deg); } 15% { transform: scale(.9) rotate(-7deg); } 30% { transform: scale(1.06) rotate(4deg); } }
+.workspaceMenuCheckButton.isChecking .workspaceDrumIcon::before { animation: drumSoundWave 9s linear infinite; }
+.workspaceMenuCheckButton.isChecking .workspaceDrumIcon::after { animation: drumSoundWave 9s linear .12s infinite; }
+.workspaceMenuCheckButton.isChecking::before { animation: drumSoundWave 9s linear .24s infinite; }
+.workspaceMenuCheckButton.isChecking::after { animation: drumSoundWave 9s linear .36s infinite; }
+.workspaceMenuCheckButton.isChecking .workspaceDrumIcon img { animation: drumBeat 9s linear infinite; }
+@keyframes drumSoundWave {
+0.0000% { transform: scale(.85); opacity: .75; animation-timing-function: ease-out; }
+6.5667% { transform: scale(2.3); opacity: 0; }
+6.6667% { transform: scale(.85); opacity: .75; animation-timing-function: ease-out; }
+13.2333% { transform: scale(2.3); opacity: 0; }
+13.3333% { transform: scale(.85); opacity: .75; animation-timing-function: ease-out; }
+19.9000% { transform: scale(2.3); opacity: 0; }
+20.0000% { transform: scale(.85); opacity: .28; animation-timing-function: ease-out; }
+26.5667% { transform: scale(1.5); opacity: 0; }
+26.6667% { transform: scale(.85); opacity: .75; animation-timing-function: ease-out; }
+33.2333% { transform: scale(2.3); opacity: 0; }
+33.3333% { transform: scale(.85); opacity: .75; animation-timing-function: ease-out; }
+39.9000% { transform: scale(2.3); opacity: 0; }
+40.0000% { transform: scale(.85); opacity: .75; animation-timing-function: ease-out; }
+46.5667% { transform: scale(2.3); opacity: 0; }
+46.6667% { transform: scale(.85); opacity: .28; animation-timing-function: ease-out; }
+53.2333% { transform: scale(1.5); opacity: 0; }
+53.3333% { transform: scale(.85); opacity: .28; animation-timing-function: ease-out; }
+59.9000% { transform: scale(1.5); opacity: 0; }
+60.0000% { transform: scale(.85); opacity: .75; animation-timing-function: ease-out; }
+66.5667% { transform: scale(2.3); opacity: 0; }
+66.6667% { transform: scale(.85); opacity: .75; animation-timing-function: ease-out; }
+73.2333% { transform: scale(2.3); opacity: 0; }
+73.3333% { transform: scale(.85); opacity: .75; animation-timing-function: ease-out; }
+79.9000% { transform: scale(2.3); opacity: 0; }
+80.0000% { transform: scale(.85); opacity: .28; animation-timing-function: ease-out; }
+86.5667% { transform: scale(1.5); opacity: 0; }
+86.6667% { transform: scale(.85); opacity: .28; animation-timing-function: ease-out; }
+93.2333% { transform: scale(1.5); opacity: 0; }
+93.3333% { transform: scale(.85); opacity: .28; animation-timing-function: ease-out; }
+99.9000% { transform: scale(1.5); opacity: 0; }
+100% { opacity: 0; transform: scale(1.5); }
+}
+@keyframes drumBeat {
+0.0000% { transform: scale(1) rotate(0deg); }
+1.4000% { transform: scale(.86) rotate(-7deg); }
+3.0000% { transform: scale(1.08) rotate(4deg); }
+6.5667% { transform: scale(1) rotate(0deg); }
+6.6667% { transform: scale(1) rotate(0deg); }
+8.0667% { transform: scale(.86) rotate(-7deg); }
+9.6667% { transform: scale(1.08) rotate(4deg); }
+13.2333% { transform: scale(1) rotate(0deg); }
+13.3333% { transform: scale(1) rotate(0deg); }
+14.7333% { transform: scale(.86) rotate(-7deg); }
+16.3333% { transform: scale(1.08) rotate(4deg); }
+19.9000% { transform: scale(1) rotate(0deg); }
+20.0000% { transform: scale(1) rotate(0deg); }
+21.4000% { transform: scale(.96) rotate(-2deg); }
+23.0000% { transform: scale(1.02) rotate(1deg); }
+26.5667% { transform: scale(1) rotate(0deg); }
+26.6667% { transform: scale(1) rotate(0deg); }
+28.0667% { transform: scale(.86) rotate(-7deg); }
+29.6667% { transform: scale(1.08) rotate(4deg); }
+33.2333% { transform: scale(1) rotate(0deg); }
+33.3333% { transform: scale(1) rotate(0deg); }
+34.7333% { transform: scale(.86) rotate(-7deg); }
+36.3333% { transform: scale(1.08) rotate(4deg); }
+39.9000% { transform: scale(1) rotate(0deg); }
+40.0000% { transform: scale(1) rotate(0deg); }
+41.4000% { transform: scale(.86) rotate(-7deg); }
+43.0000% { transform: scale(1.08) rotate(4deg); }
+46.5667% { transform: scale(1) rotate(0deg); }
+46.6667% { transform: scale(1) rotate(0deg); }
+48.0667% { transform: scale(.96) rotate(-2deg); }
+49.6667% { transform: scale(1.02) rotate(1deg); }
+53.2333% { transform: scale(1) rotate(0deg); }
+53.3333% { transform: scale(1) rotate(0deg); }
+54.7333% { transform: scale(.96) rotate(-2deg); }
+56.3333% { transform: scale(1.02) rotate(1deg); }
+59.9000% { transform: scale(1) rotate(0deg); }
+60.0000% { transform: scale(1) rotate(0deg); }
+61.4000% { transform: scale(.86) rotate(-7deg); }
+63.0000% { transform: scale(1.08) rotate(4deg); }
+66.5667% { transform: scale(1) rotate(0deg); }
+66.6667% { transform: scale(1) rotate(0deg); }
+68.0667% { transform: scale(.86) rotate(-7deg); }
+69.6667% { transform: scale(1.08) rotate(4deg); }
+73.2333% { transform: scale(1) rotate(0deg); }
+73.3333% { transform: scale(1) rotate(0deg); }
+74.7333% { transform: scale(.86) rotate(-7deg); }
+76.3333% { transform: scale(1.08) rotate(4deg); }
+79.9000% { transform: scale(1) rotate(0deg); }
+80.0000% { transform: scale(1) rotate(0deg); }
+81.4000% { transform: scale(.96) rotate(-2deg); }
+83.0000% { transform: scale(1.02) rotate(1deg); }
+86.5667% { transform: scale(1) rotate(0deg); }
+86.6667% { transform: scale(1) rotate(0deg); }
+88.0667% { transform: scale(.96) rotate(-2deg); }
+89.6667% { transform: scale(1.02) rotate(1deg); }
+93.2333% { transform: scale(1) rotate(0deg); }
+93.3333% { transform: scale(1) rotate(0deg); }
+94.7333% { transform: scale(.96) rotate(-2deg); }
+96.3333% { transform: scale(1.02) rotate(1deg); }
+99.9000% { transform: scale(1) rotate(0deg); }
+100% { transform: scale(1) rotate(0deg); }
+}
 @media (prefers-reduced-motion: reduce) {
   .workspaceMenuCheckButton.isChecking::before, .workspaceMenuCheckButton.isChecking::after,
   .workspaceMenuCheckButton.isChecking .workspaceDrumIcon::before, .workspaceMenuCheckButton.isChecking .workspaceDrumIcon::after,
