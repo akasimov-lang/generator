@@ -9944,3 +9944,7 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .networkDomainList { display: grid; gap: 8px; margin: 12px 0; max-width: 800px; }
 .networkDomainList textarea { width: 100%; font-family: monospace; white-space: pre; }
 .networkDomainList button { justify-self: start; }
+.workspaceTopbarTitle { flex: 1; min-width: 0; display: grid; grid-template-columns: auto minmax(220px, 1fr); align-items: center; gap: 4px 24px; }
+.workspaceTopbarTitle .eyebrow { grid-column: 1 / -1; }
+.workspaceHeadingSearch { width: 100%; min-width: 0; max-width: 520px; }
+@media (max-width: 1200px) { .workspaceTopbarTitle { grid-template-columns: 1fr; } }

@@ -918,6 +918,7 @@ function projectGeoCode(site?: Site): string {
 }
 
 function App() {
+  const [domainQuery, setDomainQuery] = React.useState("");
   const { designVersion, setDesignVersion } = useDesign();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const [compactNavigation, setCompactNavigation] = React.useState(() => window.matchMedia("(max-width: 900px)").matches);
@@ -1360,16 +1361,17 @@ function App() {
 
       <main className="main">
         <header className="topbar">
-          <div>
+          <div className={activeView === "workspace" ? "workspaceTopbarTitle" : undefined}>
             <p className="eyebrow">Рабочая панель</p>
             <h1>{activeView === "workspace" ? <><span className="workspaceHeadingFull">{viewTitle(activeView, workspaceTab)}</span><span className="workspaceHeadingCompact">Рабочий экран проекта</span></> : viewTitle(activeView, workspaceTab)}</h1>
+            {activeView === "workspace" && <input className="workspaceHeadingSearch" type="search" value={domainQuery} onChange={event => setDomainQuery(event.target.value)} aria-label="Поиск по домену" placeholder="Домен проекта или домен в сетке" aria-controls="workspace-domain-results" />}
           </div>
           {!compactNavigation && accountActions}
         </header>
 
         {message ? <div className="notice">{message}</div> : null}
 
-        {activeView === "workspace" && <ProjectWorkspaceView canManageAutomation api={api} sites={siteSnapshot} providers={providers} currentUsername={currentUser.username} activeTab={workspaceTab} contentOpenRequest={workspaceContentOpenRequest} onTabChange={(tab, projectName) => navigateTo("workspace", tab, false, projectName)} onSiteChanged={site => mergeSites([site])} onChanged={loadAll} />}
+        {activeView === "workspace" && <ProjectWorkspaceView domainQuery={domainQuery} canManageAutomation api={api} sites={siteSnapshot} providers={providers} currentUsername={currentUser.username} activeTab={workspaceTab} contentOpenRequest={workspaceContentOpenRequest} onTabChange={(tab, projectName) => navigateTo("workspace", tab, false, projectName)} onSiteChanged={site => mergeSites([site])} onChanged={loadAll} />}
         {activeView === "prompts" && <PromptsView api={api} sites={sites} isAdmin={isAdmin} onChanged={loadAll} />}
         {isAdmin && activeView === "dashboard" && dashboard && <DashboardView api={api} dashboard={dashboard} tasks={tasks} content={content} sites={sites} onOpenTask={(task) => {
           const site = sites.find((candidate) => candidate.id === task.site_id);
@@ -1922,6 +1924,7 @@ const FastProjectPublicationPanel = React.memo(ProjectPublicationPanel);
 const FastProjectMenuPanel = React.memo(ProjectMenuPanel);
 
 function ProjectWorkspaceView({
+  domainQuery,
   api: sourceApi,
   sites,
   providers,
@@ -1933,6 +1936,7 @@ function ProjectWorkspaceView({
   onSiteChanged,
   onChanged
 }: ViewProps & {
+  domainQuery: string;
   sites: Site[];
   providers: AiProvider[];
   currentUsername: string;
@@ -1942,7 +1946,6 @@ function ProjectWorkspaceView({
   onTabChange: (tab: WorkspaceTab, projectName?: string) => void;
   onSiteChanged: (site: Site) => void;
 }) {
-  const [domainQuery, setDomainQuery] = React.useState("");
   const normalizedDomainQuery = domainQuery.trim().toLowerCase().replace(/^https?:\/\//, "").split(/[/?#]/, 1)[0];
   const domainResults = normalizedDomainQuery ? sites.filter(site =>
     [site.name, site.cache_canon || "", ...(site.cache_domains || [])]
@@ -2334,10 +2337,7 @@ function ProjectWorkspaceView({
   return (
     <WorkspaceAccordionContext.Provider value={accordionContextValue}>
     <section className="viewStack projectWorkspaceView">
-      <label className="workspaceDomainSearch">
-        <span>Поиск по домену</span>
-        <input type="search" value={domainQuery} onChange={event => setDomainQuery(event.target.value)} placeholder="Домен проекта или домен в сетке" aria-controls="workspace-domain-results" />
-      </label>
+
       <DataPanel title={(
         <span className="workspaceProjectTitle">
           {selectedSite ? (
