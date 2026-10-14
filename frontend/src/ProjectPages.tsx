@@ -37,7 +37,7 @@ export function ProjectPages({ siteId, api, onCount }: { siteId: string; api: Ap
     finally { setLoading(false); }
   }, [siteId, api, onCount]);
   React.useEffect(() => { void load(); }, [load]);
-  const filtered = rows.filter(row => `${row.title} ${row.slug} ${row.is_home ? "главная" : ""}`.toLowerCase().includes(query.toLowerCase()));
+  const filtered = [...rows].sort((a, b) => Number(b.is_home) - Number(a.is_home)).filter(row => `${row.title} ${row.slug} ${row.is_home ? "главная" : ""}`.toLowerCase().includes(query.toLowerCase()));
   return <section className="pp-pages"><header><div><h2>Все страницы <small>{loading ? "" : rows.length}</small></h2><p>Страницы из Webdev. Нажмите на заголовок, чтобы открыть редактор.</p></div><button className="button secondary" disabled={loading} onClick={() => void load()}><RefreshCcw size={16} />Обновить список</button></header>
     <label className="pp-page-search"><Search size={18} /><input aria-label="Поиск страниц" placeholder="Заголовок или адрес страницы" value={query} onChange={e => setQuery(e.target.value)} /></label>
     {error && <p className="pp-page-error" role="alert">{error}</p>}

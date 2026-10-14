@@ -37,6 +37,9 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
   });
   const [reserve, setReserve] = React.useState("");
   const [networkView, setNetworkView] = React.useState<"main" | "amp">("main");
+  const [showDomainList, setShowDomainList] = React.useState(false);
+  const domainListRef = React.useRef<HTMLTextAreaElement>(null);
+  React.useEffect(() => { if (showDomainList) { domainListRef.current?.focus(); domainListRef.current?.select(); } }, [showDomainList]);
   const [onlyFormer, setOnlyFormer] = React.useState(false);
   const [check, setCheck] = React.useState<{ domain: string; reachable: boolean; reason: string } | null>(null);
   const [busy, setBusy] = React.useState("");
@@ -189,6 +192,8 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged }: Pr
         {mode === "network" && networkView === "amp" ? <p>Текущий AMP: <strong>{data.amp || "не задан"}</strong> · Предыдущий AMP: <strong>{data.prev_amp || "не задан"}</strong></p> : <p>Текущий Main: <strong>{data.canon || "не задан"}</strong> · Резерв: <strong>{data.reserve || "не выбран"}</strong></p>}
         {uncertain && <div className="notice" role="status">Проверяем результат отправленной операции. Новые изменения станут доступны после подтверждения. Запрос на изменение повторно не отправляется.</div>}
         {mode === "network" && <>
+          <button type="button" className="secondary compact" aria-expanded={showDomainList} onClick={() => { if (showDomainList) { domainListRef.current?.focus(); domainListRef.current?.select(); } else setShowDomainList(true); }}>Выделить домены</button>
+          {showDomainList && <div className="networkDomainList"><label>Домены — по одному в строке<textarea ref={domainListRef} readOnly aria-label="Домены для копирования" value={visibleDomains.join("\n")} rows={Math.min(12, Math.max(3, visibleDomains.length))} /></label><small>Ctrl+C / ⌘C — скопировать. Можно выделить только нужные строки.</small><button type="button" className="secondary compact" onClick={() => setShowDomainList(false)}>Скрыть список</button></div>}
           <div className="networkTableWrap" tabIndex={0} role="region" aria-label="Домены сетки"><table className="networkTable"><thead><tr><th scope="col">Домен</th><th scope="col">Тип домена</th><th scope="col">Поддомен</th><th scope="col">Статус</th><th scope="col">Был Main</th><th scope="col">Был в альтернейтах</th><th scope="col">x-default</th><th scope="col">Действия</th></tr></thead>
             <tbody>{visibleDomains.map((domain) => <tr key={domain}><td data-label="Домен">{domain}</td><td data-label="Тип домена">{ampDomains.has(domain) ? <span className="networkAmpType">AMP</span> : data.domain_classification?.[domain]?.is_subdomain ? <span title="Тип задаётся у родительского домена">{data.domain_classification[domain].parent_type === "drop" ? "Дроп (родитель)" : data.domain_classification[domain].parent_type === "newreg" ? "Новорег (родитель)" : "Не указан у родителя"}</span> : <select className="networkDomainType" aria-label={`Тип домена ${domain}`} value={data.domain_types?.[domain] || ""} disabled={Boolean(busy)} onChange={(event) => void saveDomainType(domain, event.target.value)}><option value="" disabled>Не указан</option><option value="drop">Дроп</option><option value="newreg">Новорег</option></select>}</td><td data-label="Поддомен">
                 <span className="networkSubdomain"><input type="checkbox" className="networkHistoryCheck" disabled checked={!!data.domain_classification?.[domain]?.is_subdomain} aria-label={domain + ": поддомен"} />

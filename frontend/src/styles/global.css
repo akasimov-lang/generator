@@ -9941,3 +9941,6 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .workspaceDomainSearch > span { font-size: 13px; font-weight: 600; }
 .workspaceDomainResults { padding: 20px; overflow-x: auto; }
 .workspaceDomainResults h2 { margin: 0 0 16px; }
+.networkDomainList { display: grid; gap: 8px; margin: 12px 0; max-width: 800px; }
+.networkDomainList textarea { width: 100%; font-family: monospace; white-space: pre; }
+.networkDomainList button { justify-self: start; }
