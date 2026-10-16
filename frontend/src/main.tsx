@@ -1,3 +1,4 @@
+import { BrandIcon } from "./BrandIcon";
 import { ProjectPages } from "./ProjectPages";
 import { TemplateGenerator } from "./TemplateGenerator";
 import { readProjectSnapshot, writeProjectSnapshot, removeLegacyProjectSnapshot } from "./projectSnapshot";
@@ -8588,7 +8589,7 @@ function useStatisticsSort(defaultColumn = 0) {
       return sort.descending ? -comparison : comparison;
     });
   }
-  return { header, ordered };
+  return { header, ordered, reset: () => setSort({ column: defaultColumn, descending: false }) };
 }
 
 function MassActionStatistics({ api, renderProjects }: { api: ViewProps["api"]; renderProjects: (ids: string[], refresh: () => void) => React.ReactNode }) {
@@ -8624,6 +8625,16 @@ function MassActionStatistics({ api, renderProjects }: { api: ViewProps["api"]; 
   const geoLabel = (code: string) => code === "UNKNOWN" ? "GEO не указано" : `${localeFlag(code)} ${COUNTRIES.find(c => c.code.toUpperCase() === code)?.name || code} (${code})`;
   const geoSort = useStatisticsSort();
   const brandSort = useStatisticsSort();
+  const [resetVersion, setResetVersion] = React.useState(0);
+  const resetReport = () => {
+    setResetVersion(version => version + 1);
+    setGeo(""); setTypeFilter(""); setBrandFilter("");
+    geoSort.reset(); brandSort.reset();
+    if (projectDetailsRef.current) projectDetailsRef.current.open = false;
+    if (scope !== "mass_actions") {
+      requestSequence.current += 1; setLoading(true); setScope("mass_actions");
+    }
+  };
   const metrics = (rows: StatisticsProject[]) => [rows.length, ...(["domains", "drop", "newreg", "subdomains", "amp"] as const).map(k => sum(rows, k))];
   const geoRows = geos.flatMap(g => ["monobrand", "general"].map(kind => ({ g, kind, rows: selected.filter(p => p.geo === g && p.site_type === kind) }))).filter(group => group.rows.length);
   const brandRows = [...new Set(selected.map(p => p.brand || "Бренд не указан"))].map(brand => ({ brand, rows: selected.filter(p => (p.brand || "Бренд не указан") === brand) }));
@@ -8641,8 +8652,9 @@ function MassActionStatistics({ api, renderProjects }: { api: ViewProps["api"]; 
     {error ? <p role="alert">{error}</p> : null}
     {!loading && !error ? <>
       <div className="massStatisticsCards">
-        {[["Уникальных проектов", selected.length], ["Уникальных GEO", new Set(selected.map(p => p.geo).filter(g => g && g !== "UNKNOWN")).size], ["Монобренды", selected.filter(p => p.site_type === "monobrand").length], ["Общие ключи", selected.filter(p => p.site_type === "general").length], ["Дропов", sum(selected, "drop")], ["Новорегов", sum(selected, "newreg")], ["Доменов в сетках", sum(selected, "domains")]].map(([label, value]) => {
+        {[["Всего проектов", projects.length], ["Уникальных GEO", new Set(selected.map(p => p.geo).filter(g => g && g !== "UNKNOWN")).size], ["Монобренды", selected.filter(p => p.site_type === "monobrand").length], ["Общие ключи", selected.filter(p => p.site_type === "general").length], ["Дропов", sum(selected, "drop")], ["Новорегов", sum(selected, "newreg")], ["Доменов в сетках", sum(selected, "domains")]].map(([label, value]) => {
           const filter = label === "Монобренды" ? "monobrand" : label === "Общие ключи" ? "general" : null;
+          if (label === "Всего проектов") return <button key={label} type="button" className="massStatisticsTypeCard" title="Вернуться к исходному виду отчёта" onClick={resetReport}><span>{label}</span><strong>{formatNumber(Number(value))}</strong></button>;
           return filter ? <button key={label} type="button" className={`massStatisticsTypeCard ${typeFilter === filter ? "active" : ""}`} aria-pressed={typeFilter === filter} onClick={() => setTypeFilter(previous => previous === filter ? "" : filter)}><span>{label}</span><strong>{formatNumber(Number(value))}</strong></button> : <div key={label}><span>{label}</span><strong>{formatNumber(Number(value))}</strong></div>;
         })}
       </div>
@@ -8655,10 +8667,10 @@ function MassActionStatistics({ api, renderProjects }: { api: ViewProps["api"]; 
       </tbody><tfoot><tr><th colSpan={2}>Итого</th><th>{selected.length}</th>{(["domains", "drop", "newreg", "subdomains", "amp"] as const).map(k => <th key={k}>{formatNumber(sum(selected, k))}</th>)}</tr></tfoot></table></div>
       <h3>По брендам</h3>
       <div className="massStatisticsTable"><table><thead><tr>{brandSort.header(["Бренд", "Проектов", "Доменов в сетках", "Дропов", "Новорегов", "Поддоменов", "AMP"])}</tr></thead><tbody>
-        {brandSort.ordered(brandRows, group => [group.brand, ...metrics(group.rows)]).map(({ brand, rows }) => <tr key={brand}><td><span className="massStatisticsGeoCell"><button type="button" className="secondary" aria-pressed={brandFilter === brand} onClick={() => selectBrand(brand)}>{brand}</button>{brandFilter === brand ? <button type="button" className="massStatisticsGeoClear" aria-label={`Сбросить фильтр бренда ${brand}`} title="Показать все бренды" onClick={() => setBrandFilter("")}>×</button> : null}</span></td><td>{rows.length}</td>{(["domains", "drop", "newreg", "subdomains", "amp"] as const).map(k => <td key={k}>{formatNumber(sum(rows, k))}</td>)}</tr>)}
+        {brandSort.ordered(brandRows, group => [group.brand, ...metrics(group.rows)]).map(({ brand, rows }) => <tr key={brand}><td><span className="massStatisticsGeoCell"><button type="button" className="secondary brandTableButton" aria-pressed={brandFilter === brand} onClick={() => selectBrand(brand)}><BrandIcon brand={brand} />{brand}</button>{brandFilter === brand ? <button type="button" className="massStatisticsGeoClear" aria-label={`Сбросить фильтр бренда ${brand}`} title="Показать все бренды" onClick={() => setBrandFilter("")}>×</button> : null}</span></td><td>{rows.length}</td>{(["domains", "drop", "newreg", "subdomains", "amp"] as const).map(k => <td key={k}>{formatNumber(sum(rows, k))}</td>)}</tr>)}
         {!selected.length ? <tr><td colSpan={7}>Нет проектов для выбранных фильтров.</td></tr> : null}
       </tbody><tfoot><tr><th>Итого</th><th>{selected.length}</th>{(["domains", "drop", "newreg", "subdomains", "amp"] as const).map(k => <th key={k}>{formatNumber(sum(selected, k))}</th>)}</tr></tfoot></table></div>
-      <details ref={projectDetailsRef} className="massStatisticsDetails"><summary>Проекты в выборке · {selected.length}</summary>{renderProjects(selected.map(p => p.id), () => { void load(); })}</details>
+      <details ref={projectDetailsRef} className="massStatisticsDetails"><summary>Проекты в выборке · {selected.length}</summary><React.Fragment key={resetVersion}>{renderProjects(selected.map(p => p.id), () => { void load(); })}</React.Fragment></details>
     </> : null}
   </DataPanel>;
 }

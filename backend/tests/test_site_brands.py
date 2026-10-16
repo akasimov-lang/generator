@@ -8,6 +8,9 @@ from test_api_serialization import make_client
 def test_detection_requires_clear_cached_identity():
     def detect(title, name='project.test'):
         return detect_brand(SimpleNamespace(homepage_title=title, name=name, cache_canon='drop.test'))
+    assert detect('MerkurXtip Česká republika | MerkurXtip CZ Přihlášení') == 'MerkurXtip'
+    assert detect('Merkur Xtip Casino CZ') == 'MerkurXtip'
+    assert detect('Merkur-Xtip Casino CZ') == 'MerkurXtip'
     assert detect('BetOnRed Casino CZ 2026') == 'BetOnRed'
     assert detect('Pin-Up Casino Azərbaycanda') == 'Pin-Up'
     assert detect('1xslots Casino — Official') == '1xslots'

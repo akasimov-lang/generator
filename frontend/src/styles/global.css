@@ -10126,3 +10126,25 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .workspaceDomainResultRow:hover, .workspaceDomainResultRow:focus-within { background: var(--surface-hover, #eef3ff); }
 
 .workspaceDrumCount { position: absolute; right: -5px; bottom: -5px; z-index: 2; display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 3px; border: 1px solid #d6dfeb; border-radius: 8px; background: var(--surface, #fff); color: var(--text, #34445c); font-size: 10px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; pointer-events: none; }
+
+.brandTableButton, .brandTableName {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.brandTableButton { padding: 4px 8px; }
+.brandTableIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 600;
+}
+.brandTableIcon img { display: block; width: 20px; height: 20px; object-fit: contain; }
