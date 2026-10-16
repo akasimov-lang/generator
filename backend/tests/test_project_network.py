@@ -616,3 +616,13 @@ def test_reentry_updates_addition_date(env):
     remote.data['settings']['domains'].append('next.test')
     state = network.read_network(db, site)
     assert state['domain_added_at']['next.test'] > '2025-01-01'
+
+
+def test_partial_cache_event_does_not_reset_membership_dates(env):
+    db, site, remote = env
+    network.read_network(db, site)
+    original = '2025-01-01T00:00:00+00:00'
+    site.network_state = {**site.network_state, 'domain_added_at': {'next.test': original}}
+    observe_network(site, {'settings': {'canon': 'main.test'}})
+    assert 'next.test' in site.network_state['domains']
+    assert observe_network(site, remote.data)['domain_added_at']['next.test'] == original

@@ -123,6 +123,8 @@ def project_network_state(project: dict) -> dict:
 def observe_network(site, project: dict) -> dict:
     state = project_network_state(project)
     settings = project.get("settings") if isinstance(project.get("settings"), dict) else {}
+    if not isinstance(settings.get("domains"), list):
+        state["domains"] = (site.network_state or {}).get("domains", [])
     if not any(key in settings for key in ("amp", "prevAmp", "ampDomains", "ampList")):
         for key in ("amp", "prev_amp", "amp_domains"):
             state[key] = (site.network_state or {}).get(key, state[key])
