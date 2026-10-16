@@ -7,6 +7,15 @@ window.fixture.amp='mobile.test'; window.fixture.amp_domains=['mobile.test'];
 window.fixture.domain_classification={'unused.reserve.test':{is_subdomain:true,parent_domain:'reserve.test',parent_type:null,unused_as_main:true}};
 async function api(path,options={}) {
  const payload=options.body?JSON.parse(options.body):null; window.calls.push({path,payload});
+ if(path.endsWith('/domain-history')) {
+  if(payload.field === 'ban') window.fixture.domain_bans={...window.fixture.domain_bans,[payload.domain]:payload.checked};
+  else {
+   const field={main:'main_history',alternate:'alternate_history',x_default:'x_default_history'}[payload.field];
+   window.fixture[field]=window.fixture[field].filter(d=>d!==payload.domain);
+   if(payload.checked) window.fixture[field].push(payload.domain);
+  }
+  return structuredClone(window.fixture);
+ }
  if(path.endsWith('/domain-type')) {
   window.fixture.domain_types={...window.fixture.domain_types,[payload.domain]:payload.domain_type};
   for (const info of Object.values(window.fixture.domain_classification)) info.parent_type=window.fixture.domain_types[info.parent_domain] || null;

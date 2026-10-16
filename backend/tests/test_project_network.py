@@ -516,7 +516,9 @@ def test_domain_added_dates_persist_without_dating_old_domains(env):
     remote.data["settings"]["domains"].remove("sub.new.test")
     assert network.read_network(db, site)["domain_added_at"] == dates
     remote.data["settings"]["domains"].append("sub.new.test")
-    assert network.read_network(db, site)["domain_added_at"] == dates
+    readded = network.read_network(db, site)["domain_added_at"]
+    assert readded["new.test"] == dates["new.test"]
+    assert readded["sub.new.test"] > dates["sub.new.test"]
 
 
 def test_manual_canonical_edit_is_saved_and_confirmed(env):
@@ -548,3 +550,69 @@ def test_manual_canonical_rejects_non_link_markup(env):
         change(env, 'alternates', state['revision'], alternate_markup=MARKUP,
                canonical_fake_main_markup='<script>alert(1)</script>')
     assert remote.calls == []
+
+
+def test_manual_history_survives_refresh_for_other_session(env):
+    db, site, remote = env
+    network.read_network(db, site)
+    for field, attr in [('main', 'main_history'), ('alternate', 'alternate_history'), ('x_default', 'x_default_history')]:
+        saved = network.update_domain_history(db, site, network.DomainHistoryUpdate(domain='next.test', field=field, checked=True), 'first-user')
+        assert 'next.test' in saved[attr]
+        saved = network.read_network(db, site)
+        assert 'next.test' in saved[attr]
+    network.update_domain_history(db, site, network.DomainHistoryUpdate(domain='main.test', field='main', checked=False), 'second-user')
+    assert 'main.test' not in network.read_network(db, site)['main_history']
+    db.expire_all()
+    loaded = db.get(models.Site, site.id)
+    assert loaded.network_state['history_overrides']['main.test']['main'] is False
+    assert loaded.network_state['history_edits'][-1]['initiator'] == 'second-user'
+    assert remote.calls == []
+
+
+def test_manual_history_rejects_unknown_domain(env):
+    db, site, _ = env
+    network.read_network(db, site)
+    with pytest.raises(ValueError):
+        network.update_domain_history(db, site, network.DomainHistoryUpdate(domain='unknown.test', field='main', checked=True), 'user')
+
+
+def test_ban_shared_with_same_geo_but_not_other_geo(env):
+    from app.domain_transfer_policy import banned_domains, require_transfer_allowed
+    db, site, _ = env
+    site.cache_geo = 'az-AZ'
+    network.read_network(db, site)
+    network.update_domain_history(db, site, network.DomainHistoryUpdate(domain='next.test', field='ban', checked=True), 'user')
+    other = models.Site(name='other.test', base_url='https://other.test', publication_endpoint='https://other.test/api', cache_geo='AZ')
+    assert banned_domains(db, other, ['www.next.test'])['www.next.test']
+    with pytest.raises(ValueError, match='БАН'):
+        require_transfer_allowed(db, site, 'next.test')
+    other.cache_geo = 'PL'
+    assert not banned_domains(db, other, ['next.test'])['next.test']
+    network.update_domain_history(db, site, network.DomainHistoryUpdate(domain='next.test', field='ban', checked=False), 'another-user')
+    assert require_transfer_allowed(db, site, 'next.test') is None
+
+
+def test_transfer_calendar_month_and_unknown_date(env):
+    from datetime import datetime, timezone
+    from app.domain_transfer_policy import next_transfer_at, require_transfer_allowed
+    db, site, _ = env
+    network.read_network(db, site)
+    assert next_transfer_at(None) is None
+    assert next_transfer_at('2026-01-31T12:00:00+00:00').isoformat() == '2026-02-28T12:00:00+00:00'
+    assert require_transfer_allowed(db, site, 'next.test') is None
+    site.network_state = {**site.network_state, 'domain_added_at': {'next.test': '2026-10-16T11:28:21+00:00'}}
+    db.commit()
+    with pytest.raises(ValueError, match='2026-11-16'):
+        require_transfer_allowed(db, site, 'www.next.test', datetime(2026, 11, 16, 11, 28, 20, tzinfo=timezone.utc))
+    require_transfer_allowed(db, site, 'next.test', datetime(2026, 11, 16, 11, 28, 21, tzinfo=timezone.utc))
+
+
+def test_reentry_updates_addition_date(env):
+    db, site, remote = env
+    network.read_network(db, site)
+    site.network_state = {**site.network_state, 'domain_added_at': {'next.test': '2025-01-01T00:00:00+00:00'}}
+    remote.data['settings']['domains'].remove('next.test')
+    network.read_network(db, site)
+    remote.data['settings']['domains'].append('next.test')
+    state = network.read_network(db, site)
+    assert state['domain_added_at']['next.test'] > '2025-01-01'

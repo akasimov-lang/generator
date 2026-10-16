@@ -9368,7 +9368,8 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .networkTable tbody tr:hover { background: var(--surface-3); }
 .networkTable .networkHistoryCheck { display: inline-block; width: 16px; min-width: 16px; height: 16px; min-height: 16px; margin: 0; padding: 0; vertical-align: middle; box-shadow: none; }
 .networkTable .networkHistoryCheck:checked:disabled::after { font-size: 12px; line-height: 14px; }
-.networkHistoryCheck { accent-color: #16a05a; width: 18px; height: 18px; pointer-events: none; }
+.networkHistoryCheck { accent-color: #16a05a; width: 18px; height: 18px; cursor: pointer; }
+.networkHistoryCheck:disabled { cursor: default; pointer-events: none; }
 
 .projectNetworkPanel .dataPanelBody { display: grid; gap: 16px; }
 .networkSection { display: grid; gap: 12px; border-top: 1px solid #d5dfec; padding-top: 18px; }

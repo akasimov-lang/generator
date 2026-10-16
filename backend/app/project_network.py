@@ -31,6 +31,12 @@ class DomainTypeUpdate(BaseModel):
     domain_type: Literal["drop", "newreg"]
 
 
+class DomainHistoryUpdate(BaseModel):
+    domain: str = Field(min_length=1, max_length=253)
+    field: Literal["main", "alternate", "x_default", "ban"]
+    checked: bool
+
+
 class DomainCheck(BaseModel):
     domain: str = Field(min_length=1, max_length=253)
     revision: str
@@ -186,7 +192,9 @@ def operation_history(db, site):
 
 
 def result(db, site, state):
+    from app.domain_transfer_policy import banned_domains
     return {
+        "domain_bans": banned_domains(db, site, list(dict.fromkeys([*state["domains"], *state.get("amp_domains", []), *(site.main_domain_history or []), *(site.alternate_domain_history or []), *(site.x_default_history or []), *state.get("history_overrides", {})]))),
         **state, "domain_classification": classify_domains(state["domains"], site.domain_types or {}, site.main_domain_history or [], state["canon"]), "domain_types": site.domain_types or {}, "revision": state_revision(state), "main_history": site.main_domain_history or [],
         "x_default_history": site.x_default_history or [],
         "alternate_history": site.alternate_domain_history or [],
@@ -445,3 +453,38 @@ def update_domain_type(db, site, payload):
     site.domain_types = {**(site.domain_types or {}), domain: payload.domain_type}
     db.commit()
     return {"domain_types": site.domain_types, "domain_classification": classify_domains(site.cache_domains or [], site.domain_types, site.main_domain_history or [], site.cache_canon or "")}
+
+
+def update_domain_history(db, site, payload, initiator):
+    from datetime import datetime, timezone
+    from app.network_state import HISTORY_FIELDS, apply_history_overrides
+    db.refresh(site, with_for_update=True)
+    domain = domain_name(payload.domain)
+    state = dict(site.network_state or {})
+    known = set(site.cache_domains or []) | set(state.get("domains", [])) | set(state.get("amp_domains", []))
+    for attribute in HISTORY_FIELDS.values():
+        known.update(getattr(site, attribute) or [])
+    if site.cache_canon:
+        known.add(domain_name(site.cache_canon))
+    known.update(state.get("history_overrides", {}))
+    if not domain or domain not in known:
+        raise ValueError("Домен отсутствует в сетке и истории проекта.")
+    if payload.field == "ban":
+        from app.domain_transfer_policy import set_ban
+        set_ban(db, site, domain, payload.checked, initiator)
+        return result(db, site, state)
+    overrides = dict(state.get("history_overrides", {}))
+    flags = dict(overrides.get(domain, {}))
+    before = domain in (getattr(site, HISTORY_FIELDS[payload.field]) or [])
+    flags[payload.field] = payload.checked
+    overrides[domain] = flags
+    state["history_overrides"] = overrides
+    state["history_edits"] = [*state.get("history_edits", []), {
+        "domain": domain, "field": payload.field, "before": before,
+        "checked": payload.checked, "initiator": initiator,
+        "at": datetime.now(timezone.utc).isoformat(),
+    }]
+    apply_history_overrides(site, overrides)
+    site.network_state = state
+    db.commit()
+    return result(db, site, state)

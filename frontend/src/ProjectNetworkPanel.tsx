@@ -8,7 +8,9 @@ type AlternatesSnapshot = { markup: string; enabled: boolean };
 type NetworkOperation = { id: string; action: "reserve" | "reglue" | "alternates" | "create_domains" | "create_subdomains" | "delete_domain" | "create_fake_main" | "select_fake_main" | "indexing"; task_id?: string; domains?: string[]; status: string; message: string | null; domain: string | null; source_domain?: string | null; alternates_before?: AlternatesSnapshot | null; alternates_after?: AlternatesSnapshot | null; initiator: string; created_at: string };
 type DomainClassification = { is_subdomain: boolean; parent_domain: string | null; parent_type: "drop" | "newreg" | null; unused_as_main: boolean };
 type Network = {
+  domain_bans?: Record<string, boolean>;
   domain_added_at?: Record<string, string>;
+  history_overrides?: Record<string, Record<string, boolean>>;
   fake_main_paths?: string[]; fake_main_current?: string; fake_main_enabled?: boolean;
   amp?: string; prev_amp?: string; amp_domains?: string[];
   domain_classification?: Record<string, DomainClassification>;
@@ -102,6 +104,12 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
     void load(false);
     return () => { mounted.current = false; };
   }, [site.id]);
+  React.useEffect(() => {
+    const syncSharedHistory = () => { if (document.visibilityState === "visible") void load(false); };
+    const timer = window.setInterval(syncSharedHistory, 15000);
+    window.addEventListener("focus", syncSharedHistory);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", syncSharedHistory); };
+  }, [site.id]);
   const appliedRefresh = React.useRef(refreshToken);
   React.useEffect(() => {
     if (appliedRefresh.current === refreshToken || busy) return;
@@ -170,6 +178,18 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
     } catch (err) { if (mounted.current) setError(`${errorText(err)} Обновите данные перед повторной отправкой.`); }
     finally { busyRef.current = false; if (mounted.current) setBusy(""); }
   }
+  async function saveHistory(domain: string, field: string, checked: boolean) {
+    if (!data || busyRef.current) return;
+    busyRef.current = true; setBusy("history"); setError(""); setMessage("");
+    try {
+      const next = await api<Network>(`/sites/${site.id}/network/domain-history`, {
+        method: "PATCH", body: JSON.stringify({ domain, field, checked }),
+      });
+      accept(next); onChanged();
+      if (mounted.current) setMessage("История сохранена для всех пользователей.");
+    } catch (err) { if (mounted.current) setError(errorText(err)); }
+    finally { busyRef.current = false; if (mounted.current) setBusy(""); }
+  }
   async function saveDomainType(domain: string, domainType: string) {
     if (!data || busyRef.current) return;
     busyRef.current = true; setBusy("domain-type"); setError("");
@@ -183,7 +203,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
     } catch (err) { if (mounted.current) setError(errorText(err)); }
     finally { busyRef.current = false; if (mounted.current) setBusy(""); }
   }
-  const known = data ? [...new Set([...data.domains, ...(data.amp_domains || []), data.canon, ...data.main_history, ...data.alternate_history])].filter(Boolean) : [];
+  const known = data ? [...new Set([...data.domains, ...(data.amp_domains || []), data.canon, ...data.main_history, ...data.alternate_history, ...data.x_default_history, ...Object.keys(data.history_overrides || {})])].filter(Boolean) : [];
   const ampDomains = new Set(data?.amp_domains || []);
   const visibleDomains = known.filter((domain) => networkView === "amp" ? ampDomains.has(domain) : !ampDomains.has(domain)).filter(domain => matchesProjectSearch(domain, normalizeDomainQuery(domainQuery)));
   const disabled = Boolean(busy) || uncertain;
@@ -219,7 +239,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
         {mode === "network" && <>
           <button type="button" className="secondary compact" aria-expanded={showDomainList} onClick={() => setShowDomainList(value => !value)}>Выделить домены</button>
           {showDomainList && <div className="networkDomainList"><label>Домены — по одному в строке<textarea ref={domainListRef} readOnly aria-label="Домены для копирования" value={visibleDomains.join("\n")} rows={Math.min(12, Math.max(3, visibleDomains.length))} /></label><small>Ctrl+C / ⌘C — скопировать. Можно выделить только нужные строки.</small><button type="button" className="secondary compact" onClick={() => setShowDomainList(false)}>Скрыть список</button></div>}
-          <div className="networkTableWrap" tabIndex={0} role="region" aria-label="Домены сетки"><table className="networkTable"><thead><tr><th scope="col"><div className="networkDomainSearch"><Search size={14} aria-hidden="true" /><input aria-label="Поиск по доменам сетки" placeholder="Домены" value={domainQuery} onChange={event => setDomainQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); commitDomainFilter(domainQuery); } if (event.key === "Escape") setDomainQuery(savedFilter); }} />{(savedFilter || domainQuery) && <button type="button" aria-label="Сбросить фильтр доменов" title="Сбросить фильтр" onClick={() => commitDomainFilter("")}><X size={15} /></button>}</div></th><th scope="col">Тип домена</th><th scope="col">Поддомен</th><th scope="col">Статус</th><th scope="col">Был Main</th><th scope="col">Был в альтернейтах</th><th scope="col">x-default</th><th scope="col">Действия</th><th scope="col">Дата добавления</th></tr></thead>
+          <div className="networkTableWrap" tabIndex={0} role="region" aria-label="Домены сетки"><table className="networkTable"><thead><tr><th scope="col"><div className="networkDomainSearch"><Search size={14} aria-hidden="true" /><input aria-label="Поиск по доменам сетки" placeholder="Домены" value={domainQuery} onChange={event => setDomainQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); commitDomainFilter(domainQuery); } if (event.key === "Escape") setDomainQuery(savedFilter); }} />{(savedFilter || domainQuery) && <button type="button" aria-label="Сбросить фильтр доменов" title="Сбросить фильтр" onClick={() => commitDomainFilter("")}><X size={15} /></button>}</div></th><th scope="col">Тип домена</th><th scope="col">Поддомен</th><th scope="col">Статус</th><th scope="col">Был Main</th><th scope="col">Был в альтернейтах</th><th scope="col">x-default</th><th scope="col">БАН</th><th scope="col">Действия</th><th scope="col">Дата добавления</th></tr></thead>
             <tbody>{visibleDomains.map((domain) => <tr key={domain}><td data-label="Домен">{domain}</td><td data-label="Тип домена">{ampDomains.has(domain) ? <span className="networkAmpType">AMP</span> : data.domain_classification?.[domain]?.is_subdomain ? <span title="Тип задаётся у родительского домена">{data.domain_classification[domain].parent_type === "drop" ? "Дроп (родитель)" : data.domain_classification[domain].parent_type === "newreg" ? "Новорег (родитель)" : "Не указан у родителя"}</span> : <select className="networkDomainType" aria-label={`Тип домена ${domain}`} value={data.domain_types?.[domain] || ""} disabled={Boolean(busy)} onChange={(event) => void saveDomainType(domain, event.target.value)}><option value="" disabled>Не указан</option><option value="drop">Дроп</option><option value="newreg">Новорег</option></select>}</td><td data-label="Поддомен">
                 <span className="networkSubdomain"><input type="checkbox" className="networkHistoryCheck" disabled checked={!!data.domain_classification?.[domain]?.is_subdomain} aria-label={domain + ": поддомен"} />
                 {data.domain_classification?.[domain]?.is_subdomain && <span title={"Родитель: " + data.domain_classification[domain].parent_domain}>
@@ -227,12 +247,13 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
                   {data.domain_classification[domain].unused_as_main && <small>Не был Main</small>}
                 </span>}</span>
               </td><td data-label="Статус">{networkView === "amp" && domain === data.amp ? "Текущий AMP" : networkView === "amp" && domain === data.prev_amp ? "Предыдущий AMP" : domain === data.canon ? "Main" : domain === data.reserve ? "Резерв" : data.domains.includes(domain) ? "В сетке" : "В истории"}</td>
-              {[data.main_history, data.alternate_history, data.x_default_history].map((history, i) => <td key={i} data-label={["Был Main", "Был в альтернейтах", "x-default"][i]}><input type="checkbox" className="networkHistoryCheck" disabled checked={history.includes(domain)} aria-label={`${domain}: ${["был Main", "был в альтернейтах", "x-default"][i]}`} /></td>)}
+              {[data.main_history, data.alternate_history, data.x_default_history].map((history, i) => <td key={i} data-label={["Был Main", "Был в альтернейтах", "x-default"][i]}><input type="checkbox" className="networkHistoryCheck" disabled={Boolean(busy)} checked={history.includes(domain)} onChange={event => void saveHistory(domain, ["main", "alternate", "x_default"][i], event.target.checked)} aria-label={`${domain}: ${["был Main", "был в альтернейтах", "x-default"][i]}`} /></td>)}
+              <td data-label="БАН"><input type="checkbox" className="networkHistoryCheck" aria-label={`${domain}: БАН`} title="Запрет переноса между сетками в GEO проекта" disabled={Boolean(busy)} checked={Boolean(data.domain_bans?.[domain])} onChange={event => void saveHistory(domain, "ban", event.target.checked)} /></td>
               <td data-label="Действия"><button type="button" className="networkDeleteButton" aria-label={`Удалить ${domain} из сетки`}
                 title={domain === data.canon || domain === data.reserve || domain === site.name || domain === data.amp ? "Домен проекта, Main, AMP и резерв защищены от удаления" : "Удалить домен из сетки"}
                 disabled={disabled || !data.domains.includes(domain) || [data.canon, data.reserve, site.name, data.amp].includes(domain)}
                 onClick={() => void mutate("delete_domain", domain)}><Trash2 size={15} /></button></td>
-              <td data-label="Дата добавления" className="networkAddedAt" title={data.domain_added_at?.[domain] ? "Первое подтверждённое появление в сетке (МСК)" : "Дата добавления не сохранена"}>{data.domain_added_at?.[domain] ? new Date(data.domain_added_at[domain]).toLocaleString("ru-RU", { timeZone: "Europe/Moscow", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
+              <td data-label="Дата добавления" className="networkAddedAt" title={data.domain_added_at?.[domain] ? "Последнее подтверждённое добавление в сетку (МСК)" : "Дата добавления не сохранена"}>{data.domain_added_at?.[domain] ? new Date(data.domain_added_at[domain]).toLocaleString("ru-RU", { timeZone: "Europe/Moscow", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
             </tr>)}</tbody>
           </table></div>
           {!visibleDomains.length && <p>{domainQuery.trim() ? "Домены не найдены." : networkView === "amp" ? "В кеше проекта AMP-домены не указаны." : "В основной сетке нет доменов."}</p>}
