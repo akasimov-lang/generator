@@ -38,7 +38,7 @@ def state(site_id: str, user: AuthUser, db: Session = Depends(get_db),
     provider = db.scalar(select(models.AiProvider).where(models.AiProvider.provider_type == "gemini",
                          models.AiProvider.is_active.is_(True)).order_by(models.AiProvider.created_at.desc()).limit(1))
     return {"context": context, "context_error": error, "provider_ready": bool(provider and provider.api_key),
-            "anchor_count": auto_lb.OUTPUT_LINES, "topic_count": auto_lb.OUTPUT_LINES,
+            "anchor_count": None if context and context.get("unlimited_anchors") else auto_lb.OUTPUT_LINES, "topic_count": auto_lb.OUTPUT_LINES,
             "topic_text": "\n".join(auto_lb.topic_lines(db, site_id, context)),
             "prompts": {k: auto_lb.build_prompt(k, {**context, "unique_anchor_count": unique_anchor_count})
                         for k in ("anchors", "topics")} if context else {},
@@ -52,7 +52,7 @@ def create(site_id: str, payload: GenerateRequest, user: AuthUser, db: Session =
         context = auto_lb.project_context(site)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
-    if payload.kind == "anchors":
+    if payload.kind == "anchors" and not context.get("unlimited_anchors"):
         context["unique_anchor_count"] = payload.unique_anchor_count
     existing = db.scalar(select(models.AutoLbGeneration).where(
         models.AutoLbGeneration.site_id == site_id, models.AutoLbGeneration.kind == payload.kind,

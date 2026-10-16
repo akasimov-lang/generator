@@ -1093,3 +1093,57 @@ def test_manual_publication_bypasses_queue_and_records_actual_time(db: Session, 
     db.refresh(campaign)
     assert campaign.status == "completed"
     assert campaign.completed_at is not None
+
+
+@pytest.mark.parametrize('remote_state, expected_calls, expected_status', [
+    ('absent', 6, 'publication_failed'),
+    ('created', 1, 'publication_pending_confirmation'),
+    ('unavailable', 1, 'publication_failed'),
+    ('different', 1, 'publication_failed'),
+    ('duplicates', 1, 'publication_failed'),
+])
+def test_publication_retry_checks_remote_page_and_exposes_progress(db, monkeypatch, remote_state, expected_calls, expected_status):
+    import copy
+    import httpx
+    from unittest.mock import AsyncMock
+    from app import publication_retry
+    site, item = make_content(db)
+    site.name = 'retry.example'
+    site.cache_server_ip = 'bear'
+    db.commit()
+    monkeypatch.setattr(service_module, 'refresh_project_server_id', lambda *_: 'bear')
+    async def token(_):
+        return 'secret-token'
+    monkeypatch.setattr(service_module, 'refresh_project_server_token', token)
+    progress = []
+    async def sleep(delay):
+        assert delay == 10
+        progress.append((item.status, copy.deepcopy(item.generation_context['publication_retry']), item.last_publication_status_code))
+    monkeypatch.setattr(publication_retry.asyncio, 'sleep', sleep)
+    calls = []
+    class Client:
+        def __init__(self, **kwargs): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def post(self, endpoint, json, headers):
+            calls.append(copy.deepcopy(json))
+            return httpx.Response(502, json={'error': 'gateway'})
+        async def get(self, endpoint, headers):
+            if remote_state == 'unavailable':
+                raise httpx.ConnectError('unavailable')
+            page = copy.deepcopy(calls[0]['page'])
+            if remote_state == 'different': page['title'] = 'Unrelated page'
+            pages = [] if remote_state == 'absent' else [page, page] if remote_state == 'duplicates' else [page]
+            return httpx.Response(200, json={'data': {'pages': pages}}, request=httpx.Request('GET', endpoint))
+    monkeypatch.setattr(service_module.httpx, 'AsyncClient', Client)
+    asyncio.run(publish_item(db, item, site))
+    assert len(calls) == expected_calls
+    assert item.status == expected_status
+    assert all(payload == calls[0] for payload in calls)
+    assert progress[0][0] == 'publishing'
+    assert progress[0][1]['attempt'] == 2
+    assert progress[0][1]['max_attempts'] == 6
+    assert progress[0][1]['waiting'] is True
+    assert progress[0][2] == 502
+    logs = db.scalars(select(models.PublicationLog).where(models.PublicationLog.content_item_id == item.id)).all()
+    assert all(log.request_payload.get('token') != 'secret-token' for log in logs)

@@ -935,7 +935,7 @@ def _active_site_menu_visibility_check(db: Session, site_id: str) -> models.Menu
 
 
 def _site_menu_capabilities_payload(
-    site: models.Site, latest_check: models.MenuVisibilityCheck | None
+    site: models.Site, latest_check: models.MenuVisibilityCheck | None, db: Session
 ) -> dict[str, Any]:
     # Legacy rows can have a persisted result without a check timestamp.
     result_is_current = site.header_menu_rendered is not None or site.footer_menu_rendered is not None
@@ -945,6 +945,13 @@ def _site_menu_capabilities_payload(
         else "completed" if result_is_current else "not_checked"
     )
     return {
+        "completed_check_count": db.scalar(select(func.count(models.MenuVisibilityCheck.id)).where(
+            models.MenuVisibilityCheck.site_id == site.id,
+            models.MenuVisibilityCheck.status == "completed",
+            models.MenuVisibilityCheck.requested_by_user_id.is_not(None),
+            models.MenuVisibilityCheck.started_at.is_not(None),
+            models.MenuVisibilityCheck.finished_at.is_not(None),
+        )) or 0,
         "checked_at": site.menu_capabilities_checked_at,
         "header_menu_template_rendered": site.header_menu_template_rendered,
         "header_menu_rendered": site.header_menu_rendered,
@@ -962,7 +969,7 @@ def _site_menu_capabilities_payload(
 @router.get("/sites/{site_id}/menu-capabilities")
 def get_site_menu_capabilities(site_id: str, _: AuthUser, db: Session = Depends(get_db)) -> dict[str, Any]:
     site = _get_site_or_404(db, site_id)
-    return _site_menu_capabilities_payload(site, _latest_site_menu_visibility_check(db, site.id))
+    return _site_menu_capabilities_payload(site, _latest_site_menu_visibility_check(db, site.id), db)
 
 
 @router.post("/sites/{site_id}/menu-capabilities/template-check")
@@ -986,12 +993,13 @@ def check_site_menu_template_capabilities(site_id: str, _: AuthUser, db: Session
         site.footer_menu_nested = capabilities["footer_menu_nested"]
     db.commit()
     db.refresh(site)
-    return _site_menu_capabilities_payload(site, _latest_site_menu_visibility_check(db, site.id))
+    return _site_menu_capabilities_payload(site, _latest_site_menu_visibility_check(db, site.id), db)
 
 
 @router.post("/sites/{site_id}/menu-capabilities/check")
 def enqueue_site_menu_capabilities_check(site_id: str, user: AuthUser, db: Session = Depends(get_db)) -> dict[str, Any]:
     site = _get_site_or_404(db, site_id)
+    db.refresh(site, with_for_update=True)
     active_check = _active_site_menu_visibility_check(db, site.id)
     if active_check is None:
         active_check = models.MenuVisibilityCheck(
@@ -1010,7 +1018,7 @@ def enqueue_site_menu_capabilities_check(site_id: str, user: AuthUser, db: Sessi
             active_check.error_message = f"{type(error).__name__}: {error}"[:1000]
             active_check.finished_at = datetime.now(timezone.utc)
             db.commit()
-    return _site_menu_capabilities_payload(site, active_check)
+    return _site_menu_capabilities_payload(site, active_check, db)
 
 
 @router.get("/admin/menu-visibility-checks", response_model=list[MenuVisibilityCheckResponse])
@@ -2116,6 +2124,7 @@ def list_publication_content(_: AuthUser, db: Session = Depends(get_db)) -> Any:
             models.ContentItem.generated_at,
             models.ContentItem.published_at,
             models.ContentItem.last_publication_status_code,
+            models.ContentItem.generation_context["publication_retry"].label("publication_retry"),
             models.ContentItem.updated_at,
         )
         .join(models.GenerationTask, models.GenerationTask.id == models.ContentItem.task_id)
@@ -2631,6 +2640,7 @@ def get_campaign_queue(campaign_id: str, _: AuthUser, db: Session = Depends(get_
                 "scheduled_at": item.scheduled_at,
                 "published_at": item.published_at,
                 "last_publication_status_code": item.last_publication_status_code,
+                "publication_retry": (item.generation_context or {}).get("publication_retry"),
             }
             for item, section_name in rows
         ],

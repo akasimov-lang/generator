@@ -1,6 +1,8 @@
 import React from "react";
 import { TemplateCombobox } from "./TemplateCombobox";
-import { Trash2 } from "lucide-react";
+import { buildStandardAlternates } from "./standardAlternates";
+import { matchesProjectSearch, normalizeDomainQuery } from "./projectSearch";
+import { Trash2, X, Search } from "lucide-react";
 
 type AlternatesSnapshot = { markup: string; enabled: boolean };
 type NetworkOperation = { id: string; action: "reserve" | "reglue" | "alternates" | "create_domains" | "create_subdomains" | "delete_domain" | "create_fake_main" | "select_fake_main" | "indexing"; task_id?: string; domains?: string[]; status: string; message: string | null; domain: string | null; source_domain?: string | null; alternates_before?: AlternatesSnapshot | null; alternates_after?: AlternatesSnapshot | null; initiator: string; created_at: string };
@@ -19,7 +21,7 @@ type Network = {
   operations: NetworkOperation[];
 };
 type Props = {
-  site: { id: string; name: string }; mode: "network" | "redirects"; username: string;
+  site: { id: string; name: string; cache_language?: string | null; cache_geo?: string | null }; mode: "network" | "redirects"; username: string;
   api: <T>(path: string, options?: RequestInit) => Promise<T>; onChanged: () => void; refreshToken?: number;
 };
 type Draft = { markup: string; enabled: boolean; originalMarkup: string; originalEnabled: boolean };
@@ -37,6 +39,17 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
       return value && typeof value.markup === "string" && typeof value.originalMarkup === "string" && typeof value.enabled === "boolean" && typeof value.originalEnabled === "boolean" ? value : null;
     } catch { return null; }
   });
+  const [canonicalDraft, setCanonicalDraft] = React.useState<{ standard: string; fake: string; originalStandard: string; originalFake: string } | null>(null);
+  const filterKey = `network-domain-filter:${username}:${site.id}`;
+  const [savedFilter, setSavedFilter] = React.useState(() => sessionStorage.getItem(filterKey) || "");
+  const [domainQuery, setDomainQuery] = React.useState(savedFilter);
+  function commitDomainFilter(value: string) {
+    const query = value.trim();
+    setSavedFilter(query); setDomainQuery(query);
+    if (query) sessionStorage.setItem(filterKey, query); else sessionStorage.removeItem(filterKey);
+  }
+  const canonicalDirty = Boolean(canonicalDraft && (canonicalDraft.standard !== canonicalDraft.originalStandard || canonicalDraft.fake !== canonicalDraft.originalFake));
+  const canonicalConflict = Boolean(data && canonicalDraft && canonicalDirty && (canonicalDraft.originalStandard !== (data.canonicalDefaultMarkup ?? "") || canonicalDraft.originalFake !== (data.canonicalFakeMainMarkup ?? "")));
   const [reserve, setReserve] = React.useState("");
   const [networkView, setNetworkView] = React.useState<"main" | "amp">("main");
   const [showDomainList, setShowDomainList] = React.useState(false);
@@ -52,14 +65,18 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
   const [removeDomainInput, setRemoveDomainInput] = React.useState("");
   const mounted = React.useRef(true);
   const uncertain = data?.operations.some((op) => ["pending", "unknown"].includes(op.status)) || false;
-  const dirty = Boolean(draft && (draft.markup !== draft.originalMarkup || draft.enabled !== draft.originalEnabled));
-  const conflict = Boolean(data && draft && dirty && (data.alternateMarkup !== draft.originalMarkup || data.enableAlternates !== draft.originalEnabled));
+  const dirty = canonicalDirty || Boolean(draft && (draft.markup !== draft.originalMarkup || draft.enabled !== draft.originalEnabled));
+  const conflict = canonicalConflict || Boolean(data && draft && dirty && (data.alternateMarkup !== draft.originalMarkup || data.enableAlternates !== draft.originalEnabled));
 
   function accept(next: Network, replaceReserve = false) {
     if (!mounted.current) return;
     const previous = dataRef.current;
     dataRef.current = next;
     setData(next);
+    setCanonicalDraft(old => old && (old.standard !== old.originalStandard || old.fake !== old.originalFake) && (old.standard !== next.canonicalDefaultMarkup || old.fake !== next.canonicalFakeMainMarkup) ? old : {
+      standard: next.canonicalDefaultMarkup ?? "", fake: next.canonicalFakeMainMarkup ?? "",
+      originalStandard: next.canonicalDefaultMarkup ?? "", originalFake: next.canonicalFakeMainMarkup ?? "",
+    });
     setFakeMainSelection(next.fake_main_current || "");
     setReserve((old) => !replaceReserve && old !== previous?.reserve && old && next.domains.includes(old) && old !== next.canon ? old : (next.reserve === next.canon ? "" : next.reserve));
     setDraft((old) => old && (old.markup !== old.originalMarkup || old.enabled !== old.originalEnabled) && (old.markup !== next.alternateMarkup || old.enabled !== next.enableAlternates) ? old : {
@@ -128,7 +145,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
   async function mutate(action: Exclude<NetworkOperation["action"], "indexing">, targetDomain?: string) {
     if (!data || !draft || busyRef.current) return;
     busyRef.current = true; setBusy(action); setError(""); setMessage("");
-    const payload = { action, fake_main_path: action === "select_fake_main" ? fakeMainSelection : fakeMainInput, revision: data.revision, domain: targetDomain || reserve, alternate_markup: draft.markup, enable_alternates: draft.enabled, ...((action === "create_subdomains" || action === "create_domains") ? { domains: subdomains } : {}) };
+    const payload = { action, fake_main_path: action === "select_fake_main" ? fakeMainSelection : action === "create_fake_main" ? fakeMainInput : "", ...(action === "alternates" && canonicalDirty && canonicalDraft ? { canonical_default_markup: canonicalDraft.standard, canonical_fake_main_markup: canonicalDraft.fake } : {}), revision: data.revision, domain: targetDomain || reserve, alternate_markup: draft.markup, enable_alternates: draft.enabled, ...((action === "create_subdomains" || action === "create_domains") ? { domains: subdomains } : {}) };
     const receiptKey = `network-request:${username}:${site.id}`;
     let requestId = crypto.randomUUID();
     try {
@@ -168,7 +185,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
   }
   const known = data ? [...new Set([...data.domains, ...(data.amp_domains || []), data.canon, ...data.main_history, ...data.alternate_history])].filter(Boolean) : [];
   const ampDomains = new Set(data?.amp_domains || []);
-  const visibleDomains = known.filter((domain) => networkView === "amp" ? ampDomains.has(domain) : !ampDomains.has(domain));
+  const visibleDomains = known.filter((domain) => networkView === "amp" ? ampDomains.has(domain) : !ampDomains.has(domain)).filter(domain => matchesProjectSearch(domain, normalizeDomainQuery(domainQuery)));
   const disabled = Boolean(busy) || uncertain;
   const removeDomain = removeDomainInput.trim().toLowerCase().replace(/\.$/, "");
   const protectedDomains = [data?.canon, data?.reserve, site.name, data?.amp].filter(Boolean).map(value => value!.replace(/^www\./, ""));
@@ -186,6 +203,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
           <button type="button" aria-pressed={networkView === "main"} onClick={() => setNetworkView("main")}>Основная сетка</button>
           <button type="button" aria-pressed={networkView === "amp"} onClick={() => setNetworkView("amp")}>Ампы</button>
         </div>}
+        <div className="networkTopControls">
         {mode === "network" && networkView === "amp" ? <p>Текущий AMP: <strong>{data.amp || "не задан"}</strong> · Предыдущий AMP: <strong>{data.prev_amp || "не задан"}</strong></p> : <div className="networkMainReserveRow">
           <div className="networkCurrentDomains"><span>Текущий Main: <strong>{data.canon || "не задан"}</strong></span><span>Текущий резерв: <strong>{data.reserve && data.reserve !== data.canon ? data.reserve : "не выбран"}</strong></span></div>
           <fieldset disabled={disabled} className="networkReserveField networkReserveInline"><TemplateCombobox label="Резервный домен" value={reserve} placeholder="Выберите резерв" onChange={value => { setReserve(value); }} options={[{ value: "", label: "Выберите резерв" }, ...data.domains.filter(domain => !ampDomains.has(domain) && domain !== data.canon).map(domain => ({ value: domain, label: domain }))]} /></fieldset>
@@ -196,11 +214,12 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
           <fieldset disabled={disabled} className="networkReserveField"><TemplateCombobox label="Фейковый внутряк" value={fakeMainSelection} placeholder="Выберите страницу" onChange={setFakeMainSelection} options={(data.fake_main_paths || []).map(path => ({ value: path, label: path }))} /></fieldset>
           <button type="button" className="button compact secondary" disabled={disabled || !fakeMainSelection || fakeMainSelection === data.fake_main_current} onClick={() => void mutate("select_fake_main")}>{busy === "select_fake_main" ? "Сохраняем…" : "Сохранить страницу"}</button>
         </div>}
+        </div>
         {uncertain && <div className="notice" role="status">Проверяем результат отправленной операции. Новые изменения станут доступны после подтверждения. Запрос на изменение повторно не отправляется.</div>}
         {mode === "network" && <>
           <button type="button" className="secondary compact" aria-expanded={showDomainList} onClick={() => setShowDomainList(value => !value)}>Выделить домены</button>
           {showDomainList && <div className="networkDomainList"><label>Домены — по одному в строке<textarea ref={domainListRef} readOnly aria-label="Домены для копирования" value={visibleDomains.join("\n")} rows={Math.min(12, Math.max(3, visibleDomains.length))} /></label><small>Ctrl+C / ⌘C — скопировать. Можно выделить только нужные строки.</small><button type="button" className="secondary compact" onClick={() => setShowDomainList(false)}>Скрыть список</button></div>}
-          <div className="networkTableWrap" tabIndex={0} role="region" aria-label="Домены сетки"><table className="networkTable"><thead><tr><th scope="col">Домен</th><th scope="col">Тип домена</th><th scope="col">Поддомен</th><th scope="col">Статус</th><th scope="col">Был Main</th><th scope="col">Был в альтернейтах</th><th scope="col">x-default</th><th scope="col">Действия</th><th scope="col">Дата добавления</th></tr></thead>
+          <div className="networkTableWrap" tabIndex={0} role="region" aria-label="Домены сетки"><table className="networkTable"><thead><tr><th scope="col"><div className="networkDomainSearch"><Search size={14} aria-hidden="true" /><input aria-label="Поиск по доменам сетки" placeholder="Домены" value={domainQuery} onChange={event => setDomainQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); commitDomainFilter(domainQuery); } if (event.key === "Escape") setDomainQuery(savedFilter); }} />{(savedFilter || domainQuery) && <button type="button" aria-label="Сбросить фильтр доменов" title="Сбросить фильтр" onClick={() => commitDomainFilter("")}><X size={15} /></button>}</div></th><th scope="col">Тип домена</th><th scope="col">Поддомен</th><th scope="col">Статус</th><th scope="col">Был Main</th><th scope="col">Был в альтернейтах</th><th scope="col">x-default</th><th scope="col">Действия</th><th scope="col">Дата добавления</th></tr></thead>
             <tbody>{visibleDomains.map((domain) => <tr key={domain}><td data-label="Домен">{domain}</td><td data-label="Тип домена">{ampDomains.has(domain) ? <span className="networkAmpType">AMP</span> : data.domain_classification?.[domain]?.is_subdomain ? <span title="Тип задаётся у родительского домена">{data.domain_classification[domain].parent_type === "drop" ? "Дроп (родитель)" : data.domain_classification[domain].parent_type === "newreg" ? "Новорег (родитель)" : "Не указан у родителя"}</span> : <select className="networkDomainType" aria-label={`Тип домена ${domain}`} value={data.domain_types?.[domain] || ""} disabled={Boolean(busy)} onChange={(event) => void saveDomainType(domain, event.target.value)}><option value="" disabled>Не указан</option><option value="drop">Дроп</option><option value="newreg">Новорег</option></select>}</td><td data-label="Поддомен">
                 <span className="networkSubdomain"><input type="checkbox" className="networkHistoryCheck" disabled checked={!!data.domain_classification?.[domain]?.is_subdomain} aria-label={domain + ": поддомен"} />
                 {data.domain_classification?.[domain]?.is_subdomain && <span title={"Родитель: " + data.domain_classification[domain].parent_domain}>
@@ -216,7 +235,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
               <td data-label="Дата добавления" className="networkAddedAt" title={data.domain_added_at?.[domain] ? "Первое подтверждённое появление в сетке (МСК)" : "Дата добавления не сохранена"}>{data.domain_added_at?.[domain] ? new Date(data.domain_added_at[domain]).toLocaleString("ru-RU", { timeZone: "Europe/Moscow", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
             </tr>)}</tbody>
           </table></div>
-          {!visibleDomains.length && <p>{networkView === "amp" ? "В кеше проекта AMP-домены не указаны." : "В основной сетке нет доменов."}</p>}
+          {!visibleDomains.length && <p>{domainQuery.trim() ? "Домены не найдены." : networkView === "amp" ? "В кеше проекта AMP-домены не указаны." : "В основной сетке нет доменов."}</p>}
           {networkView === "main" && <div className="networkDomainManagement"><div className="networkSection networkSubdomains">
             <h3>Добавление в сетку</h3>
             <p>Укажите домены и поддомены через запятую, пробел или новую строку.</p>
@@ -239,12 +258,18 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
         {(mode !== "network" || networkView === "main") && <div className="networkSection networkCanonical">
           <h3>Каноникл</h3>
           <p>Состояние: <strong>{typeof data.enableCanonical === "boolean" ? data.enableCanonical ? "Включён" : "Выключен" : "Нет сохранённых данных — обновите данные сетки"}</strong></p>
-          <label>Каноникл всех страниц<textarea aria-label="Каноникл всех страниц" className="networkMarkup" rows={1} style={{ width: `${Math.max(28, ...(data.canonicalDefaultMarkup || "").split("\n").map(line => line.length)) + 4}ch` }} readOnly value={data.canonicalDefaultMarkup ?? ""} placeholder={data.canonicalDefaultMarkup === undefined ? "Нет сохранённых данных" : "Не задан"} /></label>
-          <label>Каноникл главной и фейковых внутренних страниц<textarea aria-label="Каноникл главной и фейковых внутренних страниц" className="networkMarkup" rows={1} style={{ width: `${Math.max(28, ...(data.canonicalFakeMainMarkup || "").split("\n").map(line => line.length)) + 4}ch` }} readOnly value={data.canonicalFakeMainMarkup ?? ""} placeholder={data.canonicalFakeMainMarkup === undefined ? "Нет сохранённых данных" : "Не задан"} /></label>
+          <label>Каноникл всех страниц<input type="text" aria-label="Каноникл всех страниц" className="networkMarkup" spellCheck={false} disabled={disabled || !data.has_head || !canonicalDraft} value={canonicalDraft?.standard ?? ""} onChange={event => canonicalDraft && setCanonicalDraft({ ...canonicalDraft, standard: event.target.value })} placeholder={data.canonicalDefaultMarkup === undefined ? "Нет сохранённых данных" : "Не задан"} /></label>
+          <label>Каноникл главной и фейковых внутренних страниц<input type="text" aria-label="Каноникл главной и фейковых внутренних страниц" className="networkMarkup" spellCheck={false} disabled={disabled || !data.has_head || !canonicalDraft} value={canonicalDraft?.fake ?? ""} onChange={event => canonicalDraft && setCanonicalDraft({ ...canonicalDraft, fake: event.target.value })} placeholder={data.canonicalFakeMainMarkup === undefined ? "Нет сохранённых данных" : "Не задан"} /></label>
           {data.fake_main_current && <p className="muted">Текущая фейковая внутренняя страница: {data.fake_main_current}</p>}
         </div>}
         {draft && (mode !== "network" || networkView === "main") && <div className="networkSection">
           <h3>Альтернейты</h3>
+          <button type="button" className="button secondary compact" disabled={disabled || !data.has_head} onClick={() => {
+            try {
+              const markup = buildStandardAlternates(draft.markup, site.cache_language, site.cache_geo, data.fake_main_current);
+              setDraft({ ...draft, markup, enabled: true }); setError("");
+            } catch (err) { setError(errorText(err)); }
+          }}>Добавить альтернейт</button>
           <label><input type="checkbox" checked={draft.enabled} disabled={disabled || !data.has_head} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} /> Включить альтернейты</label>
           <label>Альтернейты<textarea aria-label="Альтернейты" className="networkMarkup" rows={8} spellCheck={false} value={draft.markup} disabled={disabled || !data.has_head} onChange={(event) => setDraft({ ...draft, markup: event.target.value })} placeholder={'<link rel="alternate" hreflang="x-default" href="https://example.com/" />'} /></label>
           {!data.has_head && <p>Настройки head не получены. Редактирование недоступно.</p>}
@@ -253,12 +278,12 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
             {busy === "alternates" ? "Отправляем альтернейты на сервер проекта…"
               : data.operations.some((op) => op.action === "alternates" && ["pending", "unknown"].includes(op.status))
                 ? "Запрос отправлен. Ожидаем подтверждения синхронизации с сервером проекта."
-              : dirty ? "Изменения не синхронизированы. Нажмите «Сохранить альтернейты», чтобы отправить данные на сервер проекта."
+              : dirty ? "Изменения не синхронизированы. Нажмите «Сохранить канониклы и альтернейты», чтобы отправить данные на сервер проекта."
               : "Локальных изменений нет. Разметка соответствует последним полученным данным проекта."}
           </p>
           <div className="networkActions">
-            <button type="button" className="button" disabled={disabled || !dirty || conflict || !data.has_head} onClick={() => void mutate("alternates")}>{busy === "alternates" ? "Сохраняем…" : "Сохранить альтернейты"}</button>
-            <button type="button" className="button secondary" disabled={Boolean(busy) || !dirty} onClick={() => setDraft({ markup: data.alternateMarkup, enabled: data.enableAlternates, originalMarkup: data.alternateMarkup, originalEnabled: data.enableAlternates })}>Загрузить актуальную разметку</button>
+            <button type="button" className="button" disabled={disabled || !dirty || conflict || !data.has_head} onClick={() => void mutate("alternates")}>{busy === "alternates" ? "Сохраняем…" : "Сохранить канониклы и альтернейты"}</button>
+            <button type="button" className="button secondary" disabled={Boolean(busy) || !dirty} onClick={() => { setDraft({ markup: data.alternateMarkup, enabled: data.enableAlternates, originalMarkup: data.alternateMarkup, originalEnabled: data.enableAlternates }); setCanonicalDraft({ standard: data.canonicalDefaultMarkup ?? "", fake: data.canonicalFakeMainMarkup ?? "", originalStandard: data.canonicalDefaultMarkup ?? "", originalFake: data.canonicalFakeMainMarkup ?? "" }); }}>Загрузить актуальную разметку</button>
           </div>
         </div>}
         {(mode !== "network" || networkView === "main") && <div className="networkSection"><h3>Фейковые внутренние страницы</h3>

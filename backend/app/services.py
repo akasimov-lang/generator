@@ -10,7 +10,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 from html.parser import HTMLParser
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import quote, urlparse, urlunparse
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -20,6 +20,9 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app import models
+from app.task_status import refresh_task_status
+from app.brand_home_links import apply_brand_home_links, project_link_brand
+from app.publication_retry import post_publication, set_publication_attempt
 from app.editorial_skill import prepend_editorial_skill
 from app.factual_research import COMPETITOR_QUERY_LIMIT, render_research, research_facts
 from app.technical_pages import is_technical, generate_checked, validate_publication as validate_technical_publication, sync_menu as sync_technical_menu
@@ -3647,6 +3650,13 @@ async def _build_task_content(db: Session, item: models.ContentItem, **kwargs) -
             )
         context["factual_research"] = report
     kwargs["generation_context"] = context
+    brand = project_link_brand(site)
+    if brand:
+        kwargs["prompt_template"] = (kwargs.get("prompt_template") or DEFAULT_CONTENT_PROMPT_TEMPLATE) + (
+            f"\n\nInclude at least one natural, unlinked mention of the project brand {brand!r} "
+            "in a normal paragraph of each internal article. Keep the brand spelling. "
+            "The application will add the relative homepage link to that mention."
+        )
     original_prompt = kwargs.get("prompt_template")
     last_detected: str | None = None
     for attempt in range(3):
@@ -3659,7 +3669,7 @@ async def _build_task_content(db: Session, item: models.ContentItem, **kwargs) -
         result = await generate_checked(db, item, **kwargs) if technical else await build_ai_content(**kwargs)
         last_detected = detected_content_language(result)
         if generated_content_uses_language(result, language):
-            return result
+            return apply_brand_home_links(result, site)
     raise ValueError(
         f"Generated content language {last_detected or 'unknown'} does not match project language {language}"
     )
@@ -3837,7 +3847,7 @@ def auto_publish_generated_task(db: Session, task: models.GenerationTask) -> mod
     task = db.get(models.GenerationTask, task.id)
     if not task:
         raise ValueError("Generation task not found")
-    task.status = "publication_failed" if failed else "publishing" if pending_confirmation else "published"
+    refresh_task_status(db, task.id)
     db.commit()
     db.refresh(task)
     return task
@@ -5172,9 +5182,14 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
         endpoint = site.publication_endpoint
     item.last_publication_status_code = None
     is_republication = _has_successful_page_publication(db, item)
+    needs_retry_preflight = not is_republication and bool(db.scalar(select(models.PublicationLog.id).where(
+        models.PublicationLog.content_item_id == item.id,
+        or_(models.PublicationLog.response_status >= 400, models.PublicationLog.error_message.is_not(None)),
+    ).limit(1)))
     try:
         section = db.get(models.Section, item.section_id) if item.section_id else None
         ensure_content_slug_available(db, item, section=section)
+        item.generated_json = apply_brand_home_links(item.generated_json, site)
         validate_content_for_publication(item)
     except ValueError as exc:
         db.add(
@@ -5186,6 +5201,7 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
             )
         )
         item.status = "publication_failed"
+        refresh_task_status(db, item.task_id)
         refresh_campaign_status(db, item.publication_campaign_id)
         db.commit()
         return
@@ -5196,6 +5212,7 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
         except Exception as exc:
             item.status = "publication_failed"
             item.generation_error = f"Меню технической страницы: {exc}"[:500]
+            refresh_task_status(db, item.task_id)
             db.commit()
             return
     if initiator_username == "automatic-menu-generation":
@@ -5203,6 +5220,7 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
     elif initiator_username:
         item.publication_author = initiator_username
     item.status = "publishing"
+    refresh_task_status(db, item.task_id)
     db.commit()
 
     try:
@@ -5234,8 +5252,52 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
             if page_to_update:
                 request_payload["id"] = page_to_update["id"]
                 request_payload["page"]["id"] = page_to_update["id"]
-            response = await client.post(
-                endpoint,
+            async def verify_before_retry():
+                # A failed response can follow a successful remote write. Read the
+                # project directly, never infer absence from the asynchronous cache.
+                check = await client.get(
+                    project_server_url(site, "/projects/one/") + quote(site.name, safe=""),
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+                check.raise_for_status()
+                project = check.json()
+                pages = project.get("data", {}).get("pages") if isinstance(project, dict) and isinstance(project.get("data"), dict) else None
+                if not isinstance(pages, list):
+                    raise ValueError("Повтор остановлен: сервер не подтвердил список страниц; создание дубля запрещено.")
+                matches = [page for page in pages if isinstance(page, dict) and _normalized_project_slug(page.get("slug")) == target_slug]
+                if not matches:
+                    return None
+                expected = request_payload["page"]
+                if len(matches) == 1 and all(matches[0].get(key) == expected.get(key) for key in ("title", "description")) and (matches[0].get("content") or {}).get("blocks") == expected["content"]["blocks"]:
+                    return httpx.Response(200, json={"confirmed_existing_page": True})
+                raise ValueError("Повтор остановлен: по этому адресу уже есть страница. Повторное создание запрещено.")
+
+            def record_attempt(attempt):
+                previous = (item.generation_context or {}).get("publication_retry", {})
+                set_publication_attempt(item, attempt, error=previous.get("error") if attempt > 1 else None)
+                db.commit()
+
+            def record_retry(attempt, response, error):
+                item.last_publication_status_code = response.status_code if response is not None else None
+                reason = f"HTTP {response.status_code}" if response is not None else type(error).__name__
+                set_publication_attempt(item, attempt + 1, waiting=True, error=reason)
+                logged_payload = {**request_payload, "token": "[redacted]"}
+                if initiator_username:
+                    logged_payload["requested_by"] = {"username": initiator_username}
+                db.add(models.PublicationLog(
+                    content_item_id=item.id, endpoint_url=endpoint,
+                    request_payload=logged_payload,
+                    response_status=response.status_code if response is not None else None,
+                    error_message=f"Попытка {attempt}/6: " + (f"HTTP {response.status_code}" if response is not None else type(error).__name__) + ". Повтор через 10 секунд.",
+                ))
+                db.commit()
+
+            response = await post_publication(
+                client, endpoint,
+                on_retry=record_retry,
+                on_attempt=record_attempt,
+                before_retry=verify_before_retry,
+                verify_first=needs_retry_preflight,
                 json=request_payload,
                 headers={
                     "Authorization": f"Bearer {token}",
@@ -5278,6 +5340,7 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
             item.scheduled_at = None
         else:
             item.status = "publication_failed"
+        refresh_task_status(db, item.task_id)
         refresh_campaign_status(db, item.publication_campaign_id)
         db.commit()
     except Exception as exc:
@@ -5298,6 +5361,7 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
         item.status = "publication_failed"
         item.generation_error = f"{type(exc).__name__}: {exc}"[:500]
         item.scheduled_at = None
+        refresh_task_status(db, item.task_id)
         refresh_campaign_status(db, item.publication_campaign_id)
         db.commit()
 
@@ -5579,6 +5643,8 @@ async def publish_campaign_bundle(db: Session, campaign_id: str, log_id: str) ->
             "results": results,
         }
         log.error_message = "Пакетная публикация завершена с ошибками" if has_failures else None
+        for task_id in {item.task_id for item in items}:
+            refresh_task_status(db, task_id)
         db.commit()
     except Exception as exc:
         for item in items:
@@ -5594,4 +5660,6 @@ async def publish_campaign_bundle(db: Session, campaign_id: str, log_id: str) ->
         campaign.completed_at = completed_at
         log.response_body = {"completed_at": completed_at.isoformat(), "results": results}
         log.error_message = f"{type(exc).__name__}: {exc}"[:1000]
+        for task_id in {item.task_id for item in items}:
+            refresh_task_status(db, task_id)
         db.commit()

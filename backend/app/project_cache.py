@@ -999,6 +999,9 @@ def _confirm_deleted_content(db: Session, site: models.Site, project: dict[str, 
         item.deletion_confirmed_at = now
         item.deletion_error = None
         confirmed += 1
+    from app.task_status import refresh_task_status
+    for task_id in {item.task_id for item in pending_items if item.status == "deleted"}:
+        refresh_task_status(db, task_id)
     return confirmed
 
 
@@ -1058,24 +1061,10 @@ def _confirm_published_content(db: Session, site: models.Site, project: dict[str
         task_ids.add(item.task_id)
         confirmed += 1
 
+    from app.task_status import refresh_task_status
+    db.flush()
     for task_id in task_ids:
-        task = db.get(models.GenerationTask, task_id)
-        if not task:
-            continue
-        remaining = db.scalar(
-            select(func.count(models.ContentItem.id)).where(
-                models.ContentItem.task_id == task_id,
-                models.ContentItem.status.notin_(["published", "deleted"]),
-            )
-        ) or 0
-        published = db.scalar(
-            select(func.count(models.ContentItem.id)).where(
-                models.ContentItem.task_id == task_id,
-                models.ContentItem.status == "published",
-            )
-        ) or 0
-        if published and not remaining:
-            task.status = "published"
+        refresh_task_status(db, task_id)
 
     for campaign_id in campaign_ids:
         campaign = db.get(models.PublicationCampaign, campaign_id)

@@ -43,6 +43,8 @@ class NetworkChange(BaseModel):
     domain: str = Field(default="", max_length=253)
     alternate_markup: str = Field(default="", max_length=100000)
     enable_alternates: bool = True
+    canonical_default_markup: str | None = Field(default=None, max_length=100000)
+    canonical_fake_main_markup: str | None = Field(default=None, max_length=100000)
     fake_main_path: str = Field(default="", max_length=250)
     activate_fake_main: bool = False
     domains: list[str] = Field(default_factory=list, max_length=100)
@@ -360,6 +362,11 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
             validate_markup(payload.alternate_markup)
             method, path = "PATCH", "/projects/update-head"
             request.update(alternateMarkup=payload.alternate_markup, enableAlternates=payload.enable_alternates)
+            for source, target in ((payload.canonical_default_markup, "canonicalDefaultMarkup"), (payload.canonical_fake_main_markup, "canonicalFakeMainMarkup")):
+                if source is not None:
+                    if source.strip() and not re.fullmatch(r"<link\s+rel=[\"']canonical[\"']\s+href=[\"']https?://[^\"'<>\s]+[\"']\s*/?>", source.strip(), re.IGNORECASE):
+                        raise ValueError('Каноникл должен содержать одну ссылку <link rel="canonical" href="https://…" />.')
+                    request[target] = source
             if payload.fake_main_path:
                 fake_path = normalize_fake_path(payload.fake_main_path)
                 if (not payload.enable_alternates or not state['fake_main_enabled']
@@ -380,7 +387,7 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
             stored_request["alternates_before"] = {
                 "markup": state["alternateMarkup"], "enabled": state["enableAlternates"],
             }
-            if payload.fake_main_path:
+            if payload.fake_main_path or payload.canonical_default_markup is not None or payload.canonical_fake_main_markup is not None:
                 stored_request['canonical_before'] = {key: state[key] for key in
                     ('enableCanonical', 'canonicalDefaultMarkup', 'canonicalFakeMainMarkup')}
         operation = models.NetworkOperation(id=str(payload.request_id), site_id=site.id, action=payload.action,

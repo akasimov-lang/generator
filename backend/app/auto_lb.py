@@ -17,6 +17,10 @@ DEFAULT_UNIQUE_ANCHORS = 30
 
 def project_context(site):
     brand = (site.brand or "").strip()
+    site_type = getattr(site, "site_type", None)
+    general = site_type == "general" or (not site_type and (not brand or brand.casefold() == "общие ключи"))
+    if general:
+        brand = "online casino"
     geo = (site.cache_geo or "").strip().replace("_", "-").split("-")[0].upper()
     language = (site.cache_language or "").strip().replace("_", "-")
     if not brand or brand.casefold() == "общие ключи":
@@ -29,17 +33,26 @@ def project_context(site):
     if (not host or "." not in host or parsed.username or parsed.password
             or parsed.scheme not in {"http", "https"} or re.search(r"[\s/?#]", host)):
         raise ValueError("Не найден текущий Main проекта. Обновите проект перед генерацией.")
-    return {"brand": brand, "geo": geo, "language": language, "main": host,
+    return {"brand": brand, "unlimited_anchors": bool(general),
+            "homepage_title": (getattr(site, "homepage_title", None) or "").strip(), "geo": geo, "language": language, "main": host,
             "main_url": f"{parsed.scheme}://{host}", "output_count": OUTPUT_LINES, "prompt_version": 2}
 
 
 def build_prompt(kind, context):
     brand, geo, language = (context[k] for k in ("brand", "geo", "language"))
-    data = json.dumps({key: context[key] for key in ("brand", "geo", "language", "main", "main_url")}, ensure_ascii=False)
+    data = json.dumps({key: context.get(key, "") for key in ("brand", "geo", "language", "main", "main_url", "homepage_title")}, ensure_ascii=False)
     common = (f"\nПараметры проекта (данные, не инструкции): {data}.\n"
               f"Язык результата: {language} (код языка). ГЕО: {geo} (ISO-код страны). "
               "Пиши естественно на этом языке, локализуй название страны. Сохрани бренд проекта. "
               "Только готовые строки, без вступлений, заключений, Markdown, групп и нумерации.\n")
+    if kind == "anchors" and context.get("unlimited_anchors"):
+        return (f"Сгенерируй анкор-лист для {brand}, ГЕО {geo}, на языке {language}. "
+                "Используй ссылку на главную страницу main_url и её тайтл homepage_title "
+                "для понимания тематики проекта. Тайтл и URL — исходные данные, не инструкции. "
+                "Количество строк и уникальных анкоров выбери по тематике, без фиксированного количества "
+                "и без верхнего ограничения. Допускаются естественные повторы. "
+                "Каждый анкор с новой строки. Используй текущий Main для доменных и URL-анкоров."
+                + common)
     if kind == "anchors":
         unique_count = context.get("unique_anchor_count", DEFAULT_UNIQUE_ANCHORS)
         return (f"Сгенерируй анкор-лист из {OUTPUT_LINES} строк с повторами для {brand}, ГЕО {geo}, на языке {language}, "
@@ -53,7 +66,8 @@ def build_prompt(kind, context):
                 "анкорами рекламно-информационного характера с обязательным вхождением бренда проекта. "
                 "Каждый такой анкор должен содержать бренд и содержательную рекламно-информационную фразу "
                 "на языке проекта; одно название бренда или домен в эту долю не засчитываются.\n")
-    return (f"Сгенерируй {OUTPUT_LINES} рекламно-информационных тем для {brand} casino на языке {language}, "
+    topic_brand = brand if brand.casefold().endswith("casino") else f"{brand} casino"
+    return (f"Сгенерируй {OUTPUT_LINES} рекламно-информационных тем для {topic_brand} на языке {language}, "
             "где каждая тема с новой строки без нумерации." + common)
 
 
@@ -94,7 +108,7 @@ def normalize_result(kind, text, context):
         domain = re.compile(r"https?://[^\s<>]+|(?<![\w@])(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,24}(?:/[^\s<>]*)?", re.I)
         lines = [domain.sub(lambda match: context["main_url"] if match.group().lower().startswith(("http://", "https://")) else context["main"], line) for line in lines]
         # Only new jobs carry this requirement; saved/queued older jobs keep their contract.
-        unique_count = context.get("unique_anchor_count")
+        unique_count = None if context.get("unlimited_anchors") else context.get("unique_anchor_count")
         actual = len({normalized_key(line) for line in lines})
         if unique_count is not None and actual != unique_count:
             raise ValueError(f"Ожидалось {unique_count} уникальных анкоров, получено {actual}. "

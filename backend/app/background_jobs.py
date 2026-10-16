@@ -3,6 +3,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import select, or_
 from app import models
+from app.task_status import refresh_task_status
 
 
 def enqueue_publication(db, item, actor):
@@ -17,6 +18,7 @@ def enqueue_publication(db, item, actor):
     db.add(models.BackgroundJob(kind="publication", payload={
         "content_id": item.id, "actor": actor, "previous_status": previous_status,
     }))
+    refresh_task_status(db, item.task_id)
     # The dispatcher recovers a broker failure after this commit.
     db.commit()
 
@@ -90,6 +92,7 @@ def run_job(db, job_id):
                 asyncio.run(publish_item(db, item, site, initiator_username=job.payload.get("actor")))
             if item.status == "published":
                 item.scheduled_at = None
+            refresh_task_status(db, item.task_id)
             refresh_campaign_status(db, item.publication_campaign_id)
             result = {"content_id": item.id, "status": item.status}
             if item.status == "publication_failed":

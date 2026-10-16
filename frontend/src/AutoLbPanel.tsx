@@ -4,11 +4,11 @@ import { LANGUAGE_OPTIONS } from "./languageOptions";
 import "./styles/auto-lb.css";
 
 type Kind = "anchors" | "topics";
-type Context = { brand: string; geo: string; language: string; main: string; main_url: string };
+type Context = { unlimited_anchors?: boolean; homepage_title?: string; brand: string; geo: string; language: string; main: string; main_url: string };
 type Generation = { id: string; kind: Kind; status: string; context: Context; prompt: string; text: string;
   error: string | null; line_count: number; unique_count: number; created_at: string };
 type State = { context: Context | null; context_error: string | null; provider_ready: boolean;
-  anchor_count: number; topic_count: number; topic_text: string; prompts: Partial<Record<Kind, string>>; generations: Generation[] };
+  anchor_count: number | null; topic_count: number; topic_text: string; prompts: Partial<Record<Kind, string>>; generations: Generation[] };
 type Api = <T>(path: string, init?: RequestInit) => Promise<T>;
 const pending = (row: Generation) => row.status === "queued" || row.status === "running";
 const statusLabel: Record<string, string> = { queued: "В очереди", running: "Gemini генерирует список", completed: "Готово", failed: "Ошибка генерации" };
@@ -39,6 +39,7 @@ export function AutoLbPanel({ siteId, api }: { siteId: string; api: Api }) {
   const [selected, setSelected] = React.useState<Partial<Record<Kind, string>>>({});
   const [copied, setCopied] = React.useState<Partial<Record<Kind, string>>>({});
   const [uniqueAnchors, setUniqueAnchors] = React.useState("30");
+  const unlimitedAnchors = !!state?.context?.unlimited_anchors;
   const uniqueAnchorCount = Number(uniqueAnchors);
   const validUniqueCount = uniqueAnchors.trim() !== "" && Number.isInteger(uniqueAnchorCount)
     && uniqueAnchorCount >= 1 && uniqueAnchorCount <= (state?.anchor_count ?? 300);
@@ -64,12 +65,12 @@ export function AutoLbPanel({ siteId, api }: { siteId: string; api: Api }) {
   }, [api, siteId, previewUniqueCount]);
 
   async function generate(kind: Kind) {
-    if (kind === "anchors" && !validUniqueCount) return;
+    if (kind === "anchors" && !unlimitedAnchors && !validUniqueCount) return;
     setBusy(current => ({ ...current, [kind]: true }));
     setErrors(current => ({ ...current, [kind]: "" }));
     try {
       const row = await api<Generation>(`/sites/${siteId}/auto-lb`, { method: "POST", body: JSON.stringify({ kind,
-        ...(kind === "anchors" ? { unique_anchor_count: uniqueAnchorCount } : {}) }) });
+        ...(kind === "anchors" && !unlimitedAnchors ? { unique_anchor_count: uniqueAnchorCount } : {}) }) });
       if (!alive.current) return;
       setState(current => current ? { ...current, generations: [row, ...current.generations.filter(item => item.id !== row.id)] } : current);
       setSelected(current => ({ ...current, [kind]: kind === "topics" ? undefined : row.id }));
@@ -111,13 +112,13 @@ export function AutoLbPanel({ siteId, api }: { siteId: string; api: Api }) {
         const active = rows.find(pending);
         const title = kind === "anchors" ? "Анкор-лист" : "Генерация тем";
         const count = kind === "anchors" ? state?.anchor_count ?? 300 : state?.topic_count ?? 300;
-        const changed = row && state?.context && (["brand", "geo", "language", ...(kind === "anchors" ? ["main", "main_url"] : [])] as (keyof Context)[]).some(key => row.context[key] !== state.context?.[key]);
+        const changed = row && state?.context && (["brand", "geo", "language", ...(kind === "anchors" && !unlimitedAnchors ? ["main", "main_url", "homepage_title", "unlimited_anchors"] : [])] as (keyof Context)[]).some(key => row.context[key] !== state.context?.[key]);
         return <section className="autoLbCard" key={kind} aria-label={title}>
-          <div className="autoLbCardTitle"><h3>{title}</h3><span className="autoLbCount">{count} строк</span></div>
+          <div className="autoLbCardTitle"><h3>{title}</h3><span className="autoLbCount">{kind === "anchors" && unlimitedAnchors ? "Без ограничения строк" : `${count} строк`}</span></div>
           <p className="muted autoLbDescription">{kind === "anchors"
-            ? "300 строк с повторами, без образца. Бренд и язык проекта, домен и URL — текущий Main."
+            ? unlimitedAnchors ? "Количество строк свободное. Для понимания тематики передаём ссылку на текущий Main и тайтл главной страницы." : "300 строк с повторами, без образца. Бренд и язык проекта, домен и URL — текущий Main."
             : "Каждый запуск добавляет 300 новых тем без образца. Общий список сохраняется для бренда, ГЕО и языка проекта."}</p>
-          {kind === "anchors" && <div className="autoLbUnique">
+          {kind === "anchors" && !unlimitedAnchors && <div className="autoLbUnique">
             <label htmlFor="auto-lb-unique-anchors">Уникальных анкоров</label>
             <input id="auto-lb-unique-anchors" type="number" min={1} max={count} step={1} inputMode="numeric"
               value={uniqueAnchors} disabled={!!active || !!busy.anchors} aria-invalid={!validUniqueCount}
@@ -129,7 +130,7 @@ export function AutoLbPanel({ siteId, api }: { siteId: string; api: Api }) {
               {validUniqueCount ? `От 1 до ${count}. Остальные строки — повторы. По умолчанию — 30.`
                 : `Введите целое число от 1 до ${count}.`}</p>
           </div>}
-          <button type="button" className="button" disabled={!state?.context || !state.provider_ready || !!active || !!busy[kind] || !!loadError || (kind === "anchors" && !validUniqueCount)}
+          <button type="button" className="button" disabled={!state?.context || !state.provider_ready || !!active || !!busy[kind] || !!loadError || (kind === "anchors" && !unlimitedAnchors && !validUniqueCount)}
             onClick={() => void generate(kind)}>
             {active || busy[kind] ? <LoaderCircle size={16} className="autoLbSpinner" /> : <Sparkles size={16} />}
             {active ? statusLabel[active.status] : busy[kind] ? "Запуск…" : kind === "anchors" ? "Сгенерировать анкор-лист" : "Добавить 300 тем"}

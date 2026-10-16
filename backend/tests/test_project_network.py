@@ -517,3 +517,34 @@ def test_domain_added_dates_persist_without_dating_old_domains(env):
     assert network.read_network(db, site)["domain_added_at"] == dates
     remote.data["settings"]["domains"].append("sub.new.test")
     assert network.read_network(db, site)["domain_added_at"] == dates
+
+
+def test_manual_canonical_edit_is_saved_and_confirmed(env):
+    db, site, remote = env
+    state = network.read_network(db, site)
+    standard = '<link rel="canonical" href="https://{{settings.canon}}{{reqPath}}" />'
+    fake = '<link rel="canonical" href="https://{{settings.canon}}/cz/" />'
+    result = change(env, 'alternates', state['revision'], alternate_markup=MARKUP,
+                    canonical_default_markup=standard, canonical_fake_main_markup=fake)
+    assert result['canonicalDefaultMarkup'] == standard
+    assert result['canonicalFakeMainMarkup'] == fake
+    assert result['operations'][0]['status'] == 'confirmed'
+    assert remote.data['head']['customHeaders'] == [{'key': 'X-Test', 'value': 'keep'}]
+
+
+def test_manual_canonical_waits_for_remote_confirmation(env):
+    db, site, remote = env
+    state = network.read_network(db, site)
+    remote.delayed = True
+    result = change(env, 'alternates', state['revision'], alternate_markup=MARKUP,
+                    canonical_default_markup='<link rel="canonical" href="https://{{settings.canon}}/" />')
+    assert result['operations'][0]['status'] != 'confirmed'
+
+
+def test_manual_canonical_rejects_non_link_markup(env):
+    db, site, remote = env
+    state = network.read_network(db, site)
+    with pytest.raises(ValueError, match='Каноникл'):
+        change(env, 'alternates', state['revision'], alternate_markup=MARKUP,
+               canonical_fake_main_markup='<script>alert(1)</script>')
+    assert remote.calls == []

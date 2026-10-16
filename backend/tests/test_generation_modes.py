@@ -438,3 +438,27 @@ def test_auto_publish_accepts_and_publishes_each_valid_item(db: Session, monkeyp
 
     assert task.status == "published"
     assert item.status == "published"
+
+
+def test_branded_generation_adds_home_link_before_saving(db, monkeypatch):
+    site = make_site(db)
+    site.brand = 'MerkurXtip'
+    site.site_type = 'monobrand'
+    site.cache_language = 'cs'
+    task = models.GenerationTask(site_id=site.id, title='Links', geo='CZ', language='cs', collect_competitors=False)
+    db.add(task); db.flush()
+    item = models.ContentItem(task_id=task.id, site_id=site.id, topic='Registrace', slug='/registrace/',
+                              generated_json={}, idempotency_key='brand-home-link')
+    db.add(item); db.commit()
+    prompts = []
+    async def build(**kwargs):
+        prompts.append(kwargs['prompt_template'])
+        return {'pages': [{'slug': '/registrace/', 'content': {'blocks': [
+            {'type': 'paragraph', 'data': {'text': 'Registrace v MerkurXtip.'}},
+        ]}}]}
+    monkeypatch.setattr(service_module, 'build_ai_content', build)
+    monkeypatch.setattr(service_module, 'detected_content_language', lambda _: 'cs')
+    monkeypatch.setattr(service_module, 'generated_content_uses_language', lambda *_: True)
+    result = asyncio.run(service_module._build_task_content(db, item, site=site, language='cs', prompt_template='Base prompt'))
+    assert result['pages'][0]['content']['blocks'][0]['data']['text'] == 'Registrace v <a href="/">MerkurXtip</a>.'
+    assert 'MerkurXtip' in prompts[0] and 'normal paragraph' in prompts[0]

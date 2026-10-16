@@ -357,6 +357,7 @@ class PublicationContentResponse(BaseModel):
     published_at: datetime | None
     last_publication_status_code: int | None
     updated_at: datetime
+    publication_retry: dict[str, Any] | None = None
 
 
 class GenerationTaskCreate(BaseModel):
@@ -769,6 +770,7 @@ class PublicationQueueItemResponse(BaseModel):
     scheduled_at: datetime | None
     published_at: datetime | None
     last_publication_status_code: int | None
+    publication_retry: dict[str, Any] | None = None
 
 
 class PublicationCampaignQueueResponse(BaseModel):

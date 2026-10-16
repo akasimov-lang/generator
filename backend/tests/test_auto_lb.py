@@ -80,6 +80,7 @@ def test_prompt_adapts_every_available_language_and_project(env):
 def test_missing_project_context_is_not_invented(env, field, value):
     db, site, _ = env
     configure(db, site)
+    site.site_type = "monobrand"
     setattr(site, field, value)
     with pytest.raises(ValueError):
         auto_lb.project_context(site)
@@ -263,3 +264,45 @@ def test_anchor_output_keeps_all_rows_without_exact_count(env, count):
     ctx.update(prompt_version=2, unique_anchor_count=30)
     lines = [f"Brand phrase {n % 30}" for n in range(count)]
     assert auto_lb.normalize_result("anchors", "\n".join(lines), ctx).splitlines() == lines
+
+
+@pytest.mark.parametrize("site_type,brand", [("general", ""), ("general", "Old Brand"), (None, "Общие ключи"), (None, "")])
+def test_general_sites_use_online_casino_for_auto_lb(env, site_type, brand):
+    db, site, _ = env
+    configure(db, site)
+    site.site_type, site.brand = site_type, brand
+    context = auto_lb.project_context(site)
+    assert context["brand"] == "online casino"
+    assert site.brand == brand
+    for kind in ("anchors", "topics"):
+        prompt = auto_lb.build_prompt(kind, context)
+        assert "online casino" in prompt
+        assert "online casino casino" not in prompt
+    assert context["main"] == "current.example"
+    assert context["language"] == "cs"
+
+
+def test_general_anchor_job_has_homepage_context_and_no_count_limit(env):
+    from app.auto_lb_api import create, GenerateRequest, state
+    db, site, _ = env
+    user, _ = configure(db, site)
+    site.site_type = "general"
+    site.homepage_title = "Online Casinos Deutschland — Vergleich"
+    db.commit()
+    current = state(site.id, {"id": user.id}, db)
+    assert current["anchor_count"] is None
+    assert current["topic_count"] == 300
+    row = create(site.id, GenerateRequest(kind="anchors"), {"id": user.id}, db)
+    assert row["context"]["homepage_title"] == site.homepage_title
+    assert "unique_anchor_count" not in row["context"]
+    assert "https://current.example" in row["prompt"]
+    assert site.homepage_title in row["prompt"]
+    assert "300" not in row["prompt"]
+    assert "30 уникальных" not in row["prompt"]
+    for count in (7, 351):
+        lines = [f"casino phrase {n}" for n in range(count)]
+        assert auto_lb.normalize_result("anchors", "\n".join(lines), row["context"]).splitlines() == lines
+    with pytest.raises(ValueError, match="пустой"):
+        auto_lb.normalize_result("anchors", "", row["context"])
+    site.homepage_title = "New title"
+    assert row["context"]["homepage_title"] != site.homepage_title

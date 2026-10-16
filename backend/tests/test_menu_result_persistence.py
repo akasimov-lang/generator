@@ -86,3 +86,30 @@ def test_worker_commits_result_and_failed_retry_keeps_it(monkeypatch):
     assert result['footer_menu_rendered'] is False
     with sessions() as db:
         assert db.get(models.Site, site_id).menu_capabilities_checked_at == checked_at
+
+
+def test_drum_count_tracks_completed_manual_checks_only(monkeypatch):
+    from datetime import datetime, timezone
+    client, sessions = make_client()
+    monkeypatch.setattr('app.api.check_site_menu_visibility_job.apply_async', lambda **kwargs: None)
+    monkeypatch.setattr(worker, 'SessionLocal', sessions)
+    monkeypatch.setattr(worker, 'refresh_project_server_id', lambda *args: None)
+    monkeypatch.setattr(worker, 'fetch_project_menu_capabilities', lambda *args, **kwargs: {
+        'header_menu_template_rendered': True, 'header_menu_rendered': False, 'header_menu_nested': False,
+        'footer_menu_template_rendered': True, 'footer_menu_rendered': False, 'footer_menu_nested': False,
+    })
+    with sessions() as db:
+        site_id = db.scalar(select(models.Site.id))
+    first = client.post(f'/api/sites/{site_id}/menu-capabilities/check').json()
+    again = client.post(f'/api/sites/{site_id}/menu-capabilities/check').json()
+    assert first['check_id'] == again['check_id']
+    assert again['completed_check_count'] == 0
+    assert worker.check_site_menu_visibility_job(first['check_id'])['status'] == 'completed'
+    assert client.get(f'/api/sites/{site_id}/menu-capabilities').json()['completed_check_count'] == 1
+    # A repeated delivery and a page reload cannot increase the counter.
+    assert worker.check_site_menu_visibility_job(first['check_id'])['status'] == 'completed'
+    assert client.get(f'/api/sites/{site_id}/menu-capabilities').json()['completed_check_count'] == 1
+    second = client.post(f'/api/sites/{site_id}/menu-capabilities/check').json()
+    assert second['completed_check_count'] == 1
+    assert worker.check_site_menu_visibility_job(second['check_id'])['status'] == 'completed'
+    assert client.get(f'/api/sites/{site_id}/menu-capabilities').json()['completed_check_count'] == 2

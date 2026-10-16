@@ -107,10 +107,10 @@ def reconcile_all_project_networks_job() -> dict:
 def check_site_menu_visibility_job(check_id: str) -> dict:
     db = SessionLocal()
     try:
-        check = db.get(models.MenuVisibilityCheck, check_id)
+        check = db.scalar(select(models.MenuVisibilityCheck).where(models.MenuVisibilityCheck.id == check_id).with_for_update())
         if not check:
             return {"status": "missing", "check_id": check_id}
-        if check.status not in {"queued", "running"}:
+        if check.status != "queued":
             return {"status": check.status, "check_id": check_id}
         check.status = "running"
         check.started_at = datetime.now(timezone.utc)
@@ -226,27 +226,8 @@ def run_task_pipeline_job(task_id: str) -> dict:
 
 
 def _refresh_parallel_task_status(db, task_id: str) -> None:
-    task = db.get(models.GenerationTask, task_id)
-    if not task:
-        return
-    # Another worker can finish an item while this session still holds an older
-    # relationship snapshot. Always calculate the aggregate from current rows.
-    db.expire(task, ["items"])
-    statuses = [item.status for item in task.items]
-    if any(status in {"generation_queued", "generating"} for status in statuses):
-        task.status = "generating"
-    elif any(status == "generation_failed" for status in statuses):
-        task.status = "generation_failed"
-    elif any(status == "system_stopped" for status in statuses):
-        task.status = "system_stopped"
-    elif task.auto_publish and any(status == "publication_failed" for status in statuses):
-        task.status = "publication_failed"
-    elif task.auto_publish and any(status in {"approved", "publishing", "publication_pending_confirmation"} for status in statuses):
-        task.status = "publishing"
-    elif task.auto_publish and statuses and all(status in {"published", "deleted"} for status in statuses):
-        task.status = "published"
-    else:
-        task.status = "generated"
+    from app.task_status import refresh_task_status
+    refresh_task_status(db, task_id)
     db.commit()
 
 

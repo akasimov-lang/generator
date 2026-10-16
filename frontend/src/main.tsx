@@ -297,6 +297,7 @@ const PROJECT_STATUS_OPTIONS: Array<{ value: Site["project_status"]; label: stri
 ];
 
 type MenuCapabilities = {
+  completed_check_count?: number;
   checked_at: string | null;
   header_menu_template_rendered: boolean | null;
   header_menu_rendered: boolean | null;
@@ -451,6 +452,7 @@ type PublicationContentItem = {
   published_at: string | null;
   last_publication_status_code: number | null;
   updated_at: string;
+  publication_retry?: Record<string, unknown> | null;
 };
 
 type TaskDetails = {
@@ -559,6 +561,7 @@ type PublicationQueueItem = {
   scheduled_at: string | null;
   published_at: string | null;
   last_publication_status_code: number | null;
+  publication_retry?: Record<string, unknown> | null;
 };
 
 type PublicationCampaignQueue = {
@@ -1374,7 +1377,7 @@ function App() {
 
         {message ? <div className="notice">{message}</div> : null}
 
-        {activeView === "workspace" && <ProjectWorkspaceView domainQuery={domainQuery} canManageAutomation api={api} sites={siteSnapshot} providers={providers} currentUsername={currentUser.username} activeTab={workspaceTab} contentOpenRequest={workspaceContentOpenRequest} onTabChange={(tab, projectName) => navigateTo("workspace", tab, false, projectName)} onSiteChanged={site => mergeSites([site])} onChanged={loadAll} />}
+        {activeView === "workspace" && <ProjectWorkspaceView domainQuery={domainQuery} onDomainQueryChange={setDomainQuery} canManageAutomation api={api} sites={siteSnapshot} providers={providers} currentUsername={currentUser.username} activeTab={workspaceTab} contentOpenRequest={workspaceContentOpenRequest} onTabChange={(tab, projectName) => navigateTo("workspace", tab, false, projectName)} onSiteChanged={site => mergeSites([site])} onChanged={loadAll} />}
         {activeView === "prompts" && <PromptsView api={api} sites={sites} isAdmin={isAdmin} onChanged={loadAll} />}
         {isAdmin && activeView === "dashboard" && dashboard && <DashboardView api={api} dashboard={dashboard} tasks={tasks} content={content} sites={sites} onOpenTask={(task) => {
           const site = sites.find((candidate) => candidate.id === task.site_id);
@@ -1929,6 +1932,7 @@ const FastProjectMenuPanel = React.memo(ProjectMenuPanel);
 
 function ProjectWorkspaceView({
   domainQuery,
+  onDomainQueryChange,
   api: sourceApi,
   sites,
   providers,
@@ -1941,6 +1945,7 @@ function ProjectWorkspaceView({
   onChanged
 }: ViewProps & {
   domainQuery: string;
+  onDomainQueryChange: (query: string) => void;
   sites: Site[];
   providers: AiProvider[];
   currentUsername: string;
@@ -2165,10 +2170,10 @@ function ProjectWorkspaceView({
         checked_at: site.menu_capabilities_checked_at,
         header_menu_template_rendered: site.header_menu_template_rendered,
         header_menu_rendered: site.header_menu_rendered,
-        header_menu_nested: site.header_menu_nested,
+        header_menu_nested: site.header_menu_rendered != null || site.header_menu_template_rendered != null ? site.header_menu_nested : null,
         footer_menu_template_rendered: site.footer_menu_template_rendered,
         footer_menu_rendered: site.footer_menu_rendered,
-        footer_menu_nested: site.footer_menu_nested,
+        footer_menu_nested: site.footer_menu_rendered != null || site.footer_menu_template_rendered != null ? site.footer_menu_nested : null,
         check_id: null, check_status: "not_checked", check_error_code: null, check_error_message: null
       } : null);
       setMenuCapabilitiesLoading(false);
@@ -2213,13 +2218,15 @@ function ProjectWorkspaceView({
     activityFlight.current = true;
     const siteId = selectedSiteId;
     try {
-      const [nextContent, nextCampaigns] = await Promise.all([
+      const [nextContent, nextCampaigns, nextTasks] = await Promise.all([
         api<ContentItem[]>(`/sites/${siteId}/content`, { cache: "no-store" }),
-        api<PublicationCampaign[]>(`/sites/${siteId}/publication-campaigns`, { cache: "no-store" })
+        api<PublicationCampaign[]>(`/sites/${siteId}/publication-campaigns`, { cache: "no-store" }),
+        api<Task[]>(`/sites/${siteId}/tasks`, { cache: "no-store" })
       ]);
       if (selectedSiteIdRef.current !== siteId) return;
       setSiteContent(nextContent);
       setCampaigns(nextCampaigns);
+      setSiteTasks(nextTasks);
       const stamp = JSON.stringify([siteId, nextContent.map(item => [item.id, item.status, item.indexing_status]), nextCampaigns.map(item => [item.id, item.status])]);
       if (stamp !== activitySnapshot.current) {
         activitySnapshot.current = stamp;
@@ -2327,6 +2334,12 @@ function ProjectWorkspaceView({
     setSelectedSiteId(siteId);
   }
 
+  function openDomainSearchResult(siteId: string) {
+    selectWorkspaceSite(siteId);
+    onDomainQueryChange("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   async function toggleSiteFavorite(siteId: string) {
     try {
       const result = await api<{ site_ids: string[] }>(`/me/favorite-sites/${siteId}`, {
@@ -2354,7 +2367,7 @@ function ProjectWorkspaceView({
   return (
     <WorkspaceAccordionContext.Provider value={accordionContextValue}>
     <section className="viewStack projectWorkspaceView">
-
+      <div style={{ display: domainQuery.trim() ? "none" : "contents" }}>
       <DataPanel title={(
         <span className="workspaceProjectTitle">
           {selectedSite ? (
@@ -2381,6 +2394,7 @@ function ProjectWorkspaceView({
             >
               <img className="workspaceDrumGraffiti" src="/icons/drum-graffiti.svg" alt="" aria-hidden="true" />
               <span className="workspaceDrumIcon"><img src="/icons/shaman-drum.png" width="28" height="28" alt="" aria-hidden="true" /></span>
+              <span className="workspaceDrumCount" aria-label={`Завершено проверок: ${menuCapabilities?.completed_check_count ?? 0}`} title="Количество выполненных проверок проекта по нажатию на бубен">{menuCapabilities?.completed_check_count ?? 0}</span>
             </button>
           ) : null}
           {selectedSite ? (
@@ -2663,12 +2677,13 @@ function ProjectWorkspaceView({
           </WorkspaceTabPane>
         </>
       ) : null}
+      </div>
       {domainQuery.trim() ? <div id="workspace-domain-results" className="panel workspaceDomainResults">
         <h2 aria-live="polite">Результаты поиска · {domainResults.length}</h2>
         {domainResults.length ? <div className="tableScroll"><table>
           <thead><tr><th>Проект</th><th>Имя проекта</th><th>Главный домен</th><th>Доменов в сетке</th></tr></thead>
-          <tbody>{domainResults.map(site => <tr key={site.id}>
-            <td><button type="button" className="secondary" onClick={() => { selectWorkspaceSite(site.id); window.scrollTo({ top: 0, behavior: "smooth" }); }}>{site.name}</button></td>
+          <tbody>{domainResults.map(site => <tr key={site.id} className="workspaceDomainResultRow" onClick={() => openDomainSearchResult(site.id)}>
+            <td><button type="button" className="secondary" onClick={event => { event.stopPropagation(); openDomainSearchResult(site.id); }}>{site.name}</button></td>
             <td>{site.fibery_name || "—"}</td><td>{site.cache_canon || "—"}</td><td>{site.domains_count}</td>
           </tr>)}</tbody>
         </table></div> : <p>Проекты не найдены. Поиск выполняется по доступным проектам и доменам их сеток.</p>}
@@ -4192,7 +4207,7 @@ function ProjectContentPanel({ api, site, content: allContent, sections, onChang
             item.word_count,
             ACTIVE_GENERATION_STATUSES.includes(item.status)
               ? <GenerationProgressCell item={item} compact />
-              : <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} />,
+              : <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} retry={item.generation_context?.publication_retry} />,
             item.published_at ? (
               <span className="publishedIndexingCell">
                 <span>{formatDate(item.published_at)}</span>
@@ -4732,7 +4747,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
             <div className="compactContentTopic" title={item.topic}><ContentTopicLabel item={item} /></div>,
             sectionLabel(item.section_id, sections),
             item.scheduled_at ? formatDate(item.scheduled_at) : "—",
-            <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} />,
+            <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} retry={item.generation_context?.publication_retry} />,
             item.status === "publication_pending_confirmation" ? (
               <span className="publicationConfirmationPending compact"><RefreshCcw size={13} /> Ожидает проверки</span>
             ) : (
@@ -4756,7 +4771,7 @@ function ProjectPublicationPanel({ api, site, content, sections, campaigns, logs
               sectionLabel(item.section_id, sections),
               <span className="publicationBacklogError" title={publicationFailureSummary(item, errorLog)}>{publicationFailureSummary(item, errorLog)}</span>,
               errorLog ? formatDate(errorLog.created_at) : formatDate(item.updated_at),
-              <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} />,
+              <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} retry={item.generation_context?.publication_retry} />,
               <button className="button compact primary publishImmediatelyButton" type="button" onClick={() => void publishImmediately(item)} disabled={publishingNowId === item.id}><Send size={14} /> {publishingNowId === item.id ? "Проверяем…" : "Отправить ещё раз"}</button>
             ];
           })}
@@ -4873,7 +4888,7 @@ function ProjectCampaignTreeItem({
               </span>,
               sectionLabel(item.section_id, sections),
               item.published_at ? formatDate(item.published_at) : item.scheduled_at ? formatDate(item.scheduled_at) : "—",
-              <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} />,
+              <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} retry={item.generation_context?.publication_retry} />,
               <span className="projectCampaignRowActions">
                 {item.status === "publication_pending_confirmation" ? (
                   <span className="publicationConfirmationPending compact"><RefreshCcw size={13} /> Ожидает проверки</span>
@@ -4944,6 +4959,9 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
   const [restoringSectionId, setRestoringSectionId] = React.useState<string | null>(null);
   const [sendingSectionId, setSendingSectionId] = React.useState<string | null>(null);
   const [menuNestingNotice, setMenuNestingNotice] = React.useState("");
+  React.useEffect(() => {
+    setMenuNestingNotice("");
+  }, [site.id, menuCapabilities?.header_menu_nested, menuCapabilities?.footer_menu_nested]);
   const [reviewSaving, setReviewSaving] = React.useState(false);
   const [adoptingParentKey, setAdoptingParentKey] = React.useState<string | null>(null);
   const [temporaryParentId, setTemporaryParentId] = React.useState<string | null>(null);
@@ -6139,27 +6157,30 @@ function TasksView({
   }, [includeToc, includeFaq, includeCasinoRating]);
 
   React.useEffect(() => {
-    if (!expandedTaskId || (!hasResearchInProgress && !hasGenerationInProgress)) return;
-    let cancelled = false;
+    if (!expandedTaskId) return;
+    let cancelled = false, running = false;
+    let lastStatus = JSON.stringify([expandedDetails?.task.status, expandedDetails?.items.map(item => [item.id, item.status])]);
     const pollResearch = async () => {
+      if (running || document.hidden) return;
+      running = true;
       try {
         const [details, research] = await Promise.all([
-          api<TaskDetails>(`/tasks/${expandedTaskId}`),
-          api<CompetitorResearch[]>(`/tasks/${expandedTaskId}/competitor-research`)
+          api<TaskDetails>(`/tasks/${expandedTaskId}`, { cache: "no-store" }),
+          hasResearchInProgress ? api<CompetitorResearch[]>(`/tasks/${expandedTaskId}/competitor-research`, { cache: "no-store" }) : Promise.resolve(null)
         ]);
         if (cancelled) return;
         setExpandedDetails(details);
-        setExpandedResearch(research);
-        const researchFinished = !research.some((entry) => ACTIVE_RESEARCH_STATUSES.includes(entry.status));
-        const generationFinished = !details.items.some((item) => ACTIVE_GENERATION_STATUSES.includes(item.status));
-        if (researchFinished && generationFinished) {
+        if (research) setExpandedResearch(research);
+        const status = JSON.stringify([details.task.status, details.items.map(item => [item.id, item.status])]);
+        if (status !== lastStatus) {
+          lastStatus = status;
           await onChanged();
         }
       } catch (pollError) {
-        if (!cancelled) setTaskError(pollError instanceof Error ? pollError.message : "Не удалось обновить прогресс сбора конкурентов.");
-      }
+        if (!cancelled) setTaskError(pollError instanceof Error ? pollError.message : "Не удалось обновить статусы задачи.");
+      } finally { running = false; }
     };
-    const intervalId = window.setInterval(pollResearch, 2000);
+    const intervalId = window.setInterval(pollResearch, hasGenerationInProgress || hasResearchInProgress ? 2000 : 5000);
     return () => {
       cancelled = true;
       window.clearInterval(intervalId);
@@ -7239,8 +7260,9 @@ function AdminTasksAccordion({
           </tr>
         </thead>
         <tbody>
-          {tasks.map((task) => {
-            const expanded = expandedTaskId === task.id;
+          {tasks.map((listedTask) => {
+            const expanded = expandedTaskId === listedTask.id;
+            const task = expanded && expandedDetails?.task.id === listedTask.id && new Date(expandedDetails.task.updated_at) >= new Date(listedTask.updated_at) ? expandedDetails.task : listedTask;
             const loading = loadingId === task.id;
             return (
               <React.Fragment key={task.id}>
@@ -7573,7 +7595,7 @@ function competitorStatusLabel(item: ContentItem, research?: CompetitorResearch)
 }
 
 function GenerationProgressCell({ item, compact = false }: { item: ContentItem; compact?: boolean }) {
-  const complete = ["generated", "approved", "scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published"].includes(item.status);
+  const complete = ["generated", "approved", "scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published"].includes(item.status) || (item.status === "publication_failed" && Boolean(item.generated_at));
   const researchInProgress = compact
     && ACTIVE_GENERATION_STATUSES.includes(item.status)
     && ACTIVE_RESEARCH_STATUSES.includes(item.competitor_research_status);
@@ -8210,7 +8232,7 @@ function PublicationsView({ api, sites, content, onOpenProject, onChanged }: Vie
               <button className="compactContentTopic publicationTopicButton" type="button" onClick={() => void openContentPreview(item.id)} disabled={previewLoadingId === item.id} title="Просмотреть текст и метаданные"><ContentTopicLabel item={item} /></button>,
               item.section_name || "Не выбран",
               item.published_at ? `Опубликовано ${formatDate(item.published_at)}` : item.scheduled_at ? formatDate(item.scheduled_at) : "—",
-              <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} />,
+              <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} retry={item.publication_retry} />,
               ["scheduled", "retry_scheduled", "publication_paused", "approved"].includes(item.status) ? (
                 <button className="button compact primary publishImmediatelyButton" type="button" onClick={() => void publishCampaignQueueItem(item)} disabled={publishingQueueItemId === item.id}>
                   <Send size={14} /> {publishingQueueItemId === item.id ? "Отправляем…" : "Отправить"}
@@ -8258,7 +8280,7 @@ function PublicationsView({ api, sites, content, onOpenProject, onChanged }: Vie
                       columns={["Тема", "Статус", "Slug", "Слова", "Сгенерировано", "Опубликовано"]}
                       rows={items.map((item) => [
                         <button className="compactContentTopic publicationTopicButton" type="button" onClick={() => void openContentPreview(item.id)} disabled={previewLoadingId === item.id} title="Просмотреть текст и метаданные"><ContentTopicLabel item={item} /></button>,
-                        <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} />,
+                        <PublicationStatus status={item.status} statusCode={item.last_publication_status_code} retry={item.publication_retry} />,
                         <code>{item.slug}</code>,
                         item.word_count,
                         item.generated_at ? formatDate(item.generated_at) : "—",
@@ -9686,7 +9708,7 @@ function SiteMenuPreviewSection({ title, items, site, sections = [], content = [
                   </span>
                 </div>
               ) : (
-                <button className="siteMenuPreviewItemText siteMenuPreviewItemEditTrigger" type="button" onClick={() => onEditItem?.(node.item, node.section, node.key)} disabled={!onEditItem || openingEditKey === node.key} title="Нажмите, чтобы изменить название или slug">
+                <button className="siteMenuPreviewItemText siteMenuPreviewItemEditTrigger" type="button" onClick={() => onEditItem?.(node.item, node.section, node.key)} disabled={!onEditItem || openingEditKey === node.key} title={`${node.item.title}${node.item.path ? ` — ${node.item.path}` : ""}. Нажмите, чтобы изменить название или slug`}>
                   {menuPageContent ? <span className="siteMenuMainContentIcon" title={`Есть контент пункта меню: ${menuPageContent.topic}`}><FileText size={13} /></span> : null}
                   <span className="siteMenuPreviewItemLabel"><strong>{node.item.title}</strong>{node.item.path ? <code>{node.item.path}</code> : null}</span>
                   {openingEditKey === node.key ? <LoaderCircle className="siteMenuInlineEditLoader" size={14} /> : null}
@@ -9702,7 +9724,7 @@ function SiteMenuPreviewSection({ title, items, site, sections = [], content = [
                 {collapsed ? <ChevronRight size={17} /> : <ChevronDown size={17} />}<span className="siteMenuTreeToggleLabel">{collapsed ? "Показать все" : "Свернуть"}</span><span className="siteMenuTreeNestedCount">{nestedCount}</span>
               </button> : null}
               {onAddContent ? <button className="siteMenuAddContentButton" type="button" onClick={() => onAddContent(node.item, node.section)} title={`Добавить контент в «${node.item.title}»`}><FilePlus2 size={15} /> Контент</button> : null}
-              {onAddChild ? <button className="siteMenuAddChildButton" type="button" onClick={() => onAddChild(node.item, node.section, node.key)} disabled={Boolean(adoptingParentKey)} title={`Добавить вложенный пункт в «${node.item.title}»`}><span className="buttonPlusIcon"><Plus size={15} /></span> {adoptingParentKey === parentKey ? "Открываем…" : "Добавить вложенный"}</button> : null}
+              {onAddChild ? <button className="siteMenuAddChildButton" type="button" onClick={() => onAddChild(node.item, node.section, node.key)} disabled={Boolean(adoptingParentKey)} title={`Добавить вложенный пункт в «${node.item.title}»`} aria-label={`Добавить вложенный пункт в «${node.item.title}»`} aria-busy={adoptingParentKey === parentKey}>{adoptingParentKey === parentKey ? <LoaderCircle className="spin" size={16} aria-hidden="true" /> : <Plus size={18} strokeWidth={2.4} aria-hidden="true" />}</button> : null}
               {onToggleReview ? <button className={`siteMenuReviewButton ${node.section?.is_review ? "active" : ""}`} type="button" onClick={() => onToggleReview(node.item, node.section)} disabled={reviewSaving || deletingMenuItem || savingEdit} aria-pressed={Boolean(node.section?.is_review)} aria-label={`Review: ${node.item.title}`} title={node.section?.is_review ? `Review включён: обзор казино «${node.item.title}». Нажмите, чтобы выключить.` : `Включить Review: название «${node.item.title}» будет брендом для обзора казино.`}><BookOpen size={13} /><span>Review</span></button> : null}
               {onDeleteMenuItem ? <button className="iconButton siteMenuDeleteButton" type="button" onClick={() => onDeleteMenuItem(node.item)} disabled={deletingMenuItem || savingEdit || Boolean(adoptingParentKey)} title={`Удалить «${node.item.title}»${hasChildren ? " и все вложенные пункты" : ""}`} aria-label={`Удалить пункт меню ${node.item.title}`}><Trash2 size={14} /></button> : null}
             </div>
@@ -10824,11 +10846,16 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function PublicationStatus({ status, statusCode }: { status: string; statusCode?: number | null }) {
+function PublicationStatus({ status, statusCode, retry }: { status: string; statusCode?: number | null; retry?: unknown }) {
+  const attempt = retry && typeof retry === "object" ? retry as { attempt?: number; attempts_sent?: number; max_attempts?: number; waiting?: boolean; delay_seconds?: number; error?: string } : null;
+  const retrying = ["publishing", "publishing_all"].includes(status) && (attempt?.attempt || 0) > 1;
+  const exhausted = status === "publication_failed" && attempt?.attempts_sent === attempt?.max_attempts && (attempt?.attempts_sent || 0) > 1;
   const responseClass = statusCode && statusCode >= 200 && statusCode < 300 ? "success" : "error";
   return (
     <span className="publicationStatusCell">
-      <StatusBadge status={status} />
+      {retrying ? <span className="status status-publishing" role="status">Повторная отправка {attempt?.attempt}/{attempt?.max_attempts}{attempt?.waiting ? ` через ${attempt.delay_seconds} секунд` : "…"}</span> : <StatusBadge status={status} />}
+      {exhausted ? <small>Отправок: {attempt?.attempt}/{attempt?.max_attempts}</small> : null}
+      {retrying && statusCode == null && attempt?.error ? <small className="publicationResponseCode error">{attempt.error}</small> : null}
       {statusCode != null ? <small className={`publicationResponseCode ${responseClass}`} title={`Код ответа сервера: HTTP ${statusCode}`}>HTTP {statusCode}</small> : null}
     </span>
   );
