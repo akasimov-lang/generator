@@ -37,6 +37,8 @@ def participant_locks(db, site_id, plan):
 
 
 def transferable(source, state, domain):
+    if not state.get('head_verified', state.get('has_head')):
+        raise ValueError('Не подтверждены актуальные альтернейты исходной сетки.')
     key = domain_key(domain)
     protected = [source.name, state['canon'], state.get('reserve'), *state.get('amp_domains', []),
                  *(source.main_domain_history or []), *(source.alternate_domain_history or []), *(source.x_default_history or [])]
@@ -92,7 +94,7 @@ def preview(db, target, state):
                 unique_membership(db, domain, {source.id})
             except ValueError as error:
                 reasons.append(str(error)); continue
-            if not state.get('has_head'):
+            if not state.get('head_verified', state.get('has_head')):
                 raise ValueError('Не получены данные head принимающей сетки.')
             before = state['alternateMarkup']
             after = re.sub(r'(?<=://)' + re.escape(state['canon']) + r'(?=[/:\"\s]|$)', domain, before)
@@ -220,9 +222,9 @@ def execute(db, run):
                 if not change(db, run, target, action, target_state, domain=domain, alternate_markup=plan['alternateMarkup'], enable_alternates=plan['enableAlternates']):
                     return
             target_state = network.read_network(db, target)
-            if target_state['canon'] != domain or target_state['alternateMarkup'] != plan['alternateMarkup'] or target_state['enableAlternates'] != plan['enableAlternates']:
-                raise ValueError('Итоговый Main или альтернейты не подтверждены.')
-            from app.network_indexing import queue_indexing
+            from app.network_indexing import queue_indexing, verified
+            if not verified(target_state, {'canon': domain, 'alternateMarkup': plan['alternateMarkup'], 'enableAlternates': plan['enableAlternates']}):
+                run.status = 'waiting'; run.message = 'Ждём подтверждения итогового Main и альтернейтов чтением Webdev.'; db.commit(); return
             queue_indexing(db, target, target_state, run.id, run.initiator)
             now = datetime.now(timezone.utc)
             run.plan = {**run.plan, 'alternates_after': {'markup': target_state['alternateMarkup'], 'enabled': target_state['enableAlternates']},

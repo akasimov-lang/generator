@@ -193,3 +193,12 @@ def test_brand_mismatch_and_used_history_exclude_donor(setup):
     network.update_domain_history(db, source, network.DomainHistoryUpdate(domain='next.test', field='alternate', checked=True), 'user')
     with pytest.raises(ValueError, match='истории использования'):
         auto.preview(db, target)
+
+
+def test_missing_live_head_cannot_confirm_transfer(setup):
+    db, source, target, sr, tr = setup
+    network.read_network(db, source); network.read_network(db, target)
+    del tr.data['head']
+    with pytest.raises(ValueError, match='head'):
+        auto.preview(db, target)
+    assert not sr.calls and not tr.calls
