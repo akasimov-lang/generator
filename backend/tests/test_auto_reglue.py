@@ -967,3 +967,36 @@ def test_saved_schedule_exposes_task_link_and_personal_task_in_global_view(monke
     overview = client.get(f'/api/auto-reglue?project_id={site_id}').json()
     assert overview['tasks'] == [task]
     assert overview['projects'] == []  # Listing a task never admits it to mass runs.
+
+
+def test_clean_plan_requires_no_xdefault_and_clears_scheme():
+    site, state, global_cfg, cfg = fixture()
+    global_cfg.scheme_mode = 'clean'
+    cfg.x_default_use_newreg = True
+    cfg.x_default_newreg_domain = ''
+    plan = auto.build_plan(site, state, global_cfg, cfg)
+    assert plan['alternateMarkup'] == ''
+    assert plan['enableAlternates'] is False
+    assert plan['alternates_before']['markup'] == state['alternateMarkup']
+    assert not plan.get('create_fake_main_path')
+
+
+def test_clean_executor_confirms_empty_alternates(monkeypatch):
+    sessions, run_id, calls, state = setup_run(monkeypatch)
+    with sessions() as db:
+        run = db.get(models.AutoReglueRun, run_id)
+        site = db.get(models.Site, run.site_id)
+        cfg = auto.config(db); cfg.scheme_mode = 'clean'; auto.save_config(db, cfg)
+        run.plan = auto.launch_plan(db, site, dict(state, revision=state_revision(state))); db.commit()
+    old_change = auto.project_network.change_network
+    def change(db, site, payload, username, **kwargs):
+        old_change(db, site, payload, username, **kwargs)
+        if payload.action == 'alternates': state['enableAlternates'] = payload.enable_alternates
+    monkeypatch.setattr(auto.project_network, 'change_network', change)
+    with sessions() as db:
+        auto.execute(db, run_id)
+        run = db.get(models.AutoReglueRun, run_id)
+        assert run.status == 'completed', run.message
+        assert run.plan['alternates_before']['markup']
+        assert run.plan['alternates_after'] == {'markup': '', 'enabled': False}
+    assert calls == ['reserve', 'reglue', 'alternates']

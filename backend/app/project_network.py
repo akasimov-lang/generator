@@ -290,10 +290,8 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
     if payload.action in {"create_subdomains", "create_domains"} and not existing_receipt:
         validate_subdomains(payload.domains, site.cache_domains or [], require_parent=payload.action == "create_subdomains")
     with network_lock(db, site.id), Remote(db, site) as remote:
-        active_auto = db.scalar(select(models.AutoReglueRun).where(
-            models.AutoReglueRun.site_id == site.id,
-            models.AutoReglueRun.status.in_(["queued", "running", "waiting", "partial"]),
-        ))
+        from app.auto_reglue import active_run
+        active_auto = active_run(db, site.id)
         if active_auto is not None and active_auto.id != auto_run_id:
             raise NetworkConflict("У проекта незавершённый автопереклей. Дождитесь результата или остановите его в настройках.")
         existing = db.get(models.NetworkOperation, str(payload.request_id))
@@ -304,6 +302,15 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
         if existing:
             return result(db, site, state)
         require_revision(state, payload.revision)
+        if auto_run_id:
+            run = db.get(models.AutoReglueRun, auto_run_id)
+            if run and run.plan.get('execution_mode') == 'cross_network' and payload.action == 'create_domains':
+                from app.cross_reglue import receipt_id, completed_job
+                deletion = db.get(models.NetworkOperation, receipt_id(run, 'delete_domain'))
+                source = db.get(models.Site, run.plan['source_site_id'])
+                if payload.domains != [run.plan['new_main']] or site.id != run.site_id or not deletion or deletion.site_id != source.id or not completed_job(db, source, deletion):
+                    raise ValueError('Добавление при переносе разрешено только после подтверждённого извлечения домена.')
+
         if db.scalar(select(models.NetworkOperation.id).where(
             models.NetworkOperation.site_id == site.id,
             models.NetworkOperation.status.in_(["pending", "unknown"]),
@@ -384,6 +391,15 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
                 if not state['canonicalDefaultMarkup']:
                     request['canonicalDefaultMarkup'] = '<link rel="canonical" href="https://{{settings.canon}}{{reqPath}}" />'
         stored_request = dict(request)
+        if auto_run_id:
+            run = db.get(models.AutoReglueRun, auto_run_id)
+            if run and run.plan.get('execution_mode') == 'cross_network':
+                stored_request['cross_network_transfer'] = {
+                    'run_id': run.id, 'source_site_id': run.plan['source_site_id'],
+                    'source_project': run.plan['source_project'], 'target_site_id': run.site_id,
+                    'target_project': run.plan['project'], 'domain': run.plan['new_main'],
+                }
+
         if payload.action == "reglue":
             stored_request["source_domain"] = state["canon"]
             if auto_run_id is None:

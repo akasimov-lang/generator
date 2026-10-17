@@ -117,7 +117,7 @@ def save_project(site_id: str, payload: auto.ProjectConfig, user: AuthUser, db: 
     payload = auto.saved_project_rules(payload)
     effective = auto.effective_project_config(auto.config(db), payload)
     if effective.enabled and effective.domain_layout != 'root_main':
-        base_only = auto.effective_config(auto.config(db), payload).scheme_mode == 'base_only'
+        base_only = auto.effective_config(auto.config(db), payload).scheme_mode in {'base_only', 'clean'}
         if (effective.parent_kind == 'drop' and not effective.drop_domain
             or effective.parent_kind == 'newreg' and not effective.newreg_domain
             or not base_only and (effective.x_default_use_newreg and not effective.x_default_newreg_domain
@@ -130,6 +130,7 @@ def save_project(site_id: str, payload: auto.ProjectConfig, user: AuthUser, db: 
 
 @router.post('/projects/{site_id}/preview')
 def preview(site_id: str, user: AuthUser, db: Session = Depends(get_db), scope: Literal['mass', 'project'] = 'mass'):
+    db.info['cross_allowed_site_ids'] = allowed_site_ids(user)
     return call(auto.preview,db,site_or_404(db,site_id,user),scope)
 
 
@@ -146,6 +147,7 @@ class BatchStart(BaseModel):
 
 @router.post('/start')
 def start(payload: BatchStart, user: AuthUser, db: Session = Depends(get_db)):
+    db.info['cross_allowed_site_ids'] = allowed_site_ids(user)
     if payload.scope == 'project' and len(payload.items) != 1: raise HTTPException(400,'Персональный запуск содержит один проект.')
     if payload.scope == 'mass' and len(payload.items)>auto.config(db).max_projects: raise HTTPException(400,'Превышен лимит проектов одного запуска.')
     results=[]
@@ -165,6 +167,8 @@ def control(run_id: str, action: str, user: AuthUser, db: Session = Depends(get_
     allowed = allowed_site_ids(user)
     if not run or (allowed is not None and run.site_id not in allowed):
         raise HTTPException(404,'Запуск не найден.')
+    if run.plan.get('source_site_id'):
+        site_or_404(db, run.plan['source_site_id'], user)
     if action not in {'resume','cancel'}:raise HTTPException(400,'Неизвестное действие.')
     try:
         with network_lock(db,'auto-run:'+run.id):

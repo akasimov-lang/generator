@@ -1,29 +1,30 @@
 import { BrandNetworkTable } from "./BrandNetworkTable";
 import React from "react";
+import { TemplateCombobox } from "./TemplateCombobox";
 
 type Api = <T>(path: string, options?: RequestInit) => Promise<T>;
-type Rules = { schedule_enabled: boolean; interval_days: number; scheme_mode: "preserve" | "add_auxiliary" | "base_only"; auxiliary_hreflangs: string[] };
+type Rules = { schedule_enabled: boolean; interval_days: number; scheme_mode: "preserve" | "add_auxiliary" | "base_only" | "clean"; auxiliary_hreflangs: string[] };
 type Config = Rules & { create_subdomains: boolean; create_fake_main: boolean; use_current_fake_main: boolean; subdomain_add_casino: boolean; subdomain_name_style: "mixed" | "joined" | "hyphen"; domain_layout: "subdomain_main" | "root_main"; scope: "mass" | "personal"; enabled: boolean; drop_domain: string; x_default_use_newreg: boolean; x_default_newreg_domain: string; parent_kind: "drop" | "newreg"; newreg_domain: string; language: string; profile_id: string; variant: "current" | "provided" | "before" | "after"; fake_main_path: string };
 type DomainOptions = Pick<Config, "domain_layout" | "parent_kind" | "create_subdomains" | "create_fake_main" | "use_current_fake_main" | "subdomain_add_casino" | "subdomain_name_style" | "x_default_use_newreg">;
 const defaultDomainOptions: DomainOptions = { domain_layout: "subdomain_main", parent_kind: "drop", create_subdomains: false, create_fake_main: false, use_current_fake_main: false, subdomain_add_casino: false, subdomain_name_style: "mixed", x_default_use_newreg: false };
-type GlobalConfig = Rules & { enabled: boolean; max_projects: number; apply_domain_settings?: boolean; domain_settings?: DomainOptions };
+type GlobalConfig = Rules & { execution_mode?: "within_network" | "cross_network"; enabled: boolean; max_projects: number; apply_domain_settings?: boolean; domain_settings?: DomainOptions };
 type Template = { id: string; project: string; brand: string; geo: string; variants: Record<string, unknown> };
-type Plan = { canonicalFakeMainMarkup?: string | null; create_fake_main_path?: string | null; create_subdomain?: string | null; site_id: string; project: string; old_main: string; new_main: string; drop_domain: string; x_default_domain?: string; language_domain?: string; alternateMarkup: string; required_page_urls: string[]; added_hreflang?: string | null; pool_exhausted?: boolean; preview_token: string; requestId: string };
+type Plan = { source_project?: string; added_at?: string; elapsed_seconds?: number; alternates_before?: { markup: string; enabled: boolean }; alternates_after?: { markup: string; enabled: boolean }; canonicalFakeMainMarkup?: string | null; create_fake_main_path?: string | null; create_subdomain?: string | null; site_id: string; project: string; old_main: string; new_main: string; drop_domain: string; x_default_domain?: string; language_domain?: string; alternateMarkup: string; required_page_urls: string[]; added_hreflang?: string | null; pool_exhausted?: boolean; preview_token: string; requestId: string };
 type Run = { id: string; site_id: string; status: string; phase: string; message: string; plan: Plan };
 type ScheduleTask = { site_id: string; project: string; enabled: boolean; scope: string; interval_days: number; status: string; next_run_at?: string | null; url: string };
 type ProjectData = { task?: ScheduleTask | null; next_run_at?: string | null; language_pool?: string[]; config: Config; settings: GlobalConfig; eligible: boolean; geo: string; templates: Template[]; runs: Run[] };
 const active = ["queued", "running", "waiting", "partial"];
 const labels: Record<string, string> = { queued: "В очереди", running: "Выполняется", waiting: "Ожидает подтверждения", partial: "Нужна проверка результата", completed: "Завершён", failed: "Ошибка", cancelled: "Остановлен" };
-const phases: Record<string, string> = { prepared: "Подготовлен", create_fake_main: "Создание фейковой главной", fake_main_ready: "Проверка фейковой страницы", create_subdomains: "Создание поддомена", subdomain_ready: "Проверка готовности поддомена", reserve: "Сохранение резерва", reglue: "Смена Main", alternates: "Обновление альтернейтов", completed: "Все этапы подтверждены" };
+const phases: Record<string, string> = { cross_delete_domain: "Извлечение из исходной сетки", cross_create_domains: "Добавление в новую сетку", cross_reserve: "Сохранение резерва", cross_reglue: "Смена Main", cross_alternates: "Обновление альтернейтов", prepared: "Подготовлен", create_fake_main: "Создание фейковой главной", fake_main_ready: "Проверка фейковой страницы", create_subdomains: "Создание поддомена", subdomain_ready: "Проверка готовности поддомена", reserve: "Сохранение резерва", reglue: "Смена Main", alternates: "Обновление альтернейтов", completed: "Все этапы подтверждены" };
 const errorText = (e: unknown) => e instanceof Error ? e.message : "Не удалось выполнить запрос";
 const body = (method: string, value: unknown): RequestInit => ({ method, body: JSON.stringify(value) });
 
 function PlanPreview({ plan }: { plan: Plan }) {
-  return <div className="autoRegluePlan"><strong>{plan.project}</strong><p>{plan.old_main} → <b>{plan.new_main}</b></p><p>x-default: <b>{plan.x_default_domain || plan.drop_domain}</b></p>
+  return <div className="autoRegluePlan"><strong>{plan.project}</strong><p>{plan.old_main} → <b>{plan.new_main}</b></p>{(plan.x_default_domain || plan.drop_domain) && <p>x-default: <b>{plan.x_default_domain || plan.drop_domain}</b></p>}{plan.source_project && <p>Перенос из сетки <b>{plan.source_project}</b> → <b>{plan.project}</b>; домен станет Main.</p>}{plan.added_at && <p>Добавлен в сетку: {new Date(plan.added_at).toLocaleString("ru-RU")}</p>}{plan.elapsed_seconds !== undefined && <p>Время переноса и переклея: {Math.round(plan.elapsed_seconds)} сек.</p>}{plan.alternates_before && <details><summary>Альтернейты: было / {plan.alternates_after ? "стало" : "планируется"}</summary><p>Было · {plan.alternates_before.enabled ? "включены" : "выключены"}</p><pre>{plan.alternates_before.markup || "Пусто"}</pre><p>{plan.alternates_after ? "Стало · " + (plan.alternates_after.enabled ? "включены" : "выключены") : "Планируется"}</p><pre>{(plan.alternates_after?.markup ?? plan.alternateMarkup) || "Пусто"}</pre></details>}
     {plan.create_fake_main_path && <p>Создать и выбрать действующий фейковый внутряк: <b>{plan.create_fake_main_path}</b>. Для этого запуска выбран новый свободный путь.</p>}
     {plan.canonicalFakeMainMarkup && <p>Canonical главной и фейк-внутряка: <code>{plan.canonicalFakeMainMarkup.replace("{{settings.canon}}", plan.new_main)}</code></p>}
     {plan.create_subdomain && <p>Будет создан один поддомен: <b>{plan.create_subdomain}</b>. Смена Main начнётся после готовности HTTPS и страниц схемы.</p>}
-    {plan.language_domain && <p>Домен языковых альтернейтов: <b>{plan.language_domain}</b></p>}{plan.added_hreflang && <p>Новый фейковый альтернейт: <b>{plan.added_hreflang}</b></p>}{plan.pool_exhausted && <p>Список языков исчерпан: схема сохраняется.</p>}<pre>{plan.alternateMarkup}</pre>{plan.required_page_urls.length > 0 && <p className="muted">Перед сменой Main будут проверены страницы: {plan.required_page_urls.join(", ")}. {plan.create_fake_main_path ? "Копия главной для языка-GEO будет создана автоматически; остальные страницы схемы должны существовать." : "Содержимое этих страниц нужно подготовить в проекте заранее."}</p>}</div>;
+    {plan.language_domain && <p>Домен языковых альтернейтов: <b>{plan.language_domain}</b></p>}{plan.added_hreflang && <p>Новый фейковый альтернейт: <b>{plan.added_hreflang}</b></p>}{plan.pool_exhausted && <p>Список языков исчерпан: схема сохраняется.</p>}<pre>{plan.alternateMarkup || "Альтернейты пустые"}</pre>{(plan.required_page_urls || []).length > 0 && <p className="muted">Перед сменой Main будут проверены страницы: {plan.required_page_urls.join(", ")}. {plan.create_fake_main_path ? "Копия главной для языка-GEO будет создана автоматически; остальные страницы схемы должны существовать." : "Содержимое этих страниц нужно подготовить в проекте заранее."}</p>}</div>;
 }
 
 function FakeMainOptions({ value, change }: { value: { create_fake_main?: boolean; use_current_fake_main?: boolean }; change: (patch: { create_fake_main: boolean; use_current_fake_main: boolean }) => void }) {
@@ -35,15 +36,16 @@ function FakeMainOptions({ value, change }: { value: { create_fake_main?: boolea
   </div>;
 }
 
-function AutomationRules({ value, onChange, pool }: { value: Rules; onChange: (patch: Partial<Rules>) => void; pool: string[] }) {
+function AutomationRules({ value, onChange, pool, cross = false }: { cross?: boolean; value: Rules; onChange: (patch: Partial<Rules>) => void; pool: string[] }) {
   const [languages, setLanguages] = React.useState((value.auxiliary_hreflangs || []).join(", "));
   return <div className="networkSection">
     <label className="checkboxRow"><input type="checkbox" checked={!!value.schedule_enabled} onChange={e => onChange({ schedule_enabled: e.target.checked })} /> Включить расписание автопереклеев</label>
     <label>Периодичность автопереклея<select value={value.interval_days ?? 0} onChange={e => onChange({ interval_days: Number(e.target.value) })}><option value={0}>Однократно</option>{[3, 4, 5, 7, 14].map(days => <option key={days} value={days}>Раз в {days} {days < 5 ? "дня" : "дней"}</option>)}</select></label>
     <p className="muted">В режиме «Однократно» выполняется один запуск без повторов. Повторное сохранение не запускает задачу заново. Сохранение включённого расписания создаёт задачу и сразу ставит первый переклей в очередь. Дальше запуски идут по сохранённому графику. Обновление страницы, перезапуск сервера и повторное сохранение не сбрасывают отсчёт. Изменение периода считается от последнего планового запуска. Незавершённый переклей блокирует следующий.</p>
-    <label className="checkboxRow"><input type="checkbox" checked={value.scheme_mode === "add_auxiliary"} onChange={() => onChange({ scheme_mode: "add_auxiliary" })} /> Добавлять новый фейковый альтернейт при каждом переклее</label>
-    <label className="checkboxRow"><input type="checkbox" checked={!value.scheme_mode || value.scheme_mode === "preserve"} onChange={() => onChange({ scheme_mode: "preserve" })} /> Сохранять схему: обновлять адреса и дроп в x-default</label>
-    <label className="checkboxRow"><input type="checkbox" checked={value.scheme_mode === "base_only"} onChange={() => onChange({ scheme_mode: "base_only" })} /> Только базовые альтернейты — без фейковых языков и GEO</label>
+    <label className="checkboxRow"><input type="checkbox" checked={value.scheme_mode === "clean"} onChange={() => onChange({ scheme_mode: "clean" })} /> Чистый альтернейт — очистить альтернейты при переклее</label>
+    {!cross && <label className="checkboxRow"><input type="checkbox" checked={value.scheme_mode === "add_auxiliary"} onChange={() => onChange({ scheme_mode: "add_auxiliary" })} /> Добавлять новый фейковый альтернейт при каждом переклее</label>}
+    <label className="checkboxRow"><input type="checkbox" checked={!value.scheme_mode || value.scheme_mode === "preserve"} onChange={() => onChange({ scheme_mode: "preserve" })} /> {cross ? "Сохранять схему: заменить адрес прежнего Main новым" : "Сохранять схему: обновлять адреса и дроп в x-default"}</label>
+    {!cross && <label className="checkboxRow"><input type="checkbox" checked={value.scheme_mode === "base_only"} onChange={() => onChange({ scheme_mode: "base_only" })} /> Только базовые альтернейты — без фейковых языков и GEO</label>}
     {value.scheme_mode === "base_only" && <div className="autoRegluePlan">
       <p>При переклее сохраняются ровно три ссылки. Остальные языковые альтернейты удаляются из разметки.</p>
       <ul><li><b>Язык проекта</b>, без GEO (например az) — главная страница языкового домена или поддомена.</li>
@@ -53,7 +55,7 @@ function AutomationRules({ value, onChange, pool }: { value: Rules; onChange: (p
       <pre>{'<link rel="alternate" hreflang="az" href="https://pinup-casino-az.clubheavenjax.com/" />\n<link rel="alternate" hreflang="az-AZ" href="https://pinup-casino-az.clubheavenjax.com/" />\n<link rel="alternate" hreflang="x-default" href="https://clubheavenjax.com/" />'}</pre>
       <p className="muted">Адреса в примере иллюстративные. Для запуска подставляются язык, GEO и выбранные домены проекта. Путь зависит только от отдельного режима фейковых страниц.</p>
     </div>}
-    {value.scheme_mode !== "base_only" && <><label>Языки для новых фейковых альтернейтов<textarea rows={3} value={languages} onChange={e => { setLanguages(e.target.value); onChange({ auxiliary_hreflangs: e.target.value.split(/[\s,;]+/).filter(Boolean) }); }} /></label>
+    {!cross && value.scheme_mode !== "base_only" && value.scheme_mode !== "clean" && <><label>Языки для новых фейковых альтернейтов<textarea rows={3} value={languages} onChange={e => { setLanguages(e.target.value); onChange({ auxiliary_hreflangs: e.target.value.split(/[\s,;]+/).filter(Boolean) }); }} /></label>
     <button type="button" className="button secondary compact" onClick={() => { setLanguages(pool.join(", ")); onChange({ auxiliary_hreflangs: pool }); }}>Заполнить языками ЕС и СНГ</button>
     <p className="muted">В режиме добавления берём один следующий неиспользованный код. При исчерпании списка сохраняем схему. Адреса ведут на языковой домен выбранной схемы, x-default — на выбранный корневой домен. Без фейковых страниц используются только корневые URL.</p></>}
   </div>;
@@ -92,7 +94,7 @@ function Runs({ runs, api, refresh }: { runs: Run[]; api: Api; refresh: () => Pr
     catch (e) { setError(errorText(e)); } finally { setBusy(""); }
   }
   return <section className="networkSection"><h3>Запуски</h3>{error && <p role="alert">{error}</p>}{!runs.length && <p className="muted">Запусков пока нет.</p>}
-    {runs.map(run => <div className="autoReglueRun" key={run.id}><strong>{run.plan.project} · {labels[run.status] || run.status}</strong><span>{phases[run.phase] || run.phase}</span><p>{run.message}</p>
+    {runs.map(run => <div className="autoReglueRun" key={run.id}><strong>{run.plan.project} · {labels[run.status] || run.status}</strong><span>{phases[run.phase] || run.phase}</span><p>{run.message}</p>{run.plan.new_main && <details><summary>Результат и история изменений</summary><PlanPreview plan={run.plan} /></details>}
       {active.includes(run.status) && <div className="networkActions"><button className="button secondary compact" disabled={!!busy} onClick={() => void control(run.id, "resume")}>Проверить результат и продолжить</button><button className="button secondary compact" disabled={!!busy} onClick={() => void control(run.id, "cancel")}>Остановить</button></div>}
     </div>)}{runs.some(r => active.includes(r.status)) && <p className="muted">Остановка не отменяет уже подтверждённую смену Main. При неизвестном результате повторная запись не отправляется.</p>}</section>;
 }
@@ -199,8 +201,10 @@ export function AutoReglueView({ api }: { api: Api }) {
     {error && <div className="notice" role="alert">{error}</div>}
     <p>Один запуск — один следующий неиспользованный Main для каждого выбранного проекта. Участвуют только проекты со статусом «Массовые действия» и сохранёнными настройками.</p>
     <label className="checkboxRow"><input type="checkbox" checked={draft.enabled} onChange={e => { setDraft({ ...draft, enabled: e.target.checked }); setPlans([]); }} /> Разрешить запуск автопереклеев</label>
-    <AutomationRules value={draft} onChange={patch => { setDraft({ ...draft, ...patch }); setPlans([]); }} pool={data.language_pool || []} />
-    <CommonDomainSettings value={draft} change={patch => { setDraft({ ...draft, ...patch }); setPlans([]); }} />
+    <TemplateCombobox label="Режим массового переклея" value={draft.execution_mode || "within_network"} options={[{ value: "within_network", label: "Внутри сетки" }, { value: "cross_network", label: "Перекрёстный — между сетками бренда и GEO" }]} onChange={value => { setDraft({ ...draft, execution_mode: value as GlobalConfig["execution_mode"], scheme_mode: value === "cross_network" && draft.scheme_mode !== "clean" ? "preserve" : draft.scheme_mode }); setPlans([]); }} />
+    {draft.execution_mode === "cross_network" && <p>Только свободные корневые домены того же бренда и GEO: без БАН, без истории использования и не чаще одного раза в календарный месяц. Неизвестная дата допускается. Добавление выполняется после подтверждённого извлечения; затем домен становится Main.</p>}
+    <AutomationRules cross={draft.execution_mode === "cross_network"} value={draft} onChange={patch => { setDraft({ ...draft, ...patch }); setPlans([]); }} pool={data.language_pool || []} />
+    {draft.execution_mode !== "cross_network" && <CommonDomainSettings value={draft} change={patch => { setDraft({ ...draft, ...patch }); setPlans([]); }} />}
     <label className="autoReglueBatchLimit">Максимум проектов за один запуск<input type="number" min={1} max={100} value={draft.max_projects} onChange={e => { setDraft({ ...draft, max_projects: Number(e.target.value) }); setPlans([]); }} /></label>
     {draft.interval_days === 0 && <p className="muted">Однократный автоматический запуск обработает все настроенные проекты со статусом «Массовые действия», кроме проектов с включённым персональным расписанием. Лимит определяет размер порции: остальные проекты будут обработаны следующими порциями, каждый один раз.</p>}
     <p className="muted">Массовые правила не применяются к проектам с персональным автопереклеем. Дроп для x-default задаётся в каждом проекте.</p>
