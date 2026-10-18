@@ -2,7 +2,7 @@ import { TemplateSources, type SourceDraftReference } from "./TemplateSources";
 import { TemplateCombobox } from "./TemplateCombobox";
 import { TEMPLATE_GEOS, TEMPLATE_LANGUAGES, TEMPLATE_BRANDS, languageForGeo } from "./templateLocaleOptions";
 import React from "react";
-import { Download, Monitor, Smartphone, Plus, ArrowLeft, Loader2, CheckCircle2, AlertCircle, RefreshCcw, Sparkles, Search, ChevronRight } from "lucide-react";
+import { Download, Monitor, Smartphone, Plus, ArrowLeft, Loader2, CheckCircle2, AlertCircle, RefreshCcw, Sparkles, Search, ChevronRight, Upload } from "lucide-react";
 import "./styles/template-generator.css";
 
 type Api = <T>(path: string, options?: RequestInit) => Promise<T>;
@@ -27,20 +27,21 @@ export function TemplateGenerator({ api }: { api: Api }) {
   const [providers, setProviders] = React.useState<Provider[]>([]);
   const [selected, setSelected] = React.useState<Template | null>(null);
   const [screen, setScreen] = React.useState<"list" | "new" | "detail">("list");
+  const [creationMode, setCreationMode] = React.useState<"standard" | "html">("standard");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
   const [search, setSearch] = React.useState("");
   const [busy, setBusy] = React.useState(false);
-  const [form, setForm] = React.useState({ brand: "", geo: "", language: "", ai_provider_id: "", uniqueness_scope: "brand_geo", collect_competitors: true, keywords: "", competitors: "", brand_url: "", facts: "" });
+  const [form, setForm] = React.useState({ brand: "Онлайн казино", geo: "", language: "", ai_provider_id: "", uniqueness_scope: "brand_geo", collect_competitors: false, keywords: "", competitors: "", brand_url: "", facts: "" });
   const [sourceDrafts, setSourceDrafts] = React.useState<SourceDraftReference[]>([]);
   const [sourcesSaving, setSourcesSaving] = React.useState(true);
-  const manualModeSuggested = React.useRef(false);
+  const brandEdited = React.useRef(false);
   const draftChanged = React.useCallback(() => {}, []);
   const draftsSaved = React.useCallback((sources: SourceDraftReference[]) => {
     setSourceDrafts(sources);
-    if (sources.some(source => source.hasHtml) && !manualModeSuggested.current) {
-      manualModeSuggested.current = true;
-      setForm(current => ({ ...current, collect_competitors: false }));
+    if (!brandEdited.current) {
+      const first = sources.find(source => source.hasHtml);
+      setForm(current => ({ ...current, brand: first?.suggestedBrand || "Онлайн казино" }));
     }
   }, []);
   const requestSequence = React.useRef(0);
@@ -86,14 +87,17 @@ export function TemplateGenerator({ api }: { api: Api }) {
     } catch (e) { if (seq === requestSequence.current) setError(errorText(e)); }
     finally { if (seq === requestSequence.current) setLoading(false); }
   }
-  function openCreate() {
-    setError(""); setSourcesSaving(true); setSourceDrafts([]); manualModeSuggested.current = false;
-    setForm(f => ({ ...f, geo: "", language: "" }));
+  function openCreate(mode: "standard" | "html" = "standard") {
+    setCreationMode(mode);
+    setError(""); setSourcesSaving(true); setSourceDrafts([]); brandEdited.current = false;
+    setForm(f => ({ ...f, brand: "Онлайн казино", geo: "", language: "", collect_competitors: mode === "standard", keywords: "", competitors: "" }));
     setScreen("new");
   }
   async function create(event: React.FormEvent) {
     event.preventDefault();
     if (sourcesSaving) { setError("Дождитесь сохранения HTML конкурентов."); return; }
+    if (creationMode === "html" && !sourceDrafts.some(source => source.hasHtml)) { setError("Добавьте HTML хотя бы одной главной страницы конкурента."); return; }
+    if (sourceDrafts.length > 5) { setError("Оставьте не более пяти HTML конкурентов."); return; }
     if (!form.geo || !form.language) { setError("Выберите ГЕО и язык."); return; }
     setBusy(true); setError("");
     try {
@@ -106,8 +110,8 @@ export function TemplateGenerator({ api }: { api: Api }) {
   return <div className="tg">
     {error && <div className="tg-alert" role="alert"><AlertCircle size={18} />{error}<button type="button" onClick={() => setError("")} aria-label="Закрыть ошибку">×</button></div>}
     {screen === "list" && <>
-      <div className="tg-heading"><div><h2>Ваши шаблоны</h2><p>Одностраничные сайты с контентом, дизайном и готовым меню.</p></div><button className="button primary" onClick={openCreate}><Plus size={18} />Создать шаблон</button></div>
-      {loading ? <div className="tg-empty"><Loader2 className="tg-spin" />Загружаем шаблоны…</div> : items.length === 0 ? <div className="tg-empty"><Sparkles size={36} /><h3>Новый шаблон</h3><p>Gemini изучит конкурентов, подготовит текст и сгенерирует дизайн. Результат можно посмотреть и скачать.</p><button className="button primary" onClick={openCreate}>Новый шаблон</button></div> : <>
+      <div className="tg-heading"><div><h2>Ваши шаблоны</h2><p>Одностраничные сайты с контентом, дизайном и готовым меню.</p></div><div className="tg-downloads"><button className="button secondary" onClick={() => openCreate("html")}><Upload size={18} />Загрузить HTML конкурентов</button><button className="button primary" onClick={() => openCreate()}><Plus size={18} />Создать шаблон</button></div></div>
+      {loading ? <div className="tg-empty"><Loader2 className="tg-spin" />Загружаем шаблоны…</div> : items.length === 0 ? <div className="tg-empty"><Sparkles size={36} /><h3>Новый шаблон</h3><p>Gemini изучит конкурентов, подготовит текст и сгенерирует дизайн. Результат можно посмотреть и скачать.</p><button className="button primary" onClick={() => openCreate()}>Новый шаблон</button></div> : <>
         <label className="tg-search"><Search size={18} /><input placeholder="Найти по бренду или ГЕО" value={search} onChange={e => setSearch(e.target.value)} /></label>
         <div className="tg-list">{filtered.map(item => <button className="tg-row" key={item.id} onClick={() => void open(item.id)}><div><strong>{item.brand}</strong><span>{item.geo} · {item.language.toUpperCase()} · {new Date(item.created_at).toLocaleDateString("ru-RU")}</span></div><span className={`tg-status tg-${item.status}`}>{busyStatus(item.status) && <Loader2 size={14} className="tg-spin" />}{statusLabels[item.status] || item.status}</span><ChevronRight size={18} /></button>)}</div>
         {filtered.length === 0 && <p>По этому запросу шаблонов нет.</p>}
@@ -116,19 +120,20 @@ export function TemplateGenerator({ api }: { api: Api }) {
     {screen === "new" && <>
       <button className="button secondary" onClick={() => setScreen("list")}><ArrowLeft size={16} />Все шаблоны</button>
       <div className="tg-create-layout"><form className="tg-card" onSubmit={create}>
-        <h2>Новый шаблон</h2><p>Укажите бренд и страну. Справа можно сразу вставить HTML конкурентов.</p>
-        <TemplateCombobox label="Бренд" value={form.brand} options={TEMPLATE_BRANDS} allowCustom placeholder="Выберите бренд или введите свой" onChange={brand => setForm(f => ({ ...f, brand }))} />
-        <p className="tg-help">Логотип и фавиконка подставляются по бренду из <a href="/template-assets/index.html" target="_blank" rel="noopener noreferrer">библиотеки изображений</a>. Логотипы платежей и игровых провайдеров — по подтверждённым сведениям.</p>
+        <h2>{creationMode === "html" ? "Шаблон из HTML конкурентов" : "Новый шаблон"}</h2><p>{creationMode === "html" ? "Выберите ГЕО и добавьте до пяти HTML главных страниц конкурентов. Язык подставится автоматически — его можно изменить." : "Укажите бренд, ГЕО и настройки поиска конкурентов для генерации шаблона."}</p>
         <div className="tg-fields"><TemplateCombobox label="ГЕО" value={form.geo} options={TEMPLATE_GEOS} onChange={geo => setForm(f => ({ ...f, geo, language: languageForGeo(geo) }))} /><TemplateCombobox label="Язык" value={form.language} options={TEMPLATE_LANGUAGES} onChange={language => setForm(f => ({ ...f, language }))} /></div>
+        <TemplateCombobox label="Бренд" value={form.brand} options={[{ value: "Онлайн казино", label: "Онлайн казино — общие ключи" }, ...TEMPLATE_BRANDS]} allowCustom placeholder="Введите название бренда" onChange={brand => { brandEdited.current = true; setForm(f => ({ ...f, brand })); }} />
+        <p className="tg-help">Для сайтов с общими ключами — «Онлайн казино». Бренд определяется по первому HTML; можно указать вручную.</p>
+        <details className="tg-options" key={creationMode} open={creationMode === "standard"}><summary>{creationMode === "html" ? "Дополнительные настройки" : "Настройки генерации"}</summary>
         <TemplateCombobox label="Gemini" value={form.ai_provider_id} options={gemini.map(p => ({ value: p.id, label: p.name }))} onChange={ai_provider_id => setForm(f => ({ ...f, ai_provider_id }))} placeholder="Выберите провайдер" />
         {gemini.length === 0 && <p className="tg-help">Сначала подключите Gemini в <a href="/ai-providers">API Providers</a>.</p>}
-        <label className="tg-check"><input type="checkbox" checked={form.collect_competitors} onChange={e => setForm({ ...form, collect_competitors: e.target.checked })} /><span><strong>Искать конкурентов в Google</strong><small>До 10 страниц по каждому запросу через DataForSEO. Можно отключить и указать конкурентов вручную.</small></span></label>
+        {creationMode === "standard" && <><label className="tg-check"><input type="checkbox" checked={form.collect_competitors} onChange={e => setForm({ ...form, collect_competitors: e.target.checked })} /><span><strong>Искать конкурентов в Google</strong><small>До 10 страниц по каждому запросу через DataForSEO. Можно отключить и указать конкурентов вручную.</small></span></label>
         <label>Ключевые запросы <span className="tg-muted">(необязательно)</span><textarea rows={3} maxLength={1500} placeholder="Например: бренд обзор, бренд бонусы" value={form.keywords} onChange={e => setForm({ ...form, keywords: e.target.value })} /><small>До 5 запросов: каждый с новой строки или через запятую. Без запросов ищем по названию бренда. Используются при включённом поиске Google.</small></label>
-        <label>Конкуренты <span className="tg-muted">(необязательно)</span><textarea rows={3} maxLength={10000} placeholder="example.com, https://example.org/review/" value={form.competitors} onChange={e => setForm({ ...form, competitors: e.target.value })} /><small>До 20 адресов: с новой строки, через запятую или пробел. Эти страницы будут изучены даже при выключенном поиске Google. Всего анализируем до 30 страниц, ручной список — в приоритете.</small></label>
+        <label>Конкуренты <span className="tg-muted">(необязательно)</span><textarea rows={3} maxLength={10000} placeholder="example.com, https://example.org/review/" value={form.competitors} onChange={e => setForm({ ...form, competitors: e.target.value })} /><small>До 20 адресов: с новой строки, через запятую или пробел. Эти страницы будут изучены даже при выключенном поиске Google. Всего анализируем до 30 страниц, ручной список — в приоритете.</small></label></>}
         <label>Сайт бренда для экранов смартфонов <span className="tg-muted">(необязательно)</span><input value={form.brand_url} maxLength={2000} placeholder="https://brand.com" onChange={e => setForm({ ...form, brand_url: e.target.value })} /><small>Снимем до трёх фрагментов мобильной страницы и найдём логотип. Используем одну из 15 рамок смартфонов. Укажите сайт нужного бренда и региона.</small><small><a href="/phone-frames/index.html" target="_blank" rel="noopener noreferrer">Посмотреть 15 рамок</a> · <a href="/phone-frames.zip" download>Скачать заготовки SVG</a></small></label>
         <fieldset className="tg-scope"><legend>С чем сравнивать уникальность</legend><label><input type="radio" name="scope" checked={form.uniqueness_scope === "brand_geo"} onChange={() => setForm({ ...form, uniqueness_scope: "brand_geo" })} /><span>Этот бренд + ГЕО<small>Рекомендуется для обычной генерации</small></span></label><label><input type="radio" name="scope" checked={form.uniqueness_scope === "global"} onChange={() => setForm({ ...form, uniqueness_scope: "global" })} /><span>Все шаблоны<small>Сравнение со всей историей генератора</small></span></label></fieldset>
-        <details className="tg-options"><summary>Дополнительные настройки</summary><label>Проверенные сведения о бренде<textarea rows={5} maxLength={20000} placeholder="Особенности, условия, подтверждённые контакты и другие факты, которые нужно учесть." value={form.facts} onChange={e => setForm({ ...form, facts: e.target.value })} /></label></details>
-        <button className="button primary tg-submit" disabled={busy || sourcesSaving || !form.brand.trim() || !form.ai_provider_id || !form.geo || !form.language}>{busy ? <Loader2 size={18} className="tg-spin" /> : <Sparkles size={18} />}{busy ? "Создаём задачу…" : sourcesSaving ? "Сохраняем HTML конкурентов…" : "Этап 1 — собрать конкурентов"}</button>
+        <label>Проверенные сведения о бренде<textarea rows={5} maxLength={20000} placeholder="Особенности, условия, подтверждённые контакты и другие факты, которые нужно учесть." value={form.facts} onChange={e => setForm({ ...form, facts: e.target.value })} /></label></details>
+        <button className="button primary tg-submit" disabled={busy || sourcesSaving || !form.brand.trim() || !form.ai_provider_id || !form.geo || !form.language || sourceDrafts.length > 5 || (creationMode === "html" && !sourceDrafts.some(source => source.hasHtml))}>{busy ? <Loader2 size={18} className="tg-spin" /> : <Sparkles size={18} />}{busy ? "Создаём задачу…" : sourcesSaving ? "Сохраняем HTML конкурентов…" : creationMode === "standard" ? "Этап 1 — собрать конкурентов" : "Создать шаблон по HTML"}</button>
       </form><aside className="tg-create-aside"><TemplateSources api={api} pending={busy} onChanged={draftChanged} onBusy={setSourcesSaving} onDraftSources={draftsSaved} />
       <section className="tg-card tg-explainer"><h3>Что получится</h3><ol><li><strong>Сбор конкурентов</strong><p>Получите HTML из Google через агент, Chrome или ручную вставку. Проверьте сохранённые источники.</p></li><li><strong>Генерация контента</strong><p>Gemini создаёт текст под бренд и ГЕО на основе конкурентов. Проверьте и отредактируйте его перед следующим этапом.</p></li><li><strong>Генерация HTML</strong><p>Готовый одностраничник: дизайн, хедер, футер и адаптивное меню. Проверяем 15 параметров уникальности и сравниваем вид с историей.</p></li></ol><div className="tg-note">По умолчанию пункты фейкового меню ведут к секциям страницы. Позже им можно назначить реальные адреса.</div><p className="tg-help">Генерация занимает несколько минут. Можно закрыть раздел — результат сохранится здесь.</p></section></aside></div>
     </>}

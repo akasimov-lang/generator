@@ -62,7 +62,7 @@ with sync_playwright() as p:
     draft_html='<html><body>'+('Research source. '*30)+'</body></html>'
     page.get_by_role('textbox',name='HTML конкурента 1',exact=True).fill(draft_html)
     expect(page.locator('.tg-source-field [role=status]').first).to_have_text('Сохранено')
-    expect(page.get_by_label('Искать конкурентов в Google')).not_to_be_checked()
+    expect(page.get_by_label('Искать конкурентов в Google')).to_be_checked()
     page.get_by_role('button',name='Добавить конкурента',exact=True).click()
     page.get_by_role('textbox',name='HTML конкурента 2',exact=True).fill(draft_html+'second')
     expect(page.locator('.tg-source-field [role=status]').nth(1)).to_have_text('Сохранено')
@@ -156,6 +156,8 @@ with sync_playwright() as p:
     assert len(state['sources'])==2
     page.evaluate("window.chrome = {runtime:{id:'test-extension',sendMessage:async m=>{window.extensionStart=m;return {started:true}},onMessage:{addListener:fn=>window.extensionReceive=fn}}}")
     page.add_script_tag(path='extensions/pagepilot-chrome/pagepilot.js')
+    page.get_by_text('Адрес и получение HTML через Google', exact=True).first.click()
+    page.get_by_text('Действия с HTML', exact=True).first.click()
     page.get_by_role('textbox',name='Адрес конкурента 1',exact=True).fill('https://example.com')
     page.get_by_role('button',name='Получить через Chrome',exact=True).first.click()
     page.wait_for_function('window.extensionStart?.sourceId === "source-0"')

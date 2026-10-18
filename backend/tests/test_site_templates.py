@@ -507,3 +507,70 @@ def test_new_template_html_drafts_autosave_isolation_and_atomic_attachment(db,mo
     assert asyncio.run(templates.generate(db,row,research_only=True))['status']=='sources_ready'
     assert len(prompts)==1 and 'changed text' in prompts[0]
     assert not row.document.get('content')
+
+
+@pytest.mark.parametrize('html, expected', [
+    ('<title>Mostbet — официальный сайт</title>', 'Mostbet'),
+    ('<meta property="og:site_name" content="Pin-Up">', 'Pin-Up'),
+    ('<title>Лучшие онлайн казино: Mostbet и Pin-Up</title>', 'Онлайн казино'),
+    ('<title>Общие ключи</title>', 'Онлайн казино'),
+    ('<title>Best online casinos</title>', 'Онлайн казино'),
+    ('<script>alert(1)</script>', 'Онлайн казино'),
+])
+def test_uploaded_template_brand(html, expected):
+    from app.site_templates_api import suggested_brand
+    assert suggested_brand(html) == expected
+
+
+def test_manual_source_limit_and_revision_safe_deletion(db):
+    app = FastAPI(); app.include_router(router); app.dependency_overrides[get_db] = lambda: db
+    user = models.User(username='upload-owner', password_hash='')
+    other = models.User(username='upload-other', password_hash='')
+    db.add_all([user, other]); db.commit()
+    actor = {'id': user.id, 'is_admin': True}
+    app.dependency_overrides[require_auth] = lambda: actor
+    client = TestClient(app)
+    path = '/site-templates/source-drafts'
+    rows = [client.post(path, json={'html': '<title>Mostbet</title>'}).json() for _ in range(5)]
+    assert client.post(path, json={'html': 'sixth'}).status_code == 422
+    first = rows[0]
+    assert first['suggested_brand'] == 'Mostbet'
+    url = path + '/' + first['id']
+    assert client.delete(url + '?revision=0').status_code == 409
+    actor['id'] = other.id
+    assert client.delete(url + '?revision=1').status_code == 404
+    actor['id'] = user.id
+    assert client.delete(url + '?revision=1').status_code == 200
+    assert len(client.get(path).json()) == 4
+    assert client.post(path, json={'html': 'replacement'}).status_code == 201
+
+
+def test_generic_template_brand_default():
+    from app.site_templates_api import CreateTemplateRequest
+    for brand in ({}, {'brand': 'Общие ключи'}, {'brand': ''}):
+        assert CreateTemplateRequest(geo='DE', ai_provider_id='test', **brand).brand == 'Онлайн казино'
+    assert CreateTemplateRequest(geo='DE', ai_provider_id='test', brand='Custom').brand == 'Custom'
+
+
+def test_template_source_deletion_invalidates_research_and_respects_busy(db):
+    app = FastAPI(); app.include_router(router); app.dependency_overrides[get_db] = lambda: db
+    user = models.User(username='delete-template-source', password_hash='')
+    db.add(user); db.flush()
+    row = models.SiteTemplate(created_by_user_id=user.id, brand='Brand', geo='DE', language='de',
+                              request_data={}, status='awaiting_sources')
+    db.add(row); db.commit()
+    app.dependency_overrides[require_auth] = lambda: {'id': user.id, 'is_admin': True}
+    client = TestClient(app)
+    path = f'/site-templates/{row.id}/sources'
+    source = client.post(path, json={'html': 'draft'}).json()
+    row.document = {'research': {'analysis': 'old analysis', 'sources': [{'source_id': source['id']}]}}
+    row.status = 'generating'; db.commit()
+    url = path + '/' + source['id'] + '?revision=1'
+    assert client.delete(url).status_code == 409
+    row.status = 'sources_ready'; db.commit()
+    assert client.delete(url).status_code == 200
+    db.refresh(row)
+    assert row.document['sources_changed'] is True
+    assert row.document['research']['analysis'] is None
+    assert row.document['research']['sources'] == []
+    assert client.get(path).json() == []

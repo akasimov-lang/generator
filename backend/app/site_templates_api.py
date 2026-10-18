@@ -14,7 +14,7 @@ from app.db import get_db
 from app.security import AuthUser
 from app.site_templates import TemplateRequest, TemplateEdit, build_archive, render
 from app.template_design import art_svg, PALETTES
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from uuid import UUID
 from app.template_sources import excerpt, MAX_HTML
 
@@ -60,7 +60,16 @@ class SourceDraftRef(BaseModel):
 
 
 class CreateTemplateRequest(TemplateRequest):
-    source_drafts: list[SourceDraftRef] = Field(default_factory=list, max_length=30)
+    brand: str = Field(default="Онлайн казино", min_length=1, max_length=160)
+
+    @field_validator("brand", mode="before")
+    @classmethod
+    def generic_brand(cls, value):
+        if isinstance(value, str) and value.strip().casefold() in {"", "общие ключи"}:
+            return "Онлайн казино"
+        return value
+
+    source_drafts: list[SourceDraftRef] = Field(default_factory=list, max_length=5)
 
 
 @router.post("", status_code=202)
@@ -94,7 +103,7 @@ def create_template(payload: CreateTemplateRequest, user: AuthUser, db: Session 
                 google_html=draft.google_html, capture={**draft.capture, "revision": 0})
             db.add(source); db.flush()
             entries.append({"url": source.url, "title": source.url, "source_id": source.id,
-                "position": len(entries) + 1, "origin": "google_manual"})
+                "position": len(entries) + 1, "origin": "manual_html"})
         db.delete(draft)
     if entries:
         seen = {item["url"] for item in entries if item["url"]}
@@ -113,8 +122,46 @@ class SourceDraft(BaseModel):
     revision: int = Field(default=0, ge=0)
 
 
+def suggested_brand(html):
+    from html.parser import HTMLParser
+
+    class Metadata(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.site_name = ""
+            self.title = []
+            self.in_title = False
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if tag == "title":
+                self.in_title = True
+            if tag == "meta" and (attrs.get("property") or attrs.get("name") or "").lower() in {"og:site_name", "application-name"}:
+                self.site_name = self.site_name or attrs.get("content", "")
+
+        def handle_endtag(self, tag):
+            if tag == "title":
+                self.in_title = False
+
+        def handle_data(self, data):
+            if self.in_title:
+                self.title.append(data)
+
+    parser = Metadata()
+    parser.feed(html or "")
+    from app.site_brands import detect_brand, GENERAL
+    from types import SimpleNamespace
+    # Several casino brands or generic search terms describe a generic site.
+    title = " ".join(parser.title)
+    brand = detect_brand(SimpleNamespace(homepage_title=title or parser.site_name, name="", cache_canon=""))
+    if brand != GENERAL:
+        return brand
+    return "Онлайн казино"
+
+
 def source_detail(source):
     return {"id": source.id, "url": source.url, "html": source.google_html or "",
+            "suggested_brand": suggested_brand(source.google_html),
             "capture": source.capture, "revision": source.capture.get("revision", 0),
             "updated_at": source.updated_at}
 
@@ -141,8 +188,8 @@ def list_source_drafts(user: AuthUser, db: Session = Depends(get_db)):
 def create_source_draft(payload: SourceDraft, user: AuthUser, db: Session = Depends(get_db)):
     lock_draft_owner(db, user)
     ids = db.scalars(select(models.TemplateSourceDraft.id).where(models.TemplateSourceDraft.user_id == user["id"])).all()
-    if len(ids) >= 30:
-        raise HTTPException(422, "Можно добавить до 30 конкурентов.")
+    if len(ids) >= 5:
+        raise HTTPException(422, "Можно добавить до 5 HTML конкурентов.")
     source = models.TemplateSourceDraft(user_id=user["id"], url="", google_html="", capture={})
     db.add(source); db.flush()
     return save_source(db, None, source, payload)
@@ -152,6 +199,17 @@ def create_source_draft(payload: SourceDraft, user: AuthUser, db: Session = Depe
 def update_source_draft(source_id: str, payload: SourceDraft, user: AuthUser, db: Session = Depends(get_db)):
     lock_draft_owner(db, user)
     return save_source(db, None, get_source_draft(db, user, source_id), payload)
+
+
+@router.delete("/source-drafts/{source_id}")
+def delete_source_draft(source_id: str, revision: int, user: AuthUser, db: Session = Depends(get_db)):
+    lock_draft_owner(db, user)
+    source = get_source_draft(db, user, source_id)
+    if source.capture.get("revision", 0) != revision:
+        raise HTTPException(409, "HTML изменён в другой вкладке. Обновите список.")
+    db.delete(source)
+    db.commit()
+    return {"deleted": True}
 
 
 @router.get("/{template_id}")
@@ -178,7 +236,7 @@ def save_source(db, row, source, payload):
     if source.capture.get("revision", 0) != payload.revision:
         raise HTTPException(409, "HTML изменён в другой вкладке. Скопируйте свою версию и обновите страницу.")
     source.url, source.google_html = url, payload.html
-    capture = {**source.capture, "source": "google_manual", "revision": payload.revision + 1,
+    capture = {**source.capture, "source": "manual_html", "revision": payload.revision + 1,
                "saved_at": datetime.now(timezone.utc).isoformat(), "status": "empty", "error": None}
     if payload.html.strip():
         try:
@@ -208,7 +266,7 @@ def list_sources(template_id: str, user: AuthUser, db: Session = Depends(get_db)
 def add_source(template_id: str, payload: SourceDraft, user: AuthUser, db: Session = Depends(get_db)):
     row = get_template(db, template_id); editable_sources(row)
     sources = db.scalars(select(models.TemplateSource.id).where(models.TemplateSource.template_id == template_id)).all()
-    if len(sources) >= 30: raise HTTPException(422, "Можно добавить до 30 конкурентов")
+    if len(sources) >= 5: raise HTTPException(422, "Можно добавить до 5 HTML конкурентов")
     source = models.TemplateSource(template_id=template_id, url="", capture={})
     db.add(source); db.flush()
     return save_source(db, row, source, payload)
@@ -221,6 +279,27 @@ def update_source(template_id: str, source_id: str, payload: SourceDraft, user: 
                       models.TemplateSource.template_id == template_id).with_for_update())
     if not source: raise HTTPException(404, "Источник не найден")
     return save_source(db, row, source, payload)
+
+
+@router.delete("/{template_id}/sources/{source_id}")
+def delete_source(template_id: str, source_id: str, revision: int, user: AuthUser, db: Session = Depends(get_db)):
+    row = get_template(db, template_id)
+    editable_sources(row)
+    source = db.scalar(select(models.TemplateSource).where(models.TemplateSource.id == source_id,
+                       models.TemplateSource.template_id == template_id).with_for_update())
+    if not source:
+        raise HTTPException(404, "Источник не найден")
+    if source.capture.get("revision", 0) != revision:
+        raise HTTPException(409, "HTML изменён в другой вкладке. Обновите список.")
+    document = dict(row.document or {})
+    document["sources_changed"] = True
+    if document.get("research"):
+        document["research"] = {**document["research"], "analysis": None,
+            "sources": [item for item in document["research"].get("sources", []) if item.get("source_id") != source_id]}
+    row.document = document
+    db.delete(source)
+    db.commit()
+    return {"deleted": True}
 
 
 @router.post("/{template_id}/generate-content", status_code=202)

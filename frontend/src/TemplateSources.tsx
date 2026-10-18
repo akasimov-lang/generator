@@ -1,18 +1,20 @@
 import React from "react";
-import { Copy, Download, Plus, Globe2 } from "lucide-react";
+import { Copy, Download, Plus, Globe2, Upload, Trash2, ExternalLink } from "lucide-react";
 type Api = <T>(path: string, init?: RequestInit) => Promise<T>;
-export type SourceDraftReference = { id: string; revision: number; hasHtml: boolean };
-type Source = { id: string; url: string; html: string; revision: number; capture: { status?: string; source?: string; error?: string } };
+export type SourceDraftReference = { id: string; revision: number; hasHtml: boolean; suggestedBrand?: string };
+type Source = { id: string; url: string; html: string; revision: number; suggested_brand?: string; capture: { status?: string; source?: string; error?: string } };
 const blank = (): Source => ({ id: "", url: "", html: "", revision: 0, capture: {} });
 
 export function TemplateSources({ templateId, api, pending, onChanged, onBusy, onDraftSources }: { templateId?: string; api: Api; pending: boolean; onChanged: () => void; onBusy: (busy: boolean) => void; onDraftSources?: (sources: SourceDraftReference[]) => void }) {
   const endpoint = templateId ? `/site-templates/${templateId}/sources` : "/site-templates/source-drafts";
+  const rowKeys = React.useRef<string[]>([]);
   const references = React.useRef(new Map<string, SourceDraftReference>());
   const reportSaved = React.useCallback((key: string, row: Source) => {
-    references.current.set(key, { id: row.id, revision: row.revision, hasHtml: !!row.html.trim() });
-    onDraftSources?.(Array.from(references.current.values()));
+    references.current.set(key, { id: row.id, revision: row.revision, hasHtml: !!row.html.trim(), suggestedBrand: row.suggested_brand });
+    onDraftSources?.(rowKeys.current.flatMap(key => { const ref = references.current.get(key); return ref ? [ref] : []; }));
   }, [onDraftSources]);
   const [rows, setRows] = React.useState<Array<Source & { key: string }>>([]);
+  rowKeys.current = rows.map(row => row.key);
   const dirtyKeys = React.useRef(new Set<string>());
   const trackDirty = React.useCallback((key: string, value: boolean) => { if (value) dirtyKeys.current.add(key); else dirtyKeys.current.delete(key); onBusy(dirtyKeys.current.size > 0); }, [onBusy]);
   const [reload, setReload] = React.useState(0);
@@ -25,9 +27,10 @@ export function TemplateSources({ templateId, api, pending, onChanged, onBusy, o
       try {
         const next = await api<Source[]>(endpoint);
         if (live) {
+          rowKeys.current = next.map(row => row.id);
           setRows(next.length ? next.map(row => ({ ...row, key: row.id })) : [{ ...blank(), key: "first" }]);
-          references.current = new Map(next.map(row => [row.id, { id: row.id, revision: row.revision, hasHtml: !!row.html.trim() }]));
-          onDraftSources?.(Array.from(references.current.values()));
+          references.current = new Map(next.map(row => [row.id, { id: row.id, revision: row.revision, hasHtml: !!row.html.trim(), suggestedBrand: row.suggested_brand }]));
+          onDraftSources?.(rowKeys.current.flatMap(key => { const ref = references.current.get(key); return ref ? [ref] : []; }));
           setLoading(false); onBusy(dirtyKeys.current.size > 0);
         }
       } catch (e) { if (live) { setError(String(e)); setLoading(false); } }
@@ -42,26 +45,34 @@ export function TemplateSources({ templateId, api, pending, onChanged, onBusy, o
     window.addEventListener("message", extensionSaved);
     return () => { live = false; clearInterval(timer); window.removeEventListener("message", extensionSaved); };
   }, [api, endpoint, templateId, pending, onChanged, onBusy, onDraftSources, reload]);
-  return <section className="tg-card tg-source-editor"><div className="tg-source-title"><h3>HTML конкурентов</h3>
-    <button type="button" className="button secondary" disabled={pending || loading || rows.length >= 30} onClick={() => setRows(current => [...current, { ...blank(), key: crypto.randomUUID() }])}><Plus size={16} />Добавить конкурента</button></div>
-    <p>Ручная вставка HTML с автосохранением: один конкурент — одно поле. В Rich Results Test откройте «Просмотреть проверенную страницу → HTML», скопируйте код и вставьте ниже. Изменения сохраняются автоматически.</p>
-    {!templateId && <p className="tg-note">Черновики автоматически сохраняются на сервере под вашим пользователем, даже до создания шаблона. После создания они появятся в задаче. Для вставленного HTML поиск Google включать не требуется.</p>}
-    <p className="tg-help">Серверный агент собирает HTML через Google. При запросе входа или CAPTCHA используйте расширение в своём Chrome или вставьте код вручную. Обычный HTML браузера не подменяет результат Google.</p>
-    <div className="tg-downloads"><a className="button secondary" href="/extensions/pagepilot-chrome.zip" download><Download size={16} />Скачать расширение Chrome</a><a href="/extensions/install.html" target="_blank" rel="noopener noreferrer">Установка на macOS и Windows</a></div>
+  return <section className="tg-card tg-source-editor"><div className="tg-source-title"><h3>Главные страницы конкурентов <small>{rows.length} / 5</small></h3>
+    <button type="button" className="button secondary" disabled={pending || loading || rows.length >= 5} onClick={() => setRows(current => current.length >= 5 ? current : [...current, { ...blank(), key: crypto.randomUUID() }])}><Plus size={16} />Добавить конкурента</button></div>
+    <p>Добавьте до пяти главных страниц: загрузите файл .html или вставьте код. Каждый конкурент сохраняется отдельно и автоматически.</p>
+    <details className="tg-options"><summary>Как получить HTML страницы</summary><p>Сохраните главную страницу конкурента в браузере как HTML. Также можно скопировать код из Rich Results Test: «Просмотреть проверенную страницу → HTML».</p>
+    <div className="tg-downloads"><a className="button secondary" href="/extensions/pagepilot-chrome.zip" download><Download size={16} />Расширение Chrome</a><a href="/extensions/install.html" target="_blank" rel="noopener noreferrer">Инструкция</a></div></details>
     {pending && <p className="tg-help">Сейчас выполняется задача. Поля станут доступны для изменений после завершения этапа.</p>}
     {error && <p role="alert">{error}<button type="button" className="button secondary" onClick={() => setReload(value => value + 1)}>Повторить загрузку</button></p>}{loading && <p>Загрузка источников…</p>}
-    {rows.map((row, index) => <SourceEditor key={row.key} initial={row} number={index + 1} templateId={templateId} api={api} endpoint={endpoint} disabled={pending} onChanged={onChanged} rowKey={row.key} onDirty={trackDirty} onSaved={reportSaved} />)}
+    {rows.map((row, index) => <SourceEditor key={row.key} initial={row} number={index + 1} templateId={templateId} api={api} endpoint={endpoint} disabled={pending || loading} onChanged={onChanged} rowKey={row.key} onDirty={trackDirty} onSaved={reportSaved} onRemoved={() => {
+      references.current.delete(row.key); dirtyKeys.current.delete(row.key);
+      onDraftSources?.(rowKeys.current.flatMap(key => { const ref = references.current.get(key); return ref ? [ref] : []; })); onBusy(dirtyKeys.current.size > 0);
+      setRows(current => current.filter(item => item.key !== row.key)); onChanged();
+    }} />)}
   </section>;
 }
 
-function SourceEditor({ initial, number, templateId, api, endpoint, disabled, onChanged, rowKey, onDirty, onSaved }: { endpoint: string; onSaved: (key: string, row: Source) => void; rowKey: string; onDirty: (key: string, value: boolean) => void; initial: Source; number: number; templateId?: string; api: Api; disabled: boolean; onChanged: () => void }) {
+function SourceEditor({ initial, number, templateId, api, endpoint, disabled, onChanged, rowKey, onDirty, onSaved, onRemoved }: { onRemoved: () => void; endpoint: string; onSaved: (key: string, row: Source) => void; rowKey: string; onDirty: (key: string, value: boolean) => void; initial: Source; number: number; templateId?: string; api: Api; disabled: boolean; onChanged: () => void }) {
   const [draft, setDraft] = React.useState({ html: initial.html, url: initial.url });
   const [saved, setSaved] = React.useState(initial);
   const [status, setStatus] = React.useState(initial.id ? "Сохранено" : "Вставьте HTML — сохранение автоматическое");
   const [error, setError] = React.useState("");
+  const [reading, setReading] = React.useState(false);
+  const [removing, setRemoving] = React.useState(false);
+  const [filename, setFilename] = React.useState("");
+  const fileInput = React.useRef<HTMLInputElement>(null);
   const latest = React.useRef(draft);
   const persisted = React.useRef(initial);
   const dirty = React.useRef(false);
+  const deleting = React.useRef(false);
   const timer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const queue = React.useRef<Promise<Source | undefined>>(Promise.resolve(undefined));
   const mounted = React.useRef(true);
@@ -77,7 +88,7 @@ function SourceEditor({ initial, number, templateId, api, endpoint, disabled, on
           method: current.id ? "PUT" : "POST", body: JSON.stringify({ ...snapshot, revision: current.revision }) });
         persisted.current = row;
         dirty.current = snapshot.html !== latest.current.html || snapshot.url !== latest.current.url;
-        if (mounted.current) { onSaved(rowKey, row); onDirty(rowKey, dirty.current); setSaved(row); setStatus(dirty.current ? "Ожидает сохранения…" : "Сохранено"); onChanged(); }
+        if (mounted.current) { onSaved(rowKey, row); onDirty(rowKey, dirty.current || deleting.current); setSaved(row); setStatus(dirty.current ? "Ожидает сохранения…" : "Сохранено"); onChanged(); }
         return row;
       } catch (e) { if (mounted.current) { setError(e instanceof Error ? e.message : "Ошибка сохранения"); setStatus("Не сохранено"); } throw e; }
     });
@@ -99,6 +110,29 @@ function SourceEditor({ initial, number, templateId, api, endpoint, disabled, on
     onChanged(); onDirty(rowKey, true); setDraft(next); latest.current = next; dirty.current = true; setStatus("Ожидает сохранения…");
     clearTimeout(timer.current); timer.current = setTimeout(() => void flush().catch(() => undefined), 500);
   }
+  async function upload(file?: File) {
+    if (!file) return;
+    setError("");
+    if (!/\.html?$/i.test(file.name)) { setError("Выберите файл .html или .htm."); return; }
+    if (file.size > 2_000_000) { setError("HTML превышает 2 МБ. Выберите файл меньшего размера."); return; }
+    setReading(true); onDirty(rowKey, true);
+    try {
+      const html = await file.text();
+      if (!html.trim()) throw new Error("Файл пуст. Выберите HTML главной страницы.");
+      if (new TextEncoder().encode(html).length > 2_000_000) throw new Error("HTML превышает 2 МБ.");
+      change({ ...latest.current, html }); setFilename(file.name);
+    } catch (e) { setError(e instanceof Error ? e.message : "Не удалось прочитать файл"); onDirty(rowKey, dirty.current); }
+    finally { setReading(false); if (fileInput.current) fileInput.current.value = ""; }
+  }
+  async function remove() {
+    deleting.current = true; setRemoving(true); setError(""); onDirty(rowKey, true);
+    try {
+      clearTimeout(timer.current);
+      const row = await flush();
+      if (row?.id) await api(`${endpoint}/${row.id}?revision=${row.revision}`, { method: "DELETE" });
+      dirty.current = false; onRemoved();
+    } catch (e) { setError(e instanceof Error ? e.message : "Не удалось удалить конкурента"); deleting.current = false; onDirty(rowKey, dirty.current); setRemoving(false); }
+  }
   function download() {
     const url = URL.createObjectURL(new Blob([draft.html], { type: "text/plain;charset=utf-8" }));
     const link = document.createElement("a"); link.href = url; link.download = `competitor-${number}-google-html.txt`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -109,16 +143,22 @@ function SourceEditor({ initial, number, templateId, api, endpoint, disabled, on
     const row = await flush();
     if (row) { window.postMessage({ type: "PAGEPILOT_COLLECT_GOOGLE_HTML", templateId, sourceId: row.id, revision: row.revision, url: latest.current.url }, location.origin); setStatus("Запрос передан расширению. Если Google не открылся, установите расширение по ссылке выше."); }
   }
-  return <div className="tg-source-field"><div className="tg-heading"><h4>HTML конкурента {number}</h4><small role="status">{status}</small></div>
-    <label>Адрес конкурента <span className="tg-muted">(для запуска проверки)</span><input aria-label={`Адрес конкурента ${number}`} value={draft.url} disabled={disabled} placeholder="https://example.com" onChange={e => change({ ...draft, url: e.target.value })} onBlur={() => { if (dirty.current) void flush().catch(() => undefined); }} /></label>
-    <textarea aria-label={`HTML конкурента ${number}`} rows={9} disabled={disabled} spellCheck={false} value={draft.html}
-      placeholder="Вставьте полный HTML из проверенной Google страницы…" onChange={e => change({ ...draft, html: e.target.value })} onBlur={() => { if (dirty.current) void flush().catch(() => undefined); }} />
-    <div className="tg-downloads">{templateId && <button type="button" className="button secondary" disabled={disabled || !draft.url.trim()} onClick={() => void extension().catch(() => undefined)}><Globe2 size={16} />Получить через Chrome</button>}
-      <a href={`https://search.google.com/test/rich-results?hl=ru${draft.url ? `&url=${encodeURIComponent(draft.url)}` : ""}`} target="_blank" rel="noopener noreferrer">Открыть Rich Results Test</a>
+  return <div className="tg-source-field"><div className="tg-heading"><h4>HTML конкурента {number}</h4><small role="status">{reading ? "Читаем файл…" : status}</small><button type="button" className="button secondary" aria-label={`Удалить конкурента ${number}`} disabled={disabled || reading || removing} onClick={() => void remove()}><Trash2 size={16} /></button></div>
+    <div className="tg-upload"><input ref={fileInput} type="file" accept=".html,.htm,text/html" aria-label={`Загрузить HTML конкурента ${number}`} disabled={disabled || reading || removing} onChange={e => void upload(e.target.files?.[0])} />
+      <button type="button" className="button secondary" disabled={disabled || reading || removing} onClick={() => fileInput.current?.click()}><Upload size={17} />Загрузить HTML-файл</button><small>{filename || "HTML или HTM · до 2 МБ"}</small></div>
+    <a className="tg-google-test" href={`https://search.google.com/test/rich-results?hl=ru${draft.url.trim() ? `&url=${encodeURIComponent(draft.url.trim())}` : ""}`} target="_blank" rel="noopener noreferrer" aria-label={`Проверить в Google — конкурент ${number} (новая вкладка)`}>
+      <span className="tg-google-logo"><img src="/service-logos/google.png" alt="Google" width="92" height="30" /></span>
+      <span><strong>Проверить в Google</strong><small>Расширенные результаты</small></span><ExternalLink size={18} aria-hidden="true" />
+    </a>
+    <details className="tg-source-extra"><summary>Адрес и получение HTML через Google</summary><label>Адрес конкурента <span className="tg-muted">(для запуска проверки)</span><input aria-label={`Адрес конкурента ${number}`} value={draft.url} disabled={disabled || reading || removing} placeholder="https://example.com" onChange={e => change({ ...draft, url: e.target.value })} onBlur={() => { if (dirty.current) void flush().catch(() => undefined); }} /></label>
+    </details>
+    <textarea aria-label={`HTML конкурента ${number}`} rows={9} disabled={disabled || reading || removing} spellCheck={false} value={draft.html}
+      placeholder="Или вставьте сюда HTML главной страницы конкурента…" onChange={e => change({ ...draft, html: e.target.value })} onBlur={() => { if (dirty.current) void flush().catch(() => undefined); }} />
+    <details className="tg-source-extra"><summary>Действия с HTML</summary><div className="tg-downloads">{templateId && <button type="button" className="button secondary" disabled={disabled || !draft.url.trim()} onClick={() => void extension().catch(() => undefined)}><Globe2 size={16} />Получить через Chrome</button>}
       <button type="button" className="button secondary" disabled={!draft.html} onClick={download}><Download size={16} />TXT</button>
-      <button type="button" className="button secondary" disabled={!draft.html} onClick={() => void navigator.clipboard.writeText(draft.html).then(() => setStatus("Скопировано")).catch(() => setError("Выделите HTML и скопируйте вручную."))}><Copy size={16} />Скопировать</button></div>
+      <button type="button" className="button secondary" disabled={!draft.html} onClick={() => void navigator.clipboard.writeText(draft.html).then(() => setStatus("Скопировано")).catch(() => setError("Выделите HTML и скопируйте вручную."))}><Copy size={16} />Скопировать</button></div></details>
     {error && <p role="alert" className="tg-alert">{error}<button type="button" onClick={() => void flush().catch(() => undefined)}>Повторить сохранение</button></p>}
     {saved.capture.error && <p className="tg-help">{saved.capture.error}</p>}
-    {saved.capture.status === "google_ready" && <p className="tg-help">HTML сохранён и доступен для анализа. Источник: {saved.capture.source === "google_rich_results" ? "агент Google Rich Results" : "вставка HTML из Google"}.</p>}
+    {saved.capture.status === "google_ready" && <p className="tg-help">HTML сохранён и доступен для анализа. </p>}
   </div>;
 }
