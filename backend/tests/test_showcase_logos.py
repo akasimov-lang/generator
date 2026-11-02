@@ -29,6 +29,7 @@ def test_active_and_external_svg_is_rejected(svg):
         logos.prepare(logos.LogoUpload(name='brand.svg', data=base64.b64encode(svg.encode()).decode()))
 
 
-def test_svg_fragment_gradient_is_accepted():
-    svg = '<svg xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="a"><stop offset="0" stop-color="red"/></linearGradient></defs><path fill="url(#a)" d="M0 0z"/></svg>'
-    assert logos.prepare(logos.LogoUpload(name='brand.svg', data=base64.b64encode(svg.encode()).decode())) == ('.svg', svg)
+def test_svg_is_rejected_before_calling_webdev():
+    svg = '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0z"/></svg>'
+    with pytest.raises(HTTPException):
+        logos.prepare(logos.LogoUpload(name='brand.svg', data=base64.b64encode(svg.encode()).decode()))

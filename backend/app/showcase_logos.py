@@ -3,7 +3,6 @@ import base64
 import binascii
 from io import BytesIO
 from urllib.parse import urlsplit
-import xml.etree.ElementTree as ET
 
 from fastapi import HTTPException
 from PIL import Image, UnidentifiedImageError
@@ -21,29 +20,6 @@ def prepare(logo):
         raw = base64.b64decode(logo.data, validate=True)
         if not raw or len(raw) > 2 * 1024 * 1024:
             raise ValueError('size')
-        if logo.name.lower().endswith('.svg'):
-            text = raw.decode('utf-8-sig')
-            if '<!DOCTYPE' in text.upper() or '<!ENTITY' in text.upper():
-                raise ValueError('doctype')
-            root = ET.fromstring(text)
-            if root.tag.split('}')[-1] != 'svg':
-                raise ValueError('svg')
-            allowed = {'svg', 'g', 'path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon', 'defs', 'linearGradient', 'radialGradient', 'stop', 'clipPath', 'mask', 'title', 'desc', 'text', 'tspan', 'use', 'style'}
-            for el in root.iter():
-                if el.tag.split('}')[-1] not in allowed:
-                    raise ValueError('active svg')
-                for key, value in el.attrib.items():
-                    key = key.split('}')[-1].lower()
-                    if key.startswith('on') or (key in {'href', 'src'} and not value.startswith('#')):
-                        raise ValueError('external svg')
-                content = ' '.join(el.attrib.values()) + (el.text or '')
-                import re
-                if re.search(r'@import|expression\s*\(|javascript:|url\s*\(\s*[\'"]?\s*(?!#)[^\s]', content, re.I):
-                    # Fragment-only paint/clip references are safe.
-                    stripped = re.sub(r'url\(\s*[\'"]?#[\w.-]+[\'"]?\s*\)', '', content, flags=re.I)
-                    if re.search(r'@import|expression\s*\(|javascript:|url\s*\(', stripped, re.I):
-                        raise ValueError('external css')
-            return '.svg', text
         with Image.open(BytesIO(raw)) as img:
             if img.format not in {'PNG', 'JPEG', 'WEBP'} or img.width * img.height > 16000000:
                 raise ValueError('format or dimensions')
@@ -53,8 +29,8 @@ def prepare(logo):
             if output.tell() > 4 * 1024 * 1024:
                 raise ValueError('decoded size')
             return '.png', base64.b64encode(output.getvalue()).decode()
-    except (ValueError, binascii.Error, UnicodeError, ET.ParseError, UnidentifiedImageError, OSError, Image.DecompressionBombError):
-        raise HTTPException(422, 'Загрузите PNG, JPEG, WebP или SVG без внешних ресурсов, размером до 2 МБ.')
+    except (ValueError, binascii.Error, UnicodeError, UnidentifiedImageError, OSError, Image.DecompressionBombError):
+        raise HTTPException(422, 'Загрузите PNG, JPEG или WebP, размером до 2 МБ.')
 
 
 def target(casinos, row_id):

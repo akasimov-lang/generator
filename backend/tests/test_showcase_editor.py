@@ -183,7 +183,11 @@ def test_confirmed_receipt_is_not_downgraded_after_later_changes(api_setup):
 
 def logo_payload():
     import base64
-    return {'name': 'logo.svg', 'data': base64.b64encode(b'<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h10v10z"/></svg>').decode()}
+    from io import BytesIO
+    from PIL import Image
+    out = BytesIO()
+    Image.new('RGB', (12, 8), 'blue').save(out, 'PNG')
+    return {'name': 'logo.png', 'data': base64.b64encode(out.getvalue()).decode()}
 
 
 def test_logo_upload_preserves_gallery_other_cards_and_is_idempotent(api_setup):
@@ -198,7 +202,7 @@ def test_logo_upload_preserves_gallery_other_cards_and_is_idempotent(api_setup):
     assert after['basic'][0]['data'][0] == before['basic'][0]['data'][0]
     assert after['standard'][0][3]['id'] == after['basic'][0]['data'][-1]['id']
     assert state['uploads'][0]['customPath'] == 'vitrina/logo'
-    assert state['uploads'][0]['buffer'].startswith('<svg')
+    assert state['uploads'][0]['name'].endswith('.png')
     assert client.put(path, json=payload).json()['status'] == 'confirmed'
     assert len(state['uploads']) == len(state['requests']) == 1
 
