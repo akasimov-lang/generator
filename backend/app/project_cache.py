@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import re
+import logging
 import threading
 import time
 import uuid
@@ -338,6 +339,28 @@ def _working_project_canons() -> set[str]:
 
 
 def fetch_project_cache(names: list[str] | None = None) -> list[dict[str, Any]]:
+    # Both POST endpoints below only authenticate/read. Never use this retry
+    # boundary for publication, project updates or other remote mutations.
+    for attempt in range(3):
+        try:
+            return _fetch_project_cache_once(names)
+        except ProjectCacheError as error:
+            cause = error.__cause__
+            transient = isinstance(cause, httpx.TransportError) or (
+                isinstance(cause, httpx.HTTPStatusError)
+                and (cause.response.status_code in (408, 429) or 500 <= cause.response.status_code < 600)
+            )
+            if not transient or attempt == 2:
+                raise
+            logging.getLogger(__name__).warning(
+                "Project cache read temporarily unavailable (%s); retry %s/3",
+                type(cause).__name__, attempt + 2,
+            )
+            time.sleep(attempt + 1)
+    raise AssertionError("Unreachable cache retry state")
+
+
+def _fetch_project_cache_once(names: list[str] | None = None) -> list[dict[str, Any]]:
     settings = get_settings()
     if not settings.project_cache_username or not settings.project_cache_password:
         raise ProjectCacheError("Project cache credentials are not configured")
