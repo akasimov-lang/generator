@@ -7,7 +7,8 @@ import "./styles/showcase-editor.css";
 type Api = <T>(path: string, options?: RequestInit) => Promise<T>;
 type Field = { id: string; key: string; label: string; value: string; list: boolean };
 type Row = { id: string; brand: string; fields: Field[]; editable: boolean; group: string; logo?: string };
-type Showcase = { revision: string; rows: Row[]; count: number; source: string; message: string; warning?: string };
+type Management = { complete: boolean; notes: string[]; sources: { id: string; kind: string; location: string; action: string; inline_edit: boolean }[] };
+type Showcase = { management?: Management; revision: string; rows: Row[]; count: number; source: string; message: string; warning?: string };
 type Draft = { rowId: string; revision: string; fields: Record<string, string>; requestId?: string; logo?: { name: string; data: string } };
 type Receipt = { id: string; status: string; error?: string; showcase?: Showcase | null };
 const isBrand = (field: Field) => field.key === "brand" || field.key === "name";
@@ -122,6 +123,11 @@ export function ShowcaseBrands({ siteId, api }: { siteId: string; api: Api }) {
         </tr>;
       })}</tbody>
     </table>{!visible.length && <p>По вашему запросу бренды не найдены.</p>}</div>}
+    {data?.management && <details className="showcaseManagement"><summary>Системные пометки об управлении витриной</summary>
+      {!data.management.complete && <p className="muted">Способ подключения подтверждён не полностью. Нажмите «Обновить» для проверки Webdev.</p>}
+      {data.management.sources.map(source => <div key={source.id}><strong>{({native: "Карточки Webdev", page_table: "Таблица страницы", page_code: "Блок кода", page_raw: "HTML-блок", shortcode: "Шорткод", layout: "Шаблон страницы", banner: "Баннер", external: "Внешняя витрина"} as Record<string,string>)[source.kind] || source.kind}</strong> · <code>{source.location}</code><p>{source.action}</p></div>)}
+      <ul>{data.management.notes.map(note => <li key={note}>{note}</li>)}</ul>
+    </details>}
     {data?.warning && <p className="muted">{data.warning}</p>}
     {data?.source === "cache" && !!data.rows.length && <small className="muted">Список из серверного кеша. При сохранении проверяется актуальная витрина в Webdev.</small>}
   </section>;

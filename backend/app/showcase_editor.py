@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from app import models, showcase_logos
+from app import models, showcase_logos, showcase_management
 from app.core.config import get_settings
 from app.db import get_db
 from app.project_cache import ProjectCacheError
@@ -94,11 +94,13 @@ def rows(project):
 
 def view(project, source='webdev', warning=None):
     cards = rows(project)
+    management, legacy = showcase_management.inspect(project, cards)
+    cards = cards + legacy
     if not cards:
         cards = [{'id': f'legacy:{index}', 'brand': brand, 'fields': [], 'editable': False, 'group': ''}
                  for index, brand in enumerate(showcase_brands(project)['brands'])]
     return {'revision': digest((project.get('data') or {}).get('casinos')), 'rows': cards,
-            'count': len(cards), 'source': source, 'warning': warning,
+            'count': len(cards), 'source': source, 'warning': warning, 'management': management,
             'message': '' if cards else 'В сохранённых данных проекта нет карточек брендов витрины.'}
 
 
@@ -166,7 +168,12 @@ def confirm(db, operation, remote):
 def load(site_id: str, user: AuthUser, db: Session = Depends(get_db), refresh: bool = False):
     site = allowed_site(db, site_id, user)
     project, source, warning = read_project(db, site, refresh=refresh)
-    return view(project, source, warning)
+    response = view(project, source, warning)
+    if not response['rows'] and not response['management']['complete'] and not refresh:
+        project, source, warning = read_project(db, site, refresh=True)
+        response = view(project, source, warning)
+    response['management']['record_id'] = showcase_management.remember(db, site, user, response['management'])
+    return response
 
 
 @router.put('')

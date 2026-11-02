@@ -25,3 +25,5 @@
 @media(max-width:750px) { .showcaseFields { grid-template-columns:1fr; } .showcaseTable { min-width:620px; } .showcaseTools { width:100%; } .showcaseSearch { flex:1; } .showcaseSearch input { width:100%; } }
 
 .showcaseLogo{width:88px;height:48px;object-fit:contain;background:#263044;border-radius:6px;padding:4px}.showcaseLogoUpload{display:grid;gap:8px;margin-top:12px;font-size:12px;max-width:240px}.showcaseLogoUpload input{max-width:100%;font-size:12px}
+
+.showcaseManagement{margin-top:16px;padding:12px;border:1px solid var(--border,#d6deeb);border-radius:10px;font-size:13px}.showcaseManagement summary{cursor:pointer;font-weight:600}.showcaseManagement>div{margin-top:12px}.showcaseManagement p{margin:4px 0}.showcaseManagement li{margin:6px 0}
