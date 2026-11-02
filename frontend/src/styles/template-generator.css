@@ -2,6 +2,16 @@
 
 .tg-combobox{position:relative;min-width:0}.tg .tg-combobox>label{margin:18px 0 8px}.tg-combobox-control{position:relative}.tg .tg-combobox-control input{padding-right:42px}.tg-combobox-control>button{position:absolute;right:4px;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;width:34px;height:32px;border:0;background:transparent;color:var(--muted);cursor:pointer}.tg-combobox-list{position:absolute;top:100%;left:0;right:0;z-index:40;max-height:260px;overflow-y:auto;overscroll-behavior:contain;margin-top:6px;padding:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:10px;box-shadow:0 12px 30px #0002}.tg-combobox-list [role=option]{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border-radius:6px;cursor:pointer;font-size:14px;overflow-wrap:anywhere}.tg-combobox-list [role=option].active,.tg-combobox-list [role=option]:hover{background:var(--bg)}.tg-combobox-list [aria-selected=true]{font-weight:700}.tg-combobox-list p{padding:8px 12px;margin:0;font-size:13px;color:var(--muted)}
 .tg-source-editor { margin: 18px 0; }
+.tg-collection-group { display: grid; gap: 10px; margin: 18px 0; }
+.tg-collection-group > h3 { font-size: 14px; color: var(--muted); margin: 0; }
+.tg-generated-templates { border-top: 1px solid var(--border); margin-top: 28px; padding-top: 24px; }
+.tg-row > div { min-width: 0; }
+.tg .tg-row-competitors { display: grid; gap: 3px; margin-top: 8px; }
+.tg .tg-row-competitors small { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px 12px; margin: 0; font-size: 11px; line-height: 1.35; overflow-wrap: anywhere; }
+.tg .tg-row-competitors small b { font-size: 11px; font-weight: 600; }
+.tg .tg-row-competitors small span { font-size: 11px; }
+.workspaceHtmlUpload { white-space: nowrap; }
+.tg-source-footer { display: flex; justify-content: flex-end; }
 .tg-source-field { border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin: 16px 0; display: grid; gap: 10px; min-width: 0; }
 .tg-source-field textarea { width: 100%; box-sizing: border-box; resize: vertical; font-family: ui-monospace, monospace; font-size: 12px; }
 .tg-source-field h4 { margin: 0; }
@@ -23,3 +33,35 @@
 .tg-google-logo{display:flex;align-items:center;justify-content:center;background:#fff;border-radius:6px;padding:8px;flex-shrink:0}.tg-google-logo img{display:block;width:92px;height:30px;object-fit:contain}
 .tg-google-test>span:nth-child(2){flex:1;min-width:0}.tg-google-test strong{font-size:14px}.tg-google-test small{margin-top:3px;font-size:12px}.tg-google-test>svg{flex-shrink:0;color:var(--muted)}
 @media(max-width:600px){.tg-google-test{gap:10px;padding:12px}.tg-google-logo img{width:69px;height:auto}.tg-google-logo{padding:6px}}
+
+.tg-knowledge { margin-bottom:22px; }
+.tg-create-topbar { display:flex; gap:20px; align-items:end; margin-bottom:20px; }
+.tg-create-topbar > .button { flex-shrink:0; margin-bottom:2px; }
+.tg-create-selection { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) minmax(0,1fr); gap:12px; flex:1; min-width:0; padding:12px 16px; border:1px solid var(--border); border-radius:12px; background:var(--surface); }
+.tg .tg-create-selection .tg-combobox > label { margin:0 0 5px; font-size:12px; }
+.tg-create-selection .tg-combobox-control input { min-height:38px; padding-top:7px; padding-bottom:7px; font-size:13px; }
+.tg-create-topbar + .tg-create-layout { margin-top:0; }
+@media(max-width:800px) { .tg-create-topbar { align-items:stretch; flex-direction:column; gap:12px; }.tg-create-topbar > .button { align-self:start; } }
+@media(max-width:600px) { .tg-create-selection { grid-template-columns:minmax(0,1fr); gap:9px; padding:12px; } }
+.tg-knowledge-heading { display:flex; justify-content:space-between; gap:16px; align-items:start; }
+.tg-knowledge-heading h3 { margin:0 0 5px; }
+.tg-knowledge-heading p { margin:0; color:var(--muted); font-size:12px; }
+.tg-knowledge-count { flex-shrink:0; font-size:13px; font-weight:700; color:var(--primary); }
+.tg-knowledge fieldset { min-width:0; margin:15px 0 0; padding:0; border:0; }
+.tg-knowledge-fields { display:grid; grid-template-columns:1fr 1.2fr 1.6fr; gap:14px; align-items:end; }
+.tg-knowledge-fields label { margin:0; }
+.tg-knowledge-all-geo { display:grid; gap:5px; padding:10px; font-size:13px; }
+.tg-knowledge-all-geo small { color:var(--muted); }
+.tg-knowledge-upload { display:flex; align-items:center; gap:12px; margin-top:14px; }
+.tg-knowledge-upload label.button { position:relative; overflow:hidden; margin:0; cursor:pointer; flex-shrink:0; }
+.tg-knowledge-upload input[type=file] { position:absolute; inset:0; opacity:0; cursor:pointer; }
+.tg-knowledge-upload > small { flex:1; min-width:0; overflow-wrap:anywhere; color:var(--muted); font-size:11px; }
+.tg-knowledge-paste { margin-top:12px; font-size:12px; }
+.tg-knowledge-paste textarea { width:100%; margin-top:10px; }
+.tg-knowledge-examples { margin-top:15px; font-size:12px; }
+.tg-knowledge-examples article { display:grid; gap:5px; padding:10px 0; border-top:1px solid var(--border); }
+.tg-knowledge-examples article > small { overflow-wrap:anywhere; color:var(--muted); }
+.tg-knowledge-examples li { padding:3px 0; overflow-wrap:anywhere; }
+.tg-knowledge-error { color:#b42318; white-space:pre-wrap; }
+@media(max-width:700px) { .tg-knowledge-fields { grid-template-columns:1fr; } .tg-knowledge-upload { flex-wrap:wrap; } .tg-knowledge-upload > button { width:100%; } .tg-knowledge-heading { flex-wrap:wrap; } }
+.tg-source-summary{display:flex;align-items:center;gap:14px;width:100%;border:0;background:transparent;color:inherit;text-align:left;padding:0;cursor:pointer}.tg-source-summary>span{flex:1;min-width:0;display:grid;gap:4px}.tg-source-summary strong,.tg-source-summary small{overflow-wrap:anywhere}.tg-source-summary small,.tg-source-summary time{font-size:12px;color:var(--muted,#64748b)}.tg-source-summary time{white-space:nowrap}.tg-source-summary[aria-expanded=true]{margin-bottom:20px}.tg-source-summary[aria-expanded=true]>svg{transform:rotate(180deg)}.tg-source-field>[hidden]{display:none!important}@media(max-width:600px){.tg-source-summary{flex-wrap:wrap}.tg-source-summary>span{flex-basis:85%}}

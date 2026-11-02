@@ -1,4 +1,5 @@
 import asyncio
+import httpx
 from datetime import datetime, timezone
 
 from celery import Celery
@@ -6,6 +7,7 @@ from celery.schedules import crontab
 from sqlalchemy import select
 
 from app import models
+from app import worker_connections  # noqa: F401 -- register prefork pool cleanup
 from app.core.config import get_settings
 from app.db import SessionLocal
 from app.indexing import submit_pending_content_indexing
@@ -35,12 +37,16 @@ celery_app.conf.update(
         "app.worker.submit_pending_content_indexing": {"queue": "confirmation"},
         "app.worker.network_indexing": {"queue": "confirmation"},
         "app.worker.auto_reglue": {"queue": "automation"},
+        "app.worker.auto_reglue_availability": {"queue": "confirmation"},
+        "app.worker.auto_reglue_recheck": {"queue": "automation"},
+        "app.worker.dispatch_reglue_monitor": {"queue": "maintenance"},
         "app.worker.schedule_auto_reglue": {"queue": "automation"},
         "app.worker.dispatch_background_jobs": {"queue": "maintenance"},
         "app.worker.check_site_menu_visibility": {"queue": "menu_checks"},
     },
 )
 celery_app.conf.beat_schedule = {
+    "monitor-reglue-results": {"task": "app.worker.dispatch_reglue_monitor", "schedule": 60.0},
     "dispatch-background-jobs": {"task": "app.worker.dispatch_background_jobs", "schedule": 5.0},
     "post-reglue-indexing": {"task": "app.worker.network_indexing", "schedule": 30.0},
     "scheduled-auto-reglue": {"task": "app.worker.schedule_auto_reglue", "schedule": 60.0},
@@ -244,6 +250,8 @@ def run_content_item_pipeline_job(self, content_item_id: str, collect_competitor
             return {"status": "missing", "content_item_id": content_item_id}
         task_id = item.task_id
         task = db.get(models.GenerationTask, task_id)
+        if not task or task.archived_at:
+            return {'status': 'cancelled', 'content_item_id': content_item_id}
         publish_generated = bool(task and task.auto_publish and item.status == "generated")
         redelivered = bool((self.request.delivery_info or {}).get("redelivered"))
         if item.status != "generation_queued" and not publish_generated and not (redelivered and item.status == "generating"):
@@ -256,7 +264,7 @@ def run_content_item_pipeline_job(self, content_item_id: str, collect_competitor
 
         if not publish_generated and collect_competitors and task and task.collect_competitors and not item.competitor_brief:
             research_error: Exception | None = None
-            for attempt_index in range(COMPETITOR_RESEARCH_MAX_ATTEMPTS):
+            for attempt_index in range(1):
                 try:
                     asyncio.run(continue_competitor_research_for_item(db, item))
                     research_error = None
@@ -267,10 +275,10 @@ def run_content_item_pipeline_job(self, content_item_id: str, collect_competitor
                     item = db.get(models.ContentItem, content_item_id)
                     if not item:
                         break
-                    has_next_attempt = attempt_index + 1 < COMPETITOR_RESEARCH_MAX_ATTEMPTS
+                    has_next_attempt = False
                     item.competitor_research_status = "queued" if has_next_attempt else "research_failed"
                     item.competitor_research_error = (
-                        f"Attempt {attempt_index + 1}/{COMPETITOR_RESEARCH_MAX_ATTEMPTS}: "
+                        f"Сбор конкурентов: "
                         f"{type(error).__name__}: {error}"
                     )[:500]
                     db.commit()
@@ -281,6 +289,9 @@ def run_content_item_pipeline_job(self, content_item_id: str, collect_competitor
                     item.generation_error = f"Не удалось собрать конкурентов: {type(research_error).__name__}: {research_error}"[:500]
                     db.commit()
                 _refresh_parallel_task_status(db, task_id)
+                from app.generation_retry import schedule
+                if item and schedule(db, item):
+                    return {'status': 'retry_queued', 'content_item_id': content_item_id}
                 return {"status": "failed", "content_item_id": content_item_id}
 
         item = db.get(models.ContentItem, content_item_id)
@@ -309,6 +320,9 @@ def run_content_item_pipeline_job(self, content_item_id: str, collect_competitor
             item.generation_error = f"{error_prefix}: {error}"[:500]
             db.commit()
             _refresh_parallel_task_status(db, item.task_id)
+            from app.generation_retry import schedule
+            if schedule(db, item):
+                return {'status': 'retry_queued', 'content_item_id': content_item_id}
         raise
     finally:
         db.close()
@@ -436,16 +450,75 @@ def publish_campaign_bundle_job(campaign_id: str, log_id: str) -> dict:
 def auto_reglue_job(run_id: str, confirmation_attempt: int = 0) -> None:
     from app.auto_reglue import execute
     with SessionLocal() as db:
+        from app.transfer_confirmation import record_check, INTERVAL, BATCH_LIMIT
+        before = db.get(models.AutoReglueRun, run_id)
+        if before and before.plan.get('batch_id') and confirmation_attempt > BATCH_LIMIT:
+            record_check(db, before, confirmation_attempt)
+            return
         execute(db, run_id)
         run = db.get(models.AutoReglueRun, run_id)
-        if run is not None and run.status == "waiting" and confirmation_attempt < 30:
-            auto_reglue_job.apply_async(args=[run_id, confirmation_attempt + 1], countdown=10)
+        if run and run.status == 'completed' and run.plan.get('list_launch_id') and not run.plan.get('availability_check_queued_at'):
+            auto_reglue_availability_job.delay(run_id)
+            run.plan = {**run.plan, 'availability_check_queued_at': datetime.now(timezone.utc).isoformat()}; db.commit()
+        if run and run.status in {'partial', 'failed'} and run.plan.get('create_subdomain'):
+            from app.subdomain_fallback import replace_failed
+            try:
+                if replace_failed(db, run_id):
+                    auto_reglue_job.delay(run_id)
+                    return
+            except (ProjectCacheError, ValueError, httpx.HTTPError):
+                db.rollback()  # Preserve the original error for review; other jobs continue.
+                db.refresh(run)
+        if run is not None and run.status in {'partial','failed','completed'} and run.plan.get('manual_action')=='move_plus2' and not run.plan.get('replacement_handled'):
+            from app.move_batch import continue_after_error
+            try:
+                continue_after_error(db,run,lambda id:auto_reglue_job.delay(id))
+            except (ProjectCacheError, ValueError, httpx.HTTPError):
+                db.rollback();db.refresh(run)
+                run.plan={**run.plan,'replacement_error':'Не удалось перечитать Webdev для подбора замены. Повторим проверку.'};db.commit()
+            if run.plan.get('domain_errors') and not run.plan.get('replacement_handled') and confirmation_attempt<30:
+                auto_reglue_job.apply_async(args=[run_id,confirmation_attempt+1],countdown=10)
+        from app.reglue_recheck import schedule_after_finish
+        schedule_after_finish(db, run, lambda rid, delay: auto_reglue_recheck_job.apply_async(args=[rid], kwargs={'automatic': True}, countdown=delay))
+        if record_check(db, run, confirmation_attempt):
+            auto_reglue_job.apply_async(args=[run_id, confirmation_attempt + 1], countdown=INTERVAL)
 
 @celery_app.task(name="app.worker.schedule_auto_reglue")
 def schedule_auto_reglue_job():
     from app.auto_reglue import schedule_tick
     with SessionLocal() as db:
         return schedule_tick(db, lambda run_id: auto_reglue_job.delay(run_id))
+
+
+@celery_app.task(name="app.worker.auto_reglue_availability")
+def auto_reglue_availability_job(run_id: str):
+    from app.reglue_dns import audit_pages
+    from app.project_network import network_lock
+    with SessionLocal() as db, network_lock(db, 'auto-run:' + run_id):
+        run = db.get(models.AutoReglueRun, run_id)
+        if run and run.status == 'completed' and not run.plan.get('availability_checked_at'):
+            audit_pages(db, run)
+
+
+@celery_app.task(name="app.worker.auto_reglue_recheck", bind=True, max_retries=10, acks_late=True)
+def auto_reglue_recheck_job(self, run_id: str, retry_title_h1: bool = False, request_id: str | None = None, automatic: bool = False):
+    from app.reglue_recheck import check_run
+    from app.project_network import NetworkConflict
+    try:
+        with SessionLocal() as db:
+            if automatic:
+                from app.reglue_monitor import check
+                return check(db, run_id)
+            return check_run(db, run_id, retry_title_h1=retry_title_h1, request_id=request_id)
+    except NetworkConflict as error:
+        raise self.retry(exc=error, countdown=15)
+
+
+@celery_app.task(name="app.worker.dispatch_reglue_monitor")
+def dispatch_reglue_monitor_job():
+    from app.reglue_monitor import dispatch
+    with SessionLocal() as db:
+        return dispatch(db, lambda rid: auto_reglue_recheck_job.apply_async(args=[rid], kwargs={'automatic': True}))
 
 
 @celery_app.task(name="app.worker.network_indexing")

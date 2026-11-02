@@ -410,6 +410,8 @@ def fetch_server_project_inventories(server_ids: set[str]) -> tuple[dict[str, se
                     payload = response.json()
                     if not isinstance(payload, list):
                         raise ValueError("unexpected response")
+                    if any(not isinstance(item, str) for item in payload):
+                        raise ValueError("project inventory must contain names")
                     inventories[server_id] = {
                         str(item).strip() for item in payload if isinstance(item, str) and str(item).strip()
                     }
@@ -596,10 +598,10 @@ def _reset_newly_transferred_domain_memory(
 
 
 def reconcile_server_project_inventory(db: Session) -> dict[str, Any]:
-    """Import only unambiguous projects missing entirely from PagePilot.
+    """Reconcile confirmed deletions and import unambiguous missing projects.
 
-    The inventory is additive. A server timeout never removes a project, and a
-    name already present locally is not imported again from a migration copy.
+    Failed server inventories never confirm deletions. Local data is archived
+    before removal; a migration copy is never imported as a duplicate.
     """
     aggregate_projects = fetch_project_cache()
     local_sites = db.scalars(select(models.Site)).all()
@@ -608,7 +610,11 @@ def reconcile_server_project_inventory(db: Session) -> dict[str, Any]:
         *(_server_id(project) for project in aggregate_projects if _server_id(project)),
     }
     inventories, failures = fetch_server_project_inventories(server_ids)
+    from app.project_inventory_cleanup import prune_deleted_projects, excluded_project_names
+    cleanup = prune_deleted_projects(db, aggregate_projects, inventories, failures)
+    local_sites = db.scalars(select(models.Site)).all()
     local_names = {site.name for site in local_sites if site.name}
+    excluded_names = excluded_project_names(db)
     locations: dict[str, set[str]] = {}
     for server_id, names in inventories.items():
         for name in names:
@@ -617,6 +623,7 @@ def reconcile_server_project_inventory(db: Session) -> dict[str, Any]:
     missing_locations = {
         name: servers for name, servers in locations.items()
         if name not in local_names and not name.startswith("template-")
+        and name.strip().lower().rstrip('.') not in excluded_names
     }
     imported_projects: list[dict[str, Any]] = []
     rejected_missing: dict[str, str] = {}
@@ -655,6 +662,7 @@ def reconcile_server_project_inventory(db: Session) -> dict[str, Any]:
     }
     return {
         "known_servers": len(server_ids),
+        **cleanup,
         "checked_servers": len(inventories),
         "failed_servers": failures,
         "server_project_pairs": sum(len(names) for names in inventories.values()),
@@ -889,6 +897,8 @@ def _apply_direct_project_snapshot(
     site.has_menu = bool(menu["header"] or menu["footer"])
     site.cache_synced_at = synced_at
     site.is_active = True
+    from app.reglue_reserves import reconcile_memberships
+    reconcile_memberships(db, [(site, site.network_state)])
     if commit:
         db.commit()
 
@@ -935,11 +945,12 @@ def _apply_fibery_name(site, settings):
     duty = settings.get("webdevDuty")
     if isinstance(duty, dict) and "team" in duty and (duty["team"] is None or isinstance(duty["team"], str)):
         site.project_team = (duty["team"] or "").strip()
-    if site.fibery_name_manual:
-        return
+    # Webdev is authoritative even when the local field was entered manually.
+    # Omitted or malformed metadata is not an instruction to erase its value.
     if isinstance(duty, dict) and "fibery" in duty:
         value = duty["fibery"]
-        site.fibery_name = value.strip() or None if isinstance(value, str) else None
+        if value is None or isinstance(value, str):
+            site.fibery_name = (value.strip() or None) if isinstance(value, str) else None
 
 
 def _homepage_title(project: dict[str, Any]) -> str | None:
@@ -1362,6 +1373,9 @@ def sync_project_data_update(
 
 def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str, Any]:
     projects = external_projects(db, projects)
+    from app.project_inventory_cleanup import excluded_project_names
+    excluded_names = excluded_project_names(db)
+    projects = [p for p in projects if str(p.get('name') or '').strip().lower().rstrip('.') not in excluded_names]
     projects, skipped_duplicate_count = _deduplicate_cache_projects(projects)
     default_prompt = db.scalar(
         select(models.PromptTemplate)
@@ -1496,6 +1510,9 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
         site.is_active = True
 
     db.flush()
+    from app.reglue_reserves import reconcile_memberships
+    reconcile_memberships(db, [(s, {**(s.network_state or {}), 'domains': s.cache_domains or [],
+        'canon': s.cache_canon}) for s in db.scalars(select(models.Site).where(models.Site.is_active.is_(True)))])
     deleted_duplicate_count = _remove_safe_site_duplicates(db)
     db.commit()
     cache_projects.sort(key=lambda project: (not project["is_working_project"], not project["has_menu"], project["name"].lower()))

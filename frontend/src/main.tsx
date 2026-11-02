@@ -1,21 +1,40 @@
+import { ReglueJournalCard, ReglueJournalPage } from "./ReglueJournal";
+import { siteGeoFilterCode } from "./siteGeoFilter";
+import { ReservePoolButton, ReglueReservesPage } from "./ReglueReserves";
+import type { MenuLibraryItem } from "./menuLibrary";
 import { BrandIcon } from "./BrandIcon";
-import { ProjectPages } from "./ProjectPages";
+import { ArticleImageSettings } from "./ArticleImageSettings";
+import { ShortcodeSidebar, type ShortcodeInfo } from "./ShortcodeSidebar";
+import { MassScopePicker } from "./MassScopePicker";
+import { GlobalProjectSearchInput, GlobalProjectSearchResults, matchingGlobalProjects } from "./GlobalProjectSearch";
+import { createCoalescedLoader, createVisiblePoll } from "./visiblePoll";
+import { PageEditor, ProjectPages, type PageRow } from "./ProjectPages";
 import { TemplateGenerator } from "./TemplateGenerator";
+import { previewNodes, previewDepth, editPreviewItem, movePreviewItem, type GeneratedMenuStructureItem } from "./generatedMenuPreview";
 import { readProjectSnapshot, writeProjectSnapshot, removeLegacyProjectSnapshot } from "./projectSnapshot";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { createPortal } from "react-dom";
 import { LANGUAGE_OPTIONS, type LanguageOption } from "./languageOptions";
-import { getMenuLibrary, type MenuLibraryItem } from "./menuLibrary";
 import { normalizeDomainQuery, isExactNetworkDomainSearch, matchesProjectSearch, projectSearchKeywords } from "./projectSearch";
 import { TechnicalPagesForm } from "./TechnicalPagesForm";
 import { FactualResearchPanel, factualResearchFromPayload } from "./FactualResearchPanel";
 import { workspaceRequestCache } from "./workspaceRequestCache";
 import { AutoLbPanel } from "./AutoLbPanel";
+import { MassReglueLaunch } from "./MassReglueLaunch";
 import { ProjectNetworkPanel } from "./ProjectNetworkPanel";
+import { NetworkIndexingButton, NetworkSitemapButton } from "./NetworkIndexingButton";
+import { ProjectInterlinking, ShowcaseBrands, type ProjectContentStatus } from "./ProjectInterlinking";
+import { GenerationAnchors } from "./GenerationAnchors";
+import { ProjectNotificationCenter, ProjectLogs } from "./ProjectNotifications";
+import { projectApiResult, projectNotice } from "./projectNotificationEvents";
 import { AutoReglueGuide } from "./AutoReglueGuide";
 const UserGuideView = React.lazy(() => import("./UserGuide"));
+import { AutoPilotPage } from "./AutoPilot";
 import { AutoReglueView, ProjectAutoReglue } from "./AutoRegluePanel";
+import { openDetailPage, backFromDetail, detailReturnPath } from "./detailNavigation";
+import { NetworkMoveButtons } from "./NetworkMoveButtons";
+import type { MassActionFilter, MassActionSelection } from "./massActionScope";
 import {
   Activity,
   AlertTriangle,
@@ -35,6 +54,7 @@ import {
   Copy,
   CornerDownRight,
   Database,
+  Download,
   Edit3,
   Eye,
   ExternalLink,
@@ -46,6 +66,7 @@ import {
   LayoutDashboard,
   ListChecks,
   LoaderCircle,
+  Upload,
   LogOut,
   Medal,
   Menu,
@@ -69,6 +90,7 @@ import {
   Users,
   X
 } from "lucide-react";
+import { DomainColumnHeader } from "./DomainColumnHeader";
 import "./styles/global.css";
 import "./styles/branding.css";
 import { DesignProvider, useDesign, type DesignVersion } from "./DesignProvider";
@@ -238,6 +260,7 @@ type CompetitorResearch = {
 };
 
 type Site = {
+  added_to_system_at?: string | null;
   network_domain_counts?: { drop: number; newreg: number; subdomains: number; amp: number; unknown: number };
   menu_warning?: string | null;
   core_update_notice?: string | null;
@@ -255,6 +278,7 @@ type Site = {
   showcase_payload: Record<string, unknown> | null;
   external_project_id: string | null;
   cache_canon: string | null;
+  cache_reserve?: string | null;
   cache_language: string | null;
   cache_geo: string | null;
   homepage_title: string | null;
@@ -270,6 +294,8 @@ type Site = {
   cache_server_host: string | null;
   project_team?: string | null;
   site_type?: "monobrand" | "general" | null;
+  reglue_participation?: boolean;
+  last_reglue_at?: string | null;
   project_status: "test" | "working" | "mass_actions" | "vitalina" | "hands_only" | "geo_ru" | "geo_kz" | "inactive" | "not_in_focus" | "duplicate";
   is_test_project: boolean;
   is_active?: boolean;
@@ -572,8 +598,8 @@ type PublicationCampaignQueue = {
 
 type ThemeMode = "light" | "dark";
 type InputStyle = "balanced" | "classic" | "soft" | "inset" | "underline" | "emerald" | "graphite" | "rounded" | "contrast" | "glass";
-type AppView = "templateGenerator" | "autoReglueGuide" | "autoReglue" | "published" | "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "massActionReport" | "favorites" | "guide" | "settings";
-type WorkspaceTab = "overview" | "topics" | "content" | "publication" | "menu" | "network" | "redirects" | "autoReglue" | "autoLb";
+type AppView = "reglueJournal" | "autoPilotReport" | "autoPilot" | "autoPilotLogs" | "reglueReserves" | "pagePreview" | "contentPreview" | "pageEditor" | "templateGenerator" | "autoReglueGuide" | "autoReglue" | "published" | "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "massActionReport" | "favorites" | "guide" | "settings";
+type WorkspaceTab = "overview" | "topics" | "content" | "publication" | "menu" | "network" | "redirects" | "autoReglue" | "autoLb" | "logs";
 
 type WorkspaceAccordionContextValue = {
   storagePrefix: string;
@@ -625,7 +651,7 @@ function requestErrorCode(error: unknown): string {
   }
   return "UNKNOWN";
 }
-const ACTIVE_RESEARCH_STATUSES = ["queued", "collecting_serp", "serp_collected", "serp_empty", "fetching_pages", "pages_fetched"];
+const ACTIVE_RESEARCH_STATUSES = ["queued", "preparing_topic", "collecting_serp", "serp_collected", "serp_empty", "fetching_pages", "pages_fetched"];
 const ACTIVE_GENERATION_STATUSES = ["generation_queued", "generating"];
 const DEFAULT_TARGET_WORDS = 2000;
 const DEFAULT_WORKSPACE_TAB: WorkspaceTab = "overview";
@@ -670,10 +696,18 @@ async function copyTextToClipboard(text: string) {
 }
 
 const MAIN_VIEW_PATHS: Record<Exclude<AppView, "workspace">, string> = {
+  pagePreview: "/page-preview",
+  contentPreview: "/content-preview",
+  pageEditor: "/page-editor",
   templateGenerator: "/template-generator",
   autoReglue: "/auto-reglue",
+  reglueReserves: "/auto-reglue/reserves",
+  autoPilot: "/auto-reglue/pilot",
+  autoPilotLogs: "/auto-reglue/pilot/logs",
+  autoPilotReport: "/auto-reglue/pilot/report",
   autoReglueGuide: "/auto-reglue/guide",
   dashboard: "/dashboard",
+  reglueJournal: "/reglue-journal",
   prompts: "/prompts",
   tasks: "/tasks",
   taskArchive: "/task-archive",
@@ -697,11 +731,15 @@ const WORKSPACE_TAB_PATHS: Record<WorkspaceTab, string> = {
   network: "/project-network",
   redirects: "/project-redirects",
   autoReglue: "/project-auto-reglue",
-  autoLb: "/project-auto-lb"
+  autoLb: "/project-auto-lb",
+  logs: "/project-logs"
 };
 
 function routeFromPath(pathname: string): AppRoute {
   const path = pathname.replace(/\/+$/, "") || "/";
+  if (path.startsWith("/page-preview/")) return { view: "pagePreview", workspaceTab: DEFAULT_WORKSPACE_TAB };
+  if (path.startsWith("/content-preview/")) return { view: "contentPreview", workspaceTab: DEFAULT_WORKSPACE_TAB };
+  if (path.startsWith("/page-editor/")) return { view: "pageEditor", workspaceTab: DEFAULT_WORKSPACE_TAB };
   if (path.startsWith("/guide/")) return { view: "guide", workspaceTab: DEFAULT_WORKSPACE_TAB };
   if (path === "/project-prompts") {
     return { view: "prompts", workspaceTab: DEFAULT_WORKSPACE_TAB };
@@ -751,6 +789,23 @@ function pathForRoute(view: AppView, workspaceTab: WorkspaceTab = DEFAULT_WORKSP
     return projectName ? `${basePath}/${encodeURIComponent(projectName)}/` : basePath;
   }
   return MAIN_VIEW_PATHS[view];
+}
+
+function FiberyProjectName({ value, projectName, className, emptyText = "—" }: { value?: string | null; projectName: string; className?: string; emptyText?: string }) {
+  const id = value?.match(/#\s*(\d+)/)?.[1];
+  if (!id) return <span className={className}>{value || emptyText}</span>;
+  return <a className={[className, "fiberyProjectLink"].filter(Boolean).join(" ")} href={`https://hzhz.fibery.io/favorites/Alfasearch_Config/SEO_Projects/${id}`} target="_blank" rel="noopener noreferrer" title="Открыть проект в Fibery" aria-label={`Открыть проект ${projectName} в Fibery`} onClick={event => event.stopPropagation()}>{value}</a>;
+}
+
+function projectListReturnPath(from: string | null) {
+  for (const candidate of [from, document.referrer]) {
+    if (!candidate) continue;
+    try {
+      const url = new URL(candidate, window.location.origin);
+      if (url.origin === window.location.origin && Object.values(WORKSPACE_TAB_PATHS).some(path => url.pathname.startsWith(path + "/"))) return url.pathname + url.search;
+    } catch { /* Try the next saved origin. */ }
+  }
+  return pathForRoute("workspace", "network");
 }
 
 function isAdminOnlyView(view: AppView) {
@@ -924,6 +979,9 @@ function projectGeoCode(site?: Site): string {
 
 function App() {
   const [domainQuery, setDomainQuery] = React.useState("");
+  const [sitesSearchQuery,setSitesSearchQuery]=React.useState("");
+  const [massSearchQuery,setMassSearchQuery]=React.useState("");
+  const [massRefreshToken,setMassRefreshToken]=React.useState(0);
   const { designVersion, setDesignVersion } = useDesign();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const [compactNavigation, setCompactNavigation] = React.useState(() => window.matchMedia("(max-width: 900px)").matches);
@@ -937,6 +995,7 @@ function App() {
   const [activeView, setActiveView] = React.useState<AppView>(initialRoute.view);
   const [workspaceTab, setWorkspaceTab] = React.useState<WorkspaceTab>(initialRoute.workspaceTab);
   const [, setRouteVersion] = React.useState(0);
+  const [journalRefresh, setJournalRefresh] = React.useState(0);
   const [dashboard, setDashboard] = React.useState<Dashboard | null>(null);
   const [tasks, setTasks] = React.useState<Task[]>([]);
   const [archivedTasks, setArchivedTasks] = React.useState<Task[]>([]);
@@ -944,6 +1003,8 @@ function App() {
   const [sites, setSites] = React.useState<Site[]>([]);
   const [siteSnapshot, setSiteSnapshot] = React.useState<Site[]>([]);
   const [sitesUpdatedAt, setSitesUpdatedAt] = React.useState<string | null>(null);
+  const [catalogLoaded,setCatalogLoaded]=React.useState(false);
+  const [catalogError,setCatalogError]=React.useState("");
   const userRef = React.useRef<User | null>(null);
   const providersLoadedRef = React.useRef(false);
   const viewRef = React.useRef(activeView);
@@ -953,6 +1014,8 @@ function App() {
   const refreshFlight = React.useRef<{ key: string; promise: Promise<void> } | null>(null);
   const selectedProjectRef = React.useRef("");
   const initialSitesFlight = React.useRef<Promise<void> | null>(null);
+  const webdevRefreshFlight = React.useRef<object | null>(null);
+  const [webdevRefreshing, setWebdevRefreshing] = React.useState(false);
   const mergeSites = React.useCallback((updates: Site[], replace = false) => {
     const byId = new Map(updates.map(site => [site.id, site]));
     setSites(current => (replace ? updates : [...current.filter(site => !byId.has(site.id)), ...updates]).filter(site => site.is_active !== false));
@@ -960,6 +1023,7 @@ function App() {
     snapshotRef.current = next;
     setSiteSnapshot(next);
     if (replace) {
+      setCatalogLoaded(true);setCatalogError("");
       snapshotTimeRef.current = new Date().toISOString();
       setSitesUpdatedAt(snapshotTimeRef.current);
     }
@@ -974,21 +1038,33 @@ function App() {
   const [notificationPromptVisible, setNotificationPromptVisible] = React.useState(false);
   const [workspaceContentOpenRequest, setWorkspaceContentOpenRequest] = React.useState(0);
   const isAdmin = Boolean(currentUser);
+  const listParams = new URLSearchParams(window.location.search);
+  const projectListFilters = activeView === "sites" ? { geo: siteGeoFilterCode(listParams.get("geo")) || "PL", brand: (listParams.get("brand") || "").trim() } : undefined;
+  const projectListBackPath = projectListReturnPath(listParams.get("from"));
+  const globalSitesQuery=normalizeDomainQuery(sitesSearchQuery);
+  const globalMassQuery=normalizeDomainQuery(massSearchQuery);
+  const projectListSites = globalSitesQuery ? siteSnapshot.filter(site=>[site.name,site.cache_canon||"",site.base_url,...(site.cache_domains||[])].some(value=>matchesProjectSearch(value,globalSitesQuery))) : projectListFilters ? siteSnapshot.filter(site => (projectListFilters.geo === "ALL" || (siteGeoFilterCode(site.cache_geo) || "UNKNOWN") === projectListFilters.geo) && (!projectListFilters.brand || (site.brand?.trim() || "Общие ключи").toLowerCase() === projectListFilters.brand.toLowerCase())) : siteSnapshot;
+  const projectListGeoLabel = projectListFilters?.geo === "ALL" ? "Все GEO" : projectListFilters?.geo;
 
   const navigateTo = React.useCallback((view: AppView, nextWorkspaceTab: WorkspaceTab = workspaceTab, replace = false, projectName?: string | null) => {
     const normalizedWorkspaceTab = view === "workspace" ? nextWorkspaceTab : workspaceTab;
     const nextPath = pathForRoute(view, normalizedWorkspaceTab, projectName);
     setMobileMenuOpen(false);
     setActiveView(view);
+    if (view === "sites" && activeView !== "sites") setSitesSearchQuery("");
     if (view === "workspace") {
       setWorkspaceTab(normalizedWorkspaceTab);
     }
-    if (window.location.pathname !== nextPath) {
+    if (window.location.pathname !== nextPath || window.location.search) {
       const method = replace ? "replaceState" : "pushState";
       window.history[method](null, "", nextPath);
       setRouteVersion(version => version + 1);
     }
-  }, [workspaceTab]);
+  }, [workspaceTab, activeView]);
+
+  const openMassSearchProject = (name:string) => {
+    setMassSearchQuery("");setDomainQuery("");navigateTo("workspace","network",false,name);
+  };
 
   const openWorkspaceContent = React.useCallback(() => {
     setWorkspaceContentOpenRequest((request) => request + 1);
@@ -1004,7 +1080,8 @@ function App() {
   const api = React.useCallback(
     async <T,>(path: string, options: RequestInit = {}): Promise<T> => {
       const method = (options.method || "GET").toUpperCase();
-      const attempts = method === "GET" ? 3 : 1;
+      try {
+      const attempts = method === "GET" ? 7 : 1;
       let response: Response | null = null;
       let networkError: unknown = null;
       for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -1022,7 +1099,7 @@ function App() {
           networkError = error;
           if (attempt === attempts - 1) throw error;
         }
-        await new Promise((resolve) => window.setTimeout(resolve, 250 * (attempt + 1)));
+        await new Promise((resolve) => window.setTimeout(resolve, Math.min(250 * 2 ** attempt, 4000)));
       }
       if (activeTokenRef.current !== token) throw new Error("Сессия изменилась.");
       if (!response) throw networkError instanceof Error ? networkError : new Error("Failed to fetch");
@@ -1037,12 +1114,18 @@ function App() {
         throw authError;
       }
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ detail: "Request failed" }));
-        const requestError = new Error(error.detail || "Request failed") as ApiRequestError;
+        const fallback = [502, 503, 504].includes(response.status)
+          ? "Сервер временно недоступен. Повторите попытку через несколько секунд."
+          : `Ошибка запроса (HTTP ${response.status})`;
+        const error = await response.json().catch(() => ({ detail: fallback }));
+        const requestError = new Error(typeof error.detail === "string" ? error.detail : Array.isArray(error.detail) ? error.detail.map((item: {msg?:string})=>item.msg||"Некорректное значение").join("; ") : fallback) as ApiRequestError;
         requestError.statusCode = response.status;
         throw requestError;
       }
-      return response.json();
+      const data = await response.json();
+      projectApiResult(path, method);
+      return data;
+      } catch (error) { projectApiResult(path, method, error); throw error; }
     },
     [token]
   );
@@ -1056,10 +1139,12 @@ function App() {
     const key = `${view}:${name || savedId}`;
     if (refreshFlight.current?.key === key) return refreshFlight.current.promise;
     const promise = (async () => {
-      if (["sites", "favorites", "massActionReport"].includes(view) || (view === "workspace" && !snapshotTimeRef.current)) {
+      if (["sites", "favorites", "massActionReport", "autoReglue", "templateGenerator"].includes(view) || (view === "workspace" && !snapshotTimeRef.current)) {
         if (!initialSitesFlight.current) {
-          initialSitesFlight.current = api<Site[]>(["sites", "favorites", "massActionReport"].includes(view) ? "/sites?include_grouped_inactive=true" : "/sites")
+          setCatalogError("");
+          initialSitesFlight.current = api<Site[]>(["sites", "favorites", "massActionReport", "autoReglue", "templateGenerator"].includes(view) ? "/sites?include_grouped_inactive=true" : "/sites")
             .then(result => { if (userRef.current?.id === user.id) mergeSites(result, true); })
+            .catch(error=>{if(userRef.current?.id===user.id)setCatalogError(error instanceof Error?error.message:"Не удалось загрузить список сайтов. Нажмите «Обновить».");throw error;})
             .finally(() => { initialSitesFlight.current = null; });
         }
         await initialSitesFlight.current;
@@ -1078,6 +1163,8 @@ function App() {
         setArchivedTasks(await api<Task[]>("/tasks-archive"));
       } else if (view === "content" || view === "publications") {
         setContent(await api<ContentItem[]>("/content"));
+      } else if (view === "reglueJournal") {
+        setJournalRefresh(n => n + 1);
       } else if (view === "dashboard" && user.is_admin) {
         setDashboard(await api<Dashboard>("/dashboard"));
 
@@ -1089,6 +1176,43 @@ function App() {
     refreshFlight.current = { key, promise };
     try { await promise; } finally {
       if (refreshFlight.current?.promise === promise) refreshFlight.current = null;
+    }
+  }, [api, token, mergeSites]);
+
+  const refreshWebdevCache = React.useCallback(async (resumeId?: string) => {
+    const user = userRef.current;
+    if (!token || !user || webdevRefreshFlight.current) return;
+    const flight = {};
+    webdevRefreshFlight.current = flight;
+    const storageKey = `pagepilot-sites-cache-sync-job:${user.id}`;
+    const current = () => webdevRefreshFlight.current === flight && activeTokenRef.current === token && userRef.current?.id === user.id;
+    setWebdevRefreshing(true);
+    setMessage("Обмен данными с Webdev. Обновляем кеш проектов…");
+    try {
+      const savedId = resumeId || localStorage.getItem(storageKey);
+      const queued = savedId ? { id: savedId } : await api<{ id: string }>("/sites/cache/sync-jobs", {
+        method: "POST", body: JSON.stringify({ names: [] })
+      });
+      localStorage.setItem(storageKey, queued.id);
+      let job: { status: string; result?: ProjectCacheSyncResult; error?: string };
+      do {
+        await new Promise(resolve => window.setTimeout(resolve, 2000));
+        if (!current()) return;
+        job = await api(`/background-jobs/${queued.id}`, { cache: "no-store" });
+      } while (["queued", "running"].includes(job.status));
+      localStorage.removeItem(storageKey);
+      if (job.status !== "completed") throw new Error(job.error || "Не удалось обновить кеш Webdev");
+      await initialSitesFlight.current;
+      const projects = await api<Site[]>("/sites?include_grouped_inactive=true", { cache: "no-store" });
+      if (!current()) return;
+      mergeSites(projects, true);
+      setMessage(`Кеш Webdev обновлён. Добавлено проектов: ${job.result?.created_count || 0}; обновлено: ${job.result?.updated_count || 0}.`);
+    } catch (error) {
+      if ((error as ApiRequestError)?.statusCode === 404) localStorage.removeItem(storageKey);
+      if (current()) setMessage(error instanceof Error ? error.message : "Не удалось обновить кеш Webdev");
+    } finally {
+      if (current()) setWebdevRefreshing(false);
+      if (webdevRefreshFlight.current === flight) webdevRefreshFlight.current = null;
     }
   }, [api, token, mergeSites]);
 
@@ -1128,11 +1252,14 @@ function App() {
     setDashboard(null); setTasks([]); setArchivedTasks([]); setContent([]); setProviders([]);
     snapshotRef.current = []; snapshotTimeRef.current = null;
     refreshFlight.current = null; initialSitesFlight.current = null;
+    webdevRefreshFlight.current = null; setWebdevRefreshing(false);
     userRef.current = null;
     if (!token) return;
     setCurrentUser(null);
     setSites([]);
     setSiteSnapshot([]);
+    setCatalogLoaded(false);setCatalogError("");
+    setMassSearchQuery("");
     void (async () => {
       const user = await api<User>("/auth/me");
       await removeLegacyProjectSnapshot().catch(() => {});
@@ -1151,6 +1278,12 @@ function App() {
     })().catch(error => { if (!cancelled) setMessage(error instanceof Error ? error.message : "Не удалось загрузить данные"); });
     return () => { cancelled = true; userRef.current = null; };
   }, [api, token]);
+
+  React.useEffect(() => {
+    if (!currentUser) return;
+    const saved = localStorage.getItem(`pagepilot-sites-cache-sync-job:${currentUser.id}`);
+    if (saved) void refreshWebdevCache(saved);
+  }, [currentUser?.id, refreshWebdevCache]);
 
   React.useEffect(() => {
     if (!currentUser || !token) return;
@@ -1245,6 +1378,7 @@ function App() {
       return;
     }
     const projectName = activeView === "workspace" ? workspaceProjectNameFromPath(window.location.pathname) : null;
+    if (["contentPreview", "pageEditor", "pagePreview"].includes(activeView)) return;
     if (activeView === "guide" && window.location.pathname.startsWith("/guide/")) return;
     const nextPath = pathForRoute(activeView, activeView === "workspace" ? workspaceTab : DEFAULT_WORKSPACE_TAB, projectName);
     if (window.location.pathname !== nextPath) {
@@ -1274,6 +1408,8 @@ function App() {
 
   const accountActions = (
           <div className="topbarActions">
+            {activeView === "workspace" && <a className="button secondary" href={pathForRoute("autoPilotReport")} title="Черновики и отчёты Auto Pilot" onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); setMobileMenuOpen(false); navigateTo("autoPilotReport"); } }}><Bot size={18} /> Автопилот</a>}
+            {(activeView === "autoReglue" || activeView === "massActionReport" || activeView === "sites") && <a className="button secondary" href={pathForRoute("autoPilotReport")} onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("autoPilotReport"); } }}><FileText size={18} /> AutoPilot-Report</a>}
             {activeView === "autoReglue" && <a className="button primary autoReglueGuideButton" href={pathForRoute("autoReglueGuide")} onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("autoReglueGuide"); } }}><BookOpen size={18} /> Инструкция по автопереклеям</a>}
             {currentUser ? (
               <div className="userPill">
@@ -1281,9 +1417,9 @@ function App() {
                 <strong>{currentUser.username}</strong>
               </div>
             ) : null}
-            <button className="button secondary" onClick={() => { setMobileMenuOpen(false); void loadAll(); }} title="Обновить данные">
-              <RefreshCcw size={18} />
-              Обновить
+            <button className="button secondary" onClick={() => { setMobileMenuOpen(false); if(activeView === "autoReglue")setMassRefreshToken(value=>value+1); if (activeView === "sites") void refreshWebdevCache(); else void loadAll().catch(error => setMessage(error instanceof Error ? error.message : "Не удалось обновить данные")); }} title={activeView === "sites" ? "Обновить кеш Webdev" : "Обновить данные"} disabled={webdevRefreshing} aria-busy={webdevRefreshing}>
+              <RefreshCcw size={18} className={webdevRefreshing ? "spin" : ""} />
+              {webdevRefreshing ? "Обмен данными" : "Обновить"}
             </button>
             <button
               className="iconButton"
@@ -1358,7 +1494,7 @@ function App() {
             </>
           )}
           <NavButton href={pathForRoute("templateGenerator")} icon={<FilePlus2 />} label="Генератор шаблона" active={activeView === "templateGenerator"} onClick={() => navigateTo("templateGenerator")} />
-          <NavButton href={pathForRoute("autoReglue")} icon={<RefreshCcw />} label="Автопереклей" active={activeView === "autoReglue"} onClick={() => navigateTo("autoReglue")} />
+          <NavButton href={pathForRoute("autoReglue")} icon={<RefreshCcw />} label="Массовые действия" active={activeView === "autoReglue" || activeView === "reglueReserves" || activeView === "autoPilot" || activeView === "autoPilotLogs" || activeView === "autoPilotReport"} onClick={() => navigateTo("autoReglue")} />
           <NavButton href={pathForRoute("settings")} icon={<Settings />} label="Настройки" active={activeView === "settings"} onClick={() => navigateTo("settings")} />
           {isAdmin ? <NavButton href={pathForRoute("published")} icon={<CheckCircle2 />} label="Опубликовано" active={activeView === "published"} onClick={() => navigateTo("published")} /> : null}
           <NavButton href={pathForRoute("guide")} icon={<BookOpen />} label="Инструкции" active={activeView === "guide" || activeView === "autoReglueGuide"} onClick={() => navigateTo("guide")} />
@@ -1367,11 +1503,20 @@ function App() {
       </aside>
 
       <main className="main">
-        <header className="topbar">
-          <div className={activeView === "workspace" ? "workspaceTopbarTitle" : undefined}>
-            <p className="eyebrow">Рабочая панель</p>
+        <header className={`topbar${activeView === "autoReglue" ? " massActionsTopbar" : ""}`}>
+          <div className={activeView === "workspace" || activeView === "sites" || activeView === "autoReglue" ? "workspaceTopbarTitle" : undefined}>
+            {activeView === "workspace" ? <div className="workspaceTopbarEyebrow"><p className="eyebrow">Рабочая панель</p>
+              <button className="button secondary compact workspaceHtmlUpload" type="button" onClick={() => {
+              const name = workspaceProjectNameFromPath(window.location.pathname);
+              const stored = localStorage.getItem(`workspace_site_id:${currentUser.username}`) || localStorage.getItem("workspace_site_id");
+              const project = siteSnapshot.find(site => name ? site.name === name : site.id === stored);
+              openDetailPage(pathForRoute("templateGenerator"), { mode: "html", ...(project ? { brand: project.brand || "Онлайн казино", geo: projectGeoCode(project), language: projectLanguageCode(project) } : {}) });
+            }}><Upload size={13} />Загрузить HTML</button>
+            </div> : activeView === "templateGenerator" ? <div className="workspaceTopbarEyebrow"><p className="eyebrow">Рабочая панель</p><span id="templateTopbarBack" /></div> : <p className="eyebrow">Рабочая панель</p>}
             <h1>{activeView === "workspace" ? <><span className="workspaceHeadingFull">{viewTitle(activeView, workspaceTab)}</span><span className="workspaceHeadingCompact">Рабочий экран проекта</span></> : viewTitle(activeView, workspaceTab)}</h1>
-            {activeView === "workspace" && <input className="workspaceHeadingSearch" type="search" value={domainQuery} onChange={event => setDomainQuery(event.target.value)} aria-label="Поиск по домену" placeholder="Домен проекта или домен в сетке" aria-controls="workspace-domain-results" />}
+            {activeView === "workspace" && <input className="workspaceHeadingSearch workspaceHeadingSearchCompact" type="search" value={domainQuery} onChange={event => setDomainQuery(event.target.value)} aria-label="Поиск по домену" placeholder="Домен проекта или домен в сетке" aria-controls="workspace-domain-results" />}
+            {activeView === "autoReglue" && <GlobalProjectSearchInput query={massSearchQuery} onChange={setMassSearchQuery} onSubmit={()=>{const first=matchingGlobalProjects(siteSnapshot,massSearchQuery)[0];if(first)openMassSearchProject(first.name);}}/>}
+            {activeView === "sites" && <input className="workspaceHeadingSearch" type="search" value={sitesSearchQuery} onChange={event=>setSitesSearchQuery(event.target.value)} aria-label="Поиск по всем доменам" placeholder="Домен проекта или домен в сетке" aria-controls="sites-search-results"/>}
           </div>
           {!compactNavigation && accountActions}
         </header>
@@ -1390,6 +1535,7 @@ function App() {
           localStorage.setItem(`workspace_site_id:${currentUser.username}`, site.id);
           navigateTo("workspace", "topics", false, site.name);
         }} onChanged={loadAll} />}
+        {activeView === "reglueJournal" && <ReglueJournalPage api={api} refreshKey={journalRefresh} />}
         {activeView === "tasks" && <TasksView api={api} sites={sites} providers={providers} tasks={tasks} content={content} onChanged={loadAll} />}
         {activeView === "taskArchive" && <TaskArchiveView api={api} tasks={archivedTasks} onChanged={loadAll} />}
         {isAdmin && activeView === "published" && <AdminPublishedView api={api} sites={sites} onChanged={loadAll} onOpenProject={(name) => {
@@ -1397,6 +1543,9 @@ function App() {
           if (site) localStorage.setItem(`workspace_site_id:${currentUser.username}`, site.id);
           navigateTo("workspace", "overview", false, name);
         }} />}
+        {activeView === "contentPreview" && <GeneratedContentPage key={window.location.pathname} api={api} onChanged={loadAll} />}
+        {activeView === "pagePreview" && <PublishedPageEditor readOnly key={window.location.pathname} api={api} onChanged={loadAll} />}
+        {activeView === "pageEditor" && <PublishedPageEditor key={window.location.pathname} api={api} onChanged={loadAll} actorId={currentUser.id} />}
         {activeView === "content" && <ContentView api={api} sites={sites} content={content} onChanged={loadAll} />}
         {activeView === "publications" && <PublicationsView api={api} sites={sites} content={content} onOpenProject={(site) => {
           localStorage.setItem(`workspace_site_id:${currentUser.username}`, site.id);
@@ -1404,11 +1553,18 @@ function App() {
         }} onChanged={loadAll} />}
         {isAdmin && activeView === "providers" && <ProvidersView api={api} providers={providers} onChanged={loadAll} />}
         {activeView === "massActionReport" && <MassActionStatistics api={api} renderProjects={(ids, refresh) => <SitesView embedded api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={updates => { mergeSites(updates); refresh(); }} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll} />} />}
-        {activeView === "sites" && <SitesView api={api} sites={siteSnapshot} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll} />}
+        {activeView === "sites" && projectListFilters && <section className="viewStack">{listParams.has("from")&&<div><a className="button secondary compact peerProjectsBack" href={projectListBackPath} aria-label="Назад к проекту"><ChevronLeft size={16}/>Назад</a></div>}
+          <PeerProjectPicker sites={siteSnapshot} geo={projectListFilters.geo} brand={projectListFilters.brand} onChange={(geo,brand)=>{const params=new URLSearchParams(window.location.search);params.set("geo",geo);if(brand)params.set("brand",brand);else params.delete("brand");window.history.replaceState(null,"",`/sites?${params}`);setRouteVersion(v=>v+1);}}/>
+          <div id="sites-search-results">{globalSitesQuery&&<p role="status">Поиск по всем GEO и брендам · Найдено проектов: {projectListSites.length}</p>}<details key={globalSitesQuery?"search":`${projectListFilters.geo}:${projectListFilters.brand}`} open className="massStatisticsDetails"><summary>{globalSitesQuery?"Результаты поиска":"Проекты в выборке"} · {projectListSites.length}</summary><SitesView key={globalSitesQuery?"global-sites-search":window.location.search} embedded api={api} sites={projectListSites} projectScopeLabel={globalSitesQuery?"Результаты поиска":projectListFilters.brand?`${projectListFilters.brand} — ${projectListGeoLabel}`:`Список проектов — ${projectListGeoLabel}`} moveFilter={!globalSitesQuery&&projectListFilters.brand&&projectListFilters.geo!=="ALL"?{...projectListFilters,include_general:false,site_type:null}:undefined} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/></details></div>
+        </section>}
         {activeView === "favorites" && <SitesView api={api} sites={siteSnapshot} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} favoritesOnly readOnly={!isAdmin} onChanged={loadAll} />}
-        {activeView === "templateGenerator" && <TemplateGenerator api={api} />}
+        {activeView === "templateGenerator" && <TemplateGenerator api={api} projects={siteSnapshot} />}
         {activeView === "guide" && <React.Suspense fallback={<p>Загрузка инструкции…</p>}><UserGuideView /></React.Suspense>}
-        {activeView === "autoReglue" && <AutoReglueView api={api} />}
+        {activeView === "autoReglue" && <><GlobalProjectSearchResults sites={siteSnapshot} query={massSearchQuery} onOpen={openMassSearchProject} loading={!catalogLoaded&&!catalogError}/><div style={{display:globalMassQuery?"none":undefined}}><AutoReglueView refreshToken={massRefreshToken} api={api} onNetworksChanged={loadAll} renderReport={(onScopeChange, selectionIds, onSelection, moveActions, headerContainer) => <MassActionStatistics massOnly refreshToken={massRefreshToken} catalogReady={catalogLoaded} catalogError={catalogError} onInventoryChanged={loadAll} headerContainer={headerContainer} api={api} onScopeChange={onScopeChange} renderProjects={(ids, refresh, scopeLabel) => <SitesView projectScopeLabel={scopeLabel} embedded massActions api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={updates => { mergeSites(updates); refresh(); }} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll} selectionIds={selectionIds} onSelectionChange={onSelection} headerActions={moveActions} />} />} /></div></>}
+        {activeView === "reglueReserves" && <ReglueReservesPage api={api} />}
+        {activeView === "autoPilot" && <AutoPilotPage api={api}/>}
+        {activeView === "autoPilotLogs" && <AutoPilotPage api={api} logs/>}
+        {activeView === "autoPilotReport" && <AutoPilotPage api={api} reports/>}
         {activeView === "autoReglueGuide" && <><a className="button secondary" href="/guide" onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("guide"); } }}>Все инструкции</a><AutoReglueGuide backLabel="Вернуться к автопереклею" onBack={() => navigateTo("autoReglue")} /></>}
         {activeView === "settings" && <SettingsView api={api} currentUser={currentUser} designVersion={designVersion} onDesignVersionChange={setDesignVersion} inputStyle={inputStyle} onInputStyleChange={setInputStyle} onChanged={loadAll} />}
       </main>
@@ -1443,7 +1599,7 @@ function AuthDashboardBackdrop() {
   ];
   const metrics = [
     { icon: <Database size={20} />, label: "Всего задач" },
-    { icon: <CheckCircle2 size={20} />, label: "Сгенерировано" },
+    { icon: <RefreshCcw size={20} />, label: "Журнал переклеев" },
     { icon: <FileText size={20} />, label: "Ждет approve" },
     { icon: <Send size={20} />, label: "В очереди" },
     { icon: <Activity size={20} />, label: "Опубликовано" },
@@ -1818,7 +1974,7 @@ function DashboardView({ api, dashboard, tasks, content, sites, onOpenTask, onCh
     <section className="viewStack">
       <div className="kpiGrid">
         <KpiCard icon={<Database />} label="Всего задач" value={dashboard.stats.total_tasks} />
-        <KpiCard icon={<CheckCircle2 />} label="Сгенерировано" value={dashboard.stats.generated} />
+        <ReglueJournalCard api={api} refreshKey={dashboard} />
         <KpiCard icon={<FileText />} label="Ждет approve" value={dashboard.stats.awaiting_approve} onClick={toggleReview} active={reviewExpanded} />
         <KpiCard icon={<Send />} label="В очереди" value={dashboard.stats.scheduled} />
         <KpiCard icon={<Activity />} label="Опубликовано" value={dashboard.stats.published} />
@@ -1967,10 +2123,19 @@ function ProjectWorkspaceView({
     if (name) return sites.find((site) => site.name === name)?.id || "";
     return localStorage.getItem(workspaceSiteStorageKey) || localStorage.getItem("workspace_site_id") || "";
   });
-  const requestCache = React.useMemo(() => workspaceRequestCache(sourceApi), [sourceApi]);
-  const api = requestCache.api;
   const selectedSiteIdRef = React.useRef(selectedSiteId);
   selectedSiteIdRef.current = selectedSiteId;
+  const [exchangeCounts, setExchangeCounts] = React.useState<Record<string, number>>({});
+  const exchangeApi = React.useCallback(async <T,>(path: string, options?: RequestInit): Promise<T> => {
+    const siteId = path.match(/^\/sites\/([^/?]+)(?:\/|$)/)?.[1]
+      || (/^\/(sections|content)\//.test(path) ? selectedSiteIdRef.current : "");
+    if (!siteId) return sourceApi<T>(path, options);
+    setExchangeCounts(current => ({ ...current, [siteId]: (current[siteId] || 0) + 1 }));
+    try { return await sourceApi<T>(path, options); }
+    finally { setExchangeCounts(current => ({ ...current, [siteId]: Math.max(0, (current[siteId] || 0) - 1) })); }
+  }, [sourceApi]);
+  const requestCache = React.useMemo(() => workspaceRequestCache(exchangeApi), [exchangeApi]);
+  const api = requestCache.api;
   const [overview, setOverview] = React.useState<SiteOverview | null>(null);
   const [siteTasks, setSiteTasks] = React.useState<Task[]>([]);
   const [siteContent, setSiteContent] = React.useState<ContentItem[]>([]);
@@ -1991,13 +2156,57 @@ function ProjectWorkspaceView({
   const [projectRefreshStatus, setProjectRefreshStatus] = React.useState<"idle" | "loading" | "success" | "error">("idle");
   const [projectRefreshResponseCode, setProjectRefreshResponseCode] = React.useState("");
   const [pageCounts, setPageCounts] = React.useState<Record<string, number>>({});
+  const [homeEditorLoading, setHomeEditorLoading] = React.useState(false);
+  const [homeEditor, setHomeEditor] = React.useState<{ siteId: string; projectName: string; sourceLabel: string; row: PageRow; position: { left: number; top: number } } | null>(null);
   const updatePageCount = React.useCallback((siteId: string, count: number) => setPageCounts(current => current[siteId] === count ? current : { ...current, [siteId]: count }), []);
   const [publicationWorkflowSection, setPublicationWorkflowSection] = React.useState<PublicationWorkspaceSection>("pages");
   const projectLoadRequestRef = React.useRef(0);
   const loadedWorkspaceTabRef = React.useRef("");
   const selectedSite = sites.find((site) => site.id === selectedSiteId) || null;
+  const [projectContentStatus, setProjectContentStatus] = React.useState<{ siteId: string; status: ProjectContentStatus | null } | null>(null);
+  const updateProjectContentStatus = React.useCallback((siteId: string, status: ProjectContentStatus | null) => setProjectContentStatus({ siteId, status }), []);
+  const generalNetworksOnly = selectedSite?.site_type === "general" || !selectedSite?.site_type && (!selectedSite?.brand || selectedSite.brand.trim().toLowerCase() === "общие ключи");
+  const brandNetworks = selectedSite ? sites.filter(item => item.is_active !== false
+    && (!generalNetworksOnly || item.project_status === "mass_actions")
+    && (item.brand || "Общие ключи").trim().toLocaleLowerCase() === (selectedSite.brand || "Общие ключи").trim().toLocaleLowerCase()).sort((a, b) => {
+    const currentGeo = siteGeoFilterCode(selectedSite.cache_geo);
+    return Number(siteGeoFilterCode(b.cache_geo) === currentGeo) - Number(siteGeoFilterCode(a.cache_geo) === currentGeo) || siteGeoFilterCode(a.cache_geo).localeCompare(siteGeoFilterCode(b.cache_geo)) || a.name.localeCompare(b.name);
+  }).map(item => ({ id: item.id, name: item.name, main: item.cache_canon || "", domainCount: item.domains_count, geoLabel: `${localeFlag(siteGeoFilterCode(item.cache_geo))} ${siteGeoFilterCode(item.cache_geo) || "—"}`.trim() })) : [];
+  const [brandSavingId, setBrandSavingId] = React.useState<string | null>(null);
+  const [brandError, setBrandError] = React.useState<{ siteId: string; message: string } | null>(null);
+  const workspaceBrands = [...new Set(["Общие ключи", ...sites.map(site => site.brand?.trim()).filter((brand): brand is string => !!brand)])].sort((a, b) => a.localeCompare(b, "ru"));
+  async function changeWorkspaceBrand(value: string) {
+    if (!selectedSite || brandSavingId || value === selectedSite.brand) return;
+    const siteId = selectedSite.id;
+    setBrandSavingId(siteId); setBrandError(null);
+    try {
+      const updated = await api<Site>(`/sites/${siteId}/brand`, { method: "PATCH", body: JSON.stringify({ brand: value }) });
+      onSiteChanged(updated);
+    } catch (error) {
+      setBrandError({ siteId, message: error instanceof Error ? error.message : "Не удалось сохранить бренд" });
+    } finally { setBrandSavingId(null); }
+  }
   const [typeSavingId, setTypeSavingId] = React.useState<string | null>(null);
   const [typeError, setTypeError] = React.useState<{siteId: string; message: string} | null>(null);
+  async function openHomePageEditor() {
+    if (!selectedSite || homeEditorLoading) return;
+    const { id: siteId, name: projectName } = selectedSite;
+    const labels: Record<WorkspaceTab, string> = { overview: "Обзор", topics: "Генерация", content: "Контент и публикация", publication: "Контент и публикация", menu: "Меню", network: "Сетка", redirects: "Переклей", autoReglue: "Автопереклей", autoLb: "АвтоЛБ", logs: "Логи проекта" };
+    const sourceLabel = labels[activeTab];
+    const sourcePath = window.location.pathname;
+    const position = { left: window.scrollX, top: window.scrollY };
+    setHomeEditorLoading(true); setWorkspaceError("");
+    try {
+      const result = await api<{ pages: PageRow[] }>(`/sites/${siteId}/pages`);
+      if (selectedSiteIdRef.current !== siteId || window.location.pathname !== sourcePath) return;
+      const row = result.pages.find(page => page.is_home);
+      if (!row) throw new Error("Главная страница проекта не найдена в Webdev.");
+      updatePageCount(siteId, result.pages.length);
+      setHomeEditor({ siteId, projectName, sourceLabel, row, position });
+    } catch (error) {
+      if (selectedSiteIdRef.current === siteId) setWorkspaceError(error instanceof Error ? error.message : "Не удалось открыть редактор главной страницы.");
+    } finally { setHomeEditorLoading(false); }
+  }
   async function changeWorkspaceType(value: string) {
     if (!selectedSite || typeSavingId) return;
     const siteId = selectedSite.id;
@@ -2029,25 +2238,16 @@ function ProjectWorkspaceView({
   const pendingSectionsCount = sections.filter((section) => section.sync_status === "pending").length;
   const unpublishedGeneratedContentCount = siteContent.filter((item) => Boolean(item.generated_at) && !["published", "deleted", "deletion_pending"].includes(item.status)).length;
   const headerNestingRequired = selectedSite?.menu_warning === "header_nested" || projectRequiresHeaderNesting(sections, siteContent);
-  const headerNestingRenderingMissing = selectedSite?.menu_warning === "header_nested" || Boolean(
-    headerNestingRequired
-    && menuCapabilities?.header_menu_rendered != null
-    && menuCapabilities.header_menu_nested === false
-  );
-  const selectedProjectMedalStatus = headerNestingRenderingMissing
-    ? "missing"
-    : menuCapabilities?.header_menu_rendered != null
-    ? menuMedalStatus(
-        menuCapabilities.checked_at,
-        menuCapabilities.header_menu_rendered,
-        menuCapabilities.footer_menu_rendered,
-        menuCapabilities.header_menu_nested
-      )
-    : selectedSite ? projectMenuMedalStatus(selectedSite) : "unchecked";
   const menuCheckPending = menuCapabilities?.check_status === "queued" || menuCapabilities?.check_status === "running";
   const menuCheckError = menuCapabilities?.check_status === "failed"
     ? [menuCapabilities.check_error_code, menuCapabilities.check_error_message].filter(Boolean).join(": ")
     : "";
+  React.useEffect(()=>{
+    if(!selectedSiteId)return;
+    const errors=[workspaceError,menuCapabilitiesError,menuCheckError,statusError?.siteId===selectedSiteId?statusError.message:"",brandError?.siteId===selectedSiteId?brandError.message:"",typeError?.siteId===selectedSiteId?typeError.message:""].filter(Boolean);
+    projectNotice({siteId:selectedSiteId,key:"project-form",code:"PROJECT_FORM",message:errors.join("\n")||"Ошибки формы устранены.",severity:"error",active:errors.length>0});
+  },[selectedSiteId,workspaceError,menuCapabilitiesError,menuCheckError,statusError,brandError,typeError]);
+
 
   React.useLayoutEffect(() => {
     if ("scrollRestoration" in window.history) window.history.scrollRestoration = "manual";
@@ -2122,6 +2322,7 @@ function ProjectWorkspaceView({
         const result = await api<MenuCapabilities>(`/sites/${selectedSite.id}/menu-capabilities`);
         if (cancelled) return;
         setMenuCapabilities(result);
+        setMenuCapabilitiesError("");
         if (result.check_status === "completed" || result.check_status === "failed") {
           await onChanged();
         }
@@ -2149,7 +2350,7 @@ function ProjectWorkspaceView({
   }, [routeProjectName, selectedSiteId, sites, workspaceSiteStorageKey]);
 
   React.useEffect(() => {
-    if (!selectedSite || (routeProjectName && routeProjectName !== selectedSite.name)) return;
+    if (routeFromPath(window.location.pathname).view !== "workspace" || !selectedSite || (routeProjectName && routeProjectName !== selectedSite.name)) return;
     const projectPath = pathForRoute("workspace", activeTab, selectedSite.name);
     if (window.location.pathname !== projectPath) window.history.replaceState(null, "", projectPath);
   }, [activeTab, selectedSite, routeProjectName]);
@@ -2180,6 +2381,7 @@ function ProjectWorkspaceView({
       setMenuCapabilitiesLoading(false);
       setTemplateCapabilitiesLoading(false);
       setMenuCapabilitiesError("");
+      setHomeEditor(null);
       setProjectRefreshStatus("idle");
       setProjectRefreshResponseCode("");
       setWorkspaceError("");
@@ -2192,7 +2394,7 @@ function ProjectWorkspaceView({
     if (!selectedSiteId) return;
     let cancelled = false;
     void api<MenuCapabilities>(`/sites/${selectedSiteId}/menu-capabilities`)
-      .then((result) => { if (!cancelled) setMenuCapabilities(result); })
+      .then((result) => { if (!cancelled) { setMenuCapabilities(result); setMenuCapabilitiesError(""); } })
       .catch((error: unknown) => { if (!cancelled) setMenuCapabilitiesError(error instanceof Error ? error.message : "Не удалось прочитать результат проверки меню"); });
     return () => { cancelled = true; };
   }, [api, selectedSiteId]);
@@ -2251,6 +2453,7 @@ function ProjectWorkspaceView({
       changesResult = await api<ProjectChangesSyncResult>(`/sites/${selectedSite.id}/sync-changes`, { method: "POST" });
       const refreshedCapabilities = await api<MenuCapabilities>(`/sites/${selectedSite.id}/menu-capabilities`);
       setMenuCapabilities(refreshedCapabilities);
+      setMenuCapabilitiesError("");
       if (selectedSiteIdRef.current === selectedSite.id) setNetworkRefreshToken(value => value + 1);
     }
     await onChanged();
@@ -2369,7 +2572,7 @@ function ProjectWorkspaceView({
     <WorkspaceAccordionContext.Provider value={accordionContextValue}>
     <section className="viewStack projectWorkspaceView">
       <div style={{ display: domainQuery.trim() ? "none" : "contents" }}>
-      <DataPanel title={(
+      <DataPanel actions={selectedSite ? <ProjectNotificationCenter key={selectedSite.id} siteId={selectedSite.id} project={selectedSite.name} username={currentUsername} api={sourceApi} href={pathForRoute("workspace", "logs", selectedSite.name)} onOpen={() => onTabChange("logs", selectedSite.name)} /> : undefined} title={(
         <span className="workspaceProjectTitle">
           {selectedSite ? (
             <button
@@ -2382,7 +2585,7 @@ function ProjectWorkspaceView({
               <Star size={22} />
             </button>
           ) : null}
-          <strong>{selectedSite?.name || "Выберите проект"}</strong>
+          {selectedSite ? <a className="workspacePeerProjectsLink" href={`/sites?${new URLSearchParams({ geo: siteGeoFilterCode(selectedSite.cache_geo) || "UNKNOWN", brand: (selectedSite.brand || "Общие ключи").trim(), from: pathForRoute("workspace", activeTab, selectedSite.name) })}`} title="Все проекты этого бренда и GEO" aria-label={`Все проекты бренда ${selectedSite.brand || "Общие ключи"} в GEO ${siteGeoFilterCode(selectedSite.cache_geo) || "не указано"}`}><strong>{selectedSite.name}</strong></a> : <strong>Выберите проект</strong>}
           {selectedSite ? (
             <button
               className={`workspaceMenuCheckButton ${menuCapabilitiesLoading || menuCheckPending ? "isChecking" : ""}`}
@@ -2400,8 +2603,8 @@ function ProjectWorkspaceView({
           ) : null}
           {selectedSite ? (
             <span className="workspaceFiberyName">
-              <small>Имя проекта</small>
-              <span>{selectedSite.fibery_name || "Не задано"}</span>
+              <small>Name Fibery</small>
+              <FiberyProjectName value={selectedSite.fibery_name} projectName={selectedSite.name} emptyText="Не задано" />
             </span>
           ) : null}
           {selectedSite ? (
@@ -2421,6 +2624,13 @@ function ProjectWorkspaceView({
               options={[{value: "monobrand", label: "Монобренд"}, {value: "general", label: "Общие ключи"}]}
               onChange={changeWorkspaceType} disabled={typeSavingId !== null} ariaLabel="Тип текущего сайта" searchPlaceholder="Найти тип сайта" compact /></span>
             {typeError?.siteId === selectedSite.id ? <span className="formError" role="alert">{typeError.message}</span> : null}
+          </span> : null}
+          {selectedSite ? <span className="workspaceProjectStatus">
+            <small>{brandSavingId === selectedSite.id ? "Сохраняем…" : "Бренд"}</small>
+            <span className="workspaceTypeSelect"><SearchableSelect value={selectedSite.brand?.trim() || "Общие ключи"}
+              options={workspaceBrands.map(brand => ({ value: brand, label: brand, leading: <BrandIcon brand={brand} /> }))}
+              onChange={changeWorkspaceBrand} disabled={brandSavingId !== null} ariaLabel="Бренд текущего проекта" searchPlaceholder="Найти бренд" compact /></span>
+            {brandError?.siteId === selectedSite.id ? <span className="formError" role="alert">{brandError.message}</span> : null}
           </span> : null}
         </span>
       )}>
@@ -2506,11 +2716,11 @@ function ProjectWorkspaceView({
                       </span>
                     </span>
                   </span>
-                  <span className="projectTitleCard"><small>Title</small><b title={selectedSite.homepage_title || "Title не указан"}>{selectedSite.homepage_title || "—"}</b></span>
+                  <button type="button" className="projectTitleCard" aria-label="Открыть редактор главной страницы" aria-busy={homeEditorLoading} disabled={homeEditorLoading} onClick={() => void openHomePageEditor()}><small>{homeEditorLoading ? "Открываем…" : "Title"}</small><b title={selectedSite.homepage_title || "Открыть редактор главной страницы"}>{selectedSite.homepage_title || "—"}</b></button>
                   <button type="button" className={`projectMetricCard ${activeTab === "network" ? "isActive" : ""}`} aria-pressed={activeTab === "network"} onClick={() => onTabChange("network", selectedSite.name)} aria-label="Открыть сетку проекта"><small>Доменов в сетке</small><b>{formatNumber(selectedSite.domains_count)}</b><span className="projectDomainBreakdown" title="N — новореги, D — дропы. Поддомены и AMP учитываются отдельно">N: {selectedSite.network_domain_counts ? formatNumber(selectedSite.network_domain_counts.newreg) : "—"} · D: {selectedSite.network_domain_counts ? formatNumber(selectedSite.network_domain_counts.drop) : "—"}</span></button>
                   <button type="button" className="projectMetricCard" onClick={() => { openPublicationSection("pages"); onTabChange("content", selectedSite.name); }} aria-label="Открыть все страницы проекта"><small>Страниц</small><b>{formatNumber(pageCounts[selectedSite.id] ?? (selectedSite.internal_pages_count + 1))}</b></button>
                   <MenuCapabilityCard label="Header" templateRendered={menuCapabilities?.header_menu_template_rendered} rendered={menuCapabilities?.header_menu_rendered} nested={menuCapabilities?.header_menu_nested} nestedRequired={headerNestingRequired} icon="header" loading={menuCapabilitiesLoading || templateCapabilitiesLoading || menuCheckPending} error={menuCapabilitiesError} onRetry={refreshTemplateMenuCapabilities} />
-                  <MenuCapabilityCard label="Footer" templateRendered={menuCapabilities?.footer_menu_template_rendered} rendered={menuCapabilities?.footer_menu_rendered} nested={menuCapabilities?.footer_menu_nested} icon="footer" loading={menuCapabilitiesLoading || templateCapabilitiesLoading || menuCheckPending} error={menuCapabilitiesError} onRetry={refreshTemplateMenuCapabilities} />
+                  <MenuCapabilityCard label="Footer" templateRendered={menuCapabilities?.footer_menu_template_rendered} rendered={menuCapabilities?.footer_menu_rendered} nested={menuCapabilities?.footer_menu_nested} hasItems={(Array.isArray(selectedSite.default_menu.footer) && selectedSite.default_menu.footer.length > 0) || sections.some(section => section.menu_type === "footer" && section.sync_status !== "external_deleted" && !section.is_temporary_parent)} icon="footer" loading={menuCapabilitiesLoading || templateCapabilitiesLoading || menuCheckPending} error={menuCapabilitiesError} onRetry={refreshTemplateMenuCapabilities} />
                 </div>
               </>
             ) : null}
@@ -2525,20 +2735,6 @@ function ProjectWorkspaceView({
             {selectedSite ? <span className="projectRefreshMeta"><small title={selectedSite.cache_server_host || "Сервер не указан"}>{selectedSite.cache_server_host || "—"}</small>{projectRefreshStatus === "success" || projectRefreshStatus === "error" ? <em className={projectRefreshStatus === "success" ? "success" : ""}>Status Code: {projectRefreshResponseCode || "UNKNOWN"}</em> : null}</span> : null}
           </button>
         </div>
-        {selectedSite && (selectedSite.menu_warning || selectedProjectMedalStatus === "missing") ? (
-          <div className="projectMenuImplementationWarning" role="status">
-            <AlertTriangle size={20} />
-            <div>
-              <strong>{headerNestingRenderingMissing ? "Вложенное меню Header не отображается на сайте" : "Рендеринг меню не реализован на сайте"}</strong>
-              <span>{headerNestingRenderingMissing
-                ? "В проекте есть вложенные пункты или страницы. Необходимо обратиться к веб-разработчику, чтобы реализовать рендеринг вложенного меню Header, затем повторить проверку."
-                : "Необходимо обратиться к веб-разработчику для добавления рендеринга меню на сайт."}</span>
-            </div>
-            <button className="button compact" type="button" disabled={menuCapabilitiesLoading || menuCheckPending} onClick={() => void retryMenuCapabilities()}>
-              <RefreshCcw size={15} /> {menuCapabilitiesLoading || menuCheckPending ? "Проверка…" : "Проверить"}
-            </button>
-          </div>
-        ) : null}
         {selectedSite ? (
           <ProjectCoreUpdateNotice
             key={`${currentUsername}:${selectedSite.id}`}
@@ -2553,12 +2749,17 @@ function ProjectWorkspaceView({
             <CalendarClock size={20} />
             <span>Последнее обновление</span>
             <strong>{selectedSite.cache_synced_at ? formatDate(selectedSite.cache_synced_at) : "не выполнялось"}</strong>
-            <b className={pendingSectionsCount ? "pending" : "synced"}>
-              {pendingSectionsCount ? `Не синхронизировано: ${pendingSectionsCount}` : "Синхронизировано"}
+            <b className={exchangeCounts[selectedSite.id] > 0 || projectRefreshStatus === "loading" ? "exchanging" : pendingSectionsCount ? "pending" : "synced"} role="status" aria-live="polite" aria-busy={exchangeCounts[selectedSite.id] > 0 || projectRefreshStatus === "loading"}>
+              {exchangeCounts[selectedSite.id] > 0 || projectRefreshStatus === "loading"
+                ? <><LoaderCircle size={13} className="spin" aria-hidden="true" /> Обмен данными</>
+                : pendingSectionsCount ? `Не синхронизировано: ${pendingSectionsCount}` : "Синхронизировано"}
             </b>
+            <ProjectInterlinking key={`${selectedSite.id}:${generalNetworksOnly}`} siteId={selectedSite.id} api={sourceApi} refreshToken={networkRefreshToken} generalSite={generalNetworksOnly} onStatus={updateProjectContentStatus} onShowcaseClick={() => { openPublicationSection("pages"); onTabChange("content", selectedSite.name); }} />
+            <NetworkIndexingButton key={selectedSite.id} siteId={selectedSite.id} api={sourceApi} />
+            <NetworkSitemapButton key={`sitemap-${selectedSite.id}`} siteId={selectedSite.id} api={sourceApi} />
           </div>
         ) : null}
-        {workspaceError ? <div className="notice">{workspaceError}</div> : null}
+
       </DataPanel>
         <nav className="workspaceTabs" aria-label="Вкладки проекта">
           <TabButton
@@ -2638,14 +2839,19 @@ function ProjectWorkspaceView({
         </div>
       ) : null}
 
+      {homeEditor && homeEditor.siteId === selectedSiteId && <PageEditor key={`${homeEditor.siteId}:${homeEditor.row.key}`} siteId={homeEditor.siteId} row={homeEditor.row} api={api} returnPosition={homeEditor.position} onClose={() => setHomeEditor(null)} onSaved={() => { void onChanged(); }} breadcrumbs={[
+        { label: homeEditor.projectName, onClick: () => { setHomeEditor(null); onTabChange("overview", homeEditor.projectName); } },
+        { label: homeEditor.sourceLabel, onClick: () => setHomeEditor(null) },
+      ]} />}
       {selectedSite ? (
         <>
           <WorkspaceTabPane active={activeTab === "overview"} storagePrefix={`${currentUsername}:${selectedSite.id}:overview`}>
             {overview ? <FastProjectOverviewPanel key={selectedSite.id} overview={overview} content={siteContent} sections={sections} logs={logs} /> : null}
           </WorkspaceTabPane>
           {activeTab === "autoLb" && <AutoLbPanel key={`auto-lb:${selectedSite.id}`} siteId={selectedSite.id} api={api} />}
+          {activeTab === "logs" && <ProjectLogs key={`logs:${selectedSite.id}`} siteId={selectedSite.id} project={selectedSite.name} api={sourceApi} onBack={() => onTabChange("network", selectedSite.name)} />}
           {canManageAutomation && activeTab === "autoReglue" && <ProjectAutoReglue key={`auto-reglue:${selectedSite.id}`} siteId={selectedSite.id} api={api} />}
-          {activeTab === "network" || activeTab === "redirects" ? <ProjectNetworkPanel key={`network:${selectedSite.id}`} site={selectedSite} mode={activeTab} api={api} username={currentUsername} refreshToken={networkRefreshToken} onChanged={refreshProject} /> : null}
+          {activeTab === "network" || activeTab === "redirects" ? <ProjectNetworkPanel key={`network:${selectedSite.id}`} site={selectedSite} networks={brandNetworks} brand={selectedSite.brand || "Общие ключи"} onSelectNetwork={name => onTabChange("network", name)} mode={activeTab} api={api} username={currentUsername} refreshToken={networkRefreshToken} onChanged={refreshProject} /> : null}
           <WorkspaceTabPane active={activeTab === "topics"} storagePrefix={`${currentUsername}:${selectedSite.id}:topics`}>
             <FastTasksView
               key={selectedSite.id}
@@ -2662,7 +2868,7 @@ function ProjectWorkspaceView({
             />
           </WorkspaceTabPane>
           <WorkspaceTabPane active={activeTab === "content" || activeTab === "publication"} storagePrefix={`${currentUsername}:${selectedSite.id}:content`}>
-            {publicationWorkflowSection === "pages" ? <ProjectPages key={selectedSite.id} siteId={selectedSite.id} api={api} onCount={updatePageCount} /> : null}
+            {publicationWorkflowSection === "pages" ? <>{generalNetworksOnly && <ShowcaseBrands status={projectContentStatus?.siteId === selectedSite.id ? projectContentStatus.status : null} />}<ProjectPages key={selectedSite.id} siteId={selectedSite.id} api={api} onCount={updatePageCount} /></> : null}
             {publicationWorkflowSection === "campaigns" ? <>
               <FastProjectPublicationPanel key={`${selectedSite.id}:publication-launch`} mode="launch" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} promptTemplates={promptTemplates} onPoll={pollProject} onChanged={refreshProject} />
               <FastProjectPublicationPanel key={`${selectedSite.id}:publication-campaigns`} mode="campaigns" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} promptTemplates={promptTemplates} onPoll={pollProject} onChanged={refreshProject} />
@@ -2685,7 +2891,7 @@ function ProjectWorkspaceView({
           <thead><tr><th>Проект</th><th>Имя проекта</th><th>Главный домен</th><th>Доменов в сетке</th></tr></thead>
           <tbody>{domainResults.map(site => <tr key={site.id} className="workspaceDomainResultRow" onClick={() => openDomainSearchResult(site.id)}>
             <td><button type="button" className="secondary" onClick={event => { event.stopPropagation(); openDomainSearchResult(site.id); }}>{site.name}</button></td>
-            <td>{site.fibery_name || "—"}</td><td>{site.cache_canon || "—"}</td><td>{site.domains_count}</td>
+            <td><FiberyProjectName value={site.fibery_name} projectName={site.name} /></td><td>{site.cache_canon || "—"}</td><td>{site.domains_count}</td>
           </tr>)}</tbody>
         </table></div> : <p>Проекты не найдены. Поиск выполняется по доступным проектам и доменам их сеток.</p>}
       </div> : null}
@@ -2727,10 +2933,11 @@ function AutoFitDomain({ value }: { value: string }) {
   return <b ref={domainRef} className="projectCanonDomain" title={value}>{value}</b>;
 }
 
-function MenuCapabilityCard({ label, templateRendered, rendered, nested, nestedRequired = false, icon, loading, error, onRetry }: { label: string; templateRendered: boolean | null | undefined; rendered: boolean | null | undefined; nested: boolean | null | undefined; nestedRequired?: boolean; icon: "header" | "footer"; loading: boolean; error: string; onRetry: () => void }) {
+function MenuCapabilityCard({ label, templateRendered, rendered, nested, nestedRequired = false, hasItems = true, icon, loading, error, onRetry }: { label: string; templateRendered: boolean | null | undefined; rendered: boolean | null | undefined; nested: boolean | null | undefined; nestedRequired?: boolean; hasItems?: boolean; icon: "header" | "footer"; loading: boolean; error: string; onRetry: () => void }) {
+  const emptyFooter = icon === "footer" && !hasItems;
   const effectiveRendered = rendered ?? templateRendered;
   const nestedRenderingMissing = effectiveRendered === true && nestedRequired && nested === false;
-  const statusText = loading && effectiveRendered == null
+  const statusText = emptyFooter ? "Нет пунктов меню" : loading && effectiveRendered == null
     ? "Проверяем"
     : error && effectiveRendered == null
       ? "Ошибка сервера"
@@ -2741,7 +2948,7 @@ function MenuCapabilityCard({ label, templateRendered, rendered, nested, nestedR
         : rendered != null
           ? rendered ? "Меню реализовано" : "Меню не реализовано"
           : templateRendered ? "Шаблон поддерживает" : "Нет в шаблоне";
-  const renderingDetails = effectiveRendered == null
+  const renderingDetails = emptyFooter ? "" : effectiveRendered == null
     ? ""
     : rendered != null
       ? rendered === false
@@ -2749,7 +2956,7 @@ function MenuCapabilityCard({ label, templateRendered, rendered, nested, nestedR
         : nested ? "Вложенность поддерживается" : "Только один уровень"
       : templateRendered ? nested ? "Шаблон поддерживает вложенность" : "Шаблон поддерживает один уровень" : "Шаблон не содержит меню";
   return (
-    <span className={`projectMenuCapability ${error && effectiveRendered == null ? "isError" : nestedRenderingMissing || effectiveRendered === false ? "isMissing" : effectiveRendered === true ? "isReady" : "isChecking"}`} title={error || `${label}: ${statusText}${renderingDetails ? `. ${renderingDetails}` : ""}`}>
+    <span className={`projectMenuCapability ${emptyFooter ? "isEmpty" : error && effectiveRendered == null ? "isError" : nestedRenderingMissing || effectiveRendered === false ? "isMissing" : effectiveRendered === true ? "isReady" : "isChecking"}`} title={(!emptyFooter && error) || `${label}: ${statusText}${renderingDetails ? `. ${renderingDetails}` : ""}`}>
       <span className="projectMenuCapabilityHeader">
         <small>{label}</small>
         <button className="projectMenuCapabilityRetry" type="button" onClick={onRetry} disabled={loading} title={`Обновить проверку шаблона ${label}`} aria-label={`Обновить проверку шаблона ${label}`}>
@@ -2757,17 +2964,17 @@ function MenuCapabilityCard({ label, templateRendered, rendered, nested, nestedR
         </button>
       </span>
       <span className="projectMenuCapabilityValue">
-        {nestedRenderingMissing || effectiveRendered === false ? <MenuReadyMedal tone="red" /> : effectiveRendered === true ? <MenuReadyMedal tone={nested ? "gold" : "green"} /> : icon === "header" ? <HeaderMenuIcon /> : <FooterMenuIcon />}
+        {emptyFooter ? <MenuReadyMedal tone="gray" /> : nestedRenderingMissing || effectiveRendered === false ? <MenuReadyMedal tone="red" /> : effectiveRendered === true ? <MenuReadyMedal tone={nested ? "gold" : "green"} /> : icon === "header" ? <HeaderMenuIcon /> : <FooterMenuIcon />}
         <b>{statusText}</b>
       </span>
-      {error ? <em className="projectMenuCapabilityError">{error}</em> : nestedRenderingMissing ? <em>Вложенные пункты не отображаются</em> : effectiveRendered ? <em>{nested ? "Есть вложенность" : "Один уровень"}</em> : effectiveRendered === false ? <em>{rendered == null ? "Не найдено в шаблоне" : "Не отображается на сайте"}</em> : null}
+      {emptyFooter ? null : error ? <em className="projectMenuCapabilityError">{error}</em> : nestedRenderingMissing ? <em>Вложенные пункты не отображаются</em> : effectiveRendered ? <em>{nested ? "Есть вложенность" : "Один уровень"}</em> : effectiveRendered === false ? <em>{rendered == null ? "Не найдено в шаблоне" : "Не отображается на сайте"}</em> : null}
     </span>
   );
 }
 
-function MenuReadyMedal({ tone = "green" }: { tone?: "green" | "red" | "gold" }) {
+function MenuReadyMedal({ tone = "green" }: { tone?: "green" | "red" | "gold" | "gray" }) {
   return (
-    <svg className={`menuReadyMedal ${tone === "red" ? "isRed" : tone === "gold" ? "isGold" : ""}`} viewBox="0 0 48 52" aria-hidden="true">
+    <svg className={`menuReadyMedal ${tone === "red" ? "isRed" : tone === "gold" ? "isGold" : tone === "gray" ? "isGray" : ""}`} viewBox="0 0 48 52" aria-hidden="true">
       <defs>
         <linearGradient id="menuReadyRibbon" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#2eaa61" /><stop offset="1" stopColor="#09612e" /></linearGradient>
         <linearGradient id="menuReadyFace" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#f2fff6" /><stop offset="1" stopColor="#aee9c4" /></linearGradient>
@@ -4909,18 +5116,13 @@ function ProjectCampaignTreeItem({
   );
 }
 
-type GeneratedMenuStructureItem = {
-  title: string;
-  slug: string;
-  content_kind: "menu_page" | "casino_review";
-  children?: GeneratedMenuStructureItem[];
-};
+type GeneratedMenuMode = "thematic" | "casino_reviews" | "technical_pages";
 
 type GeneratedMenuStructurePreview = {
   menu_type: "header" | "footer";
   levels: number;
   top_level_count: number;
-  mode: "thematic" | "casino_reviews";
+  mode: GeneratedMenuMode;
   geo: string;
   language: string;
   items: GeneratedMenuStructureItem[];
@@ -4936,19 +5138,6 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
   const [formError, setFormError] = React.useState("");
   const [inlineMenuType, setInlineMenuType] = React.useState<"header" | "footer" | null>(null);
   const [addingMenuItemId, setAddingMenuItemId] = React.useState<string | null>(null);
-  const [libraryFormExpanded, setLibraryFormExpanded] = React.useState(false);
-  const [libraryName, setLibraryName] = React.useState("");
-  const [libraryPath, setLibraryPath] = React.useState("");
-  const [savingLibraryItem, setSavingLibraryItem] = React.useState(false);
-  const [editingLibraryItem, setEditingLibraryItem] = React.useState<MenuLibraryItem | null>(null);
-  const [editingLibraryName, setEditingLibraryName] = React.useState("");
-  const [editingLibraryPath, setEditingLibraryPath] = React.useState("");
-  const [editingLibraryRussianName, setEditingLibraryRussianName] = React.useState("");
-  const [savingLibraryEdit, setSavingLibraryEdit] = React.useState(false);
-  const [menuTemplates, setMenuTemplates] = React.useState<MenuTemplate[]>([]);
-  const [applyingTemplateId, setApplyingTemplateId] = React.useState<string | null>(null);
-  const [templateApplyMessage, setTemplateApplyMessage] = React.useState("");
-  const [updatedAt, setUpdatedAt] = React.useState<string | null>(null);
   const [editingSectionId, setEditingSectionId] = React.useState<string | null>(null);
   const [editingSectionName, setEditingSectionName] = React.useState("");
   const [editingSectionPath, setEditingSectionPath] = React.useState("");
@@ -4977,33 +5166,16 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
   const [generatedMenuType, setGeneratedMenuType] = React.useState<"header" | "footer">("header");
   const [generatedMenuLevels, setGeneratedMenuLevels] = React.useState(2);
   const [generatedMenuTopLevelCount, setGeneratedMenuTopLevelCount] = React.useState(5);
-  const [generatedMenuMode, setGeneratedMenuMode] = React.useState<"thematic" | "casino_reviews">("thematic");
+  const [generatedMenuMode, setGeneratedMenuMode] = React.useState<GeneratedMenuMode>("thematic");
+  const technicalCatalogCount = site.site_type === "general" || !site.site_type && (!site.brand || site.brand.trim().toLowerCase() === "общие ключи") ? 10 : 8;
+  const [technicalMenuCount, setTechnicalMenuCount] = React.useState(technicalCatalogCount);
+  const [editingGeneratedPath, setEditingGeneratedPath] = React.useState<string | null>(null);
   const [generatedMenuPreview, setGeneratedMenuPreview] = React.useState<GeneratedMenuStructurePreview | null>(null);
   const [generatingMenuPreview, setGeneratingMenuPreview] = React.useState(false);
   const [menuGenerationProgress, setMenuGenerationProgress] = useSimulatedOperationProgress(generatingMenuPreview);
   const [applyingGeneratedMenu, setApplyingGeneratedMenu] = React.useState(false);
   const cachedHeader = Array.isArray(site.default_menu.header) ? site.default_menu.header : [];
   const cachedFooter = Array.isArray(site.default_menu.footer) ? site.default_menu.footer : [];
-  const menuLibrary = React.useMemo(() => {
-    const itemsById = new Map(getMenuLibrary(site.cache_language).map((item) => [item.external_id, item]));
-    for (const template of menuTemplates) {
-      for (const item of template.items) itemsById.set(item.external_id, item);
-    }
-    for (const item of Array.isArray(site.menu_library) ? site.menu_library : []) itemsById.set(item.external_id, item);
-    return Array.from(itemsById.values());
-  }, [menuTemplates, site.cache_language, site.menu_library]);
-  const existingSectionIds = React.useMemo(() => new Set(sections.map((section) => section.external_id)), [sections]);
-  const existingHeaderSectionPaths = React.useMemo(
-    () => new Set(
-      sections
-        .filter((section) => section.menu_type === "header")
-        .map((section) => {
-          const pathWithoutEdgeSlashes = section.path.trim().replace(/^\/+|\/+$/g, "");
-          return pathWithoutEdgeSlashes ? `/${pathWithoutEdgeSlashes}/` : "/";
-        })
-    ),
-    [sections]
-  );
   const persistedSections = React.useMemo(() => sections.filter((section) => !section.is_temporary_parent), [sections]);
   const pendingSections = React.useMemo(() => sections.filter((section) => section.sync_status === "pending"), [sections]);
   const publicationPages = React.useMemo(
@@ -5019,7 +5191,6 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
       });
     return result;
   }, [logs]);
-  const menuLibraryListId = React.useId();
 
   const sectionResponseCode = React.useCallback((section: Section) => {
     const normalizedPath = normalizedTreePath(section.path);
@@ -5047,13 +5218,6 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
     setParentTreeKey("");
     setTemporaryParentId(null);
     setInlineMenuType(null);
-    setLibraryFormExpanded(false);
-    setLibraryName("");
-    setLibraryPath("");
-    setEditingLibraryItem(null);
-    setMenuTemplates([]);
-    setTemplateApplyMessage("");
-    setUpdatedAt(null);
     setPagePreview(null);
     setPagePreviewError(null);
     setPagePreviewLoadingKey(null);
@@ -5081,41 +5245,11 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
     return () => window.removeEventListener("open-menu-structure-generator", openGenerator);
   }, [site.id]);
 
-  async function openPagePreview(item: MenuPreviewItem, treeKey: string) {
-    const slug = normalizedTreePath(item.path);
-    setPagePreviewLoadingKey(treeKey);
-    setPagePreviewError(null);
-    try {
-      const preview = await api<ProjectPagePreview>(`/sites/${site.id}/pages/preview?slug=${encodeURIComponent(slug || item.path || "#")}`);
-      setPagePreview(preview);
-    } catch (error) {
-      setPagePreviewError({
-        title: item.title,
-        slug: item.path,
-        message: error instanceof Error ? error.message : "Не удалось загрузить текст страницы"
-      });
-    } finally {
-      setPagePreviewLoadingKey(null);
-    }
+  async function openPagePreview(item: MenuPreviewItem, _treeKey: string) {
+    openDetailPage(`/page-preview/${encodeURIComponent(site.id)}/`, { slug: normalizedTreePath(item.path) || item.path || "/" });
   }
 
-  React.useEffect(() => {
-    let cancelled = false;
-    void api<MenuTemplate[]>(`/menu-templates?language=${encodeURIComponent(site.cache_language || "")}`)
-      .then((templates) => {
-        if (!cancelled) setMenuTemplates(templates);
-      })
-      .catch((error) => {
-        if (!cancelled) setFormError(error instanceof Error ? error.message : "Не удалось загрузить шаблоны меню");
-      });
-    return () => { cancelled = true; };
-  }, [api, site.cache_language, site.id]);
-
-  function updateMenuName(value: string) {
-    setName(value);
-    const libraryItem = menuLibrary.find((item) => item.name === value);
-    if (libraryItem) setPath(libraryItem.path);
-  }
+  function updateMenuName(value: string) { setName(value); }
 
   function openInlineForm(targetMenuType: "header" | "footer") {
     setName("");
@@ -5209,7 +5343,6 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
     setMenuNestingNotice("");
     try {
       await api<ContentItem>(`/content/${item.id}/delete-published`, { method: "POST" });
-      setUpdatedAt(new Date().toISOString());
       await onChanged();
     } catch (error) {
       setMenuNestingNotice(error instanceof Error ? error.message : "Не удалось удалить вложенную страницу");
@@ -5224,7 +5357,6 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
     setMenuNestingNotice("");
     try {
       await api<ContentItem>(`/content/${item.id}/publish-immediately`, { method: "POST" });
-      setUpdatedAt(new Date().toISOString());
       await onChanged();
     } catch (error) {
       setMenuNestingNotice(error instanceof Error ? error.message : "Не удалось повторно отправить страницу");
@@ -5314,7 +5446,6 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
           throw new Error(failure?.error || "Изменения сохранены, но меню проекта не удалось обновить");
         }
       }
-      setUpdatedAt(updated.updated_at);
       cancelSectionEdit();
       await onChanged();
     } catch (error) {
@@ -5347,7 +5478,6 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
     try {
       await api(`/sites/${site.id}/menu/${menuType}/branch`, { method: "DELETE", body: JSON.stringify({ path: item.path, external_id: item.externalId }) });
       cancelSectionEdit();
-      setUpdatedAt(new Date().toISOString());
       await onChanged();
     } catch (error) {
       setMenuNestingNotice(error instanceof Error ? error.message : "Не удалось удалить ветку меню");
@@ -5370,7 +5500,6 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
         }
       }
       if (editingSectionId === section.id) cancelSectionEdit();
-      setUpdatedAt(new Date().toISOString());
       await onChanged();
     } catch (error) {
       setMenuNestingNotice(error instanceof Error ? error.message : "Не удалось удалить пункт меню");
@@ -5391,7 +5520,6 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
         const failure = syncResult.results.find((result) => !result.success);
         throw new Error(failure?.error || "Не удалось восстановить пункт меню на проекте");
       }
-      setUpdatedAt(new Date().toISOString());
       await onChanged();
     } catch (error) {
       setMenuNestingNotice(error instanceof Error ? error.message : "Не удалось восстановить пункт меню");
@@ -5411,7 +5539,6 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
         const failure = syncResult.results.find((result) => !result.success);
         throw new Error(failure?.error || `Не удалось отправить пункт меню «${section.name}»`);
       }
-      setUpdatedAt(new Date().toISOString());
       await onChanged();
     } catch (error) {
       setMenuNestingNotice(error instanceof Error ? error.message : "Не удалось отправить пункт меню");
@@ -5433,7 +5560,6 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
         const failure = result.results.find((item) => !item.success);
         throw new Error(failure?.error || "Проект не принял новые slug; изменения отменены");
       }
-      setUpdatedAt(new Date().toISOString());
       setMenuNestingNotice(`Slug меню ${menuLabel} обновлены: ${result.updated_count}. Вложенность и идентификаторы сохранены.`);
       await onChanged();
     } catch (error) {
@@ -5444,19 +5570,20 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
     }
   }
 
-  async function generateMenuStructurePreview() {
+  async function generateMenuStructurePreview(mode: GeneratedMenuMode = generatedMenuMode, levels = generatedMenuLevels, count = mode === "technical_pages" ? technicalMenuCount : generatedMenuTopLevelCount) {
     setMenuGenerationProgress(3);
     setGeneratingMenuPreview(true);
     setGeneratedMenuPreview(null);
+    setEditingGeneratedPath(null);
     setFormError("");
     try {
       const preview = await api<GeneratedMenuStructurePreview>(`/sites/${site.id}/menu-structure-preview`, {
         method: "POST",
         body: JSON.stringify({
           menu_type: generatedMenuType,
-          levels: generatedMenuMode === "casino_reviews" ? 2 : generatedMenuLevels,
-          top_level_count: generatedMenuTopLevelCount,
-          mode: generatedMenuMode
+          levels: mode === "casino_reviews" ? 2 : levels,
+          top_level_count: count,
+          mode
         })
       });
       setGeneratedMenuPreview(preview);
@@ -5481,15 +5608,17 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
         body: JSON.stringify({
           menu_type: generatedMenuPreview.menu_type,
           levels: generatedMenuPreview.levels,
-          top_level_count: generatedMenuPreview.mode === "casino_reviews" ? generatedMenuTopLevelCount : generatedMenuPreview.top_level_count,
+          top_level_count: generatedMenuPreview.top_level_count,
           mode: generatedMenuPreview.mode,
           items: generatedMenuPreview.items
         })
       });
-      if (!result.success) throw new Error("Проект не принял структуру; добавление отменено");
+      if (!result.success) {
+        const failure = result.results.find(item => !item.success);
+        throw new Error(failure?.error || `Проект не принял структуру${failure?.status_code ? ` (HTTP ${failure.status_code})` : ""}; добавление отменено`);
+      }
       setMenuGeneratorOpen(false);
       setGeneratedMenuPreview(null);
-      setUpdatedAt(new Date().toISOString());
       setMenuNestingNotice(`На сайт добавлена сгенерированная структура: ${result.created_count} пунктов.`);
       await onChanged();
     } catch (error) {
@@ -5500,34 +5629,55 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
     }
   }
 
-  function renderGeneratedMenuPreview(items: GeneratedMenuStructureItem[], depth = 0): React.ReactNode {
-    return <ul className={`generatedMenuPreviewTree ${depth === 0 ? "root" : "nested"}`}>{items.map((item) => (
-      <li key={item.slug}>
+  const generatedPreviewNodes = previewNodes(generatedMenuPreview?.items || []);
+  const existingPreviewPaths = new Set(previewNodes((site.default_menu[generatedMenuPreview?.menu_type || generatedMenuType] || []) as GeneratedMenuStructureItem[]).map(node => node.item.slug));
+  const generatedPreviewError = !generatedMenuPreview ? "" : !generatedPreviewNodes.length ? "В предпросмотре нет пунктов. Сгенерируйте структуру заново." : generatedPreviewNodes.some(node => !node.item.title.trim() || !/^\/[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)*\/?$/.test(node.item.slug)) ? "Заполните названия и относительные URL пунктов, например /privacy-policy/." : new Set(generatedPreviewNodes.map(node => node.item.slug.replace(/\/$/, ""))).size !== generatedPreviewNodes.length ? "В предпросмотре повторяются URL. Измените URL или удалите лишние строки." : generatedPreviewNodes.some(node => existingPreviewPaths.has(node.item.slug)) ? "Некоторые URL уже есть в этом меню. Измените их или удалите строки с отметкой «Уже в меню»." : "";
+  function updateGeneratedPreview(items: GeneratedMenuStructureItem[]) {
+    setFormError("");
+    setGeneratedMenuLevels(previewDepth(items));
+    if (items.length) {
+      if (generatedMenuPreview?.mode === "technical_pages") setTechnicalMenuCount(items.length);
+      else if (generatedMenuPreview?.mode === "thematic") setGeneratedMenuTopLevelCount(items.length);
+    }
+    setGeneratedMenuPreview(current => current ? { ...current, items, levels: previewDepth(items), top_level_count: items.length } : current);
+  }
+  function renderGeneratedMenuPreview(items: GeneratedMenuStructureItem[], depth = 0, parentPath = ""): React.ReactNode {
+    return <ul className={`generatedMenuPreviewTree ${depth === 0 ? "root" : "nested"}`}>{items.map((item, index) => {
+      const itemPath = parentPath ? `${parentPath}.${index}` : String(index);
+      const label = itemPath.split('.').map(part => Number(part) + 1).join('.');
+      const editing = editingGeneratedPath === itemPath;
+      return <li key={itemPath}>
         <div className={`generatedMenuPreviewRow level${depth + 1}`}>
           <span className="generatedMenuPreviewBranch" aria-hidden="true">{depth === 0 ? <FolderKanban size={16} /> : <CornerDownRight size={16} />}</span>
-          <span className="generatedMenuPreviewText"><span><b>Уровень {depth + 1}</b><strong>{item.title}</strong>{item.content_kind === "casino_review" ? <em>Обзор казино</em> : null}</span><code>{item.slug}</code></span>
+          <span className="generatedMenuPreviewText"><span><b>Уровень {depth + 1}</b><strong>{item.title || "Без названия"}</strong>{item.content_kind === "casino_review" ? <em>Обзор казино</em> : item.content_kind === "technical_page" ? <em>Техническая страница</em> : null}{existingPreviewPaths.has(item.slug) && <em className="previewDuplicate">Уже в меню</em>}</span><code>{item.slug || "URL не задан"}</code></span>
+          <div className="generatedMenuPreviewActions"><button type="button" className="iconButton" aria-label={`Изменить пункт ${label}`} title="Изменить название, URL и вложенность" disabled={applyingGeneratedMenu} onClick={() => setEditingGeneratedPath(editing ? null : itemPath)}><Edit3 size={15}/></button><button type="button" className="iconButton danger" aria-label={`Удалить пункт ${label}`} title="Удалить строку и её подпункты из предпросмотра" disabled={applyingGeneratedMenu} onClick={() => { updateGeneratedPreview(editPreviewItem(generatedMenuPreview!.items, itemPath, null)); setEditingGeneratedPath(null); }}><Trash2 size={15}/></button></div>
         </div>
-        {item.children?.length ? renderGeneratedMenuPreview(item.children, depth + 1) : null}
-      </li>
-    ))}</ul>;
+        {editing && <div className="generatedMenuPreviewFields">
+          <label>Название<input aria-label={`Название пункта ${label}`} maxLength={generatedMenuPreview?.mode === "technical_pages" ? 60 : 40} value={item.title} onChange={event => updateGeneratedPreview(editPreviewItem(generatedMenuPreview!.items, itemPath, { title: event.target.value }))}/></label>
+          <label>URL<input aria-label={`URL пункта ${label}`} maxLength={240} value={item.slug} onChange={event => updateGeneratedPreview(editPreviewItem(generatedMenuPreview!.items, itemPath, { slug: event.target.value }))}/></label>
+          {generatedMenuPreview?.mode !== "casino_reviews" && <label>Родитель<SearchableSelect compact ariaLabel={`Родитель пункта ${label}`} value={parentPath} options={[{value:"", label:"Без вложенности"}, ...generatedPreviewNodes.filter(node => node.path !== itemPath && !node.path.startsWith(`${itemPath}.`) && node.depth + previewDepth([item]) <= 3).map(node => ({value:node.path, label:`${node.item.title} · ур. ${node.depth}`}))]} searchPlaceholder="Найти родительский пункт" onChange={value => { updateGeneratedPreview(movePreviewItem(generatedMenuPreview!.items, itemPath, value)); setEditingGeneratedPath(null); }}/></label>}
+          <button type="button" className="button compact secondary" onClick={() => setEditingGeneratedPath(null)}>Готово</button>
+        </div>}
+        {item.children?.length ? renderGeneratedMenuPreview(item.children, depth + 1, itemPath) : null}
+      </li>;
+    })}</ul>;
   }
 
-  async function saveMenuItem(targetMenuType: "header" | "footer", item?: MenuLibraryItem) {
-    const itemName = (item?.name || name).trim();
-    const itemPath = (item?.path || path).trim();
+  async function saveMenuItem(targetMenuType: "header" | "footer") {
+    const itemName = name.trim();
+    const itemPath = path.trim();
     if (!itemName || !itemPath) return;
     setFormError("");
     const pathWithoutEdgeSlashes = itemPath.replace(/^\/+|\/+$/g, "");
     const normalizedPath = pathWithoutEdgeSlashes ? `/${pathWithoutEdgeSlashes}/` : "/";
-    const libraryItem = item || menuLibrary.find((candidate) => candidate.name === itemName);
-    const actionId = `${libraryItem?.external_id || slugFromText(itemName)}:${targetMenuType}`;
+    const actionId = `${slugFromText(itemName)}:${targetMenuType}`;
     setAddingMenuItemId(actionId);
     try {
       const created = await api<Section>(`/sites/${site.id}/sections`, {
         method: "POST",
         body: JSON.stringify({
           name: itemName,
-          external_id: libraryItem?.external_id || slugFromText(itemName),
+          external_id: slugFromText(itemName),
           path: normalizedPath,
           menu_type: targetMenuType,
           parent_id: parentId || null
@@ -5540,7 +5690,6 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
       setParentTreeKey("");
       setTemporaryParentId(null);
       setInlineMenuType(null);
-      setUpdatedAt(created.updated_at || new Date().toISOString());
       await onChanged();
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Не удалось добавить пункт меню");
@@ -5552,89 +5701,6 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
   async function createSection(event: React.FormEvent, targetMenuType = menuType) {
     event.preventDefault();
     await saveMenuItem(targetMenuType);
-  }
-
-  async function addLibraryItem(event: React.FormEvent) {
-    event.preventDefault();
-    const itemName = libraryName.trim();
-    const rawPath = libraryPath.trim();
-    if (!itemName || !rawPath) return;
-    const pathWithoutEdgeSlashes = rawPath.replace(/^\/+|\/+$/g, "");
-    const normalizedPath = pathWithoutEdgeSlashes ? `/${pathWithoutEdgeSlashes}/` : "/";
-    setSavingLibraryItem(true);
-    setFormError("");
-    try {
-      await api<MenuLibraryItem>(`/sites/${site.id}/menu-library`, {
-        method: "POST",
-        body: JSON.stringify({
-          name: itemName,
-          path: normalizedPath,
-          external_id: slugFromText(itemName),
-          russian_name: ""
-        })
-      });
-      setLibraryName("");
-      setLibraryPath("");
-      setLibraryFormExpanded(false);
-      setUpdatedAt(new Date().toISOString());
-      await onChanged();
-    } catch (error) {
-      setFormError(error instanceof Error ? error.message : "Не удалось добавить пункт в библиотеку");
-    } finally {
-      setSavingLibraryItem(false);
-    }
-  }
-
-  async function applyMenuTemplate(template: MenuTemplate) {
-    setApplyingTemplateId(template.id);
-    setTemplateApplyMessage("");
-    setFormError("");
-    try {
-      const result = await api<MenuTemplateApplyResult>(`/sites/${site.id}/menu-templates/${encodeURIComponent(template.id)}/apply`, {
-        method: "POST"
-      });
-      setTemplateApplyMessage(
-        `Структура добавлена: новых пунктов — ${result.created_count}, уже существовало — ${result.skipped_count}, обновлена вложенность — ${result.updated_count}.`
-      );
-      setUpdatedAt(new Date().toISOString());
-      await onChanged();
-    } catch (error) {
-      setFormError(error instanceof Error ? error.message : "Не удалось добавить готовую структуру меню");
-    } finally {
-      setApplyingTemplateId(null);
-    }
-  }
-
-  function openLibraryEdit(item: MenuLibraryItem) {
-    setEditingLibraryItem(item);
-    setEditingLibraryName(item.name);
-    setEditingLibraryPath(item.path);
-    setEditingLibraryRussianName(item.russian_name || "");
-    setFormError("");
-  }
-
-  async function saveLibraryEdit(event: React.FormEvent) {
-    event.preventDefault();
-    if (!editingLibraryItem || !editingLibraryName.trim() || !editingLibraryPath.trim()) return;
-    setSavingLibraryEdit(true);
-    setFormError("");
-    try {
-      await api<MenuLibraryItem>(`/sites/${site.id}/menu-library/${encodeURIComponent(editingLibraryItem.external_id)}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          name: editingLibraryName.trim(),
-          path: editingLibraryPath.trim(),
-          russian_name: editingLibraryRussianName.trim()
-        })
-      });
-      setEditingLibraryItem(null);
-      setUpdatedAt(new Date().toISOString());
-      await onChanged();
-    } catch (error) {
-      setFormError(error instanceof Error ? error.message : "Не удалось изменить пункт библиотеки");
-    } finally {
-      setSavingLibraryEdit(false);
-    }
   }
 
   function menuFields(targetMenuType?: "header" | "footer") {
@@ -5658,10 +5724,7 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
         {targetMenuType && parentId ? <div className="siteMenuSelectedParent"><CornerDownRight size={17} /><span>Дочерний пункт для:</span><strong>{parentName || sections.find((section) => section.id === parentId)?.name}</strong></div> : null}
         <label>
           Пункт меню
-          <input list={menuLibraryListId} value={name} onChange={(event) => updateMenuName(event.target.value)} placeholder="Выберите или введите свой" required />
-          <datalist id={menuLibraryListId}>
-            {menuLibrary.map((item) => <option value={item.name} label={item.russian_name ? `* ${item.russian_name} · ${item.path}` : item.path} key={item.external_id} />)}
-          </datalist>
+          <input value={name} onChange={(event) => updateMenuName(event.target.value)} placeholder="Введите название" required />
         </label>
         <label>
           URL
@@ -5669,10 +5732,7 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
         </label>
         {!targetMenuType && nestingSupported && possibleParents.length ? <label>
           Родительский пункт
-          <select value={parentId} onChange={(event) => setParentId(event.target.value)}>
-            <option value="">Без вложенности</option>
-            {possibleParents.map((section) => <option value={section.id} key={section.id}>{parentLabel(section)}</option>)}
-          </select>
+          <SearchableSelect value={parentId} onChange={setParentId} options={[{ value: "", label: "Без вложенности" }, ...possibleParents.map(section => ({ value: section.id, label: parentLabel(section) }))]} searchPlaceholder="Найти родительский пункт" />
         </label> : null}
         {targetMenuType ? (
           <div className="siteMenuInlineActions">
@@ -5712,14 +5772,14 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
             return [
               editing ? <input className="menuSectionEditInput" value={editingSectionName} onChange={(event) => setEditingSectionName(event.target.value)} aria-label="Название пункта меню" /> : <span className="menuTableClamp" title={section.name}>{section.name}</span>,
               section.menu_type === "footer" ? "Footer" : "Header",
-              editing ? <input className="menuSectionEditInput" value={editingSectionPath} onChange={(event) => setEditingSectionPath(event.target.value)} aria-label="URL пункта меню" /> : <code className="menuTableClamp" title={section.path}>{section.path}</code>,
+              editing ? <input className="menuSectionEditInput" value={editingSectionPath} onChange={(event) => setEditingSectionPath(event.target.value)} aria-label="URL пункта меню" /> : <a className="menuTableUrl" href={projectMenuMainUrl(site, section.path)} target="_blank" rel="noopener noreferrer" title={`Открыть на Main: ${projectMenuMainUrl(site, section.path)}`}><code>{section.path}</code><ExternalLink size={13} aria-hidden="true" /></a>,
               formatDate(section.synced_at || section.updated_at),
               <span className="menuTableState">{section.sync_status === "synced"
                 ? <span className="syncedBadge">Синхронизировано</span>
                 : section.sync_status === "external_deleted"
                   ? <span className="pendingSyncBadge">Удалено на проекте</span>
                   : <span className="pendingSyncBadge">Не синхронизировано</span>}{responseCode ? <span className="publicationResponseCode">HTTP {responseCode}</span> : null}</span>,
-              editing ? <div className="menuSectionEditActions"><button className="button compact secondary" type="button" onClick={cancelSectionEdit} disabled={savingSectionEdit}>Отменить</button><button className="button compact primary" type="button" onClick={() => saveSectionEdit(section)} disabled={savingSectionEdit}>Сохранить</button></div> : <div className="menuSectionEditActions">{section.sync_status === "external_deleted" ? <button className="button compact primary" type="button" onClick={() => restoreSection(section)} disabled={restoringSectionId === section.id || sendingSectionId === section.id}><RefreshCcw size={14} /> {restoringSectionId === section.id ? "Восстанавливаем" : "Восстановить"}</button> : <><button className="button compact primary" type="button" onClick={() => sendSection(section)} disabled={sendingSectionId === section.id || deletingSectionId === section.id}><Send size={14} /> {sendingSectionId === section.id ? "Отправляем" : "Отправить"}</button><button className="button compact secondary" type="button" onClick={() => startSectionEdit(section)} disabled={deletingSectionId === section.id || sendingSectionId === section.id}><Edit3 size={14} /> Изменить</button></>}<button className="button compact danger" type="button" onClick={() => deleteSection(section)} disabled={deletingSectionId === section.id || restoringSectionId === section.id || sendingSectionId === section.id}><Trash2 size={14} /> {deletingSectionId === section.id ? "Удаляем" : "Удалить"}</button></div>
+              editing ? <div className="menuSectionEditActions"><button className="button compact secondary" type="button" onClick={cancelSectionEdit} disabled={savingSectionEdit}>Отменить</button><button className="button compact primary" type="button" onClick={() => saveSectionEdit(section)} disabled={savingSectionEdit}>Сохранить</button></div> : <div className="menuSectionEditActions">{section.sync_status === "external_deleted" ? <button className="button compact primary" type="button" onClick={() => restoreSection(section)} disabled={restoringSectionId === section.id || sendingSectionId === section.id}><RefreshCcw size={14} /> {restoringSectionId === section.id ? "Восстанавливаем" : "Восстановить"}</button> : <>{section.sync_status !== "synced" && <button className="button compact primary" type="button" onClick={() => sendSection(section)} disabled={sendingSectionId === section.id || deletingSectionId === section.id}><Send size={14} /> {sendingSectionId === section.id ? "Отправляем" : "Отправить"}</button>}<button className="button compact secondary" type="button" onClick={() => startSectionEdit(section)} disabled={deletingSectionId === section.id || sendingSectionId === section.id}><Edit3 size={14} /> Изменить</button></>}<button className="button compact danger" type="button" onClick={() => deleteSection(section)} disabled={deletingSectionId === section.id || restoringSectionId === section.id || sendingSectionId === section.id}><Trash2 size={14} /> {deletingSectionId === section.id ? "Удаляем" : "Удалить"}</button></div>
             ];
           }), ...publicationPages.map((item) => {
             const section = sections.find((candidate) => candidate.id === item.section_id);
@@ -5731,7 +5791,7 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
             return [
               <span className="menuTableClamp" title={item.topic}>{item.topic}</span>,
               <span className="menuTableClamp" title={pageType}>{pageType}</span>,
-              <code className="menuTableClamp" title={item.slug}>{item.slug}</code>,
+              <a className="menuTableUrl" href={projectMenuMainUrl(site, item.slug)} target="_blank" rel="noopener noreferrer" title={`Открыть на Main: ${projectMenuMainUrl(site, item.slug)}`}><code>{item.slug}</code><ExternalLink size={13} aria-hidden="true" /></a>,
               formatDate(item.published_at || item.updated_at),
               <span className="menuTableState" title={failureDetails || undefined}><PublicationStatus status={item.status} statusCode={item.last_publication_status_code || publicationLog?.response_status} />{failureDetails ? <small className="publicationBacklogError">{failureDetails}</small> : null}</span>,
               item.status === "published" ? <div className="menuSectionEditActions"><a className="button compact secondary" href={projectContentSiteUrl(site, item)} target="_blank" rel="noreferrer" title="Открыть опубликованную страницу"><ExternalLink size={14} /> URL</a><button className="button compact danger" type="button" onClick={() => void deleteNestedPage(item)} disabled={deletingNestedPageId === item.id} title={`Удалить опубликованную страницу${section ? ` из «${section.name}»` : ""}`}><Trash2 size={14} /> {deletingNestedPageId === item.id ? "Удаляем" : "Удалить"}</button></div> : <button className="button compact primary" type="button" onClick={() => void retryNestedPagePublication(item)} disabled={retryingNestedPageId === item.id}><Send size={14} /> {retryingNestedPageId === item.id ? "Проверяем…" : "Отправить ещё раз"}</button>
@@ -5741,84 +5801,6 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
         {pagePreview ? <ProjectPagePreviewModal preview={pagePreview} onClose={() => setPagePreview(null)} /> : null}
         {pagePreviewError ? <Modal title={`Просмотр страницы: ${pagePreviewError.title}`} subtitle={pagePreviewError.slug || "URL не указан"} onClose={() => setPagePreviewError(null)}><div className="emptyState">{pagePreviewError.message}</div></Modal> : null}
       </DataPanel>
-      <DataPanel
-        title={`Библиотека пунктов меню · ${menuLibrary.length}`}
-        allowCollapse={false}
-        actions={<button className="button secondary compact" type="button" onClick={() => setLibraryFormExpanded((current) => !current)}><span className="buttonPlusIcon"><Plus size={15} /></span> Новый пункт</button>}
-      >
-          {menuTemplates.map((template) => {
-            const existingCount = template.items.filter((item) => existingSectionIds.has(item.external_id) || existingHeaderSectionPaths.has(item.path)).length;
-            const missingCount = template.items.length - existingCount;
-            const rootCount = template.items.filter((item) => !item.parent_external_id).length;
-            const applying = applyingTemplateId === template.id;
-            return (
-              <article className="menuTemplateCard" key={template.id}>
-                <span className="menuTemplateIcon"><ListChecks size={23} /></span>
-                <div className="menuTemplateCopy">
-                  <strong>{template.name}</strong>
-                  <span>{template.description}</span>
-                  <small>{rootCount} основных разделов · {template.items.length} пунктов · до {template.max_depth} уровней · только Header</small>
-                </div>
-                <div className="menuTemplateProgress">
-                  <b>{existingCount}/{template.items.length}</b>
-                  <span>уже добавлено</span>
-                </div>
-                <button className="button primary menuTemplateApplyButton" type="button" onClick={() => void applyMenuTemplate(template)} disabled={applying || missingCount === 0}>
-                  <span className="buttonPlusIcon"><Plus size={15} /></span>
-                  {applying ? "Добавляем…" : missingCount ? `Добавить всю структуру (${missingCount})` : "Структура добавлена"}
-                </button>
-              </article>
-            );
-          })}
-          {templateApplyMessage ? <div className="formSuccess menuTemplateResult">{templateApplyMessage}</div> : null}
-          {libraryFormExpanded ? (
-            <form className="menuLibraryCreateForm" onSubmit={addLibraryItem}>
-              <label>Название<input value={libraryName} onChange={(event) => setLibraryName(event.target.value)} placeholder="Введите название" required /></label>
-              <label>URL<input value={libraryPath} onChange={(event) => setLibraryPath(event.target.value)} placeholder="new-section" required /></label>
-              <button className="button primary compact" type="submit" disabled={savingLibraryItem}><span className="buttonPlusIcon"><Plus size={15} /></span> {savingLibraryItem ? "Сохраняем" : "Добавить в библиотеку"}</button>
-            </form>
-          ) : null}
-          <div className="menuItemLibraryHeader">
-            <div>
-              <strong>Выберите отдельный пункт</strong>
-              <span>Быстрое добавление в Header или Footer</span>
-            </div>
-            <b>{site.cache_language}</b>
-          </div>
-          {updatedAt ? <div className="formSuccess">Информация обновлена: {formatDate(updatedAt)}</div> : null}
-          {formError ? <div className="formError">{formError}</div> : null}
-          <div className="menuItemLibraryGrid">
-            {menuLibrary.map((item) => {
-              const alreadyAdded = existingSectionIds.has(item.external_id);
-              const addingToHeader = addingMenuItemId === `${item.external_id}:header`;
-              const addingToFooter = addingMenuItemId === `${item.external_id}:footer`;
-              return (
-                <article className={`menuItemLibraryCard ${alreadyAdded ? "isAdded" : ""}`} key={item.external_id}>
-                  <div className="menuItemLibraryText">
-                    <strong>{item.name}</strong>
-                    <code>{item.path}</code>
-                    {item.description ? <small>{item.description}</small> : item.russian_name ? <small>* {item.russian_name}</small> : null}
-                  </div>
-                  <div className="menuItemLibraryActions">
-                    <button className="button compact menuLibraryEditButton" type="button" data-tooltip="Редактировать" aria-label={`Редактировать ${item.name}`} onClick={() => openLibraryEdit(item)}>
-                      <Edit3 size={14} />
-                    </button>
-                    {alreadyAdded ? <span>Уже добавлен</span> : (
-                      <>
-                        <button className="button compact menuPlacementButton" type="button" data-tooltip="Добавить в Header" aria-label={`Добавить ${item.name} в Header`} onClick={() => saveMenuItem("header", item)} disabled={Boolean(addingMenuItemId)}>
-                          <HeaderMenuIcon /> {addingToHeader ? "Добавляем" : "Header"}
-                        </button>
-                        <button className="button compact menuPlacementButton" type="button" data-tooltip="Добавить в Footer" aria-label={`Добавить ${item.name} в Footer`} onClick={() => saveMenuItem("footer", item)} disabled={Boolean(addingMenuItemId)}>
-                          <FooterMenuIcon /> {addingToFooter ? "Добавляем" : "Footer"}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-      </DataPanel>
       {menuGeneratorOpen ? (
         <Modal
           title="Сгенерировать структуру меню"
@@ -5827,47 +5809,39 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
           wide
           className="generatedMenuStructureModal"
         >
+          <div className="generatedMenuStructureBody">
           <div className="generatedMenuStructureControls">
-            <label>Тип меню<select value={generatedMenuType} onChange={(event) => { setGeneratedMenuType(event.target.value as "header" | "footer"); setGeneratedMenuPreview(null); }}><option value="header">Header</option><option value="footer">Footer</option></select></label>
-            <label>Тип структуры<select value={generatedMenuMode} onChange={(event) => { const mode = event.target.value as "thematic" | "casino_reviews"; setGeneratedMenuMode(mode); if (mode === "casino_reviews") setGeneratedMenuLevels(2); setGeneratedMenuPreview(null); }}><option value="thematic">По тематике проекта</option><option value="casino_reviews">Обзоры казино: 10 брендов</option></select></label>
-            <label>Уровней вложенности<select value={generatedMenuMode === "casino_reviews" ? 2 : generatedMenuLevels} onChange={(event) => { setGeneratedMenuLevels(Number(event.target.value)); setGeneratedMenuPreview(null); }} disabled={generatedMenuMode === "casino_reviews"}><option value={1}>1 уровень</option><option value={2}>2 уровня</option><option value={3}>3 уровня</option></select></label>
+            <label>Тип меню<SearchableSelect ariaLabel="Тип меню структуры" value={generatedMenuType} disabled={generatingMenuPreview || applyingGeneratedMenu} onChange={(value) => { setGeneratedMenuType(value as "header" | "footer"); setGeneratedMenuPreview(null); }} options={[{value:"header", label:"Header"}, {value:"footer", label:"Footer"}]} searchPlaceholder="Найти тип меню" /></label>
+            <label>Тип структуры<SearchableSelect ariaLabel="Тип структуры меню" value={generatedMenuMode} disabled={generatingMenuPreview || applyingGeneratedMenu} onChange={(value) => { const mode = value as GeneratedMenuMode; setGeneratedMenuMode(mode); setGeneratedMenuPreview(null); if (mode === "casino_reviews") setGeneratedMenuLevels(2); if (mode === "technical_pages") { setGeneratedMenuLevels(1); setTechnicalMenuCount(technicalCatalogCount); } }} options={[{value:"thematic",label:"По тематике проекта"}, {value:"casino_reviews",label:"Обзоры казино: 10 брендов"}, {value:"technical_pages",label:"Технические страницы"}]} searchPlaceholder="Найти тип структуры" /></label>
+            <label>Уровней вложенности<SearchableSelect ariaLabel="Уровни структуры меню" value={String(generatedMenuMode === "casino_reviews" ? 2 : generatedMenuLevels)} onChange={(value) => { const levels = Number(value); setGeneratedMenuLevels(levels); setTechnicalMenuCount(count => Math.min(count, technicalCatalogCount - levels + 1)); setGeneratedMenuPreview(null); }} disabled={generatedMenuMode === "casino_reviews" || generatingMenuPreview || applyingGeneratedMenu} options={[{value:"1",label:"1 уровень"}, {value:"2",label:"2 уровня"}, {value:"3",label:"3 уровня"}]} searchPlaceholder="Найти число уровней" /></label>
             {generatedMenuMode === "casino_reviews"
               ? <label>Пунктов верхнего уровня<input value="1 — общий раздел" disabled /></label>
-              : <label>Пунктов верхнего уровня<select value={generatedMenuTopLevelCount} onChange={(event) => { setGeneratedMenuTopLevelCount(Number(event.target.value)); setGeneratedMenuPreview(null); }}>{[2, 3, 4, 5, 6, 7, 8].map((count) => <option value={count} key={count}>{count}</option>)}</select></label>}
+              : <label>Пунктов верхнего уровня<SearchableSelect ariaLabel="Количество пунктов структуры меню" value={String(generatedMenuMode === "technical_pages" ? technicalMenuCount : generatedMenuTopLevelCount)} disabled={generatingMenuPreview || applyingGeneratedMenu} onChange={(value) => { if (generatedMenuMode === "technical_pages") setTechnicalMenuCount(Number(value)); else setGeneratedMenuTopLevelCount(Number(value)); setGeneratedMenuPreview(null); }} options={(generatedMenuMode === "technical_pages" ? Array.from({length:technicalCatalogCount - generatedMenuLevels + 1}, (_, index) => index + 1) : [1, 2, 3, 4, 5, 6, 7, 8]).map(count => ({value:String(count),label:String(count)}))} searchPlaceholder="Найти количество пунктов" /></label>}
           </div>
           <div className="menuStructureSummary">
             {generatedMenuMode === "casino_reviews"
               ? `Система подберёт 10 реальных брендов для GEO проекта (${site.cache_geo || "не задано"}) и создаст общий выпадающий раздел. После нажатия «Добавить на сайт» весь блок будет добавлен первым пунктом меню. Существующая структура сохранится без удаления и пересоздания.`
+              : generatedMenuMode === "technical_pages"
+                ? `Технические страницы для типа «${technicalCatalogCount === 10 ? "Общие ключи" : "Монобренд"}» на языке проекта (${site.cache_language || "не задан"}), GEO ${site.cache_geo || "не задано"}. Один уровень — выбранное число страниц; при 2–3 уровнях страницы каталога распределяются между корневыми пунктами. Названия, URL и вложенность можно изменить в предпросмотре.`
               : `Структура будет создана на языке проекта (${site.cache_language || "не задан"}) с учётом его тематики и GEO (${site.cache_geo || "не задано"}).`}
           </div>
-          {formError ? <div className="formError">{formError}</div> : null}
+          {formError ? <div className="formError" role="alert">{formError}</div> : null}
           {generatedMenuPreview ? (
             <section className="generatedMenuPreview">
-              <header><strong>Предпросмотр</strong><span>{generatedMenuPreview.language.toUpperCase()} · {generatedMenuPreview.geo.toUpperCase()} · {generatedMenuPreview.levels} ур. · верхних пунктов: {generatedMenuPreview.top_level_count}</span></header>
+              <header><strong>Предпросмотр</strong><span>{generatedMenuPreview.language.toUpperCase()} · {generatedMenuPreview.geo.toUpperCase()} · {generatedMenuPreview.levels} ур. · верхних пунктов: {generatedMenuPreview.top_level_count} · всего: {generatedPreviewNodes.length}</span></header>
               {renderGeneratedMenuPreview(generatedMenuPreview.items)}
+              {generatedPreviewError && <p className="formError" role="status">{generatedPreviewError}</p>}
             </section>
           ) : <div className="siteMenuPreviewEmpty">Нажмите «Сгенерировать», чтобы увидеть будущую структуру.</div>}
+          </div>
           <div className="modalActions">
             <button className="button secondary" type="button" onClick={() => setMenuGeneratorOpen(false)} disabled={generatingMenuPreview || applyingGeneratedMenu}>Отменить</button>
             <button className="button secondary" type="button" onClick={() => void generateMenuStructurePreview()} disabled={generatingMenuPreview || applyingGeneratedMenu}>{generatingMenuPreview ? <CircularOperationProgress value={menuGenerationProgress} /> : <Sparkles size={16} />} {generatingMenuPreview ? `Генерация ${Math.round(menuGenerationProgress)}%` : generatedMenuPreview ? "Сгенерировать заново" : "Сгенерировать"}</button>
-            <button className="button primary" type="button" onClick={() => void addGeneratedMenuToSite()} disabled={!generatedMenuPreview || generatingMenuPreview || applyingGeneratedMenu}>{applyingGeneratedMenu ? <LoaderCircle className="spin" size={16} /> : <Send size={16} />} {applyingGeneratedMenu ? "Добавляем…" : "Добавить на сайт"}</button>
+            <button className="button primary" type="button" onClick={() => void addGeneratedMenuToSite()} disabled={!generatedMenuPreview || Boolean(generatedPreviewError) || generatingMenuPreview || applyingGeneratedMenu}>{applyingGeneratedMenu ? <LoaderCircle className="spin" size={16} /> : <Send size={16} />} {applyingGeneratedMenu ? "Добавляем…" : "Добавить на сайт"}</button>
           </div>
         </Modal>
       ) : null}
-      {editingLibraryItem ? (
-        <Modal title="Редактировать пункт библиотеки" subtitle="Изменения сохранятся только для выбранного проекта" onClose={() => setEditingLibraryItem(null)}>
-          <form className="menuLibraryEditForm" onSubmit={saveLibraryEdit}>
-            <label>Название<input value={editingLibraryName} onChange={(event) => setEditingLibraryName(event.target.value)} required autoFocus /></label>
-            <label>URL<input value={editingLibraryPath} onChange={(event) => setEditingLibraryPath(event.target.value)} required /></label>
-            <label>Перевод на русский<input value={editingLibraryRussianName} onChange={(event) => setEditingLibraryRussianName(event.target.value)} /></label>
-            {formError ? <span className="formError">{formError}</span> : null}
-            <div className="modalActions">
-              <button className="button secondary" type="button" onClick={() => setEditingLibraryItem(null)} disabled={savingLibraryEdit}>Отменить</button>
-              <button className="button primary" type="submit" disabled={savingLibraryEdit}>{savingLibraryEdit ? "Сохраняем" : "Сохранить"}</button>
-            </div>
-          </form>
-        </Modal>
-      ) : null}
+
     </section>
   );
 }
@@ -5942,6 +5916,7 @@ function TasksView({
   const [menuStructureHeader, setMenuStructureHeader] = React.useState(true);
   const [menuStructureFooter, setMenuStructureFooter] = React.useState(false);
   const [menuStructureAutoPublish, setMenuStructureAutoPublish] = React.useState(false);
+  const [menuStructureInterlinking, setMenuStructureInterlinking] = React.useState(true);
   const [creatingMenuStructure, setCreatingMenuStructure] = React.useState(false);
   const [creatingTaskAction, setCreatingTaskAction] = React.useState<"draft" | "start" | "">("");
   const [generatingTopics, setGeneratingTopics] = React.useState(false);
@@ -6267,6 +6242,7 @@ function TasksView({
           menu_types: menuTypes,
           section_ids: [],
           auto_publish: menuStructureAutoPublish,
+          homepage_interlinking: menuStructureInterlinking,
           save_as_draft: false
         })
       });
@@ -6357,7 +6333,12 @@ function TasksView({
       const details = await api<TaskDetails>(`/tasks/${task.id}`);
       const actionable = details.items.filter(canApproveContent);
       if (!actionable.length) {
-        setTaskError(`В задаче «${task.title}» нет текстов, доступных для принятия.`);
+        if (details.items.length && details.items.every((item) => ["approved", "scheduled", "retry_scheduled", "publication_paused", "publishing", "publication_pending_confirmation", "published", "deleted"].includes(item.status))) {
+          if (expandedTaskId === task.id) await loadTaskDetails(task.id);
+          await onChanged();
+          return;
+        }
+        setTaskError(`В задаче «${task.title}» нет готовых текстов для принятия. Дождитесь завершения генерации.`);
         return;
       }
       const results = await Promise.allSettled(actionable.map((item) => api(`/content/${item.id}/approve`, { method: "POST" })));
@@ -6667,6 +6648,7 @@ function TasksView({
 
   return (
     <section className="viewStack">
+      {selectedSite && <GenerationAnchors key={selectedSite.id} siteId={selectedSite.id} api={api} />}
       <div className="taskCreateToolbar">
         <button
           className="newGenerationTaskButton"
@@ -6921,7 +6903,8 @@ function TasksView({
                 <label className="checkboxRow"><input type="checkbox" checked={includeFaq} onChange={(event) => setIncludeFaq(event.target.checked)} /> Создавать FAQ</label>
                 <label className="checkboxRow"><input type="checkbox" checked={generateTitle} onChange={(event) => setGenerateTitle(event.target.checked)} /> Генерировать Title</label>
                 <label className="checkboxRow"><input type="checkbox" checked={collectCompetitors} onChange={(event) => setCollectCompetitors(event.target.checked)} /> Собрать конкурентов</label>
-                <label className="checkboxRow casinoReviewOption"><input type="checkbox" checked={menuStructureAutoPublish} onChange={(event) => setMenuStructureAutoPublish(event.target.checked)} /><span><b>Принять и опубликовать</b><small>После генерации система автоматически примет и опубликует каждый готовый текст; ошибки останутся в задаче.</small></span></label>
+                <label className="checkboxRow"><input type="checkbox" checked={menuStructureInterlinking} onChange={(event) => setMenuStructureInterlinking(event.target.checked)} /> Перелинковка</label>
+                <label className="checkboxRow"><input type="checkbox" checked={menuStructureAutoPublish} onChange={(event) => setMenuStructureAutoPublish(event.target.checked)} /> Принять и опубликовать</label>
               </div>
             </fieldset>
             <div className="menuStructureSummary wide">Будут созданы релевантные MAIN-тексты для всех корневых и дочерних пунктов выбранных меню, у которых ещё нет контента. Каждый текст автоматически привязывается к своему пункту и URL.</div>
@@ -7332,10 +7315,10 @@ function AdminTasksAccordion({
                           event.stopPropagation();
                           onApproveAll(task);
                         }}
-                        disabled={task.auto_publish || loading || actionId === `${task.id}:approve-all` || ["generation_queued", "generating"].includes(task.status)}
+                        disabled={task.auto_publish || loading || actionId === `${task.id}:approve-all` || ["generation_queued", "generating", "approved", "published", "scheduled", "publishing", "empty"].includes(task.status)}
                         title={task.auto_publish ? "Автоматическое принятие и публикация включены для этой задачи" : "Принять все готовые тексты этой задачи"}
                       >
-                        <CheckCircle2 size={15} /> {actionId === `${task.id}:approve-all` ? "Принимаю" : "Принять"}
+                        <CheckCircle2 size={15} /> {actionId === `${task.id}:approve-all` ? "Принимаю" : task.status === "approved" ? "Принято" : "Принять"}
                       </button>
                       <button
                         className="button compact danger"
@@ -7477,6 +7460,7 @@ function AdminTasksAccordion({
                                 <TopicMetaCell item={item} promptName={expandedTask.prompt_template_name} />,
                                 <QueryCell
                                   queries={itemResearch?.queries || []}
+                                  articleTopic={typeof (item.generation_context?.article_research_topic as { topic?: unknown } | undefined)?.topic === "string" ? (item.generation_context?.article_research_topic as { topic: string }).topic : ""}
                                   activeAction={actionId.startsWith(item.id) ? actionId.split(":")[1] : ""}
                                   busy={busy}
                                   onEdit={() => onEditQueries(item)}
@@ -7584,6 +7568,8 @@ function AdminTasksAccordion({
 
 function competitorStatusLabel(item: ContentItem, research?: CompetitorResearch) {
   const status = research?.status || item.competitor_research_status;
+  if (status === "topic_pending") return "Нужна тема из 5–9 слов";
+  if (status === "preparing_topic") return "Готовлю тему статьи";
   if (status === "queued") return "В очереди";
   if (status === "collecting_serp") return "Собираю выдачу Google";
   if (status === "fetching_pages") return "Загружаю страницы";
@@ -7662,12 +7648,14 @@ function CompetitorCell({ item, research }: { item: ContentItem; research?: Comp
 
 function QueryCell({
   queries,
+  articleTopic,
   activeAction,
   busy,
   onEdit,
   onRegenerate
 }: {
   queries: CompetitorQuery[];
+  articleTopic?: string;
   activeAction: string;
   busy: boolean;
   onEdit: () => void;
@@ -7678,6 +7666,7 @@ function QueryCell({
     <div className="queryCell" tabIndex={0}>
       <span className="queryCount">{queryTexts.length}</span>
       <div className="queryTooltip" role="tooltip">
+        {articleTopic && <><strong>Тема статьи</strong><span>{articleTopic}</span></>}
         <strong>Подготовленные запросы</strong>
         {queryTexts.length ? (
           <ol>
@@ -8343,6 +8332,7 @@ function ProvidersView({ api, providers, onChanged }: ViewProps & { providers: A
 
   return (
     <section className="viewStack">
+      <ArticleImageSettings api={api} providers={providers} />
       <DataPanel title="Подключить API provider">
         <form className="formGrid" onSubmit={createProvider}>
           <label>
@@ -8427,10 +8417,10 @@ function ProvidersView({ api, providers, onChanged }: ViewProps & { providers: A
   );
 }
 
-type SiteTableColumn = "brand" | "rowNumber" | "select" | "name" | "title" | "canon" | "language" | "status" | "internalPages" | "menuType" | "menuCount" | "domainsCount" | "subdomainsCount" | "fiberyName";
+type SiteTableColumn = "brand" | "rowNumber" | "select" | "name" | "title" | "canon" | "language" | "status" | "dropsCount" | "newregCount" | "menuType" | "menuCount" | "domainsCount" | "subdomainsCount" | "fiberyName";
 type SiteSummaryFilter = "projects" | "working" | "menu" | "mass_actions" | "vitalina" | "hands_only" | "geo_ru" | "geo_kz" | "inactive" | "duplicate" | "all";
 
-const DEFAULT_SITE_COLUMN_ORDER: SiteTableColumn[] = ["rowNumber", "select", "name", "brand", "title", "canon", "language", "status", "internalPages", "menuType", "menuCount", "domainsCount", "subdomainsCount", "fiberyName"];
+const DEFAULT_SITE_COLUMN_ORDER: SiteTableColumn[] = ["rowNumber", "select", "name", "brand", "title", "canon", "language", "status", "menuType", "menuCount", "domainsCount", "dropsCount", "newregCount", "subdomainsCount", "fiberyName"];
 const SITE_COLUMN_LABELS: Record<SiteTableColumn, string> = {
   brand: "Бренд",
   rowNumber: "№",
@@ -8440,12 +8430,13 @@ const SITE_COLUMN_LABELS: Record<SiteTableColumn, string> = {
   canon: "Main",
   language: "Язык",
   status: "Статус",
-  internalPages: "Страницы",
+  dropsCount: "Drops",
+  newregCount: "NewReg",
   menuType: "Тип меню",
   menuCount: "Пункты меню",
-  fiberyName: "Имя проекта",
+  fiberyName: "Name Fibery",
   subdomainsCount: "Поддоменов",
-  domainsCount: "Доменов в сетке"
+  domainsCount: "Domains"
 };
 const SITE_COLUMN_SORT_KEYS: Record<SiteTableColumn, string | null> = {
   brand: "brand",
@@ -8456,7 +8447,8 @@ const SITE_COLUMN_SORT_KEYS: Record<SiteTableColumn, string | null> = {
   canon: "canon",
   language: "language",
   status: "status",
-  internalPages: "internalPages",
+  dropsCount: "dropsCount",
+  newregCount: "newregCount",
   menuType: "menuType",
   menuCount: "menuCount",
   fiberyName: "fiberyName",
@@ -8476,13 +8468,6 @@ function localeCountryCode(value: string): string | null {
   if (explicitCountry) return explicitCountry.toUpperCase();
   const normalized = parts[0]?.toLowerCase() || "";
   return LANGUAGE_COUNTRIES[normalized] || (normalized.length === 2 ? normalized.toUpperCase() : null);
-}
-
-function siteGeoFilterCode(value: string | null | undefined): string {
-  const normalized = (value || "").trim().toUpperCase();
-  if (/^[A-Z]{2}$/.test(normalized)) return normalized;
-  const parts = normalized.split(/[-_]/).filter(Boolean);
-  return parts.length > 1 ? [...parts].reverse().find(part => /^[A-Z]{2}$/.test(part)) || normalized : normalized;
 }
 
 function localeFlag(countryCode: string | null): string {
@@ -8582,8 +8567,10 @@ type StatisticsProject = { brand: string; id: string; name: string; project_name
 function useStatisticsSort(defaultColumn = 0) {
   const [sort, setSort] = React.useState({ column: defaultColumn, descending: false });
   const header = (labels: string[]) => labels.map((label, column) => <th key={label} aria-sort={sort.column === column ? (sort.descending ? "descending" : "ascending") : "none"}><button type="button" className="massStatisticsSort" onClick={() => setSort(previous => ({ column, descending: previous.column === column ? !previous.descending : false }))}>{label}<span aria-hidden="true">{sort.column === column ? (sort.descending ? " ↓" : " ↑") : " ↕"}</span></button></th>);
-  function ordered<T>(rows: T[], values: (row: T) => (string | number)[]): T[] {
+  function ordered<T>(rows: T[], values: (row: T) => (string | number)[], priority?: (row: T) => number): T[] {
     return [...rows].sort((a, b) => {
+      const pinned = priority ? priority(a) - priority(b) : 0;
+      if (pinned) return pinned;
       const left = values(a)[sort.column], right = values(b)[sort.column];
       const comparison = typeof left === "number" && typeof right === "number" ? left - right : String(left).localeCompare(String(right), "ru", { numeric: true });
       return sort.descending ? -comparison : comparison;
@@ -8592,17 +8579,20 @@ function useStatisticsSort(defaultColumn = 0) {
   return { header, ordered, reset: () => setSort({ column: defaultColumn, descending: false }) };
 }
 
-function MassActionStatistics({ api, renderProjects }: { api: ViewProps["api"]; renderProjects: (ids: string[], refresh: () => void) => React.ReactNode }) {
+function MassActionStatistics({ api, renderProjects, massOnly = false, onScopeChange, headerContainer, onInventoryChanged, refreshToken = 0, catalogReady = true, catalogError = "" }: { refreshToken?:number;catalogReady?:boolean;catalogError?:string; onInventoryChanged?: () => Promise<void>; headerContainer?: HTMLElement|null; massOnly?: boolean; onScopeChange?: (selection: MassActionSelection) => void; api: ViewProps["api"]; renderProjects: (ids: string[], refresh: () => void, scopeLabel?:string) => React.ReactNode }) {
+  const inventorySignature = React.useRef<string|null>(null);
   const [scope, setScope] = React.useState("mass_actions");
   const requestSequence = React.useRef(0);
   const [projects, setProjects] = React.useState<StatisticsProject[]>([]);
-  const [brandFilter, setBrandFilter] = React.useState("");
+  const [brandFilter, setBrandFilter] = React.useState(()=>massOnly?new URLSearchParams(window.location.search).get("brand")||"":"");
+  const [includeGeneral, setIncludeGeneral] = React.useState(false);
   const brandLabel = (project: StatisticsProject) => project.brand || "Бренд не указан";
   const selectBrand = (value: string) => {
     setBrandFilter(value);
     if (value && projectDetailsRef.current) projectDetailsRef.current.open = true;
   };
-  const [geo, setGeo] = React.useState("");
+  const [geo, setGeo] = React.useState(()=>{const value=new URLSearchParams(window.location.search).get("geo")||"";return massOnly&&/^(?:[A-Z]{2}|UNKNOWN)$/.test(value)?value:"";});
+  React.useEffect(()=>{if(!massOnly)return;const url=new URL(window.location.href);for(const [key,value] of [["geo",geo],["brand",brandFilter]]){if(value)url.searchParams.set(key,value);else url.searchParams.delete(key);}window.history.replaceState(null,"",url);},[massOnly,geo,brandFilter]);
   const projectDetailsRef = React.useRef<HTMLDetailsElement>(null);
   const selectGeo = (value: string) => {
     setGeo(value);
@@ -8611,16 +8601,44 @@ function MassActionStatistics({ api, renderProjects }: { api: ViewProps["api"]; 
   const [typeFilter, setTypeFilter] = React.useState("");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
-  const load = React.useCallback(async () => {
+  const statisticsContext=React.useMemo(()=>({active:true}),[api,scope,onInventoryChanged]);
+  const fetchProjects = React.useMemo(() => createCoalescedLoader(async () => {
+    if(!statisticsContext.active)return;
     const request = ++requestSequence.current;
-    setLoading(true); setError("");
-    try { const result = await api<{ projects: StatisticsProject[] }>(`/sites/statistics?scope=${scope}`); if (request === requestSequence.current) setProjects(result.projects); }
-    catch (e) { if (request === requestSequence.current) setError(e instanceof Error ? e.message : "Не удалось загрузить статистику"); }
-    finally { if (request === requestSequence.current) setLoading(false); }
-  }, [api, scope]);
-  React.useEffect(() => { void load(); }, [load]);
+    setError("");
+    try {
+      const result = await api<{ projects: StatisticsProject[] }>(`/sites/statistics?scope=${scope}`);
+      if (!statisticsContext.active || request !== requestSequence.current) return;
+      const signature=JSON.stringify(result.projects.map(p=>[p.id,p.brand,p.geo,p.site_type]).sort((a,b)=>String(a[0]).localeCompare(String(b[0]))));
+      // The initial catalogue is already loading in App. Only a later membership
+      // change needs a fresh catalogue before applying the new selection.
+      if(inventorySignature.current!==null && signature!==inventorySignature.current){
+        await onInventoryChanged?.();
+        if(!statisticsContext.active || request!==requestSequence.current)return;
+      }
+      inventorySignature.current=signature;
+      setProjects(result.projects);
+    } catch (e) { if (statisticsContext.active && request === requestSequence.current) setError(e instanceof Error ? e.message : "Не удалось загрузить проекты"); }
+    finally { if (statisticsContext.active && request === requestSequence.current) setLoading(false); }
+  }), [api, scope, onInventoryChanged,statisticsContext]);
+  const load = React.useCallback((background = false, fresh = false) => {
+    if(!background)setLoading(true);
+    return fetchProjects(fresh);
+  }, [fetchProjects]);
+  React.useEffect(() => { statisticsContext.active=true;void load(false,true);return()=>{statisticsContext.active=false;requestSequence.current++;}; }, [load,statisticsContext]);
+  React.useEffect(() => {
+    if(!massOnly)return;
+    return createVisiblePoll({load:()=>load(true),intervalMs:15000});
+  },[massOnly,load]);
+  const previousRefreshToken=React.useRef(refreshToken);
+  React.useEffect(()=>{
+    if(previousRefreshToken.current===refreshToken)return;
+    previousRefreshToken.current=refreshToken;void load(true,true);
+  },[refreshToken,load]);
   const geos = [...new Set(projects.map(p => p.geo))].sort();
-  const selected = projects.filter(p => (!geo || p.geo === geo) && (!typeFilter || p.site_type === typeFilter) && (!brandFilter || brandLabel(p) === brandFilter));
+  const selected = projects.filter(p => (!geo || p.geo === geo) && (!typeFilter || p.site_type === typeFilter) && (!brandFilter || brandLabel(p) === brandFilter || massOnly && includeGeneral && p.site_type === "general"));
+  const scopeSignature = JSON.stringify(massOnly && geo && geo !== "UNKNOWN" && brandFilter && catalogReady && !loading && !error ? { filter: { brand: brandFilter, geo, include_general: includeGeneral, site_type: typeFilter || null }, site_ids: selected.map(p => p.id) } : { filter: null, site_ids: [] });
+  React.useEffect(() => { onScopeChange?.(JSON.parse(scopeSignature)); }, [scopeSignature, onScopeChange]);
   const sum = (rows: StatisticsProject[], key: "domains" | "drop" | "newreg" | "subdomains" | "amp" | "unknown") => rows.reduce((n, p) => n + p[key], 0);
   const geoLabel = (code: string) => code === "UNKNOWN" ? "GEO не указано" : `${localeFlag(code)} ${COUNTRIES.find(c => c.code.toUpperCase() === code)?.name || code} (${code})`;
   const geoSort = useStatisticsSort();
@@ -8628,7 +8646,7 @@ function MassActionStatistics({ api, renderProjects }: { api: ViewProps["api"]; 
   const [resetVersion, setResetVersion] = React.useState(0);
   const resetReport = () => {
     setResetVersion(version => version + 1);
-    setGeo(""); setTypeFilter(""); setBrandFilter("");
+    setGeo(""); setTypeFilter(""); setBrandFilter(""); setIncludeGeneral(false);
     geoSort.reset(); brandSort.reset();
     if (projectDetailsRef.current) projectDetailsRef.current.open = false;
     if (scope !== "mass_actions") {
@@ -8640,19 +8658,25 @@ function MassActionStatistics({ api, renderProjects }: { api: ViewProps["api"]; 
   const brandRows = [...new Set(selected.map(p => p.brand || "Бренд не указан"))].map(brand => ({ brand, rows: selected.filter(p => (p.brand || "Бренд не указан") === brand) }));
   const typeLabel = (kind: string) => kind === "monobrand" ? "Монобренды" : "Общие ключи";
   const geoSortLabel = (code: string) => COUNTRIES.find(c => c.code.toUpperCase() === code)?.name || code;
+  const geoPriority = (group: { g: string }) => group.g === "PL" ? 0 : group.g === "CZ" ? 1 : 2;
   const headers = ["GEO", "Тип проекта", "Проектов", "Доменов в сетках", "Дропов", "Новорегов", "Поддоменов", "AMP"];
-  return <DataPanel title={`Статистика · ${scope === "geo_ru" ? "RU проекты" : scope === "geo_kz" ? "KZ проекты" : scope === "hands_only" ? "hands only" : "Массовые действия"}`}>
-    <div className="massStatisticsScopes" aria-label="Подборка для статистики">
+  const picker=massOnly?<MassScopePicker loading={loading&&projects.length===0} projects={projects} geo={geo} brand={brandFilter} geoLabel={geoLabel} onChange={(g,b)=>{selectGeo(g);selectBrand(b);setTypeFilter("");}}><label className="massActionGeneralToggle"><input type="checkbox" checked={includeGeneral} onChange={e=>setIncludeGeneral(e.target.checked)}/>Включить общие ключи этого GEO</label><ReservePoolButton api={api}/></MassScopePicker>:null;
+  if(massOnly)return <section className="viewStack massProjectList">{picker&&headerContainer?createPortal(picker,headerContainer):picker}{error&&<p role="alert">{error}</p>}{!catalogReady&&catalogError?<p role="alert">{catalogError}</p>:loading||!catalogReady?<p className="muted">Загружаем проекты…</p>:!error?<React.Fragment key={resetVersion}>{renderProjects(selected.map(p=>p.id),()=>{void load(true,true);},brandFilter&&geo?`${brandFilter} — ${geo}`:undefined)}</React.Fragment>:null}</section>;
+  return <>{picker && headerContainer ? createPortal(picker,headerContainer) : picker}<DataPanel title={`${scope === "geo_ru" ? "RU проекты" : scope === "geo_kz" ? "KZ проекты" : scope === "hands_only" ? "hands only" : "Массовые действия"}`}>
+    {!massOnly && <div className="massStatisticsScopes" aria-label="Подборка проектов">
       {[{ value: "mass_actions", label: "Массовые действия" }, { value: "geo_ru", label: "RU проекты" }, { value: "geo_kz", label: "KZ проекты" }, { value: "hands_only", label: "hands only" }].map(option => <button type="button" key={option.value} className={`massStatisticsScope ${scope === option.value ? "active" : ""}`} aria-pressed={scope === option.value} onClick={() => { if (scope !== option.value) { requestSequence.current += 1; setLoading(true); setGeo(""); setTypeFilter(""); setBrandFilter(""); setScope(option.value); } }}>{option.label}</button>)}
-    </div>
+    </div>}
     <div className="massStatisticsControls">
-      <label>GEO<SearchableSelect value={geo} onChange={selectGeo} options={[{ value: "", label: "Все GEO" }, ...geos.map(g => ({ value: g, label: geoLabel(g) }))]} searchPlaceholder="Введите страну или код" /></label>
-      <button className="secondary" type="button" onClick={() => void load()} disabled={loading}>{loading ? "Загрузка…" : "Обновить статистику"}</button>
+      {!massOnly&&<><label>GEO<SearchableSelect value={geo} onChange={selectGeo} options={[{ value: "", label: "Все GEO" }, ...geos.map(g => ({ value: g, label: geoLabel(g) }))]} searchPlaceholder="Введите страну или код" /></label>
+      <label>Бренд<SearchableSelect value={brandFilter} onChange={selectBrand} options={[{ value: "", label: "Все бренды" }, ...[...new Set(projects.filter(p => !geo || p.geo === geo).map(brandLabel))].sort((a, b) => a.localeCompare(b)).map(brand => ({ value: brand, label: brand }))]} searchPlaceholder="Введите название бренда" /></label></>}
+      {massOnly && <label className="massActionGeneralToggle"><input type="checkbox" checked={includeGeneral} onChange={e => setIncludeGeneral(e.target.checked)} />Включить общие ключи этого GEO</label>}
+      <button className="button secondary compact" type="button" onClick={() => void load(false,true)} disabled={loading}>{loading ? "Загрузка…" : "Обновить данные"}</button>
     </div>
+    {massOnly && (!geo || !brandFilter) && <p className="muted">Для массового действия выберите бренд и GEO. В запуск попадут только проекты этой выборки.</p>}
     {error ? <p role="alert">{error}</p> : null}
     {!loading && !error ? <>
-      <div className="massStatisticsCards">
-        {[["Всего проектов", projects.length], ["Уникальных GEO", new Set(selected.map(p => p.geo).filter(g => g && g !== "UNKNOWN")).size], ["Монобренды", selected.filter(p => p.site_type === "monobrand").length], ["Общие ключи", selected.filter(p => p.site_type === "general").length], ["Дропов", sum(selected, "drop")], ["Новорегов", sum(selected, "newreg")], ["Доменов в сетках", sum(selected, "domains")]].map(([label, value]) => {
+      {!massOnly&&<><div className="massStatisticsCards">
+        {[["Всего проектов", massOnly ? selected.length : projects.length], ["Уникальных GEO", new Set(selected.map(p => p.geo).filter(g => g && g !== "UNKNOWN")).size], ["Монобренды", selected.filter(p => p.site_type === "monobrand").length], ["Общие ключи", selected.filter(p => p.site_type === "general").length], ["Дропов", sum(selected, "drop")], ["Новорегов", sum(selected, "newreg")], ["Доменов в сетках", sum(selected, "domains")]].map(([label, value]) => {
           const filter = label === "Монобренды" ? "monobrand" : label === "Общие ключи" ? "general" : null;
           if (label === "Всего проектов") return <button key={label} type="button" className="massStatisticsTypeCard" title="Вернуться к исходному виду отчёта" onClick={resetReport}><span>{label}</span><strong>{formatNumber(Number(value))}</strong></button>;
           return filter ? <button key={label} type="button" className={`massStatisticsTypeCard ${typeFilter === filter ? "active" : ""}`} aria-pressed={typeFilter === filter} onClick={() => setTypeFilter(previous => previous === filter ? "" : filter)}><span>{label}</span><strong>{formatNumber(Number(value))}</strong></button> : <div key={label}><span>{label}</span><strong>{formatNumber(Number(value))}</strong></div>;
@@ -8660,9 +8684,9 @@ function MassActionStatistics({ api, renderProjects }: { api: ViewProps["api"]; 
       </div>
       {typeFilter ? <button type="button" className="secondary" onClick={() => setTypeFilter("")} aria-label="Сбросить фильтр типа проекта">{typeFilter === "monobrand" ? "Монобренды" : "Общие ключи"} ×</button> : null}
       {brandFilter ? <button type="button" className="secondary" onClick={() => setBrandFilter("")} aria-label="Сбросить фильтр бренда">{brandFilter} ×</button> : null}
-      <p className="muted">{scope === "geo_ru" ? "Проекты со статусом «GEO RU»" : scope === "geo_kz" ? "Проекты со статусом «GEO KZ»" : scope === "hands_only" ? "Проекты со статусом «hands only»" : "Только проекты со статусом «Массовые действия»"}, без исключённых из системы. Дропы и новореги считаются по сохранённым типам доменов; поддомены и AMP показаны отдельно. Домен, входящий в разные сетки, учитывается в каждой сетке.</p>
+      <p className="muted">{scope === "geo_ru" ? "Проекты со статусом «GEO RU»" : scope === "geo_kz" ? "Проекты со статусом «GEO KZ»" : scope === "hands_only" ? "Проекты со статусом «hands only»" : "Только проекты со статусом «Массовые действия»"}, без исключённых из системы. Дропы и новореги считаются по сохранённым типам доменов; поддомены и AMP показаны отдельно. Домен, входящий в разные сетки, учитывается в каждой сетке.</p></>}
       <div className="massStatisticsTable"><table><thead><tr>{geoSort.header(headers)}</tr></thead><tbody>
-        {geoSort.ordered(geoRows, group => [geoSortLabel(group.g), typeLabel(group.kind), ...metrics(group.rows)]).map(({ g, kind, rows }) => <tr key={`${g}-${kind}`}><td><span className="massStatisticsGeoCell"><button type="button" className="secondary" onClick={() => selectGeo(g)}>{geoLabel(g)}</button>{geo === g ? <button type="button" className="massStatisticsGeoClear" aria-label="Сбросить фильтр GEO" title="Показать все GEO" onClick={() => setGeo("")}>×</button> : null}</span></td><td>{typeLabel(kind)}</td><td>{rows.length}</td>{(["domains", "drop", "newreg", "subdomains", "amp"] as const).map(k => <td key={k}>{formatNumber(sum(rows, k))}</td>)}</tr>)}
+        {geoSort.ordered(geoRows, group => [geoSortLabel(group.g), typeLabel(group.kind), ...metrics(group.rows)], geoPriority).map(({ g, kind, rows }) => <tr key={`${g}-${kind}`}><td><span className="massStatisticsGeoCell"><button type="button" className="secondary" onClick={() => selectGeo(g)}>{geoLabel(g)}</button>{geo === g ? <button type="button" className="massStatisticsGeoClear" aria-label="Сбросить фильтр GEO" title="Показать все GEO" onClick={() => setGeo("")}>×</button> : null}</span></td><td>{typeLabel(kind)}</td><td>{rows.length}</td>{(["domains", "drop", "newreg", "subdomains", "amp"] as const).map(k => <td key={k}>{formatNumber(sum(rows, k))}</td>)}</tr>)}
         {!selected.length ? <tr><td colSpan={8}>Нет проектов для выбранных фильтров.</td></tr> : null}
       </tbody><tfoot><tr><th colSpan={2}>Итого</th><th>{selected.length}</th>{(["domains", "drop", "newreg", "subdomains", "amp"] as const).map(k => <th key={k}>{formatNumber(sum(selected, k))}</th>)}</tr></tfoot></table></div>
       <h3>По брендам</h3>
@@ -8672,10 +8696,41 @@ function MassActionStatistics({ api, renderProjects }: { api: ViewProps["api"]; 
       </tbody><tfoot><tr><th>Итого</th><th>{selected.length}</th>{(["domains", "drop", "newreg", "subdomains", "amp"] as const).map(k => <th key={k}>{formatNumber(sum(selected, k))}</th>)}</tr></tfoot></table></div>
       <details ref={projectDetailsRef} className="massStatisticsDetails"><summary>Проекты в выборке · {selected.length}</summary><React.Fragment key={resetVersion}>{renderProjects(selected.map(p => p.id), () => { void load(); })}</React.Fragment></details>
     </> : null}
-  </DataPanel>;
+  </DataPanel></>;
 }
 
-function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsername, favoritesOnly = false, readOnly = false, embedded = false, onChanged }: ViewProps & { sites: Site[]; snapshotUpdatedAt: string | null; onSitesChanged: (sites: Site[], replace?: boolean) => void; currentUsername: string; favoritesOnly?: boolean; readOnly?: boolean; embedded?: boolean }) {
+function PeerProjectPicker({ sites, geo, brand, onChange }: { sites: Site[]; geo: string; brand: string; onChange: (geo: string, brand: string) => void }) {
+  const brandGroups = (country: string) => {
+    const groups = new Map<string, { brand: string; count: number }>();
+    for (const site of sites) {
+      if (country !== "ALL" && (siteGeoFilterCode(site.cache_geo) || "UNKNOWN") !== country) continue;
+      const name = site.brand?.trim() || "Общие ключи";
+      const key = name.toLocaleLowerCase();
+      const group = groups.get(key) || { brand: name, count: 0 };
+      group.count += 1; groups.set(key, group);
+    }
+    return [...groups.values()].sort((a, b) => a.brand.localeCompare(b.brand, "ru"));
+  };
+  const groups = brandGroups(geo);
+  const geoLabel = (value: string) => value === "ALL" ? "🌐 Все GEO" : value === "UNKNOWN" ? "🌐 GEO не указано" : `${localeFlag(value)} ${COUNTRIES.find(country => country.code === value)?.name || value} (${value})`;
+  const priority = (value: string) => value === "PL" ? 0 : value === "CZ" ? 1 : 2;
+  const geos = [...new Set([geo, ...sites.map(site => siteGeoFilterCode(site.cache_geo) || "UNKNOWN")])].filter(value => value !== "ALL").sort((a, b) => priority(a) - priority(b) || geoLabel(a).localeCompare(geoLabel(b), "ru"));
+  return <section className="peerProjectPicker" aria-label="Бренды и GEO">
+    <label className="peerGeoPicker"><span>GEO</span><SearchableSelect value={geo} ariaLabel="GEO выборки проектов" searchPlaceholder="Введите страну или код" options={[{value:"ALL",label:geoLabel("ALL")},...geos.map(value => ({ value, label: geoLabel(value) }))]} onChange={value => {
+      const next = brandGroups(value);
+      onChange(value, next.find(group => group.brand.toLocaleLowerCase() === brand.toLocaleLowerCase())?.brand || "");
+    }} /></label>
+    <div className="peerBrandTiles" role="group" aria-label={`Бренды в GEO ${geo}`}>
+      <button type="button" className="peerBrandTile" aria-pressed={!brand} onClick={()=>onChange(geo,"")} aria-label={`Все бренды, проектов: ${groups.reduce((n,g)=>n+g.count,0)}`}><span className="peerBrandName">Все бренды</span><span className="peerBrandCount">{groups.reduce((n,g)=>n+g.count,0)}</span></button>
+      {groups.map(group => <button type="button" className="peerBrandTile" key={group.brand.toLocaleLowerCase()} aria-pressed={group.brand.toLocaleLowerCase() === brand.toLocaleLowerCase()} aria-label={`${group.brand}, проектов: ${group.count}`} onClick={() => onChange(geo, group.brand)}>
+        <BrandIcon brand={group.brand} /><span className="peerBrandName">{group.brand}</span><span className="peerBrandCount" aria-hidden="true">{group.count}</span>
+      </button>)}
+      {!groups.length && <p className="muted">В этом GEO пока нет проектов.</p>}
+    </div>
+  </section>;
+}
+
+function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsername, favoritesOnly = false, readOnly = false, embedded = false, massActions = false, onChanged, onSelectionChange, selectionIds, headerActions, moveFilter, projectScopeLabel }: ViewProps & { massActions?: boolean; projectScopeLabel?:string; moveFilter?: MassActionFilter; headerActions?: React.ReactNode; sites: Site[]; snapshotUpdatedAt: string | null; onSitesChanged: (sites: Site[], replace?: boolean) => void; currentUsername: string; favoritesOnly?: boolean; readOnly?: boolean; embedded?: boolean; selectionIds?: string[]; onSelectionChange?: (ids: string[]) => void }) {
   const [showStatistics, setShowStatistics] = React.useState(() => window.location.hash === "#mass-action-statistics");
   const preferencesKey = `sites-table-preferences:${currentUsername}`;
   const storedPreferences = React.useMemo(() => {
@@ -8703,17 +8758,31 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
   const [geoFilter, setGeoFilter] = React.useState(() => siteGeoFilterCode(storedPreferences.geoFilter));
   const [brandFilter, setBrandFilter] = React.useState(() => storedPreferences.brandFilter || "");
   const [syncing, setSyncing] = React.useState(false);
+  const [refreshingNetworks, setRefreshingNetworks] = React.useState(false);
+  const refreshingNetworksRef = React.useRef(false);
+  const [networkRefreshResult, setNetworkRefreshResult] = React.useState<{scope:string;done:number;total:number;errors:string[]}|null>(null);
   const [syncError, setSyncError] = React.useState("");
-  const [selectedProjectNames, setSelectedProjectNames] = React.useState<string[]>([]);
+  const [localSelectedNames, setLocalSelectedNames] = React.useState<string[]>([]);
+  const selectedProjectNames = selectionIds ? managedSites.filter(site => selectionIds.includes(site.id)).map(site => site.name) : localSelectedNames;
+  const setSelectedProjectNames = (change: React.SetStateAction<string[]>) => {
+    const names = typeof change === "function" ? change(selectedProjectNames) : change;
+    if (selectionIds) onSelectionChange?.(managedSites.filter(site => names.includes(site.name)).map(site => site.id));
+    else setLocalSelectedNames(names);
+  };
   const [syncMessage, setSyncMessage] = React.useState("");
   const [summaryFilter, setSummaryFilter] = React.useState<SiteSummaryFilter | null>(() => ["test", "menu"].includes(String(storedPreferences.summaryFilter)) ? null : storedPreferences.summaryFilter === "working" ? "hands_only" : storedPreferences.summaryFilter === "projects" ? "all" : storedPreferences.summaryFilter || null);
   const [medalFilter, setMedalFilter] = React.useState<ProjectMedalStatus | null>(null);
-  const [siteSort, setSiteSort] = React.useState<{ key: string; direction: "asc" | "desc" } | null>(["geo", "menuType", "menuCount"].includes(storedPreferences.siteSort?.key || "") ? null : storedPreferences.siteSort || null);
+  const [siteSort, setSiteSort] = React.useState<{ key: string; direction: "asc" | "desc" } | null>(["geo", "menuType", "menuCount", "internalPages", "reserve"].includes(storedPreferences.siteSort?.key || "") ? null : storedPreferences.siteSort || null);
   const [deletingDuplicates, setDeletingDuplicates] = React.useState(false);
   const [menuPreview, setMenuPreview] = React.useState<{ name: string; header: unknown[]; footer: unknown[] } | null>(null);
   const [columnsSettingsOpen, setColumnsSettingsOpen] = React.useState(false);
+  const [savingParticipation, setSavingParticipation] = React.useState<string[]>([]);
+  const columnLabels = {...SITE_COLUMN_LABELS, ...(massActions ? {subdomainsCount: "Участвует в переклее"} : {})};
+  const [exportingTable, setExportingTable] = React.useState(false);
+  const [exportTableError, setExportTableError] = React.useState("");
   const [currentPage, setCurrentPage] = React.useState(1);
   const [rowsPerPage, setRowsPerPage] = React.useState<number | "all">(() => {
+    if (massActions) return "all";
     const stored = storedPreferences.rowsPerPage;
     return stored === "all" || [25, 50, 100, 250].includes(Number(stored)) ? stored as number | "all" : 50;
   });
@@ -8740,18 +8809,20 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
   });
   const [menuTypeFilters, setMenuTypeFilters] = React.useState<string[]>(allMenuTypeFilters);
   const [columnOrder, setColumnOrder] = React.useState<SiteTableColumn[]>(() => {
-    const previous = Array.isArray(storedPreferences.columnOrder) ? storedPreferences.columnOrder.map(column => (column as string) === "xDefault" ? "fiberyName" as SiteTableColumn : column) : storedPreferences.columnOrder;
+    const previous = Array.isArray(storedPreferences.columnOrder) ? storedPreferences.columnOrder.map(column => (column as string) === "xDefault" ? "fiberyName" as SiteTableColumn : column).filter(column => !["internalPages", "reserve"].includes(column as string)) : storedPreferences.columnOrder;
     const withSubdomains = Array.isArray(previous) && !previous.includes("subdomainsCount")
       ? previous.flatMap(column => column === "domainsCount" ? [column, "subdomainsCount" as SiteTableColumn] : [column]) : previous;
-    const stored = Array.isArray(withSubdomains) && !withSubdomains.includes("brand")
-      ? withSubdomains.flatMap(column => column === "name" ? [column, "brand" as SiteTableColumn] : [column])
-      : withSubdomains;
+    const withCounts = Array.isArray(withSubdomains)
+      ? withSubdomains.flatMap(column => column === "domainsCount" ? [column, ...(["dropsCount", "newregCount"] as SiteTableColumn[]).filter(key => !withSubdomains.includes(key))] : [column]) : withSubdomains;
+    const stored = Array.isArray(withCounts) && !withCounts.includes("brand")
+      ? withCounts.flatMap(column => column === "name" ? [column, "brand" as SiteTableColumn] : [column])
+      : withCounts;
     return Array.isArray(stored) && stored.every((column) => DEFAULT_SITE_COLUMN_ORDER.includes(column))
       ? [...new Set([...stored, ...DEFAULT_SITE_COLUMN_ORDER])]
       : DEFAULT_SITE_COLUMN_ORDER;
   });
   const [hiddenColumns, setHiddenColumns] = React.useState<SiteTableColumn[]>(() => {
-    const stored = Array.isArray(storedPreferences.hiddenColumns) ? storedPreferences.hiddenColumns.filter(column => (column as string) !== "xDefault") : storedPreferences.hiddenColumns;
+    const stored = Array.isArray(storedPreferences.hiddenColumns) ? storedPreferences.hiddenColumns.filter(column => DEFAULT_SITE_COLUMN_ORDER.includes(column)) : storedPreferences.hiddenColumns;
     return Array.isArray(stored) && stored.every((column) => DEFAULT_SITE_COLUMN_ORDER.includes(column)) ? stored : [];
   });
   const [favoriteSiteIds, setFavoriteSiteIds] = React.useState<string[]>([]);
@@ -8874,6 +8945,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       brand: site.brand || "Общие ключи",
       baseUrl: site.base_url,
       isFavorite: favoriteSiteIds.includes(site.id),
+      reserve: site.cache_reserve || "",
       isActive: site.is_active !== false,
       canon: site.cache_canon || site.base_url.replace(/^https?:\/\//, "").replace(/\/$/, ""),
       language: site.cache_language,
@@ -8883,6 +8955,8 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       isTest: site.is_test_project,
       isWorking: site.project_status === "working",
       projectStatus: site.project_status,
+      participation: site.reglue_participation !== false,
+      lastReglueAt: site.last_reglue_at,
       hasMenu: site.has_menu,
       medalStatus: projectMenuMedalStatus(site),
       headerMenuCount,
@@ -8892,7 +8966,8 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       menuTypeKey: headerMenuCount && footerMenuCount ? "header_footer" : headerMenuCount ? "header" : footerMenuCount ? "footer" : "none",
       menuType: headerMenuCount && footerMenuCount ? "Header + Footer" : headerMenuCount ? "Header" : footerMenuCount ? "Footer" : "",
       menuCount: headerMenuCount + footerMenuCount,
-      internalPagesCount: site.internal_pages_count + 1,
+      dropsCount: site.network_domain_counts?.drop ?? null,
+      newregCount: site.network_domain_counts?.newreg ?? null,
       fiberyName: site.fibery_name || "",
       fiberyNameManual: Boolean(site.fibery_name_manual),
       projectTeam: site.project_team,
@@ -8919,10 +8994,11 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       language: [left.language || "", right.language || ""],
       geo: [left.geo || "", right.geo || ""],
       status: [statusPriority(left.projectStatus), statusPriority(right.projectStatus)],
-      internalPages: [left.internalPagesCount, right.internalPagesCount],
+      dropsCount: [left.dropsCount ?? -1, right.dropsCount ?? -1],
+      newregCount: [left.newregCount ?? -1, right.newregCount ?? -1],
       menuType: [left.menuType, right.menuType],
       menuCount: [left.menuCount, right.menuCount],
-      subdomainsCount: [left.subdomainsCount ?? -1, right.subdomainsCount ?? -1],
+      subdomainsCount: massActions ? [Number(left.participation), Number(right.participation)] : [left.subdomainsCount ?? -1, right.subdomainsCount ?? -1],
       domainsCount: [left.domainsCount, right.domainsCount]
     };
     const [leftValue, rightValue] = values[siteSort.key];
@@ -8944,26 +9020,74 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
     if (summaryFilter === "vitalina" || summaryFilter === "hands_only" || summaryFilter === "geo_ru" || summaryFilter === "geo_kz" || summaryFilter === "inactive") return row.projectStatus === summaryFilter;
     return row.projectStatus === "duplicate";
   };
-  const filteredRows = domainRows.filter((row) => {
+  const rowsBeforeStatus = domainRows.filter((row) => {
     const exactNetworkDomainMatch = isExactNetworkDomainSearch(row.domains, normalizedQuery);
     const matchesSearch = !normalizedQuery
       || [row.name, row.fiberyName, row.homepageTitle || "", row.canon, row.externalProjectId || "", row.projectStatus, ...row.domains]
         .some((value) => matchesProjectSearch(value, normalizedQuery));
     const matchesActiveFilters = (
       (!favoritesOnly || row.isFavorite)
-      && matchesSummaryFilter(row)
       && (!medalFilter || row.medalStatus === medalFilter)
-      && statusFilters.includes(row.projectStatus)
       && menuTypeFilters.includes(row.menuTypeKey)
       && (!geoFilter || siteGeoFilterCode(row.geo) === geoFilter)
       && (!normalizedBrandFilter || matchesProjectSearch(row.brand, normalizedBrandFilter))
     );
     return matchesSearch && (exactNetworkDomainMatch || matchesActiveFilters);
-  }).sort((left, right) => {
+  });
+  const statusCounts = new Map(statusFilterOptions.map(option => [option.value, rowsBeforeStatus.filter(row => row.projectStatus === option.value).length]));
+  const filteredRows = rowsBeforeStatus.filter(row => statusFilters.includes(row.projectStatus) && matchesSummaryFilter(row)).sort((left, right) => {
     if (!normalizedQuery) return 0;
     return Number(isExactNetworkDomainSearch(right.domains, normalizedQuery))
       - Number(isExactNetworkDomainSearch(left.domains, normalizedQuery));
   });
+  const networkRefreshScope = JSON.stringify(filteredRows.map(row=>row.id).sort());
+  async function downloadProjectTable() {
+    if (exportingTable || !filteredRows.length) return;
+    setExportingTable(true); setExportTableError("");
+    try {
+      const result = await api<{ filename: string; content_type: string; count: number; base64: string }>("/sites/export-table", {
+        method: "POST", body: JSON.stringify({ site_ids: filteredRows.map(row => row.id) })
+      });
+      const bytes = Uint8Array.from(atob(result.base64), character => character.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: result.content_type }));
+      const link = document.createElement("a"); link.href = url; link.download = result.filename;
+      document.body.appendChild(link); link.click(); link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) { setExportTableError(error instanceof Error ? error.message : "Не удалось скачать таблицу."); }
+    finally { setExportingTable(false); }
+  }
+  async function refreshFilteredNetworks() {
+    if(refreshingNetworksRef.current || !filteredRows.length)return;
+    refreshingNetworksRef.current=true;setRefreshingNetworks(true);
+    const pending=filteredRows.map(row=>({id:row.id,name:row.name}));
+    const scope=networkRefreshScope,total=pending.length,updates:Site[]=[],errors:string[]=[];
+    let done=0;
+    setNetworkRefreshResult({scope,done,total,errors:[]});
+    const worker=async()=>{
+      while(pending.length && cacheViewMounted.current){
+        const row=pending.shift()!;
+        try{
+          await api(`/sites/${row.id}/network?refresh=true`,{cache:"no-store"});
+          const updated=await api<Site>(`/sites/lookup?site_id=${encodeURIComponent(row.id)}`,{cache:"no-store"});
+          updates.push(updated);
+        }catch(error){errors.push(`${row.name}: ${error instanceof Error?error.message:"Не удалось обновить сетку"}`);}
+        done++;
+        if(cacheViewMounted.current)setNetworkRefreshResult({scope,done,total,errors:[...errors]});
+      }
+    };
+    try{
+      await Promise.all([worker(),worker()]);
+      if(cacheViewMounted.current && updates.length)applySiteUpdates(updates);
+    }finally{refreshingNetworksRef.current=false;if(cacheViewMounted.current)setRefreshingNetworks(false);}
+  }
+  const visibleSelection = JSON.stringify(filteredRows.filter(row => selectedProjectNames.includes(row.name)).map(row => row.id).sort());
+  const requestedSelection = JSON.stringify(selectionIds ? [...selectionIds].sort() : []);
+  const selectionSnapshotCurrent = sites.length === managedSites.length && sites.every(site => managedSites.some(managed => managed.id === site.id)) && (selectionIds || []).every(id => sites.some(site => site.id === id));
+  React.useEffect(() => { if (selectionIds && selectionSnapshotCurrent && visibleSelection !== requestedSelection) onSelectionChange?.(JSON.parse(visibleSelection)); }, [visibleSelection, requestedSelection, selectionSnapshotCurrent, onSelectionChange]);
+  const domainTotalColumns = ["domainsCount", "dropsCount", "newregCount"] as const;
+  const domainTotals = Object.fromEntries(domainTotalColumns.map(column => [column, filteredRows.some(row => row[column] === null)
+    ? <span title="Для части проектов количество ещё не определено">—</span>
+    : formatNumber(filteredRows.reduce((total, row) => total + (row[column] ?? 0), 0))]));
   const totalPages = rowsPerPage === "all" ? 1 : Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
   const activePage = Math.min(currentPage, totalPages);
   const pageStart = rowsPerPage === "all" ? 0 : (activePage - 1) * rowsPerPage;
@@ -8975,7 +9099,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
     .filter((value): value is string => Boolean(value))
     .sort((left, right) => Date.parse(right) - Date.parse(left))[0] || null;
   const selectedNames = new Set(selectedProjectNames);
-  const selectableFilteredNames = filteredRows.filter((row) => row.externalProjectId && row.isActive).map((row) => row.name);
+  const selectableFilteredNames = filteredRows.filter((row) => (selectionIds || row.externalProjectId) && row.isActive).map((row) => row.name);
   const allFilteredSelected = Boolean(selectableFilteredNames.length) && selectableFilteredNames.every((name) => selectedNames.has(name));
   const statusFilterActive = statusFilters.length !== statusFilterOptions.length;
   const menuTypeFilterActive = menuTypeFilters.length !== menuTypeFilterOptions.length;
@@ -9060,6 +9184,14 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
     }
   }
 
+  async function updateParticipation(siteId: string, enabled: boolean) {
+    if (savingParticipation.includes(siteId)) return;
+    setSavingParticipation(ids => [...ids, siteId]); setSyncError("");
+    try { applySiteUpdates([await api<Site>(`/auto-reglue/projects/${siteId}/participation`, {method: "PATCH", body: JSON.stringify({enabled})})]); }
+    catch (error) { setSyncError(error instanceof Error ? error.message : "Не удалось сохранить участие"); }
+    finally { setSavingParticipation(ids => ids.filter(id => id !== siteId)); }
+  }
+
   async function updateProjectStatus(siteId: string, projectStatus: Site["project_status"]) {
     setSyncError("");
     try {
@@ -9142,19 +9274,43 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       </DataPanel> : syncError ? <div className="formError">{syncError}</div> : null}
       <DataPanel
         title={(
-          <span className="siteDomainsTitle">
-            {favoritesOnly ? "Избранные проекты" : "Домены"}
+          <span className="siteDomainsTitle" style={{ flexWrap: "wrap" }}>
+            {favoritesOnly ? "Избранные проекты" : projectScopeLabel || (moveFilter ? `${moveFilter.brand} — ${moveFilter.geo}` : "Список проектов")}
             <small>{filteredRows.length === domainRows.length ? formatNumber(domainRows.length) : `${formatNumber(filteredRows.length)} из ${formatNumber(domainRows.length)}`}</small>
             <small className="siteVisibleRowsCount">На странице: {formatNumber(visibleRows.length)}</small>
+            <span className="siteStatusPicker">
+              <SearchableSelect compact ariaLabel="Фильтр проектов по статусу" searchPlaceholder="Найти статус"
+                value={statusFilters.length === allStatusFilters.length ? "all" : statusFilters.length === 1 ? statusFilters[0] : "multiple"}
+                options={[
+                  { value: "all", label: `Все статусы · ${rowsBeforeStatus.length}` },
+                  ...(statusFilters.length !== 1 && statusFilters.length !== allStatusFilters.length ? [{ value: "multiple", label: `Выбрано статусов: ${statusFilters.length}` }] : []),
+                  ...statusFilterOptions.map(option => ({ value: option.value, label: `${option.label} · ${statusCounts.get(option.value) || 0}` }))
+                ]}
+                onChange={value => { if (value === "multiple") return; setStatusFilters(value === "all" ? allStatusFilters : [value as Site["project_status"]]); setSummaryFilter(null); }} />
+            </span>
+            <button type="button" className="button secondary compact siteExportButton" disabled={exportingTable || !filteredRows.length}
+              title={`Скачать Excel: ${filteredRows.length} проектов со всех страниц текущей выборки`}
+              onClick={() => void downloadProjectTable()}><Download size={15} />{exportingTable ? "Готовим Excel…" : "Скачать таблицу"}</button>
+            {headerActions}
+            {massActions && !readOnly && <MassReglueLaunch api={api} siteIds={filteredRows.map(row => row.id)} onChanged={onChanged} />}
+            {moveFilter && !readOnly && <NetworkMoveButtons key={JSON.stringify(moveFilter)} api={api} filter={moveFilter} siteIds={filteredRows.filter(row => row.projectStatus === "mass_actions" && row.isActive && (!selectedProjectNames.length || selectedProjectNames.includes(row.name))).map(row => row.id)} onChanged={onChanged} />}
           </span>
         )}
         actions={(
-          <button className="iconButton siteColumnsSettingsButton" type="button" onClick={() => setColumnsSettingsOpen(true)} title="Настроить порядок столбцов" aria-label="Настроить порядок столбцов">
-            <Settings size={15} />
-          </button>
+          <div className="siteNetworkActions">
+            {networkRefreshResult?.scope===networkRefreshScope&&<small role="status" title={networkRefreshResult.errors.length?`Ошибок: ${networkRefreshResult.errors.length}`:"Сетки обновлены"}>{refreshingNetworks?"Обновление":networkRefreshResult.errors.length?"Обновлено частично":"Обновлено"}: {networkRefreshResult.done-networkRefreshResult.errors.length} / {networkRefreshResult.total}</small>}
+            <button className="iconButton siteColumnsSettingsButton" type="button" onClick={()=>void refreshFilteredNetworks()} disabled={refreshingNetworks||syncing||!filteredRows.length} title="Обновить сетки и количество доменов в текущей выборке" aria-label="Обновить сетки проектов" aria-busy={refreshingNetworks}>
+              <RefreshCcw size={15} className={refreshingNetworks?"spin":""}/>
+            </button>
+            <button className="iconButton siteColumnsSettingsButton" type="button" onClick={() => setColumnsSettingsOpen(true)} title="Настроить порядок столбцов" aria-label="Настроить порядок столбцов">
+              <Settings size={15} />
+            </button>
+          </div>
         )}
       >
+        {networkRefreshResult?.scope===networkRefreshScope&&!!networkRefreshResult.errors.length&&<details className="siteNetworkRefreshErrors"><summary>Не удалось обновить сетки: {networkRefreshResult.errors.length}</summary>{networkRefreshResult.errors.map(error=><p key={error}>{error}</p>)}</details>}
         <div className="siteCacheSearch">
+          {exportTableError && <p className="formError" role="alert">{exportTableError}</p>}
           <Search size={18} />
           <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Поиск по домену или имени проекта" />
           <div className="siteCacheFilter siteGeoFilter">
@@ -9178,13 +9334,9 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
           </label>
           <label className="siteRowsPerPage">
             <span>Строк</span>
-            <select value={rowsPerPage} onChange={(event) => setRowsPerPage(event.target.value === "all" ? "all" : Number(event.target.value))} aria-label="Количество строк на странице">
-              <option value="25">25</option>
-              <option value="50">50</option>
-              <option value="100">100</option>
-              <option value="250">250</option>
-              <option value="all">Все</option>
-            </select>
+            <SearchableSelect value={String(rowsPerPage)} onChange={value => setRowsPerPage(value === "all" ? "all" : Number(value))}
+              ariaLabel="Количество строк на странице" searchPlaceholder="Найти количество строк" compact
+              options={[{ value: "all", label: "Все" }, ...[25, 50, 100, 250].map(count => ({ value: String(count), label: String(count) }))]} />
           </label>
           <button className="button secondary siteSortResetButton" type="button" onClick={() => setSiteSort(null)} disabled={!siteSort}>Сбросить сортировку</button>
           <span>{filteredRows.length ? `${formatNumber(pageStart + 1)}–${formatNumber(pageStart + visibleRows.length)} из ${formatNumber(filteredRows.length)}` : `0 из ${formatNumber(domainRows.length)}`}</span>
@@ -9232,9 +9384,18 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
           </div>
         ) : null}
         <ResponsiveTable
-          columns={visibleColumnOrder.map((column) => SITE_COLUMN_LABELS[column])}
+          columns={visibleColumnOrder.map((column) => columnLabels[column])}
+          footer={visibleColumnOrder.map(column => domainTotals[column] ?? null)}
+          footerLabelIndex={-1}
           columnKeys={visibleColumnOrder}
           columnHeaders={{
+            ...Object.fromEntries((["name", "canon"] as const).map(column => [visibleColumnOrder.indexOf(column),
+              <DomainColumnHeader key={column} label={columnLabels[column]}
+                domains={filteredRows.map(row => row[column])}
+                sortDirection={siteSort?.key === column ? siteSort.direction : undefined}
+                onSort={() => sortSitesByColumn(visibleColumnOrder.indexOf(column))}
+                copyText={copyTextToClipboard} />
+            ])),
             [visibleColumnOrder.indexOf("select")]: (
               <label className={`tableSelectAllButton ${selectableFilteredNames.length ? "" : "disabled"}`} title="Выбрать все домены в текущем списке">
                 <input type="checkbox" checked={allFilteredSelected} disabled={!selectableFilteredNames.length} onChange={toggleAllFilteredProjects} />
@@ -9269,14 +9430,14 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
             const cells: Record<SiteTableColumn, React.ReactNode> = {
               brand: <SiteBrandField key={row.id + row.brand} name={row.name} value={row.brand} save={(brand) => updateProjectBrand(row.id, brand)} />,
               rowNumber: formatNumber(pageStart + rowIndex + 1),
-              select: <input type="checkbox" checked={selectedNames.has(row.name)} disabled={!row.externalProjectId || !row.isActive} onChange={() => toggleSelectedProject(row.name)} aria-label={`Выбрать проект ${row.name}`} />,
+              select: <input type="checkbox" checked={selectedNames.has(row.name)} disabled={(!selectionIds && !row.externalProjectId) || !row.isActive} onChange={() => toggleSelectedProject(row.name)} aria-label={`Выбрать проект ${row.name}`} />,
               name: (
                 <span className="siteNameCell">
                   <span className="siteNameWithFlag">
                     {localeFlag(localeCountryCode(row.geo || row.language || "")) ? <span aria-hidden="true">{localeFlag(localeCountryCode(row.geo || row.language || ""))}</span> : null}
                     {<a
                       className="siteProjectDomainLink"
-                      href={pathForRoute("workspace", "topics", row.name)}
+                      href={pathForRoute("workspace", "network", row.name)}
                       onClick={() => {
                         localStorage.setItem(`workspace_site_id:${currentUsername}`, row.id);
                         localStorage.removeItem("workspace_site_id");
@@ -9285,6 +9446,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
                     >
                       <strong>{row.name}</strong>
                     </a>}
+                    {row.reserve && <span className="siteReserveChosen" role="img" aria-label={`Резерв выбран: ${row.reserve}`} title={`Резерв выбран: ${row.reserve}`}><CheckCircle2 size={15} strokeWidth={2.5}/></span>}
                   </span>
                   <span className="siteNameActions">
                     <button
@@ -9306,25 +9468,25 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
                     >
                       <Globe2 size={15} />
                     </a>
-                    {row.isActive ? <a
+                    <a
                       className="siteRowActionButton"
-                      href={pathForRoute("workspace", "topics", row.name)}
-                      onClick={() => {
-                        localStorage.setItem(`workspace_site_id:${currentUsername}`, row.id);
-                        localStorage.removeItem("workspace_site_id");
-                      }}
-                      title="Открыть задачи проекта"
-                      aria-label={`Открыть задачи проекта ${row.name}`}
+                      href={`https://webdev-alfasearch.ru/projects/${encodeURIComponent(row.name)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Открыть проект в WebDev"
+                      aria-label={`Открыть проект ${row.name} в WebDev`}
                     >
-                      <FolderKanban size={15} />
-                    </a> : null}
+                      <span className="projectWebDevLabel" aria-hidden="true"><span>web</span><span>dev</span></span>
+                    </a>
                   </span>
                 </span>
               ),
               title: row.homepageTitle ? (
                 <SiteTitleTooltip name={row.name} title={row.homepageTitle} />
               ) : "—",
-              canon: <strong className="siteMainDomain" title={row.canon}>{row.canon}</strong>,
+              canon: <span className={`siteMainWithDate ${row.lastReglueAt ? "hasReglueDate" : ""}`}>
+                {row.lastReglueAt && Number.isFinite(Date.parse(row.lastReglueAt)) && <small className="siteReglueDate" title={`Последняя смена Main, подтверждённая операцией или снимком Webdev: ${new Date(row.lastReglueAt).toLocaleString("ru-RU", {timeZone: "Europe/Moscow"})} (МСК)`}>{new Date(row.lastReglueAt).toLocaleString("ru-RU", {day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Europe/Moscow"})}</small>}
+                <strong className="siteMainDomain" title={row.canon}>{row.canon}</strong></span>,
               language: <LocaleCode value={row.language} />,
               status: readOnly ? (
                 <span className={`siteStatusReadonly ${row.projectStatus}`}>
@@ -9337,7 +9499,8 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
                     onChange={(value) => updateProjectStatus(row.id, value as Site["project_status"])} />
                 </div>
               ),
-              internalPages: formatNumber(row.internalPagesCount),
+              dropsCount: row.dropsCount === null ? "—" : formatNumber(row.dropsCount),
+              newregCount: row.newregCount === null ? "—" : formatNumber(row.newregCount),
               menuType: row.headerMenuCount && row.footerMenuCount
                 ? <span className="siteMenuTypeBadge">Header + Footer</span>
                 : row.headerMenuCount
@@ -9350,8 +9513,10 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
                   {formatNumber(row.menuCount)}
                 </button>
               ) : "0",
-              fiberyName: <span className="siteFiberyName" title={row.projectTeam == null ? "Нет сохранённых данных о команде" : `Команда: ${row.projectTeam || "не заполнена"}`}><span className="siteFiberyNameText">{row.fiberyName || "—"}</span>{row.needsTeamReview && <a className="siteFiberyReviewButton" href={`https://webdev-alfasearch.ru/projects/${encodeURIComponent(row.name)}`} target="_blank" rel="noopener noreferrer" aria-label={`Проверить команду проекта ${row.name} в Webdev`}>Проверить</a>}</span>,
-              subdomainsCount: row.subdomainsCount === null ? "—" : formatNumber(row.subdomainsCount),
+              fiberyName: <span className="siteFiberyName" title={row.projectTeam == null ? "Нет сохранённых данных о команде" : `Команда: ${row.projectTeam || "не заполнена"}`}><FiberyProjectName value={row.fiberyName} projectName={row.name} className="siteFiberyNameText" />{row.needsTeamReview && <a className="siteFiberyReviewButton" href={`https://webdev-alfasearch.ru/projects/${encodeURIComponent(row.name)}`} target="_blank" rel="noopener noreferrer" aria-label={`Проверить команду проекта ${row.name} в Webdev`}>Проверить</a>}</span>,
+              subdomainsCount: massActions ? readOnly ? (row.participation ? "Да" : "Нет") : <fieldset className="massParticipation" disabled={savingParticipation.includes(row.id)}>
+                <SearchableSelect value={row.participation ? "yes" : "no"} searchable={false} compact ariaLabel={`Участвует в переклее ${row.name}`} searchPlaceholder="Найти значение" options={[{value:"yes",label:"Да"},{value:"no",label:"Нет"}]} onChange={value => void updateParticipation(row.id, value === "yes")} />
+              </fieldset> : row.subdomainsCount === null ? "—" : formatNumber(row.subdomainsCount),
               domainsCount: row.isActive ? <a href={pathForRoute("workspace", "network", row.name)} aria-label={`Открыть сетку проекта ${row.name}`}>{formatNumber(row.domainsCount)}</a> : <span title="Сохранённое число доменов неактивного проекта">{formatNumber(row.domainsCount)}</span>
             };
             return visibleColumnOrder.map((column) => cells[column]);
@@ -9384,7 +9549,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
               <div key={column}>
                 <label className="siteColumnVisibility">
                   <input type="checkbox" checked={visible} onChange={() => toggleSiteColumn(column)} disabled={visible && visibleColumnOrder.length === 1} />
-                  <span>{SITE_COLUMN_LABELS[column] || "Чекбокс выбора"}</span>
+                  <span>{columnLabels[column] || "Чекбокс выбора"}</span>
                 </label>
                 <div>
                   <button type="button" onClick={() => moveSiteColumn(column, -1)} disabled={column === "rowNumber" || index === 1} aria-label="Переместить столбец выше"><ChevronUp size={15} /></button>
@@ -9597,6 +9762,21 @@ function nestedContentSlug(sectionPath: string, contentSlug: string): string {
   if (!leaf) return parent;
   if (contentPath === parent) return parent;
   return parent === "/" ? `/${leaf}/` : `${parent}${leaf}/`;
+}
+
+function projectMenuMainUrl(site: Pick<Site, "cache_canon" | "base_url" | "name">, path: string): string {
+  const main = site.cache_canon?.trim();
+  const base = main ? `https://${main.replace(/^https?:\/\//i, "").replace(/\/+$/, "")}/` : `${site.base_url.replace(/\/+$/, "") || `https://${site.name}`}/`;
+  try {
+    const page = new URL(path, base);
+    const url = new URL(base);
+    url.pathname = page.pathname;
+    url.search = page.search;
+    url.hash = page.hash;
+    return url.toString();
+  } catch {
+    return base;
+  }
 }
 
 function projectContentSiteUrl(site: Pick<Site, "name" | "base_url"> & Partial<Pick<Site, "cache_canon">>, item: Pick<ContentItem, "slug" | "published_url">): string {
@@ -10133,6 +10313,7 @@ function SearchableSelect({
   onChange,
   searchPlaceholder = "Начните вводить для поиска",
   disabled = false,
+  searchable = true,
   ariaLabel,
   showSelectedIndicator = true,
   searchMode = "contains",
@@ -10146,6 +10327,7 @@ function SearchableSelect({
   onChange: (value: string) => void;
   searchPlaceholder?: string;
   disabled?: boolean;
+  searchable?: boolean;
   ariaLabel?: string;
   showSelectedIndicator?: boolean;
   searchMode?: "contains" | "prefix";
@@ -10190,7 +10372,8 @@ function SearchableSelect({
     if (!open) return;
     updateDropdownPosition();
     window.requestAnimationFrame(() => {
-      searchRef.current?.focus();
+      if (searchable) searchRef.current?.focus();
+      else (dropdownRef.current?.querySelector('[aria-selected="true"]') as HTMLElement | null)?.focus();
       dropdownRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
     });
     const handlePointerDown = (event: Event) => {
@@ -10209,7 +10392,7 @@ function SearchableSelect({
       document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("focusin", handlePointerDown);
     };
-  }, [open, updateDropdownPosition]);
+  }, [open, searchable, updateDropdownPosition]);
 
   React.useEffect(() => {
     setActiveIndex(0);
@@ -10249,7 +10432,7 @@ function SearchableSelect({
           if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
             event.preventDefault();
             showOptions();
-          } else if (searchMode === "prefix" && event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+          } else if (searchable && searchMode === "prefix" && event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
             event.preventDefault();
             showOptions();
             setQuery(event.key);
@@ -10265,7 +10448,7 @@ function SearchableSelect({
       </button>
       {open ? createPortal(
         <div ref={dropdownRef} className={`searchableSelectDropdown ${compact ? "searchableSelectDropdownCompact" : ""}`} style={dropdownStyle}>
-          <div className="searchableSelectSearch">
+          {searchable && <div className="searchableSelectSearch">
             <Search size={16} />
             <input
               ref={searchRef}
@@ -10291,7 +10474,7 @@ function SearchableSelect({
               aria-label={searchPlaceholder}
               autoComplete="off"
             />
-          </div>
+          </div>}
           {dropdownToolbar ? <div className="searchableSelectToolbar">{dropdownToolbar}</div> : null}
           <div className="searchableSelectOptions" id={listboxId} role="listbox">
             {filteredOptions.length ? filteredOptions.map((option, index) => (
@@ -10307,6 +10490,13 @@ function SearchableSelect({
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
                     chooseOption(option);
+                  } else if (event.key === "Escape") {
+                    event.preventDefault(); closeDropdown();
+                  } else if (!searchable && ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+                    event.preventDefault();
+                    const next = event.key === "Home" ? 0 : event.key === "End" ? filteredOptions.length - 1 : Math.max(0, Math.min(filteredOptions.length - 1, index + (event.key === "ArrowDown" ? 1 : -1)));
+                    setActiveIndex(next);
+                    (dropdownRef.current?.querySelectorAll<HTMLElement>('[role="option"]')[next])?.focus();
                   }
                 }}
               >
@@ -10376,7 +10566,7 @@ function DataPanel({ id, title, actions, children, collapseKey, allowCollapse = 
   );
 }
 
-function ResponsiveTable({ columns, columnKeys = [], rows, rowClassNames, wrapperClassName = "", sortableColumnIndexes = [], sortColumnIndex = null, sortDirection, onSortColumn, columnHeaders = {} }: { columns: string[]; columnKeys?: string[]; rows: React.ReactNode[][]; rowClassNames?: string[]; wrapperClassName?: string; sortableColumnIndexes?: number[]; sortColumnIndex?: number | null; sortDirection?: "asc" | "desc"; onSortColumn?: (columnIndex: number) => void; columnHeaders?: Record<number, React.ReactNode> }) {
+function ResponsiveTable({ columns, columnKeys = [], rows, rowClassNames, footer, footerLabelIndex = 0, wrapperClassName = "", sortableColumnIndexes = [], sortColumnIndex = null, sortDirection, onSortColumn, columnHeaders = {} }: { columns: string[]; columnKeys?: string[]; rows: React.ReactNode[][]; rowClassNames?: string[]; footer?: React.ReactNode[]; footerLabelIndex?: number; wrapperClassName?: string; sortableColumnIndexes?: number[]; sortColumnIndex?: number | null; sortDirection?: "asc" | "desc"; onSortColumn?: (columnIndex: number) => void; columnHeaders?: Record<number, React.ReactNode> }) {
   if (!rows.length) return <EmptyState text="Данных пока нет." />;
   return (
     <div className={`tableWrap ${wrapperClassName}`.trim()}>
@@ -10392,6 +10582,9 @@ function ResponsiveTable({ columns, columnKeys = [], rows, rowClassNames, wrappe
           </th>
         ))}</tr></thead>
         <tbody>{rows.map((row, rowIndex) => <tr className={rowClassNames?.[rowIndex] || undefined} key={rowIndex}>{row.map((cell, cellIndex) => <td className={columnKeys[cellIndex] ? `column-${columnKeys[cellIndex]}` : undefined} data-label={columns[cellIndex]} key={cellIndex}>{cell}</td>)}</tr>)}</tbody>
+        {footer && <tfoot aria-label="Итого по текущей выборке"><tr>{footer.map((cell, index) => index === footerLabelIndex
+          ? <th scope="row" className={columnKeys[index] ? `column-${columnKeys[index]}` : undefined} key={index}>{cell}</th>
+          : <td className={columnKeys[index] ? `column-${columnKeys[index]}` : undefined} data-label={columns[index]} key={index}>{cell}</td>)}</tr></tfoot>}
       </table>
     </div>
   );
@@ -10549,7 +10742,76 @@ function PublishedContentRegenerationModal({ item, promptTemplates, api, onChang
   );
 }
 
-function ContentPreviewModal({ item, promptName, actions, api, onChanged, onClose }: {
+function ContentDetailFrame({ title, subtitle, children, onClose }: { title?: string; subtitle?: string; children: React.ReactNode; onClose: () => void; wide?: boolean; className?: string }) {
+  return <section className="dataPanel contentPreviewModal" style={{ width: "100%", maxWidth: "100%", padding: 24 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20 }}><button type="button" className="button secondary compact" onClick={onClose}><ChevronLeft size={16} />Назад</button><div><h2 style={{ margin: 0 }}>{title}</h2>{subtitle && <small>{subtitle}</small>}</div></div>{children}
+  </section>;
+}
+
+function GeneratedContentPage({ api, onChanged }: ViewProps) {
+  const id = decodeURIComponent(window.location.pathname.split("/")[2] || "");
+  const [item, setItem] = React.useState<ContentItem | null>(null);
+  const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  async function action(name: "approve" | "publish-immediately", refresh: () => Promise<void>) {
+    setBusy(true); setError("");
+    try { await api(`/content/${encodeURIComponent(id)}/${name}`, { method: "POST" }); await refresh(); }
+    catch (e) { setError(e instanceof Error ? e.message : "Не удалось выполнить действие"); }
+    finally { setBusy(false); }
+  }
+  React.useEffect(() => { let live = true; void api<ContentItem>(`/content/${encodeURIComponent(id)}`).then(value => { if (live) setItem(value); }).catch(e => { if (live) setError(e instanceof Error ? e.message : "Не удалось загрузить текст"); }); return () => { live = false; }; }, [api, id]);
+  if (!item) return <ContentDetailFrame title="Просмотр текста" onClose={() => backFromDetail()}><p role={error ? "alert" : "status"}>{error || "Загружаем текст…"}</p></ContentDetailFrame>;
+  return <>{error && <p className="formError" role="alert">{error}</p>}<ContentPreviewModal fullPage item={item} api={api} onChanged={onChanged} onClose={() => backFromDetail()} actions={(current, refresh) => <>
+    {canApproveContent(current) && <button className="button compact approve" disabled={busy} onClick={() => void action("approve", refresh)}>Принять</button>}
+    <button className="button compact primary" disabled={busy || !canPublishContentImmediately(current)} onClick={() => void action("publish-immediately", refresh)}>Опубликовать</button>
+  </>} /></>;
+}
+
+function PublishedPageEditor({ api, onChanged, readOnly = false, actorId }: ViewProps & { readOnly?: boolean; actorId?:string }) {
+  const sourcePath = new URL(detailReturnPath("/project-content"), window.location.origin).pathname;
+  const sourceRoute = routeFromPath(sourcePath);
+  const sourceProject = workspaceProjectNameFromPath(sourcePath);
+  const tabLabels: Record<WorkspaceTab, string> = { overview: "Обзор", topics: "Генерация", content: "Контент и публикация", publication: "Контент и публикация", menu: "Меню", network: "Сетка", redirects: "Переклей", autoReglue: "Автопереклей", autoLb: "АвтоЛБ", logs: "Логи проекта" };
+  const back = () => backFromDetail("/project-content");
+  const breadcrumbs = [
+    ...(sourceProject ? [{ label: sourceProject, onClick: () => { window.history.pushState(null, "", pathForRoute("workspace", "overview", sourceProject)); window.dispatchEvent(new PopStateEvent("popstate")); } }] : []),
+    { label: sourceRoute.view === "workspace" ? tabLabels[sourceRoute.workspaceTab] : viewTitle(sourceRoute.view, sourceRoute.workspaceTab), onClick: back },
+  ];
+  const parts = window.location.pathname.split("/");
+  const siteId = decodeURIComponent(parts[2] || ""), key = decodeURIComponent(parts[3] || "");
+  const [row, setRow] = React.useState<(PageRow & { shortcodes?: ShortcodeInfo[]; description?: string; content?: Record<string, unknown> }) | null>(null);
+  const [error, setError] = React.useState("");
+  React.useEffect(() => {
+    let live = true;
+    void (async () => {
+      let pageKey = key;
+      if (!pageKey) {
+        const slug = new URLSearchParams(window.location.search).get("slug") || "/";
+        const result = await api<{ pages: PageRow[] }>(`/sites/${encodeURIComponent(siteId)}/pages?refresh=true`);
+        const page = result.pages.find(page => normalizedTreePath(page.slug) === normalizedTreePath(slug));
+        if (!page) throw new Error("Страница не найдена в проекте.");
+        pageKey = page.key;
+      }
+      const value = await api<PageRow & { shortcodes?: ShortcodeInfo[]; description?: string; content?: Record<string, unknown> }>(`/sites/${encodeURIComponent(siteId)}/pages/${encodeURIComponent(pageKey)}${readOnly ? "?refresh=true" : ""}`);
+      if (live) setRow(value);
+    })().catch(e => {
+      if (!live) return;
+      const status = (e as {statusCode?:number})?.statusCode;
+      if (!readOnly && key && (!status || status >= 500)) {
+        // The editor can restore its saved draft even when Webdev cannot load
+        // the page. Access errors must still stop the route here.
+        setRow({key, title:"Страница проекта", slug:"", is_home:false});
+      } else setError(e instanceof Error ? e.message : "Не удалось открыть страницу");
+    });
+    return () => { live = false; };
+  }, [api, siteId, key, readOnly]);
+  if (!row) return <ContentDetailFrame title="Редактор страницы" onClose={() => backFromDetail("/project-content")}><p role={error ? "alert" : "status"}>{error || "Загружаем страницу…"}</p></ContentDetailFrame>;
+  if (readOnly) return <ContentDetailFrame title={row.title} subtitle={row.slug} onClose={() => backFromDetail("/project-content")}><button className="button secondary compact" onClick={() => openDetailPage(`/page-editor/${encodeURIComponent(siteId)}/${encodeURIComponent(row.key)}/`)}>Редактировать страницу</button><div className="pp-shortcode-layout pp-page-preview-layout"><ShortcodeSidebar content={row.content} catalog={row.shortcodes}/><div className="pp-editor-content"><ContentPreviewBody generatedJson={{ pages: [row] }} /></div></div></ContentDetailFrame>;
+  return <PageEditor fullPage draftActorId={actorId} breadcrumbs={breadcrumbs} siteId={siteId} row={row} api={api} onClose={() => backFromDetail("/project-content")} onSaved={() => void onChanged()} />;
+}
+
+function ContentPreviewModal({ item, promptName, actions, api, onChanged, onClose, fullPage = false }: {
+  fullPage?: boolean;
   item: ContentItem;
   promptName?: string | null;
   actions?: React.ReactNode | ((currentItem: ContentItem, refreshItem: () => Promise<void>) => React.ReactNode);
@@ -10557,6 +10819,7 @@ function ContentPreviewModal({ item, promptName, actions, api, onChanged, onClos
   onChanged?: () => void | Promise<void>;
   onClose: () => void;
 }) {
+  React.useEffect(() => { if (!fullPage) openDetailPage(`/content-preview/${encodeURIComponent(item.id)}/`); }, [fullPage, item.id]);
   const [currentItem, setCurrentItem] = React.useState(item);
   const [remarks, setRemarks] = React.useState("");
   const [generateTitle, setGenerateTitle] = React.useState(true);
@@ -10577,6 +10840,7 @@ function ContentPreviewModal({ item, promptName, actions, api, onChanged, onClos
     generated_at: selectedVersion?.side === "source" ? selectedRevision?.source_generated_at || null : selectedRevision?.revised_generated_at || null
   } : currentItem;
   const previewDescription = contentItemDescription(previewItem);
+  const articleImage = (currentItem.generated_json.generation_meta as { article_image?: { status: string; error?: string } } | undefined)?.article_image;
   const selectedVersionLabel = selectedRevision && selectedVersion
     ? `${selectedVersion.side === "source" ? "До" : "После"} доработки №${revisions.findIndex((revision) => revision.id === selectedRevision.id) + 1}`
     : "Текущая версия";
@@ -10589,7 +10853,7 @@ function ContentPreviewModal({ item, promptName, actions, api, onChanged, onClos
   // Project lists intentionally contain metadata only. Fetch the article body
   // when, and only when, the user opens its preview.
   React.useEffect(() => {
-    if (!api || Object.keys(item.generated_json || {}).length) return;
+    if (!fullPage || !api || Object.keys(item.generated_json || {}).length) return;
     let cancelled = false;
     api<ContentItem>(`/content/${item.id}`)
       .then((fullItem) => {
@@ -10673,8 +10937,9 @@ function ContentPreviewModal({ item, promptName, actions, api, onChanged, onClos
   }
 
   const renderedActions = typeof actions === "function" ? actions(currentItem, refreshCurrentItem) : actions;
+  if (!fullPage) return null;
   return (
-    <Modal title={contentItemTitle(previewItem)} subtitle={selectedVersionLabel} onClose={onClose} wide className="contentPreviewModal">
+    <ContentDetailFrame title={contentItemTitle(previewItem)} subtitle={selectedVersionLabel} onClose={onClose} wide className="contentPreviewModal">
       <div className="contentPreviewHeader">
         <div className="contentPreviewInfo">
           <div className="contentPreviewMetaLine">
@@ -10697,6 +10962,15 @@ function ContentPreviewModal({ item, promptName, actions, api, onChanged, onClos
         <span className="previewGenerationLabel">Генерация</span>
         <GenerationProgressCell item={currentItem} />
       </div>
+      {revisionError ? <p className="formError" role="alert">{revisionError}</p> : null}
+      {!selectedVersion && articleImage?.status === "failed" ? <div className="notice">
+        <span>Изображение не создано. Готовый текст сохранён. {articleImage.error}</span>
+        {api && ["generated", "generation_failed", "draft"].includes(currentItem.status) ? <button className="button compact" type="button" onClick={async () => {
+          setRevisionError("");
+          try { await api(`/article-images/content/${currentItem.id}/retry`, { method: "POST" }); await refreshCurrentItem(); }
+          catch (error) { setRevisionError(error instanceof Error ? error.message : "Не удалось запустить изображение."); }
+        }}>Повторить только изображение</button> : null}
+      </div> : null}
       <FactualResearchPanel value={(!selectedVersion && currentItem.generation_context?.factual_research) || factualResearchFromPayload(previewItem.generated_json)} />
       {api && (revisionAllowed || revisionActive) ? (
         <section className="revisionAccordion open">
@@ -10722,7 +10996,6 @@ function ContentPreviewModal({ item, promptName, actions, api, onChanged, onClos
               </form>
             )}
             {currentItem.generation_error && !revisionActive ? <span className="formError">{currentItem.generation_error}</span> : null}
-            {revisionError ? <span className="formError">{revisionError}</span> : null}
           </div>
         </section>
       ) : null}
@@ -10745,7 +11018,7 @@ function ContentPreviewModal({ item, promptName, actions, api, onChanged, onClos
         Метки H1–H4 показаны только для проверки структуры и не добавляются в опубликованный текст.
       </div>
       <ContentPreviewBody item={previewItem} />
-    </Modal>
+    </ContentDetailFrame>
   );
 }
 
@@ -10838,6 +11111,8 @@ function StatusBadge({ status }: { status: string }) {
     publishing: "Публикуется",
     publishing_all: "Публикуем все",
     queries_ready: "Запросы готовы",
+    topic_pending: "Ожидает подготовки темы",
+    preparing_topic: "Готовлю тему статьи",
     queued: "В очереди",
     rejected: "Отклонено",
     research_failed: "Ошибка анализа",
@@ -10881,7 +11156,7 @@ function publicationFailureSummary(item: ContentItem, log?: PublicationLog): str
         .map((key) => responseBody[key])
         .find((value) => typeof value === "string" && value.trim())
     : null;
-  const message = log?.error_message || (typeof responseMessage === "string" ? responseMessage : "");
+  const message = log?.error_message || item.generation_error || (typeof responseMessage === "string" ? responseMessage : "");
   return [statusCode ? `HTTP ${statusCode}` : "", message].filter(Boolean).join(" · ") || "Ошибка публикации без HTTP-ответа";
 }
 
@@ -10926,8 +11201,12 @@ function viewTitle(view: AppView, _workspaceTab: WorkspaceTab) {
   }
 
   const titles: Record<Exclude<AppView, "workspace">, string> = {
+    pagePreview: "Просмотр страницы",
+    contentPreview: "Просмотр текста",
+    pageEditor: "Редактор страницы",
     templateGenerator: "Генератор шаблона",
     dashboard: "Dashboard",
+    reglueJournal: "Журнал переклеев",
     prompts: "Промпты",
     tasks: "Задачи генерации",
     taskArchive: "Архив задач",
@@ -10939,7 +11218,11 @@ function viewTitle(view: AppView, _workspaceTab: WorkspaceTab) {
     massActionReport: "Массовые действия Отчет",
     favorites: "Избранное",
     guide: "Инструкции",
-    autoReglue: "Автопереклей",
+    autoReglue: "Массовые действия",
+    reglueReserves: "База резервов под переклей",
+    autoPilot: "Auto Pilot",
+    autoPilotLogs: "Auto Pilot — выполнение",
+    autoPilotReport: "AutoPilot-Report",
     autoReglueGuide: "Инструкция по автопереклеям",
     settings: "Настройки"
   };
@@ -11074,6 +11357,15 @@ function ContentPreviewBody({ item, generatedJson }: { item?: ContentItem; gener
         }
         if (block.type === "paragraph" && data && !Array.isArray(data)) {
           return <p className="previewParagraph" key={String(block.id || blockIndex)}><PreviewInlineText value={data.text} /></p>;
+        }
+        if (block.type === "button" && data && !Array.isArray(data)) {
+          return <div className="previewArticleButton" key={String(block.id || blockIndex)}><button className="button primary" type="button" disabled><PreviewInlineText value={data.button} /></button></div>;
+        }
+        if (block.type === "image" && data && !Array.isArray(data)) {
+          const file = data.file as { url?: unknown; width?: number; height?: number } | undefined;
+          const url = typeof file?.url === "string" ? file.url : "";
+          if (!/^https?:\/\//i.test(url)) return null;
+          return <figure className="previewArticleImage" key={String(block.id || blockIndex)}><img src={url} alt={typeof data.alt === "string" ? data.alt : ""} width={file?.width} height={file?.height} loading="lazy" />{data.caption ? <figcaption><PreviewInlineText value={data.caption} /></figcaption> : null}</figure>;
         }
         if (block.type === "list" && data && !Array.isArray(data) && Array.isArray(data.items)) {
           const items = data.items as unknown[];

@@ -3,7 +3,7 @@ import asyncio
 import pytest
 
 from app import models, services as service_module
-from app.editorial_skill import AI_NEUTRALIZER_MARKER, AI_NEUTRALIZER_TEXT
+from app.editorial_skill import AI_NEUTRALIZER_MARKER, AI_NEUTRALIZER_TEXT, CONTENT_EDITORIAL_TEXT
 from app.services import (
     CASINO_RATING_PROMPT_MARKER,
     PROMPT_FORMAT_CONTRACT_MARKER,
@@ -32,7 +32,7 @@ def test_editorial_skill_precedes_rendered_brief(template, content_kind) -> None
         generation_context={"content_kind": content_kind},
     )
 
-    assert prompt.startswith(f"{AI_NEUTRALIZER_MARKER}\n{AI_NEUTRALIZER_TEXT}\n")
+    assert prompt.startswith(f"{AI_NEUTRALIZER_MARKER}\n{AI_NEUTRALIZER_TEXT if content_kind == 'technical_page' else CONTENT_EDITORIAL_TEXT}\n")
     assert prompt.count(AI_NEUTRALIZER_MARKER) == 1
     brief = prompt.split("=== ТЗ И КОНТЕКСТ ГЕНЕРАЦИИ ===\n", 1)[1]
     assert PROMPT_FORMAT_CONTRACT_MARKER in brief
@@ -319,7 +319,7 @@ def test_gemini_content_generation_passes_competitor_brief_to_prompt(monkeypatch
 
     assert "Example Casino Page" in captured["prompt"]
     assert captured["prompt"].startswith(AI_NEUTRALIZER_MARKER)
-    assert AI_NEUTRALIZER_TEXT in captured["prompt"]
+    assert CONTENT_EDITORIAL_TEXT in captured["prompt"]
     assert "Mehr Details zu KYC und Limits" in captured["prompt"]
     assert generated["pages"][0]["title"] == "Beste Online Casinos in Deutschland 2026: Legale Anbieter im Vergleich"
     assert generated["pages"][0]["content"]["blocks"][0]["data"]["text"] == "Beste Online Casinos in Deutschland 2026"

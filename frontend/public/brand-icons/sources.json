@@ -223,5 +223,12 @@
     "brand": "Pelican",
     "file": "pelican.png",
     "source": "https://d2anrf6jptfkek.cloudfront.net/41c8e8de-e63c-442a-92e7-69bd91801bd8-apple-icon-180x180.webp"
+  },
+  {
+    "brand": "BetOnRed",
+    "file": "betonred-favicon.png",
+    "source": "https://icons.duckduckgo.com/ip3/betonred.com.ico",
+    "official_site": "https://betonred.com/",
+    "retrieved_at": "2026-10-27"
   }
 ]

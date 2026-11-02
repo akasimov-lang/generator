@@ -1,16 +1,20 @@
 import { TemplateSources, type SourceDraftReference } from "./TemplateSources";
 import { TemplateCombobox } from "./TemplateCombobox";
+import { TemplateKnowledgeLibrary } from "./TemplateKnowledgeLibrary";
+import { templateBrandOptions, isGeneralBrand, type TemplateProject, type KnowledgeScope } from "./templateBrandOptions";
 import { TEMPLATE_GEOS, TEMPLATE_LANGUAGES, TEMPLATE_BRANDS, languageForGeo } from "./templateLocaleOptions";
 import React from "react";
+import { createPortal } from "react-dom";
 import { Download, Monitor, Smartphone, Plus, ArrowLeft, Loader2, CheckCircle2, AlertCircle, RefreshCcw, Sparkles, Search, ChevronRight, Upload } from "lucide-react";
 import "./styles/template-generator.css";
+import { backFromDetail } from "./detailNavigation";
 
 type Api = <T>(path: string, options?: RequestInit) => Promise<T>;
 type Provider = { id: string; name: string; provider_type: string; is_active: boolean };
 type Section = { id: string; title: string; paragraphs: string[]; bullets: string[]; table: string[][] };
 type Content = { title: string; description: string; heading: string; intro: string; menu_label: string; cta_label: string; faq_title: string; footer_text: string; sections: Section[]; faq: { question: string; answer: string }[]; editorial_notes: string[] };
 type Menu = { id: string; label: string; section_id: string; mode: "fake" | "real"; url: string; header: boolean; footer: boolean };
-type Summary = { id: string; brand: string; geo: string; language: string; status: string; phase: string; error: string | null; revision: number; created_at: string; updated_at: string };
+type Summary = { id: string; brand: string; geo: string; language: string; status: string; phase: string; error: string | null; revision: number; created_at: string; updated_at: string; has_html?: boolean; competitors?: {domain:string;title:string;url:string}[] };
 type Template = Summary & { html: string | null; request: { uniqueness_scope: string }; document: null | {
   sources_changed?: boolean; content?: Content; menu?: Menu[]; design?: Record<string, string>; design_rationale?: string;
   comparisons?: { template_id: string; similarity: number; passed: boolean }[];
@@ -22,20 +26,26 @@ const statusLabels: Record<string, string> = { queued: "В очереди", gene
 const busyStatus = (status: string) => ["queued", "generating"].includes(status);
 const errorText = (e: unknown) => e instanceof Error ? e.message : "Не удалось выполнить действие";
 
-export function TemplateGenerator({ api }: { api: Api }) {
+export function TemplateGenerator({ api, projects = [] }: { api: Api; projects?: TemplateProject[] }) {
+  const [backTarget,setBackTarget]=React.useState<HTMLElement|null>(null);
+  React.useEffect(()=>setBackTarget(document.getElementById("templateTopbarBack")),[]);
+  const [knowledgeScopes,setKnowledgeScopes]=React.useState<KnowledgeScope[]>([]);
   const [items, setItems] = React.useState<Summary[]>([]);
   const [providers, setProviders] = React.useState<Provider[]>([]);
   const [selected, setSelected] = React.useState<Template | null>(null);
-  const [screen, setScreen] = React.useState<"list" | "new" | "detail">("list");
-  const [creationMode, setCreationMode] = React.useState<"standard" | "html">("standard");
+  const entry = React.useMemo(() => new URLSearchParams(window.location.search), []);
+  const directUpload = entry.get("mode") === "html";
+  const [screen, setScreen] = React.useState<"list" | "new" | "detail">(directUpload ? "new" : "list");
+  const [creationMode, setCreationMode] = React.useState<"standard" | "html">(directUpload ? "html" : "standard");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
   const [search, setSearch] = React.useState("");
   const [busy, setBusy] = React.useState(false);
-  const [form, setForm] = React.useState({ brand: "Онлайн казино", geo: "", language: "", ai_provider_id: "", uniqueness_scope: "brand_geo", collect_competitors: false, keywords: "", competitors: "", brand_url: "", facts: "" });
+  const [message, setMessage] = React.useState("");
+  const [form, setForm] = React.useState({ brand: entry.get("brand") || "Онлайн казино", geo: entry.get("geo") || "", language: entry.get("language") || languageForGeo(entry.get("geo") || ""), ai_provider_id: "", uniqueness_scope: "brand_geo", collect_competitors: false, keywords: "", competitors: "", brand_url: "", facts: "" });
   const [sourceDrafts, setSourceDrafts] = React.useState<SourceDraftReference[]>([]);
   const [sourcesSaving, setSourcesSaving] = React.useState(true);
-  const brandEdited = React.useRef(false);
+  const brandEdited = React.useRef(!!entry.get("brand"));
   const draftChanged = React.useCallback(() => {}, []);
   const draftsSaved = React.useCallback((sources: SourceDraftReference[]) => {
     setSourceDrafts(sources);
@@ -89,7 +99,7 @@ export function TemplateGenerator({ api }: { api: Api }) {
   }
   function openCreate(mode: "standard" | "html" = "standard") {
     setCreationMode(mode);
-    setError(""); setSourcesSaving(true); setSourceDrafts([]); brandEdited.current = false;
+    setError(""); setMessage(""); setSourcesSaving(true); setSourceDrafts([]); brandEdited.current = false;
     setForm(f => ({ ...f, brand: "Онлайн казино", geo: "", language: "", collect_competitors: mode === "standard", keywords: "", competitors: "" }));
     setScreen("new");
   }
@@ -97,34 +107,63 @@ export function TemplateGenerator({ api }: { api: Api }) {
     event.preventDefault();
     if (sourcesSaving) { setError("Дождитесь сохранения HTML конкурентов."); return; }
     if (creationMode === "html" && !sourceDrafts.some(source => source.hasHtml)) { setError("Добавьте HTML хотя бы одной главной страницы конкурента."); return; }
-    if (sourceDrafts.length > 5) { setError("Оставьте не более пяти HTML конкурентов."); return; }
+    if (sourceDrafts.length > 10) { setError("Оставьте не более десяти HTML конкурентов."); return; }
     if (!form.geo || !form.language) { setError("Выберите ГЕО и язык."); return; }
     setBusy(true); setError("");
     try {
+      if (creationMode === "html") {
+        const result = await api<{saved:number;duplicates:number}>("/site-templates/knowledge/save-drafts", {method:"POST",body:JSON.stringify({
+          brand:form.brand,geo:form.geo,language:form.language,ai_provider_id:form.ai_provider_id,
+          source_drafts:sourceDrafts.filter(source=>source.hasHtml).map(({id,revision})=>({id,revision}))})});
+        setMessage(`Сохранено конкурентов: ${result.saved}${result.duplicates?` · Уже в базе: ${result.duplicates}`:""}`);
+        await loadList(); setScreen("list"); setSourceDrafts([]); return;
+      }
       const result = await api<Template>("/site-templates", { method: "POST", body: JSON.stringify({ ...form, source_drafts: sourceDrafts.map(({ id, revision }) => ({ id, revision })), browser_profile: { user_agent: navigator.userAgent, locale: navigator.language, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, width: Math.max(320, Math.min(3840, innerWidth)), height: Math.max(320, Math.min(2160, innerHeight)), device_scale_factor: Math.min(4, Math.max(1, devicePixelRatio)), color_scheme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light' } }) });
       setSelected(result); setItems(rows => [result, ...rows]); setScreen("detail");
     } catch (e) { setError(errorText(e)); } finally { setBusy(false); }
   }
   const gemini = providers.filter(p => p.provider_type === "gemini" && p.is_active);
   const filtered = items.filter(i => `${i.brand} ${i.geo} ${i.language}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
+  const hasGeneratedHtml = (item: Summary) => item.has_html ?? item.status === "ready";
+  const collected = filtered.filter(item => !hasGeneratedHtml(item));
+  const generated = filtered.filter(hasGeneratedHtml);
+  const groups = collected.reduce<Record<string, Summary[]>>((result,item) => {
+    const key = `${item.geo} · ${item.brand}`;
+    (result[key] ||= []).push(item); return result;
+  }, {});
+  function renderRows(rows: Summary[]) {
+    return <div className="tg-list">{rows.map(item => <button className="tg-row" key={item.id} onClick={() => void open(item.id)}><div><strong>{item.brand}</strong><span>{item.geo} · {item.language.toUpperCase()} · {new Date(item.created_at).toLocaleDateString("ru-RU")}</span>
+      {!!item.competitors?.length && <div className="tg-row-competitors">{item.competitors.map((source,index)=><small key={`${source.url}:${index}`} title={source.title}><b>{source.domain || "Домен не указан"}</b><span>{source.title || "Без тайтла"}</span></small>)}</div>}
+      </div><span className={`tg-status tg-${item.status}`}>{busyStatus(item.status) && <Loader2 size={14} className="tg-spin" />}{statusLabels[item.status] || item.status}</span><ChevronRight size={18} /></button>)}</div>;
+  }
+  const brandOptions=templateBrandOptions(projects,knowledgeScopes,form.geo);
+  const knowledgeCount=knowledgeScopes.filter(s=>isGeneralBrand(form.brand)?isGeneralBrand(s.brand):s.geo===form.geo&&s.brand.toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu,'')===form.brand.toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu,'')).reduce((sum,s)=>sum+s.count,0);
   return <div className="tg">
     {error && <div className="tg-alert" role="alert"><AlertCircle size={18} />{error}<button type="button" onClick={() => setError("")} aria-label="Закрыть ошибку">×</button></div>}
+    {message && <p role="status" className="tg-note">{message}</p>}
     {screen === "list" && <>
-      <div className="tg-heading"><div><h2>Ваши шаблоны</h2><p>Одностраничные сайты с контентом, дизайном и готовым меню.</p></div><div className="tg-downloads"><button className="button secondary" onClick={() => openCreate("html")}><Upload size={18} />Загрузить HTML конкурентов</button><button className="button primary" onClick={() => openCreate()}><Plus size={18} />Создать шаблон</button></div></div>
+      <TemplateKnowledgeLibrary api={api} projects={projects} onScopesChanged={setKnowledgeScopes} onSaved={loadList}/>
+      <div className="tg-heading"><div><h2>Конкуренты собраны</h2><p>Сохранённые HTML конкурентов по брендам и ГЕО.</p></div><div className="tg-downloads"><button className="button secondary" onClick={() => openCreate("html")}><Upload size={18} />Загрузить HTML конкурентов</button><button className="button primary" onClick={() => openCreate()}><Plus size={18} />Создать шаблон</button></div></div>
       {loading ? <div className="tg-empty"><Loader2 className="tg-spin" />Загружаем шаблоны…</div> : items.length === 0 ? <div className="tg-empty"><Sparkles size={36} /><h3>Новый шаблон</h3><p>Gemini изучит конкурентов, подготовит текст и сгенерирует дизайн. Результат можно посмотреть и скачать.</p><button className="button primary" onClick={() => openCreate()}>Новый шаблон</button></div> : <>
         <label className="tg-search"><Search size={18} /><input placeholder="Найти по бренду или ГЕО" value={search} onChange={e => setSearch(e.target.value)} /></label>
-        <div className="tg-list">{filtered.map(item => <button className="tg-row" key={item.id} onClick={() => void open(item.id)}><div><strong>{item.brand}</strong><span>{item.geo} · {item.language.toUpperCase()} · {new Date(item.created_at).toLocaleDateString("ru-RU")}</span></div><span className={`tg-status tg-${item.status}`}>{busyStatus(item.status) && <Loader2 size={14} className="tg-spin" />}{statusLabels[item.status] || item.status}</span><ChevronRight size={18} /></button>)}</div>
-        {filtered.length === 0 && <p>По этому запросу шаблонов нет.</p>}
+        {Object.entries(groups).sort(([a],[b])=>a.localeCompare(b)).map(([scope,rows])=><section className="tg-collection-group" key={scope}><h3>{scope}</h3>{renderRows(rows)}</section>)}
+        {!collected.length && <p>Сохранённых конкурентов по этому запросу нет.</p>}
       </>}
+      <section className="tg-generated-templates"><div className="tg-heading"><div><h2>Сгенерированные шаблоны <small>{generated.length}</small></h2><p>Готовый HTML сайта для просмотра и скачивания.</p></div></div>{generated.length?renderRows(generated):<p>Готовых шаблонов пока нет.</p>}</section>
     </>}
     {screen === "new" && <>
-      <button className="button secondary" onClick={() => setScreen("list")}><ArrowLeft size={16} />Все шаблоны</button>
+      <div className="tg-create-topbar">{backTarget && createPortal(<button className="button secondary compact workspaceHtmlUpload" onClick={() => directUpload ? backFromDetail("/template-generator") : setScreen("list")}><ArrowLeft size={13} />Назад</button>,backTarget)}
+        <div className="tg-create-selection" role="group" aria-label="GEO, бренд и язык">
+          <TemplateCombobox label="ГЕО" value={form.geo} options={TEMPLATE_GEOS} onChange={geo => setForm(f => ({ ...f, geo, language: languageForGeo(geo), brand: templateBrandOptions(projects,knowledgeScopes,geo).some(o=>o.value===f.brand)?f.brand:"Онлайн казино" }))} />
+          <TemplateCombobox label="Бренд" value={form.brand} options={brandOptions} allowCustom placeholder="Введите название бренда" onChange={brand => { brandEdited.current = true; setForm(f => ({ ...f, brand })); }} />
+          <TemplateCombobox label="Язык" value={form.language} options={TEMPLATE_LANGUAGES} onChange={language => setForm(f => ({ ...f, language }))} />
+        </div>
+      </div>
       <div className="tg-create-layout"><form className="tg-card" onSubmit={create}>
-        <h2>{creationMode === "html" ? "Шаблон из HTML конкурентов" : "Новый шаблон"}</h2><p>{creationMode === "html" ? "Выберите ГЕО и добавьте до пяти HTML главных страниц конкурентов. Язык подставится автоматически — его можно изменить." : "Укажите бренд, ГЕО и настройки поиска конкурентов для генерации шаблона."}</p>
-        <div className="tg-fields"><TemplateCombobox label="ГЕО" value={form.geo} options={TEMPLATE_GEOS} onChange={geo => setForm(f => ({ ...f, geo, language: languageForGeo(geo) }))} /><TemplateCombobox label="Язык" value={form.language} options={TEMPLATE_LANGUAGES} onChange={language => setForm(f => ({ ...f, language }))} /></div>
-        <TemplateCombobox label="Бренд" value={form.brand} options={[{ value: "Онлайн казино", label: "Онлайн казино — общие ключи" }, ...TEMPLATE_BRANDS]} allowCustom placeholder="Введите название бренда" onChange={brand => { brandEdited.current = true; setForm(f => ({ ...f, brand })); }} />
+        <h2>{creationMode === "html" ? "Сохранить HTML конкурентов" : "Новый шаблон"}</h2><p>{creationMode === "html" ? "Выберите ГЕО и бренд, добавьте до десяти главных страниц. Кнопка сохранит HTML в базу конкурентов. Генерацию шаблона можно запустить отдельно позже." : "Укажите бренд, ГЕО и настройки поиска конкурентов для генерации шаблона."}</p>
+        <p className="tg-help">База знаний: {knowledgeCount} примеров подключатся автоматически.</p>
         <p className="tg-help">Для сайтов с общими ключами — «Онлайн казино». Бренд определяется по первому HTML; можно указать вручную.</p>
-        <details className="tg-options" key={creationMode} open={creationMode === "standard"}><summary>{creationMode === "html" ? "Дополнительные настройки" : "Настройки генерации"}</summary>
+        {creationMode === "standard" && <details className="tg-options" key={creationMode} open><summary>Настройки генерации</summary>
         <TemplateCombobox label="Gemini" value={form.ai_provider_id} options={gemini.map(p => ({ value: p.id, label: p.name }))} onChange={ai_provider_id => setForm(f => ({ ...f, ai_provider_id }))} placeholder="Выберите провайдер" />
         {gemini.length === 0 && <p className="tg-help">Сначала подключите Gemini в <a href="/ai-providers">API Providers</a>.</p>}
         {creationMode === "standard" && <><label className="tg-check"><input type="checkbox" checked={form.collect_competitors} onChange={e => setForm({ ...form, collect_competitors: e.target.checked })} /><span><strong>Искать конкурентов в Google</strong><small>До 10 страниц по каждому запросу через DataForSEO. Можно отключить и указать конкурентов вручную.</small></span></label>
@@ -132,10 +171,10 @@ export function TemplateGenerator({ api }: { api: Api }) {
         <label>Конкуренты <span className="tg-muted">(необязательно)</span><textarea rows={3} maxLength={10000} placeholder="example.com, https://example.org/review/" value={form.competitors} onChange={e => setForm({ ...form, competitors: e.target.value })} /><small>До 20 адресов: с новой строки, через запятую или пробел. Эти страницы будут изучены даже при выключенном поиске Google. Всего анализируем до 30 страниц, ручной список — в приоритете.</small></label></>}
         <label>Сайт бренда для экранов смартфонов <span className="tg-muted">(необязательно)</span><input value={form.brand_url} maxLength={2000} placeholder="https://brand.com" onChange={e => setForm({ ...form, brand_url: e.target.value })} /><small>Снимем до трёх фрагментов мобильной страницы и найдём логотип. Используем одну из 15 рамок смартфонов. Укажите сайт нужного бренда и региона.</small><small><a href="/phone-frames/index.html" target="_blank" rel="noopener noreferrer">Посмотреть 15 рамок</a> · <a href="/phone-frames.zip" download>Скачать заготовки SVG</a></small></label>
         <fieldset className="tg-scope"><legend>С чем сравнивать уникальность</legend><label><input type="radio" name="scope" checked={form.uniqueness_scope === "brand_geo"} onChange={() => setForm({ ...form, uniqueness_scope: "brand_geo" })} /><span>Этот бренд + ГЕО<small>Рекомендуется для обычной генерации</small></span></label><label><input type="radio" name="scope" checked={form.uniqueness_scope === "global"} onChange={() => setForm({ ...form, uniqueness_scope: "global" })} /><span>Все шаблоны<small>Сравнение со всей историей генератора</small></span></label></fieldset>
-        <label>Проверенные сведения о бренде<textarea rows={5} maxLength={20000} placeholder="Особенности, условия, подтверждённые контакты и другие факты, которые нужно учесть." value={form.facts} onChange={e => setForm({ ...form, facts: e.target.value })} /></label></details>
-        <button className="button primary tg-submit" disabled={busy || sourcesSaving || !form.brand.trim() || !form.ai_provider_id || !form.geo || !form.language || sourceDrafts.length > 5 || (creationMode === "html" && !sourceDrafts.some(source => source.hasHtml))}>{busy ? <Loader2 size={18} className="tg-spin" /> : <Sparkles size={18} />}{busy ? "Создаём задачу…" : sourcesSaving ? "Сохраняем HTML конкурентов…" : creationMode === "standard" ? "Этап 1 — собрать конкурентов" : "Создать шаблон по HTML"}</button>
+        <label>Проверенные сведения о бренде<textarea rows={5} maxLength={20000} placeholder="Особенности, условия, подтверждённые контакты и другие факты, которые нужно учесть." value={form.facts} onChange={e => setForm({ ...form, facts: e.target.value })} /></label></details>}
+        <button className="button primary tg-submit" disabled={busy || sourcesSaving || !form.brand.trim() || (creationMode === "standard" && !form.ai_provider_id) || !form.geo || !form.language || sourceDrafts.length > 10 || (creationMode === "html" && !sourceDrafts.some(source => source.hasHtml))}>{busy ? <Loader2 size={18} className="tg-spin" /> : <Sparkles size={18} />}{busy ? creationMode === "html" ? "Сохраняем конкурентов…" : "Создаём задачу…" : sourcesSaving ? "Сохраняем HTML конкурентов…" : creationMode === "standard" ? "Этап 1 — собрать конкурентов" : "Сохранить конкурентов"}</button>
       </form><aside className="tg-create-aside"><TemplateSources api={api} pending={busy} onChanged={draftChanged} onBusy={setSourcesSaving} onDraftSources={draftsSaved} />
-      <section className="tg-card tg-explainer"><h3>Что получится</h3><ol><li><strong>Сбор конкурентов</strong><p>Получите HTML из Google через агент, Chrome или ручную вставку. Проверьте сохранённые источники.</p></li><li><strong>Генерация контента</strong><p>Gemini создаёт текст под бренд и ГЕО на основе конкурентов. Проверьте и отредактируйте его перед следующим этапом.</p></li><li><strong>Генерация HTML</strong><p>Готовый одностраничник: дизайн, хедер, футер и адаптивное меню. Проверяем 15 параметров уникальности и сравниваем вид с историей.</p></li></ol><div className="tg-note">По умолчанию пункты фейкового меню ведут к секциям страницы. Позже им можно назначить реальные адреса.</div><p className="tg-help">Генерация занимает несколько минут. Можно закрыть раздел — результат сохранится здесь.</p></section></aside></div>
+      </aside></div>
     </>}
     {screen === "detail" && selected && <TemplateDetail key={`${selected.id}:${selected.revision}:${selected.status}`} template={selected} api={api} onBack={() => { setScreen("list"); void loadList().catch(e => setError(errorText(e))); }} onUpdate={t => { setSelected(t); setItems(rows => rows.map(r => r.id === t.id ? t : r)); }} />}
   </div>;
@@ -192,8 +231,8 @@ function TemplateDetail({ template: t, api, onBack, onUpdate }: { template: Temp
       })}>{busy === "save" ? "Сохраняем…" : "Сохранить и проверить"}</button></div>}
       {tab === "preview" && t.status === "content_ready" && <p>Текст готов. Проверьте вкладку «Контент» и запустите этап 3 — генерацию HTML.</p>}
       {tab === "preview" && t.status !== "content_ready" && <>
-        <div className="tg-preview-toolbar"><div className="tg-device"><button className={!mobile ? "active" : ""} aria-pressed={!mobile} onClick={() => setMobile(false)}><Monitor size={17} />Компьютер</button><button className={mobile ? "active" : ""} aria-pressed={mobile} onClick={() => setMobile(true)}><Smartphone size={17} />Телефон</button></div><div className="tg-downloads"><button className="button secondary" disabled={!!busy || t.status !== "ready" || dirty} onClick={() => void download("html")}><Download size={16} />HTML</button><button className="button secondary" disabled={!!busy || t.status !== "ready" || dirty} onClick={() => void download("images")}><Download size={16} />Изображения ZIP</button><button className="button primary" disabled={!!busy || t.status !== "ready" || dirty} onClick={() => void download("bundle")}><Download size={16} />Весь шаблон</button></div></div>
-        <p className="tg-help">Для отдельного HTML распакуйте images.zip рядом с index.html. «Весь шаблон» содержит автономный HTML, настройки и результаты проверок.</p>
+        <div className="tg-preview-toolbar"><div className="tg-device"><button className={!mobile ? "active" : ""} aria-pressed={!mobile} onClick={() => setMobile(false)}><Monitor size={17} />Компьютер</button><button className={mobile ? "active" : ""} aria-pressed={mobile} onClick={() => setMobile(true)}><Smartphone size={17} />Телефон</button></div><div className="tg-downloads"><button className="button secondary" disabled={!!busy || t.status !== "ready" || dirty} onClick={() => void download("html")}><Download size={16} />HTML</button><button className="button secondary" disabled={!!busy || t.status !== "ready" || dirty} onClick={() => void download("images")}><Download size={16} />Изображения ZIP</button><button className="button primary" disabled={!!busy || t.status !== "ready" || dirty} onClick={() => void download("bundle")}><Download size={16} />Скачать архив</button></div></div>
+        <p className="tg-help">Для отдельного HTML распакуйте images.zip рядом с index.html. «Скачать архив» — готовый ZIP: index.html, все изображения, иконки, логотип, фавикон, настройки и результаты проверок.</p>
         <div className={`tg-preview ${mobile ? "tg-preview-mobile" : ""}`}><iframe title={`Предпросмотр ${t.brand}`} sandbox="" referrerPolicy="no-referrer" srcDoc={t.html || ""} /></div>
         <p className="tg-help">Шаблон сохраняется как черновик с noindex. Перед публикацией потребуются домен и окончательная проверка фактов. Иллюстрация в базовой версии — локальный SVG.</p>
       </>}

@@ -21,7 +21,7 @@ def setup(monkeypatch):
     db = Session(engine)
     site = models.Site(name='brand.test', base_url='https://brand.test', brand='Brand', is_active=True, publication_endpoint='/projects/update')
     db.add(site); db.commit()
-    project = {'settings': {}, 'data': {'pages': [
+    project = {'settings': {}, 'shortcodes': [{'name': 'promo.hbs', 'data': '<div>Original promo</div>'}], 'data': {'pages': [
         {'id': '8', 'slug': '/bonus/', 'title': 'Bonus', 'description': 'About bonus', 'head': ['keep'], 'content': {'blocks': []}},
         {'id': '4', 'slug': '/', 'title': 'Home', 'description': 'About brand', 'head': ['canonical'],
          'banners': {'desktop':'keep'}, 'publishedTime': 'old', 'content': {'version':'2.28', 'blocks': [
@@ -29,13 +29,27 @@ def setup(monkeypatch):
             {'type':'customWidget','data':{'settings':{'keep':True}}},
             {'id':'p', 'type':'paragraph','data':{'text':'Original paragraph'}}]}}
     ]}}
-    state = {'project':project, 'requests':[], 'failure': None, 'apply':True}
+    state = {'project':project, 'requests':[], 'failure': None, 'apply':True,
+             'backups': [], 'backup_requests': [], 'backup_failure': None, 'backup_apply': True,
+             'backup_list_failure': None, 'events': []}
     class Remote:
         def __init__(self,*args): pass
         def __enter__(self): return self
         def __exit__(self,*args): pass
         def project(self): return copy.deepcopy(state['project'])
         def request(self,method,path,payload):
+            if path == '/projects/backupList':
+                state['events'].append('backupList')
+                if state['backup_list_failure']: raise state['backup_list_failure']
+                return 201, copy.deepcopy(state['backups'])
+            if path == '/projects/backup':
+                state['events'].append('backup')
+                state['backup_requests'].append(copy.deepcopy(payload))
+                if state['backup_apply']:
+                    state['backups'].append({'name': f"mainpage-test-{len(state['backups'])}.json", 'data': copy.deepcopy(payload['page'])})
+                if state['backup_failure']: raise state['backup_failure']
+                return 201, {'message': 'backup path'}
+            state['events'].append('update')
             state['requests'].append(copy.deepcopy(payload))
             if state['failure']: raise state['failure']
             if state['apply']:
@@ -192,20 +206,22 @@ def test_fibery_name_keeps_value_when_snapshot_omits_field_and_clears_explicit_e
     assert site.fibery_name is None
 
 
-def test_manual_fibery_name_survives_webdev_sync(setup):
+def test_webdev_fibery_name_overwrites_manual_value_but_omitted_or_invalid_field_preserves_it(setup):
     from app.project_cache import _apply_fibery_name
     client, db, site, state = setup
     site.fibery_name = '#736_savaspin_IT'
     site.fibery_name_manual = True
     db.commit()
-    db.refresh(site)
-    for settings in ({}, {'webdevDuty': {'fibery': ''}},
-                     {'webdevDuty': {'fibery': '#999_other_IT'}}):
+    for settings in ({}, {'webdevDuty': {}}, {'webdevDuty': {'fibery': {'invalid': True}}}):
         _apply_fibery_name(site, settings)
         assert site.fibery_name == '#736_savaspin_IT'
-    site.fibery_name_manual = False
-    _apply_fibery_name(site, {'webdevDuty': {'fibery': '#999_other_IT'}})
+    _apply_fibery_name(site, {'webdevDuty': {'fibery': '  #999_other_IT  '}})
     assert site.fibery_name == '#999_other_IT'
+    assert site.fibery_name_manual is True
+    for value in ('', None, '   '):
+        site.fibery_name = '#999_other_IT'
+        _apply_fibery_name(site, {'webdevDuty': {'fibery': value}})
+        assert site.fibery_name is None
 
 
 def test_page_dates_from_webdev_with_publication_fallback():
@@ -251,3 +267,38 @@ def test_cache_for_another_project_is_not_used(setup, monkeypatch):
     result = client.get(f'/sites/{site.id}/pages')
     assert result.status_code == 200
     assert result.json()['source'] == 'webdev'
+
+
+@pytest.mark.parametrize('count', [1, 2, 3])
+def test_append_buttons_create_reviewed_drafts_without_publication(setup, monkeypatch, count):
+    import json
+    from app import services, background_jobs
+    client, db, site, state = setup
+    path, payload = draft(client, site)
+    provider = models.AiProvider(name='Gemini', provider_type='gemini', endpoint_url='https://ai.test', api_key='test')
+    db.add(provider); db.commit()
+    content = copy.deepcopy(payload['content'])
+    content['blocks'].insert(0, {'id': 'heading', 'type': 'header', 'data': {'text': 'Choosing a session', 'level': 2}})
+    header = next(i for i, block in enumerate(content['blocks']) if block['type'] == 'header')
+    prompts = []
+    reviewed = [dict(type='paragraph', data={'text': f'Reviewed addition {i}: a practical new scenario that develops the section without repeating the supplied original text.'}) for i in range(count)]
+    async def generate(_provider, prompt, **kwargs):
+        prompts.append(prompt)
+        assert not kwargs.get('url_context')
+        assert 'IN TOTAL' in prompt and 'ENTIRE page' in prompt
+        output = {'sections': [{'id': header, 'blocks': reviewed if len(prompts) == 2 else [dict(type='paragraph', data={'text': 'A provisional paragraph to be reviewed against all the existing information on this page.'})]}]}
+        return {'candidates': [{'content': {'parts': [{'text': json.dumps(output)}]}}], 'usageMetadata': {'totalTokenCount': 10}}
+    monkeypatch.setattr(services, 'call_gemini', generate)
+    response = client.post(path + '/ai', json={'action': f'append_{count}', 'provider_id': provider.id, 'content': content})
+    assert response.status_code == 202
+    job = db.scalar(select(models.BackgroundJob).where(models.BackgroundJob.kind == 'project_page_ai'))
+    assert background_jobs.run_job(db, job.id)['status'] == 'completed'
+    result = client.get(path + '/ai/' + response.json()['id']).json()
+    assert result['status'] == 'ready'
+    original_ids = {block.get('id') for block in content['blocks']}
+    assert [block for block in result['result_content']['blocks'] if block.get('id') in original_ids] == content['blocks']
+    assert len(result['result_content']['blocks']) == len(content['blocks']) + count
+    assert len(prompts) == 2 and 'REDUNDANCY REVIEW' in prompts[1]
+    assert result['input_content'] == content
+    assert provider.total_tokens_used == 20
+    assert not state['requests']

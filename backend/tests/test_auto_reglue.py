@@ -6,14 +6,25 @@ from sqlalchemy import select
 
 from app import auto_reglue as auto, models
 from app.network_state import state_revision
-from test_api_serialization import make_client
+from test_api_serialization import make_client as base_make_client
+
+MASS_FILTER = {'brand': 'Pin-Up', 'geo': 'AZ'}
+
+
+def make_client():
+    client, sessions = base_make_client()
+    with sessions() as db:
+        site = db.scalar(select(models.Site))
+        site.brand = 'Pin-Up'; site.cache_geo = 'AZ'; site.site_type = 'monobrand'
+        db.commit()
+    return client, sessions
 
 
 def fixture():
     site = SimpleNamespace(id='site', name='clubheavenjax.com', project_status='mass_actions', cache_geo='AZ', main_domain_history=['old.clubheavenjax.com','used.clubheavenjax.com'])
     state = dict(fake_main_current='/events/',fake_main_paths=['/events/'],fake_main_enabled=True,canon='old.clubheavenjax.com', prev='', reserve='', domains=['first.clubheavenjax.com','old.clubheavenjax.com','used.clubheavenjax.com','next.clubheavenjax.com','last.clubheavenjax.com'], has_head=True, enableAlternates=True, alternateMarkup='<link rel="alternate" hreflang="tr" href="https://old.clubheavenjax.com/extra/" />')
     cfg=auto.ProjectConfig(use_current_fake_main=True,enabled=True,drop_domain='clubheavenjax.com',language='az',fake_main_path='/events/',profile_id='pinup:az:clubheavenjax.com',variant='after')
-    return site,state,auto.GlobalConfig(enabled=True,scheme_mode='add_auxiliary',auxiliary_hreflangs=['fr-FR']),cfg
+    return site,state,auto.GlobalConfig(selection_filter=MASS_FILTER,enabled=True,scheme_mode='add_auxiliary',auxiliary_hreflangs=['fr-FR']),cfg
 
 
 def test_next_unused_subdomain_and_fixed_drop_with_preserved_extras():
@@ -278,7 +289,7 @@ def test_schedule_due_time_personal_priority_and_mass_exclusion(monkeypatch):
     _, sessions = make_client()
     with sessions() as db:
         site = db.scalar(select(models.Site))
-        g = auto.GlobalConfig(enabled=True, schedule_enabled=True, interval_days=3)
+        g = auto.GlobalConfig(selection_filter=MASS_FILTER, enabled=True, schedule_enabled=True, interval_days=3)
         cfg = auto.ProjectConfig(enabled=True, drop_domain='drop.test', language='az',fake_main_path='/events/')
         site.project_status = 'mass_actions'; db.commit()
         auto.save_config(db, g); auto.save_config(db, cfg, site.id)
@@ -376,7 +387,7 @@ def test_personal_project_not_listed_or_accepted_in_mass_api():
         site_id = site.id
         auto.save_config(db, auto.ProjectConfig(scope='personal', enabled=True, drop_domain='drop.test', language='az'), site.id)
     assert client.get('/api/auto-reglue').json()['projects'] == []
-    result = client.post('/api/auto-reglue/start', json={'items':[{'site_id':site_id, 'request_id':str(uuid4()), 'preview_token':'a'*64}]})
+    result = client.post('/api/auto-reglue/start', json={'filter':MASS_FILTER,'items':[{'site_id':site_id, 'request_id':str(uuid4()), 'preview_token':'a'*64}]})
     assert 'персональные' in result.json()['results'][0]['error']
 
 
@@ -510,7 +521,7 @@ def test_legacy_schedule_keeps_due_date_on_upgrade():
     anchor = datetime(2026, 9, 15, tzinfo=timezone.utc)
     with sessions() as db:
         site = db.scalar(select(models.Site)); site.project_status = 'mass_actions'
-        db.add(models.AutoReglueConfig(key='global', value={**auto.GlobalConfig(enabled=True, schedule_enabled=True, interval_days=3).model_dump(), '_schedule_since': anchor.isoformat()}))
+        db.add(models.AutoReglueConfig(key='global', value={**auto.GlobalConfig(selection_filter=MASS_FILTER, enabled=True, schedule_enabled=True, interval_days=3).model_dump(), '_schedule_since': anchor.isoformat()}))
         db.add(models.AutoReglueConfig(key=site.id, value={**auto.ProjectConfig(enabled=True).model_dump(), '_schedule_since': anchor.isoformat()}))
         db.commit()
         auto.sync_schedules(db, anchor + timedelta(days=1)); db.commit()
@@ -535,7 +546,7 @@ def test_once_default_all_mass_projects_personal_excluded_and_no_repeats(monkeyp
         for site in [original, second]:
             auto.save_config(db, auto.ProjectConfig(enabled=True), site.id)
         auto.save_config(db, auto.ProjectConfig(enabled=True, scope='personal', schedule_enabled=False), personal.id)
-        g = auto.GlobalConfig(enabled=True, schedule_enabled=True, max_projects=1)
+        g = auto.GlobalConfig(selection_filter=MASS_FILTER, enabled=True, schedule_enabled=True, max_projects=1)
         auto.save_config(db, g)
         queued = []
         now = datetime.now(timezone.utc)
@@ -817,6 +828,18 @@ def test_fake_path_skips_normalized_content_and_current_and_validates_metadata()
         next_fake_path(site, state, cfg)
 
 
+@pytest.mark.parametrize('home_path', ['/', '//', ' / ', '///'])
+def test_fake_path_ignores_home_page_but_respects_occupied_internal_pages(home_path):
+    from app.fake_main import next_fake_path
+    site, state, _, cfg = fixture()
+    site.cache_geo = 'PL'; site.cache_language = 'pl'
+    state['content_page_paths'] = [home_path, '/pl1/']
+    state['fake_main_paths'] = ['/pl/']
+    state['fake_main_current'] = '/pl/'
+    state['fake_main_history'] = ['/pl2/']
+    assert next_fake_path(site, state, cfg) == '/pl3/'
+
+
 @pytest.mark.parametrize('rules', [dict(create_fake_main=True), dict(interval_days=7), dict(scheme_mode='base_only'), dict(profile_id='custom')])
 def test_saved_own_rules_auto_exclude_even_disabled(monkeypatch, rules):
     from app import auto_reglue_api
@@ -832,10 +855,10 @@ def test_saved_own_rules_auto_exclude_even_disabled(monkeypatch, rules):
     assert result.json()['scope'] == 'personal'
     assert not result.json()['enabled'] and result.json()['schedule_enabled']
     assert client.get('/api/auto-reglue').json()['projects'] == []
-    denied = client.post('/api/auto-reglue/start', json={'items':[{'site_id':site_id, 'request_id':str(uuid4()), 'preview_token':'a'*64}]})
+    denied = client.post('/api/auto-reglue/start', json={'filter':MASS_FILTER,'items':[{'site_id':site_id, 'request_id':str(uuid4()), 'preview_token':'a'*64}]})
     assert 'персональные' in denied.json()['results'][0]['error']
     with sessions() as db:
-        auto.save_config(db, auto.GlobalConfig(enabled=True, schedule_enabled=True))
+        auto.save_config(db, auto.GlobalConfig(selection_filter=MASS_FILTER, enabled=True, schedule_enabled=True))
         site = db.get(models.Site, site_id)
         assert auto.next_scheduled_at(db, site) is None
     # Clearing rules and explicitly returning to mass is required.
@@ -860,7 +883,7 @@ def test_disabling_personal_schedule_returns_to_mass_and_keeps_rules(monkeypatch
     client, sessions = make_client(); client.app.include_router(auto_reglue_api.router, prefix='/api')
     with sessions() as db:
         site = db.scalar(select(models.Site)); site.project_status = status; db.commit(); site_id = site.id
-        auto.save_config(db, auto.GlobalConfig(enabled=True, schedule_enabled=True, interval_days=3))
+        auto.save_config(db, auto.GlobalConfig(selection_filter=MASS_FILTER, enabled=True, schedule_enabled=True, interval_days=3))
     payload = auto.ProjectConfig(enabled=True, schedule_enabled=True, interval_days=14, drop_domain='drop.test', language='az', create_fake_main=True).model_dump()
     saved = client.put(f'/api/auto-reglue/projects/{site_id}', json=payload)
     assert saved.status_code == 200, saved.text
@@ -885,7 +908,7 @@ def test_mass_status_is_permission_without_project_enabled_or_saved_config():
     _, sessions = make_client()
     with sessions() as db:
         site = db.scalar(select(models.Site)); site.project_status = 'mass_actions'; db.commit()
-        g = auto.GlobalConfig(enabled=True, schedule_enabled=True)
+        g = auto.GlobalConfig(selection_filter=MASS_FILTER, enabled=True, schedule_enabled=True)
         auto.save_config(db, g)
         cfg = auto.config(db, site.id)
         assert not cfg.enabled

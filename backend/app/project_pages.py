@@ -88,6 +88,26 @@ def page_detail(page):
     return {**page_summary(page), **editable(page), "revision": digest(page)}
 
 
+def shortcode_catalog(project):
+    definitions=project.get('shortcodes')
+    known={str(row.get('name') or '').removesuffix('.hbs') for row in definitions or [] if isinstance(row,dict)} if isinstance(definitions,list) else set()
+    uses={};used_pages={}
+    for page in pages(project):
+        content=page.get('content')
+        blocks=content.get('blocks',[]) if isinstance(content,dict) else []
+        for block in blocks if isinstance(blocks,list) else []:
+            if not isinstance(block,dict) or block.get('type')!='shortcode':continue
+            data=block.get('data')
+            value=data.get('shortcode') if isinstance(data,dict) else data
+            if not isinstance(value,str) or not value.strip():continue
+            name=value.strip().removesuffix('.hbs')
+            uses[name]=uses.get(name,0)+1
+            used_pages.setdefault(name,set()).add(page_key(page))
+    return [{'name':name,'uses_on_site':uses.get(name,0),'pages_count':len(used_pages.get(name,[])),
+             'defined':name in known if isinstance(definitions,list) else None}
+            for name in sorted((known|set(uses))-{''})]
+
+
 def site_for(db, site_id):
     site = db.scalar(select(models.Site).where(models.Site.id == site_id, models.Site.is_active.is_(True)))
     if not site:
@@ -147,14 +167,59 @@ def list_pages(site_id: str, user: AuthUser, db: Session = Depends(get_db), refr
     return {"pages": result, "total": len(result), "source": source, "warning": warning}
 
 
+@router.get("/interlinking")
+def interlinking(site_id: str, user: AuthUser, db: Session = Depends(get_db)):
+    site = site_for(db, site_id)
+    if user.get("allowed_site_ids") is not None and site_id not in user["allowed_site_ids"]:
+        raise HTTPException(404, "Проект недоступен.")
+    from app.project_interlinking import interlinking_status
+    project, source, warning = read_project(db, site, refresh=True)
+    result = interlinking_status(project, (project.get("settings") or {}).get("canon") or site.cache_canon or site.base_url)
+    if site.site_type == "general" or not site.site_type and (not site.brand or site.brand.strip().casefold() == "общие ключи"):
+        from app.showcase_brands import showcase_brands
+        result["showcase"] = showcase_brands(project)
+    if warning:
+        result.update(complete=False, message="Не удалось подтвердить актуальную перелинковку в Webdev.")
+    return {**result, "source": source, "warning": warning,
+            "checked_at": datetime.now(timezone.utc).isoformat()}
+
+
+class GenerationAnchorsEdit(BaseModel):
+    anchors: str | list[str]
+
+
+@router.get("/generation-anchors")
+def generation_anchors(site_id: str, user: AuthUser, db: Session = Depends(get_db)):
+    site = site_for(db, site_id)
+    if user.get("allowed_site_ids") is not None and site_id not in user["allowed_site_ids"]:
+        raise HTTPException(404, "Проект недоступен.")
+    from app.generation_anchors import settings
+    return settings(db, site)
+
+
+@router.put("/generation-anchors")
+def edit_generation_anchors(site_id: str, payload: GenerationAnchorsEdit, user: AuthUser, db: Session = Depends(get_db)):
+    site = site_for(db, site_id)
+    if user.get("allowed_site_ids") is not None and site_id not in user["allowed_site_ids"]:
+        raise HTTPException(404, "Проект недоступен.")
+    from app.generation_anchors import save_settings
+    try:
+        return save_settings(db, site, payload.anchors)
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from error
+
+
 @router.get("/{key}")
 def read_page(site_id: str, key: str, user: AuthUser, db: Session = Depends(get_db), refresh: bool = False):
     site = site_for(db, site_id)
     project, source, warning = read_project(db, site, refresh)
-    return {**page_detail(find_page(project, key)), "source": source, "warning": warning}
+    return {**page_detail(find_page(project, key)), "source": source, "warning": warning,
+            "shortcodes": shortcode_catalog(project)}
 
 
 def operation_result(operation, page=None):
+    if page is None and operation.status == "confirmed":
+        page = operation.after_page
     return {"id": operation.id, "status": operation.status, "error": operation.error,
             "requested_by": operation.requested_by, "updated_at": operation.updated_at,
             "page": page_detail(page) if page is not None else None}
@@ -162,8 +227,12 @@ def operation_result(operation, page=None):
 
 def confirm(db, operation, remote, site):
     current = find_page(remote.project(), operation.page_key)
-    if editable(current) == editable(operation.after_page):
+    if (editable(current) == editable(operation.after_page)
+            and current.get("updatedTime") == operation.after_page.get("updatedTime")
+            and current.get("publishedTime") == operation.after_page.get("publishedTime")):
         operation.status, operation.error = "confirmed", None
+        from app.project_page_autolink import saved_page
+        saved_page(db, site, current)
         if is_home(current):
             site.homepage_title = current.get("title") or ""
     else:
@@ -196,9 +265,30 @@ def save_page(site_id: str, key: str, payload: PageEdit, user: AuthUser, db: Ses
                 raise HTTPException(409, "Идентификатор сохранения уже использован для других изменений.")
             return operation_result(operation)
         with Remote(db, site) as remote:
-            current = find_page(remote.project(), key)
+            project = remote.project()
+            current = find_page(project, key)
             if digest(current) != payload.revision:
                 raise HTTPException(409, "Страница изменилась в Webdev. Скопируйте свои изменения и загрузите актуальную версию.")
+            if editable(current) == {"title": payload.title, "description": payload.description, "content": payload.content}:
+                # A retry or an unchanged form is not a content update. Keep both
+                # remote dates and record the request without another Webdev write.
+                operation = models.ProjectPageEdit(id=str(payload.request_id), site_id=site_id, page_key=key,
+                    requested_by=user["username"], fingerprint=fingerprint, before_page=current,
+                    after_page=deepcopy(current), status="confirmed")
+                db.add(operation)
+                db.commit()
+                return operation_result(operation, current)
+            from app.page_backups import ensure_backup, PageBackupError
+            try:
+                ensure_backup(db, remote, site, project, current,
+                              actor=user["username"], operation=f"save:{payload.request_id}",
+                              defer_verification=bool(db.info.get('pilot_defer_backup')))
+            except PageBackupError as error:
+                raise HTTPException(502, str(error)) from error
+            # A backup can take time. Never overwrite a concurrent external edit.
+            latest = find_page(remote.project(), key)
+            if digest(latest) != payload.revision:
+                raise HTTPException(409, "Страница изменилась во время создания бекапа. Загрузите актуальную версию.")
             updated = {**deepcopy(current), "title": payload.title, "description": payload.description,
                        "content": payload.content, "updatedTime": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")}
             operation = models.ProjectPageEdit(id=str(payload.request_id), site_id=site_id, page_key=key,
@@ -243,13 +333,15 @@ class DraftContent(BaseModel):
 
 
 class AIContent(DraftContent):
-    action: Literal["paragraphs", "headings", "emoji"]
-    provider_id: str
+    action: Literal["paragraphs", "headings", "emoji", "append_1", "append_2", "append_3", "meta_headings", "full_title_h1", "full_title_headings", "trim_50", "trim_99"]
+    provider_id: str | None = None
+    title: str | None = Field(default=None, max_length=2000)
+    description: str | None = Field(default=None, max_length=10000)
 
 
 def draft_result(draft):
     return {"id": draft.id, "action": draft.action, "status": draft.status, "error": draft.error,
-            "input_content": draft.input_content, "result_content": draft.result_content, "created_at": draft.created_at}
+            "input_content": draft.input_content, "result_content": draft.result_content, "input_metadata":draft.input_metadata, "result_metadata":draft.result_metadata, "created_at": draft.created_at}
 
 
 @router.post("/{key}/interlink")
@@ -269,20 +361,35 @@ def generate_interlink(site_id: str, key: str, payload: DraftContent, user: Auth
 
 @router.post("/{key}/ai", status_code=202)
 def generate_ai_draft(site_id: str, key: str, payload: AIContent, user: AuthUser, db: Session = Depends(get_db)):
-    from app.page_content_tools import targets
+    from app.page_content_tools import targets, validate_heading_scope
     site = site_for(db, site_id)
     with remote_errors(), Remote(db, site) as remote:
-        page = find_page(remote.project(), key)
+        project = remote.project()
+        page = find_page(project, key)
     if not is_home(page):
         raise HTTPException(422, "Эта обработка доступна для главной страницы.")
-    provider = db.get(models.AiProvider, payload.provider_id)
-    if not provider or not provider.is_active or provider.provider_type != "gemini" or not provider.api_key:
+    provider = db.get(models.AiProvider, payload.provider_id) if payload.provider_id else None
+    if payload.action not in {"trim_50","trim_99"} and (not provider or not provider.is_active or provider.provider_type != "gemini" or not provider.api_key):
         raise HTTPException(422, "Выберите активный Gemini-провайдер.")
-    if not targets(payload.content, payload.action):
+    try:
+        eligible = targets(payload.content, "headings" if payload.action=="meta_headings" else payload.action)
+        mode = validate_heading_scope(project, key, payload.content, payload.action)
+        if mode and not (payload.title if payload.title is not None else page.get('title') or '').strip():
+            raise ValueError('Для полного переписывания нужен исходный Title страницы.')
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+    if not eligible and payload.action!="meta_headings":
         raise HTTPException(422, "Нет подходящих блоков для выбранного действия.")
     row = models.ProjectPageDraft(site_id=site_id, page_key=key, requested_by=user["username"],
-        provider_id=provider.id, action=payload.action, input_content=payload.content)
+        provider_id=provider.id if provider else None, action=payload.action, input_content=payload.content,
+        input_metadata={"title": payload.title if payload.title is not None else page.get("title") or "",
+                        "description":payload.description if payload.description is not None else page.get("description") or "",
+                        **({'title_rewrite_mode': mode} if mode else {})})
     db.add(row); db.flush()
+    if payload.action in {'headings','meta_headings','full_title_h1','full_title_headings'}:
+        from app import short_h1
+        from app.full_heading_rewrite import all_targets
+        if sum(item['level']==1 for item in all_targets(payload.content))==1:short_h1.select_for_draft(row)
     db.add(models.BackgroundJob(kind="project_page_ai", payload={"draft_id": row.id}))
     db.commit()
     return draft_result(row)
@@ -292,7 +399,8 @@ def generate_ai_draft(site_id: str, key: str, payload: AIContent, user: AuthUser
 def list_ai_drafts(site_id: str, key: str, user: AuthUser, db: Session = Depends(get_db)):
     site_for(db, site_id)
     rows = db.scalars(select(models.ProjectPageDraft).where(models.ProjectPageDraft.site_id == site_id,
-        models.ProjectPageDraft.page_key == key).order_by(models.ProjectPageDraft.created_at.desc()).limit(10)).all()
+        models.ProjectPageDraft.page_key == key,
+        models.ProjectPageDraft.action != "manual_save").order_by(models.ProjectPageDraft.created_at.desc()).limit(10)).all()
     return [{"id": r.id, "action": r.action, "status": r.status, "created_at": r.created_at} for r in rows]
 
 
@@ -300,7 +408,8 @@ def list_ai_drafts(site_id: str, key: str, user: AuthUser, db: Session = Depends
 def read_ai_draft(site_id: str, key: str, draft_id: str, user: AuthUser, db: Session = Depends(get_db)):
     site_for(db, site_id)
     row = db.scalar(select(models.ProjectPageDraft).where(models.ProjectPageDraft.id == draft_id,
-        models.ProjectPageDraft.site_id == site_id, models.ProjectPageDraft.page_key == key))
+        models.ProjectPageDraft.site_id == site_id, models.ProjectPageDraft.page_key == key,
+        models.ProjectPageDraft.action != "manual_save"))
     if not row:
         raise HTTPException(404, "Черновик не найден.")
     return draft_result(row)
@@ -325,3 +434,7 @@ def page_version(site_id: str, key: str, edit_id: UUID, user: AuthUser, db: Sess
     if not row:
         raise HTTPException(404, "Версия не найдена.")
     return page_detail(row.before_page if before else row.after_page)
+
+
+from app.page_editor_drafts import router as editor_drafts_router
+router.include_router(editor_drafts_router)

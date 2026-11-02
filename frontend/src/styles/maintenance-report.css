@@ -1,0 +1,44 @@
+.maintenanceReport .pilotTools h2{flex:1}
+.maintenanceReport .pilotProgress p{margin:8px 0}
+.maintenanceEntry{margin-top:18px;padding:16px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+.maintenanceEntry>header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+.maintenanceEntry h3{margin:0;font-size:16px}
+.maintenanceEntry p{margin:10px 0;line-height:1.5}
+.maintenanceChangesScroll{overflow-x:auto;margin-top:12px}
+.maintenanceChanges{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed}
+.maintenanceChanges th,.maintenanceChanges td{padding:10px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;white-space:pre-wrap;overflow-wrap:anywhere}
+.maintenanceChanges th:first-child{width:110px}
+.maintenanceChanges thead th{color:var(--muted)}
+.maintenanceEntry details{margin-top:12px;font-size:12px}
+.maintenanceEntry summary{cursor:pointer}
+.maintenanceTimes,.maintenanceWordsScope,.maintenanceOperationId{font-size:12px;color:var(--muted)}
+.maintenanceOperations h4{font-size:14px;margin:16px 0 8px}
+.maintenanceOperations details{padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface)}
+.maintenanceOperations summary{line-height:1.5}
+.maintenanceOperations .maintenanceChanges{font-size:12px}
+@media(max-width:640px){.maintenanceEntry{padding:10px}.maintenanceChanges{min-width:520px}.maintenanceEntry>header{align-items:flex-start}}
+.maintenanceTaskChanges{padding:10px;border:1px solid var(--border);border-radius:8px}
+.maintenanceCopyChange{padding:10px 0;border-top:1px solid var(--border)}
+.maintenanceRepeat{padding:12px 14px;margin:14px 0;border:1px solid var(--border);border-radius:10px;background:var(--surface-2)}
+.maintenanceRepeatActions{display:flex;flex-wrap:wrap;align-items:center;gap:12px 18px}
+.maintenanceRepeatActions label{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
+.maintenanceRepeatActions input[type=checkbox]{width:16px;height:16px;flex-shrink:0;margin:0;accent-color:var(--brand,#3557d6)}
+.maintenanceRepeat p{margin:10px 0;font-size:13px;line-height:1.5}
+.maintenanceRepeat small,.maintenanceBackground{font-size:12px;color:var(--muted)}
+
+.maintenanceReportId{display:block;font-size:.75rem;font-weight:600;margin-bottom:.2rem}
+.maintenanceEntryProgress{display:flex;align-items:center;flex-wrap:wrap;gap:.45rem .8rem;margin:.5rem 0 1rem;font-size:.875rem}
+.maintenanceEntryProgress small{color:var(--muted);margin-left:auto}
+.maintenanceEntryProgress progress{display:block;width:100%;height:7px;border:0;border-radius:8px;overflow:hidden;accent-color:var(--success,#278563)}
+.maintenanceEntryProgress progress::-webkit-progress-bar{background:var(--border);border-radius:8px}
+.maintenanceEntryProgress progress::-webkit-progress-value{background:var(--success,#278563);border-radius:8px}
+.maintenanceStages{display:flex;flex-wrap:wrap;gap:6px 12px;width:100%;list-style:none;padding:0;margin:4px 0 0}
+.maintenanceStages li{display:flex;gap:6px;align-items:center;border:1px solid var(--border);border-radius:7px;padding:5px 8px;font-size:12px}
+.maintenanceStages li span{color:var(--muted)}
+.maintenanceStages li[data-state="completed"] span{color:var(--success,#278563)}
+.maintenanceStages li[data-state="failed"] span{color:var(--danger,#b52a36)}
+.maintenanceStages li[data-state="running"] span{color:var(--brand,#3557d6)}
+.maintenancePlannedValue{background:var(--surface-2)}
+
+.maintenanceStructuredData pre{margin:0;max-height:360px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.5}
+.maintenanceStructuredData details pre{margin-top:10px;padding:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px}

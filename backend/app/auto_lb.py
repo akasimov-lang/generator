@@ -6,12 +6,14 @@ import re
 import unicodedata
 from urllib.parse import urlsplit
 
-from app import models
+from app import models, auto_lb_keywords
+from app.domain_transfer_policy import geo_key
 from sqlalchemy import select
 
 DATA = Path(__file__).parent / "data" / "auto_lb"
 ANCHORS = (DATA / "anchors_cs.txt").read_text().splitlines()
 OUTPUT_LINES = 300
+ANCHOR_OUTPUT_LINES = 100
 DEFAULT_UNIQUE_ANCHORS = 30
 
 
@@ -21,7 +23,7 @@ def project_context(site):
     general = site_type == "general" or (not site_type and (not brand or brand.casefold() == "общие ключи"))
     if general:
         brand = "online casino"
-    geo = (site.cache_geo or "").strip().replace("_", "-").split("-")[0].upper()
+    geo = geo_key(site.cache_geo)
     language = (site.cache_language or "").strip().replace("_", "-")
     if not brand or brand.casefold() == "общие ключи":
         raise ValueError("Укажите бренд проекта на странице «Сайты».")
@@ -33,9 +35,9 @@ def project_context(site):
     if (not host or "." not in host or parsed.username or parsed.password
             or parsed.scheme not in {"http", "https"} or re.search(r"[\s/?#]", host)):
         raise ValueError("Не найден текущий Main проекта. Обновите проект перед генерацией.")
-    return {"brand": brand, "unlimited_anchors": bool(general),
+    return auto_lb_keywords.snapshot({"brand": brand, "unlimited_anchors": bool(general),
             "homepage_title": (getattr(site, "homepage_title", None) or "").strip(), "geo": geo, "language": language, "main": host,
-            "main_url": f"{parsed.scheme}://{host}", "output_count": OUTPUT_LINES, "prompt_version": 2}
+            "main_url": f"{parsed.scheme}://{host}", "output_count": OUTPUT_LINES, "prompt_version": 2})
 
 
 def build_prompt(kind, context):
@@ -52,23 +54,23 @@ def build_prompt(kind, context):
                 "Количество строк и уникальных анкоров выбери по тематике, без фиксированного количества "
                 "и без верхнего ограничения. Допускаются естественные повторы. "
                 "Каждый анкор с новой строки. Используй текущий Main для доменных и URL-анкоров."
-                + common)
+                + common + auto_lb_keywords.prompt(context, kind))
     if kind == "anchors":
         unique_count = context.get("unique_anchor_count", DEFAULT_UNIQUE_ANCHORS)
-        return (f"Сгенерируй анкор-лист из {OUTPUT_LINES} строк с повторами для {brand}, ГЕО {geo}, на языке {language}, "
+        return (f"Сгенерируй анкор-лист из {ANCHOR_OUTPUT_LINES} строк с повторами для {brand}, ГЕО {geo}, на языке {language}, "
                 "без нумерации, где каждый ключ с новой строки без разбивки на группы, "
                 "при этом рассчитай всё в правильном соотношении через повторы одинаковых анкоров."
                 + common
                 + f"В итоговом списке должно быть ровно {unique_count} уникальных анкоров. "
-                f"Остальные строки до общего количества {OUTPUT_LINES} заполни повторами этих анкоров. "
+                f"Остальные строки до общего количества {ANCHOR_OUTPUT_LINES} заполни повторами этих анкоров. "
                 "Различия только в регистре букв или пробелах не считаются уникальными анкорами.\n"
-                + f"Не менее 10% всех строк (минимум {(OUTPUT_LINES + 9) // 10} из {OUTPUT_LINES}) должны быть "
+                + f"Не менее 10% всех строк (минимум {(ANCHOR_OUTPUT_LINES + 9) // 10} из {ANCHOR_OUTPUT_LINES}) должны быть "
                 "анкорами рекламно-информационного характера с обязательным вхождением бренда проекта. "
                 "Каждый такой анкор должен содержать бренд и содержательную рекламно-информационную фразу "
                 "на языке проекта; одно название бренда или домен в эту долю не засчитываются.\n")
     topic_brand = brand if brand.casefold().endswith("casino") else f"{brand} casino"
     return (f"Сгенерируй {OUTPUT_LINES} рекламно-информационных тем для {topic_brand} на языке {language}, "
-            "где каждая тема с новой строки без нумерации." + common)
+            "где каждая тема с новой строки без нумерации." + common + auto_lb_keywords.prompt(context, kind))
 
 
 def parse_lines(text):
@@ -101,6 +103,7 @@ def normalize_result(kind, text, context):
     if kind == "topics":
         if len({normalized_key(line) for line in lines}) != expected:
             raise ValueError("Gemini вернул повторяющиеся темы.")
+        auto_lb_keywords.check_topics(lines, context)
         return "\n".join(lines)
     if context.get("prompt_version", 1) >= 2:
         # New prompts are free of examples; preserve Gemini's anchor choices and repetitions.
@@ -113,7 +116,7 @@ def normalize_result(kind, text, context):
         if unique_count is not None and actual != unique_count:
             raise ValueError(f"Ожидалось {unique_count} уникальных анкоров, получено {actual}. "
                              "Проверь повторы, регистр, пробелы и использование текущего Main.")
-        return "\n".join(lines)
+        return "\n".join(auto_lb_keywords.include_anchors(lines, context))
     # Older queued tasks keep their original 87-line reference contract.
 
     profile = ANCHORS
@@ -155,10 +158,17 @@ async def generate(db, row):
         raise ValueError("Настройте активный Gemini с API-ключом в разделе API Providers.")
     row.status = "running"
     db.commit()
+    await auto_lb_keywords.prepare(db, row, provider)
+    if row.context.get("required_keyword_profile") == auto_lb_keywords.PROFILE:
+        row.prompt = build_prompt(row.kind, row.context)
+        db.commit()
     existing = {normalized_key(line) for line in topic_lines(db, row.site_id, row.context)} if row.kind == "topics" else set()
+    from app import reference_context
+    references = reference_context.prompt(reference_context.collect(db, db.get(models.Site, row.site_id),
+        brand=row.context.get('brand'), geo=row.context.get('geo')))
     correction = ""
     for attempt in range(2):
-        response = await call_gemini(provider, row.prompt + correction)
+        response = await call_gemini(provider, row.prompt + references + correction)
         apply_provider_usage(provider, response.get("usageMetadata", {}))
         db.commit()
         try:

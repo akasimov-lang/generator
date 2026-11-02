@@ -303,3 +303,34 @@ def test_unresolved_editor_check_stops_after_two_revisions(db, monkeypatch):
     assert len(calls) == 3
     assert db.scalars(select(models.TechnicalPageText)).all() == []
     assert "technical_check" not in item.generation_context
+
+
+def test_homepage_anchor_before_punctuation_preserves_checked_text(db):
+    from app.brand_home_links import apply_brand_home_links
+    site, _, payload = setup(db)
+    site.brand='Example';site.site_type='monobrand'
+    task=technical.create_task(db,site,payload,None)
+    item=task.items[0]
+    original=article('unique-link')
+    original['pages'][0]['content']['blocks'][1]['data']['text']='Example, '+original['pages'][0]['content']['blocks'][1]['data']['text']
+    technical.validate_and_record(db,item,original)
+    item.generated_json=apply_brand_home_links(original,site)
+    assert '<a href="/">Example</a>,' in item.generated_json['pages'][0]['content']['blocks'][1]['data']['text']
+    technical.validate_publication(item)
+    assert technical.page_text(original)==technical.page_text(item.generated_json)
+    changed=copy.deepcopy(item.generated_json)
+    changed['pages'][0]['content']['blocks'][1]['data']['text']+=' Different text.'
+    item.generated_json=changed
+    with pytest.raises(ValueError,match='проверку сходства'):
+        technical.validate_publication(item)
+
+
+def test_legacy_fingerprint_of_existing_inline_link_remains_valid(db):
+    import hashlib
+    site, _, payload = setup(db)
+    item=technical.create_task(db,site,payload,None).items[0]
+    item.generated_json=article('legacy-link')
+    item.generated_json['pages'][0]['content']['blocks'][1]['data']['text']='<a href="/contacts/">Example</a>, '+item.generated_json['pages'][0]['content']['blocks'][1]['data']['text']
+    fingerprint=hashlib.sha256(technical.normalized(technical.page_text(item.generated_json,strip_links=False)).encode()).hexdigest()
+    item.generation_context={**item.generation_context,'technical_check':{'fingerprint':fingerprint}}
+    technical.validate_publication(item)

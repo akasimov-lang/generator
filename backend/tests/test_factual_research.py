@@ -88,7 +88,7 @@ def test_url_context_failure_does_not_claim_pages_were_read(monkeypatch, unsuppo
     assert report["status"] == ("failed" if unsupported else "partial")
 
 
-def test_url_analysis_reaches_planner_and_article_context(monkeypatch):
+def test_explicit_research_planner_still_works_but_article_ignores_old_report(monkeypatch):
     async def analyze(*args):
         return {"status": "complete", "pages": [{"url": "https://example.com", "status": "read", "analysis": "Unique competitor finding"}]}
 
@@ -106,7 +106,8 @@ def test_url_analysis_reaches_planner_and_article_context(monkeypatch):
         generation_context={"factual_research": report},
     )
     assert "https://example.com" in prompt
-    assert "Unique competitor finding" in prompt
+    assert "Unique competitor finding" not in prompt
+    assert "CONTENT WRITING MODE: NO FACT CHECK" in prompt
 
 
 def test_second_round_uses_actual_source_text_and_preserves_query_provenance(monkeypatch):
@@ -278,7 +279,7 @@ def test_source_fetch_reads_text_and_rejects_unsupported_content(monkeypatch, co
             assert "SECRET_SCRIPT" not in source["excerpt"]
 
 
-def test_language_retry_reuses_research_and_renders_evidence(monkeypatch):
+def test_language_retry_does_not_start_fact_check_even_with_competitors_enabled(monkeypatch):
     task = SimpleNamespace(collect_competitors=True)
     item = SimpleNamespace(task_id="task", generation_context={})
     db = SimpleNamespace(get=lambda *args: task, commit=lambda: None)
@@ -295,7 +296,7 @@ def test_language_retry_reuses_research_and_renders_evidence(monkeypatch):
         return {}
 
     monkeypatch.setattr(services, "get_dataforseo_provider", lambda db: object())
-    monkeypatch.setattr(services, "research_facts", facts)
+    monkeypatch.setattr(research, "research_facts", facts)
     monkeypatch.setattr(services, "build_ai_content", build)
     monkeypatch.setattr(services, "detected_content_language", lambda result: "de")
     monkeypatch.setattr(services, "generated_content_uses_language", lambda *args: len(prompts) > 1)
@@ -304,11 +305,12 @@ def test_language_retry_reuses_research_and_renders_evidence(monkeypatch):
         site=None, target_words=1000, prompt_template="Write article", shortcode=None,
         include_toc=False, include_faq=False,
     ))
-    assert len(research_calls) == 1
+    assert not research_calls
     assert len(prompts) == 2
-    assert all(research.RESEARCH_MARKER in prompt and "Evidence" in prompt for prompt in prompts)
+    assert all(research.RESEARCH_MARKER not in prompt and "CONTENT WRITING MODE: NO FACT CHECK" in prompt for prompt in prompts)
     assert "MANDATORY LANGUAGE CORRECTION" in prompts[1]
-    assert item.generation_context["factual_research"]["status"] == "complete"
+    assert "factual_research" not in item.generation_context
+    assert item.generation_context["fact_check_enabled"] is False
 
 
 @pytest.mark.parametrize("technical, enabled", [(False, False), (True, True)])

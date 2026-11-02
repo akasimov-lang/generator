@@ -85,7 +85,7 @@ with sync_playwright() as p:
     page.screenshot(path='/tmp/pagepilot-template-upload-mobile.png', full_page=True)
     page.set_viewport_size({'width': 1440, 'height': 1050})
     page.screenshot(path='/tmp/pagepilot-template-upload-desktop.png', full_page=True)
-    page.get_by_role('button', name='Создать шаблон по HTML', exact=True).click()
+    page.get_by_role('button', name='Сохранить конкурентов', exact=True).click()
     expect(page.get_by_role('heading', name='Мой бренд / DE')).to_be_visible()
     assert state['created']['brand'] == 'Мой бренд'
     assert state['created']['language'] == 'en' and state['created']['geo'] == 'DE'

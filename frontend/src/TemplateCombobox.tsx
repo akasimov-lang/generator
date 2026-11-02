@@ -16,7 +16,7 @@ export function TemplateCombobox({ label, value, options, onChange, allowCustom 
   const selected = options.find(o => o.value === value);
   const normalized = (query || "").trim().toLocaleLowerCase();
   const matches = options.filter(o => `${o.label} ${o.value} ${o.keywords || ""}`.toLocaleLowerCase().includes(normalized));
-  const filtered = allowCustom && normalized && !options.some(o => o.value.toLocaleLowerCase() === normalized) ? [{ value: (query || "").trim(), label: `Использовать «${(query || "").trim()}»` }, ...matches] : matches;
+  const filtered = allowCustom && normalized && !options.some(o => o.value.toLocaleLowerCase() === normalized) ? [...matches, { value: (query || "").trim(), label: `Использовать «${(query || "").trim()}»` }] : matches;
 
   function show() { beforeEdit.current = value; setOpen(true); setQuery(null); setActive(Math.max(0, options.findIndex(o => o.value === value))); }
   function close() { setOpen(false); setQuery(null); }

@@ -453,7 +453,7 @@ def test_branded_generation_adds_home_link_before_saving(db, monkeypatch):
     prompts = []
     async def build(**kwargs):
         prompts.append(kwargs['prompt_template'])
-        return {'pages': [{'slug': '/registrace/', 'content': {'blocks': [
+        return {'generation_meta': {'content_button': {'brand': 'MerkurXtip', 'text': 'Zaregistrujte se v MerkurXtip'}}, 'pages': [{'slug': '/registrace/', 'content': {'blocks': [
             {'type': 'paragraph', 'data': {'text': 'Registrace v MerkurXtip.'}},
         ]}}]}
     monkeypatch.setattr(service_module, 'build_ai_content', build)
@@ -461,4 +461,6 @@ def test_branded_generation_adds_home_link_before_saving(db, monkeypatch):
     monkeypatch.setattr(service_module, 'generated_content_uses_language', lambda *_: True)
     result = asyncio.run(service_module._build_task_content(db, item, site=site, language='cs', prompt_template='Base prompt'))
     assert result['pages'][0]['content']['blocks'][0]['data']['text'] == 'Registrace v <a href="/">MerkurXtip</a>.'
+    assert result['pages'][0]['content']['blocks'][1]['type'] == 'button'
+    assert result['pages'][0]['content']['blocks'][1]['data'] == {'button': 'Zaregistrujte se v MerkurXtip'}
     assert 'MerkurXtip' in prompts[0] and 'normal paragraph' in prompts[0]

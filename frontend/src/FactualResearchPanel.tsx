@@ -8,7 +8,8 @@ type Query = {
 type Report = { status: string; geo?: string; language?: string; query_limit?: number; queries?: Query[]; sources?: Source[];
   competitor_url_analysis?: { status: string; pages: { url: string; status: string; analysis?: string }[] } };
 
-export function factualResearchFromPayload(payload: Record<string, unknown>): unknown {
+export function factualResearchFromPayload(payload: unknown): unknown {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload) || !("generation_meta" in payload)) return undefined;
   const meta = payload.generation_meta;
   if (!meta || typeof meta !== "object" || !("generation_context" in meta)) return undefined;
   const context = meta.generation_context;

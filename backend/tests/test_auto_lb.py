@@ -68,7 +68,7 @@ def test_prompt_adapts_every_available_language_and_project(env):
         prompt = auto_lb.build_prompt("anchors", context)
         assert f"Язык результата: {language}" in prompt
         assert "Other Brand" in prompt and "ГЕО DE" in prompt and "current.example" in prompt
-        assert "300 строк" in prompt
+        assert "100 строк" in prompt
         assert "ОБРАЗЕЦ" not in prompt and "Česko" not in prompt and "betonred.cz" not in prompt
     prompt = auto_lb.build_prompt("topics", context)
     assert "300 рекламно-информационных тем" in prompt
@@ -184,7 +184,8 @@ def test_topic_accumulation_survives_history_limit_main_change_and_failure(env):
     result=state(site.id,{'id':user.id},db)
     assert result['topic_text'].splitlines()==[f'Topic {n}' for n in range(42)]
     assert len(result['generations'])==40
-    assert result['anchor_count']==result['topic_count']==300
+    assert result['anchor_count'] == 100
+    assert result['topic_count'] == 300
 
 
 def test_repeated_generation_appends_300_topics_and_retries_duplicate_batch(env,monkeypatch):
@@ -202,7 +203,7 @@ def test_repeated_generation_appends_300_topics_and_retries_duplicate_batch(env,
     assert provider.total_tokens_used==36
 
 
-@pytest.mark.parametrize('count', [1, 30, 47, 300])
+@pytest.mark.parametrize('count', [1, 30, 47, 100])
 def test_unique_anchor_setting_snapshotted_and_preview_matches_job(env, count):
     db, site, _ = env
     user, _ = configure(db, site)
@@ -210,10 +211,14 @@ def test_unique_anchor_setting_snapshotted_and_preview_matches_job(env, count):
     preview = state(site.id, {'id': user.id}, db, unique_anchor_count=count)
     row = create(site.id, GenerateRequest(kind='anchors', unique_anchor_count=count), {'id': user.id}, db)
     assert row['context']['unique_anchor_count'] == count
+    assert row['context']['output_count'] == 100
+    assert preview['anchor_count'] == 100
+    assert 'анкор-лист из 100 строк' in row['prompt']
+    assert 'минимум 10 из 100' in row['prompt']
     assert row['prompt'] == preview['prompts']['anchors']
     assert f'ровно {count} уникальных анкоров' in row['prompt']
     assert 'Не менее 10%' in row['prompt']
-    lines = [f'BetOnRed phrase {n % count}' for n in range(300)]
+    lines = [f'BetOnRed phrase {n % count}' for n in range(100)]
     assert auto_lb.normalize_result('anchors', '\n'.join(lines), row['context']).splitlines() == lines
 
 
@@ -221,7 +226,7 @@ def test_unique_default_and_invalid_counts():
     from app.auto_lb_api import GenerateRequest
     from pydantic import ValidationError
     assert GenerateRequest(kind='anchors').unique_anchor_count == 30
-    for invalid in [0, -1, 301, 2.5, True, None, '30']:
+    for invalid in [0, -1, 101, 301, 2.5, True, None, '30']:
         with pytest.raises(ValidationError):
             GenerateRequest(kind='anchors', unique_anchor_count=invalid)
 
@@ -301,7 +306,9 @@ def test_general_anchor_job_has_homepage_context_and_no_count_limit(env):
     assert "30 уникальных" not in row["prompt"]
     for count in (7, 351):
         lines = [f"casino phrase {n}" for n in range(count)]
-        assert auto_lb.normalize_result("anchors", "\n".join(lines), row["context"]).splitlines() == lines
+        # Jobs queued before the required-keyword profile keep their contract.
+        old_context = {k: v for k, v in row["context"].items() if k != "required_keyword_profile"}
+        assert auto_lb.normalize_result("anchors", "\n".join(lines), old_context).splitlines() == lines
     with pytest.raises(ValueError, match="пустой"):
         auto_lb.normalize_result("anchors", "", row["context"])
     site.homepage_title = "New title"

@@ -1,0 +1,3 @@
+.pilotVersionTabs{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.pilotVersionTabs .button{padding:3px 6px;font-size:11px;line-height:1.2;min-height:24px}
+.pilotVersionTabs .button[aria-pressed=true]{opacity:1;background:var(--accent-soft,#e8edff);border-color:var(--accent,#3855db);color:var(--accent,#3855db)}

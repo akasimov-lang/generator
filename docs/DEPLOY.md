@@ -51,11 +51,15 @@ docker-compose run --rm backend alembic upgrade head
 
 ## Тесты
 
-Backend unit tests запускаются так:
+Перед деплоем выбирайте проверки по изменённым файлам текущей задачи:
 
 ```bash
-docker-compose run --rm backend pytest
+python scripts/check_changes.py backend/app/auto_pilot.py frontend/src/AutoPilot.tsx
+python scripts/check_changes.py --run backend/app/auto_pilot.py frontend/src/AutoPilot.tsx
 ```
+
+Полный backend-набор выполняется при изменениях общих моделей, БД, миграций или
+инфраструктуры тестов. Подробности и выбор зависимых проверок — в [TESTING.md](TESTING.md).
 
 ## Просмотр
 

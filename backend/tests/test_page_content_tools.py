@@ -6,10 +6,11 @@ from app.page_content_tools import interlink, validate_rewrite, targets
 def test_second_brand_occurrence_respects_links_and_preserves_other_markup():
     content={'version':'2.1','blocks':[
         {'type':'header','data':{'level':1,'text':'BetOnRed casino'}},
-        {'type':'paragraph','data':{'text':'Review <strong>Bet-On-Red</strong> today. <a href="https://else.test">Other</a>'}}]}
+        {'type':'paragraph','data':{'text':'BetOnRed review. <strong>Bet-On-Red</strong> today. <a href="https://else.test">Other</a>'}}]}
     before=copy.deepcopy(content)
     result,_,changed=interlink(content,'BetOnRed')
-    assert changed and result['blocks'][1]['data']['text']=='Review <strong><a href="/">Bet-On-Red</a></strong> today. <a href="https://else.test">Other</a>'
+    assert changed and result['blocks'][1]['data']['text']=='BetOnRed review. <strong><a href="/">Bet-On-Red</a></strong> today. <a href="https://else.test">Other</a>'
+    assert result['blocks'][0] == before['blocks'][0]
     assert content==before
     same,_,changed=interlink(result,'BetOnRed')
     assert not changed and same==result
@@ -31,3 +32,15 @@ def test_rewrite_guards_facts_and_structure():
 def test_emoji_targeting_keeps_table_header_and_existing_emoji():
     content={'blocks':[{'type':'table','data':{'withHeadings':True,'content':[['Heading','Value'],['Deposit','10'],['🎁 Bonus','100']]}}]}
     assert targets(content,'emoji')==[{'block':0,'row':1,'text':'Deposit','context':['Deposit','10']}]
+
+
+def test_autolink_never_inserts_links_in_headings_or_table_headers():
+    content={'blocks':[
+        {'type':'header','data':{'level':1,'text':'Brand Brand'}},
+        {'type':'header','data':{'level':3,'text':'Brand Brand'}},
+        {'type':'table','data':{'withHeadings':True,'content':[['Brand Brand'],['Brand Brand']]}},
+        {'type':'paragraph','data':{'text':'Brand intro. Brand details.'}},
+    ]}
+    result,_,changed=interlink(content,'Brand')
+    assert changed and result['blocks'][:3]==content['blocks'][:3]
+    assert result['blocks'][3]['data']['text']=='Brand intro. <a href="/">Brand</a> details.'

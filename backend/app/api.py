@@ -1,4 +1,5 @@
 from app.project_access import external_projects
+from app.project_table_export import ProjectTableExport, export_table
 import asyncio
 from datetime import datetime, timedelta, timezone
 import json
@@ -9,6 +10,8 @@ from urllib.parse import urlsplit
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, load_only
+from sqlalchemy.exc import IntegrityError
+from app.task_status import refresh_task_status
 
 from app import models
 from app.content_trash import trash_content, restore_content
@@ -16,6 +19,7 @@ from app.published_content import article_words
 from app.menu_deletion import MenuBranchDelete, delete_menu_branch
 from app import technical_pages
 from app import project_network
+from app import network_indexing, network_sitemap
 from app.technical_pages import TechnicalPagesRequest
 from app.core.config import get_settings
 from app.db import get_db
@@ -105,6 +109,7 @@ from app.services import (
     create_menu_structure_task,
     ensure_base_prompt_template,
     ensure_content_slug_available,
+    find_content_slug_conflict,
     ensure_default_prompt_template,
     ensure_casino_review_prompt_template,
     ensure_competitor_queries,
@@ -477,6 +482,11 @@ def list_sites(_: AuthUser, db: Session = Depends(get_db), include_grouped_inact
     return sites
 
 
+@router.post("/sites/export-table")
+def export_sites_table(payload: ProjectTableExport, user: AuthUser, db: Session = Depends(get_db)) -> Any:
+    return export_table(db, user, payload)
+
+
 @router.get("/sites/statistics")
 def site_statistics(_: AuthUser, db: Session = Depends(get_db), scope: str = Query("mass_actions", pattern="^(mass_actions|geo_ru|geo_kz|hands_only)$")) -> Any:
     from app.site_statistics import mass_action_statistics
@@ -624,7 +634,7 @@ def _network_call(callback, *args):
 def get_site_network(site_id: str, _: AuthUser, db: Session = Depends(get_db), refresh: bool = False):
     site = _get_site_or_404(db, site_id)
     state = site.network_state or {}
-    if not refresh and state.get("has_head") and isinstance(state.get("domains"), list):
+    if not refresh and state.get("has_head") and isinstance(state.get("domains"), list) and "has_page_redirects" in state:
         return project_network.result(db, site, state)
     return _network_call(project_network.read_network, db, site)
 
@@ -632,6 +642,29 @@ def get_site_network(site_id: str, _: AuthUser, db: Session = Depends(get_db), r
 @router.get("/sites/{site_id}/network/operations")
 def get_network_operations(site_id: str, _: AuthUser, db: Session = Depends(get_db)):
     return project_network.operation_history(db, _get_site_or_404(db, site_id))
+
+
+@router.get("/sites/{site_id}/network/sitemap")
+def get_network_sitemap(site_id: str, _: AuthUser, db: Session = Depends(get_db)):
+    return network_sitemap.receipt(network_sitemap.latest(db, _get_site_or_404(db, site_id)))
+
+
+@router.post("/sites/{site_id}/network/sitemap")
+def update_network_sitemap(site_id: str, payload: network_indexing.IndexNetworkRequest, user: AuthUser, db: Session = Depends(get_db)):
+    site = _get_site_or_404(db, site_id)
+    op = _network_call(lambda: network_sitemap.queue(db, site, payload.request_id, _request_username(user) or "user", manual=True))
+    db.commit()
+    return network_sitemap.receipt(op)
+
+
+@router.get("/sites/{site_id}/network/indexing")
+def get_network_indexing(site_id: str, _: AuthUser, db: Session = Depends(get_db)):
+    return network_indexing.indexing_receipt(network_indexing.latest_indexing(db, _get_site_or_404(db, site_id)))
+
+
+@router.post("/sites/{site_id}/network/indexing")
+def index_site_network(site_id: str, payload: network_indexing.IndexNetworkRequest, user: AuthUser, db: Session = Depends(get_db)):
+    return _network_call(network_indexing.request_indexing, db, _get_site_or_404(db, site_id), payload.request_id, _request_username(user) or "user")
 
 
 @router.patch("/sites/{site_id}/network/domain-history")
@@ -1743,6 +1776,16 @@ def suggest_site_topics(site_id: str, payload: TopicSuggestionsRequest, _: AuthU
     return {"topics": topics}
 
 
+def _content_url_integrity_error(db: Session, exc: IntegrityError) -> None:
+    db.rollback()
+    if getattr(getattr(exc.orig, "diag", None), "constraint_name", None) == "uq_content_items_active_site_slug":
+        raise HTTPException(
+            status_code=409,
+            detail="Этот адрес страницы уже занят другим текстом. Обновите список задач и выберите другой адрес или существующий текст.",
+        ) from exc
+    raise exc
+
+
 @router.post("/sites/{site_id}/tasks", response_model=GenerationTaskResponse)
 def create_site_task(site_id: str, payload: GenerationTaskCreate, user: AuthUser, db: Session = Depends(get_db)) -> Any:
     _get_site_or_404(db, site_id)
@@ -1753,6 +1796,8 @@ def create_site_task(site_id: str, payload: GenerationTaskCreate, user: AuthUser
     data["site_id"] = site_id
     try:
         return create_generation_task(db, GenerationTaskCreate(**data), created_by_user_id=user["id"])
+    except IntegrityError as exc:
+        _content_url_integrity_error(db, exc)
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -1801,6 +1846,8 @@ def create_site_menu_structure_task(
             raise HTTPException(status_code=400, detail="Select an active AI provider")
     try:
         return create_menu_structure_task(db, site, payload, created_by_user_id=user["id"])
+    except IntegrityError as exc:
+        _content_url_integrity_error(db, exc)
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -1911,6 +1958,8 @@ def create_task(payload: GenerationTaskCreate, user: AuthUser, db: Session = Dep
     _validate_task_topics(payload)
     try:
         return create_generation_task(db, payload, created_by_user_id=user["id"])
+    except IntegrityError as exc:
+        _content_url_integrity_error(db, exc)
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -1933,9 +1982,19 @@ def restore_task(task_id: str, _: AuthUser, db: Session = Depends(get_db)) -> An
     task = db.get(models.GenerationTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    if task.archived_at is not None:
+        for item in task.items:
+            if item.status == "deleted":
+                continue
+            conflict = find_content_slug_conflict(db, item.site_id, item.slug, exclude_content_id=item.id)
+            if conflict:
+                raise HTTPException(status_code=409, detail=f"URL {item.slug} уже используется другой задачей. Архивная задача сохранена.")
     task.archived_at = None
     task.archived_by_user_id = None
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        _content_url_integrity_error(db, exc)
     db.refresh(task)
     return task
 
@@ -2188,14 +2247,25 @@ def update_content_competitor_queries(content_id: str, payload: CompetitorQuerie
 
 
 @router.post("/content/{content_id}/competitor-queries/regenerate", response_model=CompetitorResearchResponse)
-def regenerate_content_competitor_queries(content_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
+async def regenerate_content_competitor_queries(content_id: str, _: AuthUser, db: Session = Depends(get_db)) -> Any:
     item = db.get(models.ContentItem, content_id)
     if not item:
         raise HTTPException(status_code=404, detail="Content item not found")
     task = db.get(models.GenerationTask, item.task_id)
     if not task:
         raise HTTPException(status_code=400, detail="Generation task not found")
-    regenerate_competitor_queries(db, item, task.geo, task.language)
+    if item.competitor_research_status in {"queued", "preparing_topic", "collecting_serp", "fetching_pages"}:
+        raise HTTPException(409, "Дождитесь завершения текущего сбора конкурентов.")
+    from app.structure_research import prepare
+    try:
+        item.generation_context = {**(item.generation_context or {}), "competitor_queries_manual": False}
+        await prepare(db, item, task, db.get(models.Site, item.site_id) if item.site_id else None)
+        regenerate_competitor_queries(db, item, task.geo, task.language)
+    except ValueError as error:
+        item.competitor_research_status = "research_failed"
+        item.competitor_research_error = str(error)[:500]
+        db.commit()
+        raise HTTPException(400, str(error)) from error
     db.commit()
     db.refresh(item)
     return _competitor_research_response(db, item)
@@ -2206,7 +2276,7 @@ def collect_content_competitors(content_id: str, _: AuthUser, db: Session = Depe
     item = db.get(models.ContentItem, content_id)
     if not item:
         raise HTTPException(status_code=404, detail="Content item not found")
-    if item.competitor_research_status in {"queued", "collecting_serp", "fetching_pages"}:
+    if item.competitor_research_status in {"queued", "preparing_topic", "collecting_serp", "fetching_pages"}:
         return _competitor_research_response(db, item)
     item.competitor_research_status = "queued"
     item.competitor_research_progress = 1
@@ -2560,6 +2630,7 @@ def approve_content(content_id: str, _: AuthUser, db: Session = Depends(get_db))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     item.status = "approved"
+    refresh_task_status(db, item.task_id)
     db.commit()
     db.refresh(item)
     return item

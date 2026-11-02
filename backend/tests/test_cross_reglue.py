@@ -28,7 +28,7 @@ def setup(env, monkeypatch):
             if path == '/site-config/create':
                 self.data['settings']['domains'] += [d['domain'] for d in payload['domains']]
                 return 200, {'jobId': 'add-job'}
-            if path.endswith('update-reglue'):
+            if path.endswith(('update-reglue', '/reglue')):
                 self.data['settings']['prev'] = self.data['settings']['canon']; self.data['settings']['canon'] = payload['reserve']
             elif path.endswith('update-value'):
                 self.data['settings'].update(payload)
@@ -36,7 +36,8 @@ def setup(env, monkeypatch):
                 self.data['head'].update(payload)
             return 200, {'ok': True}
     def data(main, domains):
-        return {'settings': {'canon': main, 'domains': domains, 'port': 1234}, 'head': {'alternateMarkup': '<link rel="alternate" hreflang="az" href="https://' + main + '/az/" />', 'enableAlternates': True}}
+        return {'settings': {'redirects': [], 'canon': main, 'domains': domains, 'port': 1234}, 'head': {'alternateMarkup': '<link rel="alternate" hreflang="az" href="https://' + main + '/az/" />', 'enableAlternates': True}}
+    source.domain_types = {'main.test': 'drop', 'next.test': 'newreg'}; db.commit()
     sr = Remote(data('main.test', ['main.test', 'next.test']))
     tr = Remote(data('target.test', ['target.test']))
     monkeypatch.setattr(network, 'Remote', lambda db, site: nullcontext(sr if site.id == source.id else tr))
@@ -125,8 +126,7 @@ def test_monthly_limit_and_unknown_date(setup):
     db, source, target, sr, tr = setup
     assert auto.preview(db, target)['new_main'] == 'next.test'
     source.network_state = {**source.network_state, 'domain_added_at': {'next.test': datetime.now(timezone.utc).isoformat()}}; db.commit()
-    with pytest.raises(ValueError, match='Повторный перенос'):
-        auto.preview(db, target)
+    assert auto.preview(db, target)['new_main'] == 'next.test'
     assert sr.calls == tr.calls == []
 
 
@@ -202,3 +202,77 @@ def test_missing_live_head_cannot_confirm_transfer(setup):
     with pytest.raises(ValueError, match='head'):
         auto.preview(db, target)
     assert not sr.calls and not tr.calls
+
+
+def dns_error_job():
+    item = {'domain': 'next.test', 'status': 'error', 'failedStage': 'dns', 'errorMessage': 'DNS failed'}
+    return {'state': 'completed', 'domains': [item], 'result': {'domains': [item], 'errorCount': 1}}
+
+
+def test_recovered_dns_continues_same_receipt_without_recreating_domain(setup, monkeypatch):
+    db, source, target, sr, tr = setup
+    run = launch(setup)
+    monkeypatch.setattr(tr, 'job_state', lambda _: dns_error_job())
+    auto.execute(db, run.id)
+    assert run.status == 'completed', run.message
+    op = db.get(models.NetworkOperation, cross.receipt_id(run, 'create_domains'))
+    assert op.request_payload['dns_recovery']['domains'] == ['next.test']
+    assert op.request_payload['dns_recovery']['https_status'] == 200
+    assert sum(path == '/site-config/create' for path, _ in tr.calls) == 1
+
+
+@pytest.mark.parametrize('case', ['dns_unresolved', 'redirect', 'tls_error', 'wrong_domain', 'other_error', 'mixed_errors', 'failed_job', 'missing_membership'])
+def test_dns_recovery_never_ignores_unresolved_or_unrelated_errors(setup, monkeypatch, case):
+    import httpx
+    db, source, target, sr, tr = setup
+    run = launch(setup)
+    job = dns_error_job()
+    if case in {'dns_unresolved', 'redirect', 'tls_error'}:
+        def unavailable(urls):
+            if case == 'redirect': raise ValueError('HTTP 301')
+            raise httpx.ConnectError('DNS or TLS unavailable')
+        monkeypatch.setattr(auto, 'verify_pages', unavailable)
+    if case == 'wrong_domain': job['domains'][0]['domain'] = 'unrelated.test'
+    if case == 'other_error': job['domains'][0]['failedStage'] = 'nginx'
+    if case == 'mixed_errors': job['result']['errorCount'] = 2
+    if case == 'failed_job': job['state'] = 'failed'
+    if case == 'missing_membership':
+        original = cross.recovered_dns_job
+        def missing(db, site, op, job):
+            tr.data['settings']['domains'].remove('next.test')
+            return original(db, site, op, job)
+        monkeypatch.setattr(cross, 'recovered_dns_job', missing)
+    monkeypatch.setattr(tr, 'job_state', lambda _: job)
+    auto.execute(db, run.id)
+    assert run.status == 'partial'
+    assert tr.data['settings']['canon'] == 'target.test'
+    op = db.get(models.NetworkOperation, cross.receipt_id(run, 'create_domains'))
+    assert 'dns_recovery' not in op.request_payload
+
+
+def test_expired_webdev_job_uses_recorded_completion_without_repeat(setup, monkeypatch):
+    db, source, target, sr, tr = setup
+    run = launch(setup)
+    def unavailable(urls): raise ValueError('HTTPS not ready yet')
+    monkeypatch.setattr(auto, 'verify_pages', unavailable)
+    auto.execute(db, run.id)
+    assert run.status == 'waiting'
+    for action in ('delete_domain','create_domains'):
+        op = db.get(models.NetworkOperation, cross.receipt_id(run, action))
+        assert op.request_payload['provisioning_result']['job']['state'] == 'completed'
+    monkeypatch.setattr(sr, 'job_state', lambda _: {'state':'not_found'})
+    monkeypatch.setattr(tr, 'job_state', lambda _: {'state':'not_found'})
+    monkeypatch.setattr(auto, 'verify_pages', lambda urls: None)
+    auto.execute(db, run.id)
+    assert run.status == 'completed', run.message
+    assert sum(path == '/site-config/create' for path,_ in tr.calls) == 1
+    assert sum(path == '/site-config/delete' for path,_ in sr.calls) == 1
+
+
+def test_expired_job_without_evidence_stops_instead_of_infinite_wait(setup, monkeypatch):
+    db, source, target, sr, tr = setup
+    run = launch(setup)
+    monkeypatch.setattr(sr,'job_state',lambda _: {'state':'not_found'})
+    auto.execute(db,run.id)
+    assert run.status == 'partial' and 'удалил задачу' in run.message
+    assert not tr.calls

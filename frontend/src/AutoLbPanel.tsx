@@ -42,7 +42,7 @@ export function AutoLbPanel({ siteId, api }: { siteId: string; api: Api }) {
   const unlimitedAnchors = !!state?.context?.unlimited_anchors;
   const uniqueAnchorCount = Number(uniqueAnchors);
   const validUniqueCount = uniqueAnchors.trim() !== "" && Number.isInteger(uniqueAnchorCount)
-    && uniqueAnchorCount >= 1 && uniqueAnchorCount <= (state?.anchor_count ?? 300);
+    && uniqueAnchorCount >= 1 && uniqueAnchorCount <= (state?.anchor_count ?? 100);
   const previewUniqueCount = validUniqueCount ? uniqueAnchorCount : 30;
   const alive = React.useRef(true);
   React.useEffect(() => { setUniqueAnchors("30"); setSelected({}); }, [siteId]);
@@ -111,12 +111,12 @@ export function AutoLbPanel({ siteId, api }: { siteId: string; api: Api }) {
         const row = kind === "topics" && !selected.topics && cumulative ? { ...cumulative, text: topicText, line_count: topicText ? topicText.split("\n").length : 0 } : batch;
         const active = rows.find(pending);
         const title = kind === "anchors" ? "Анкор-лист" : "Генерация тем";
-        const count = kind === "anchors" ? state?.anchor_count ?? 300 : state?.topic_count ?? 300;
+        const count = kind === "anchors" ? state?.anchor_count ?? 100 : state?.topic_count ?? 300;
         const changed = row && state?.context && (["brand", "geo", "language", ...(kind === "anchors" && !unlimitedAnchors ? ["main", "main_url", "homepage_title", "unlimited_anchors"] : [])] as (keyof Context)[]).some(key => row.context[key] !== state.context?.[key]);
         return <section className="autoLbCard" key={kind} aria-label={title}>
           <div className="autoLbCardTitle"><h3>{title}</h3><span className="autoLbCount">{kind === "anchors" && unlimitedAnchors ? "Без ограничения строк" : `${count} строк`}</span></div>
           <p className="muted autoLbDescription">{kind === "anchors"
-            ? unlimitedAnchors ? "Количество строк свободное. Для понимания тематики передаём ссылку на текущий Main и тайтл главной страницы." : "300 строк с повторами, без образца. Бренд и язык проекта, домен и URL — текущий Main."
+            ? unlimitedAnchors ? "Количество строк свободное. Для понимания тематики передаём ссылку на текущий Main и тайтл главной страницы." : `${count} строк с повторами, без образца. Бренд и язык проекта, домен и URL — текущий Main.`
             : "Каждый запуск добавляет 300 новых тем без образца. Общий список сохраняется для бренда, ГЕО и языка проекта."}</p>
           {kind === "anchors" && !unlimitedAnchors && <div className="autoLbUnique">
             <label htmlFor="auto-lb-unique-anchors">Уникальных анкоров</label>

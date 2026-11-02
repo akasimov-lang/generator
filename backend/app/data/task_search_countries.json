@@ -1,0 +1,998 @@
+{
+  "AF": [
+    "Афганистан",
+    "Afghanistan"
+  ],
+  "AX": [
+    "Аландские о-ва",
+    "Åland Islands"
+  ],
+  "AL": [
+    "Албания",
+    "Albania"
+  ],
+  "DZ": [
+    "Алжир",
+    "Algeria"
+  ],
+  "AS": [
+    "Американское Самоа",
+    "American Samoa"
+  ],
+  "AD": [
+    "Андорра",
+    "Andorra"
+  ],
+  "AO": [
+    "Ангола",
+    "Angola"
+  ],
+  "AI": [
+    "Ангилья",
+    "Anguilla"
+  ],
+  "AQ": [
+    "Антарктида",
+    "Antarctica"
+  ],
+  "AG": [
+    "Антигуа и Барбуда",
+    "Antigua & Barbuda"
+  ],
+  "AR": [
+    "Аргентина",
+    "Argentina"
+  ],
+  "AM": [
+    "Армения",
+    "Armenia"
+  ],
+  "AW": [
+    "Аруба",
+    "Aruba"
+  ],
+  "AU": [
+    "Австралия",
+    "Australia"
+  ],
+  "AT": [
+    "Австрия",
+    "Austria"
+  ],
+  "AZ": [
+    "Азербайджан",
+    "Azerbaijan"
+  ],
+  "BS": [
+    "Багамы",
+    "Bahamas"
+  ],
+  "BH": [
+    "Бахрейн",
+    "Bahrain"
+  ],
+  "BD": [
+    "Бангладеш",
+    "Bangladesh"
+  ],
+  "BB": [
+    "Барбадос",
+    "Barbados"
+  ],
+  "BY": [
+    "Беларусь",
+    "Belarus"
+  ],
+  "BE": [
+    "Бельгия",
+    "Belgium"
+  ],
+  "BZ": [
+    "Белиз",
+    "Belize"
+  ],
+  "BJ": [
+    "Бенин",
+    "Benin"
+  ],
+  "BM": [
+    "Бермудские о-ва",
+    "Bermuda"
+  ],
+  "BT": [
+    "Бутан",
+    "Bhutan"
+  ],
+  "BO": [
+    "Боливия",
+    "Bolivia"
+  ],
+  "BQ": [
+    "Бонэйр, Синт-Эстатиус и Саба",
+    "Caribbean Netherlands"
+  ],
+  "BA": [
+    "Босния и Герцеговина",
+    "Bosnia & Herzegovina"
+  ],
+  "BW": [
+    "Ботсвана",
+    "Botswana"
+  ],
+  "BV": [
+    "о-в Буве",
+    "Bouvet Island"
+  ],
+  "BR": [
+    "Бразилия",
+    "Brazil"
+  ],
+  "IO": [
+    "Британская территория в Индийском океане",
+    "British Indian Ocean Territory"
+  ],
+  "BN": [
+    "Бруней",
+    "Brunei"
+  ],
+  "BG": [
+    "Болгария",
+    "Bulgaria"
+  ],
+  "BF": [
+    "Буркина-Фасо",
+    "Burkina Faso"
+  ],
+  "BI": [
+    "Бурунди",
+    "Burundi"
+  ],
+  "CV": [
+    "Кабо-Верде",
+    "Cape Verde"
+  ],
+  "KH": [
+    "Камбоджа",
+    "Cambodia"
+  ],
+  "CM": [
+    "Камерун",
+    "Cameroon"
+  ],
+  "CA": [
+    "Канада",
+    "Canada"
+  ],
+  "KY": [
+    "о-ва Кайман",
+    "Cayman Islands"
+  ],
+  "CF": [
+    "Центрально-Африканская Республика",
+    "Central African Republic"
+  ],
+  "TD": [
+    "Чад",
+    "Chad"
+  ],
+  "CL": [
+    "Чили",
+    "Chile"
+  ],
+  "CN": [
+    "Китай",
+    "China"
+  ],
+  "CX": [
+    "о-в Рождества",
+    "Christmas Island"
+  ],
+  "CC": [
+    "Кокосовые о-ва",
+    "Cocos (Keeling) Islands"
+  ],
+  "CO": [
+    "Колумбия",
+    "Colombia"
+  ],
+  "KM": [
+    "Коморы",
+    "Comoros"
+  ],
+  "CG": [
+    "Конго - Браззавиль",
+    "Congo - Brazzaville"
+  ],
+  "CD": [
+    "Конго - Киншаса",
+    "Congo - Kinshasa"
+  ],
+  "CK": [
+    "о-ва Кука",
+    "Cook Islands"
+  ],
+  "CR": [
+    "Коста-Рика",
+    "Costa Rica"
+  ],
+  "CI": [
+    "Кот-д’Ивуар",
+    "Côte d’Ivoire"
+  ],
+  "HR": [
+    "Хорватия",
+    "Croatia"
+  ],
+  "CU": [
+    "Куба",
+    "Cuba"
+  ],
+  "CW": [
+    "Кюрасао",
+    "Curaçao"
+  ],
+  "CY": [
+    "Кипр",
+    "Cyprus"
+  ],
+  "CZ": [
+    "Чехия",
+    "Czechia"
+  ],
+  "DK": [
+    "Дания",
+    "Denmark"
+  ],
+  "DJ": [
+    "Джибути",
+    "Djibouti"
+  ],
+  "DM": [
+    "Доминика",
+    "Dominica"
+  ],
+  "DO": [
+    "Доминиканская Республика",
+    "Dominican Republic"
+  ],
+  "EC": [
+    "Эквадор",
+    "Ecuador"
+  ],
+  "EG": [
+    "Египет",
+    "Egypt"
+  ],
+  "SV": [
+    "Сальвадор",
+    "El Salvador"
+  ],
+  "GQ": [
+    "Экваториальная Гвинея",
+    "Equatorial Guinea"
+  ],
+  "ER": [
+    "Эритрея",
+    "Eritrea"
+  ],
+  "EE": [
+    "Эстония",
+    "Estonia"
+  ],
+  "SZ": [
+    "Эсватини",
+    "Eswatini"
+  ],
+  "ET": [
+    "Эфиопия",
+    "Ethiopia"
+  ],
+  "FK": [
+    "Фолклендские о-ва",
+    "Falkland Islands"
+  ],
+  "FO": [
+    "Фарерские о-ва",
+    "Faroe Islands"
+  ],
+  "FJ": [
+    "Фиджи",
+    "Fiji"
+  ],
+  "FI": [
+    "Финляндия",
+    "Finland"
+  ],
+  "FR": [
+    "Франция",
+    "France"
+  ],
+  "GF": [
+    "Французская Гвиана",
+    "French Guiana"
+  ],
+  "PF": [
+    "Французская Полинезия",
+    "French Polynesia"
+  ],
+  "TF": [
+    "Французские Южные территории",
+    "French Southern Territories"
+  ],
+  "GA": [
+    "Габон",
+    "Gabon"
+  ],
+  "GM": [
+    "Гамбия",
+    "Gambia"
+  ],
+  "GE": [
+    "Грузия",
+    "Georgia"
+  ],
+  "DE": [
+    "Германия",
+    "Germany"
+  ],
+  "GH": [
+    "Гана",
+    "Ghana"
+  ],
+  "GI": [
+    "Гибралтар",
+    "Gibraltar"
+  ],
+  "GR": [
+    "Греция",
+    "Greece"
+  ],
+  "GL": [
+    "Гренландия",
+    "Greenland"
+  ],
+  "GD": [
+    "Гренада",
+    "Grenada"
+  ],
+  "GP": [
+    "Гваделупа",
+    "Guadeloupe"
+  ],
+  "GU": [
+    "Гуам",
+    "Guam"
+  ],
+  "GT": [
+    "Гватемала",
+    "Guatemala"
+  ],
+  "GG": [
+    "Гернси",
+    "Guernsey"
+  ],
+  "GN": [
+    "Гвинея",
+    "Guinea"
+  ],
+  "GW": [
+    "Гвинея-Бисау",
+    "Guinea-Bissau"
+  ],
+  "GY": [
+    "Гайана",
+    "Guyana"
+  ],
+  "HT": [
+    "Гаити",
+    "Haiti"
+  ],
+  "HM": [
+    "о-ва Херд и Макдональд",
+    "Heard & McDonald Islands"
+  ],
+  "VA": [
+    "Ватикан",
+    "Vatican City"
+  ],
+  "HN": [
+    "Гондурас",
+    "Honduras"
+  ],
+  "HK": [
+    "Гонконг (САР)",
+    "Hong Kong SAR China"
+  ],
+  "HU": [
+    "Венгрия",
+    "Hungary"
+  ],
+  "IS": [
+    "Исландия",
+    "Iceland"
+  ],
+  "IN": [
+    "Индия",
+    "India"
+  ],
+  "ID": [
+    "Индонезия",
+    "Indonesia"
+  ],
+  "IR": [
+    "Иран",
+    "Iran"
+  ],
+  "IQ": [
+    "Ирак",
+    "Iraq"
+  ],
+  "IE": [
+    "Ирландия",
+    "Ireland"
+  ],
+  "IM": [
+    "о-в Мэн",
+    "Isle of Man"
+  ],
+  "IL": [
+    "Израиль",
+    "Israel"
+  ],
+  "IT": [
+    "Италия",
+    "Italy"
+  ],
+  "JM": [
+    "Ямайка",
+    "Jamaica"
+  ],
+  "JP": [
+    "Япония",
+    "Japan"
+  ],
+  "JE": [
+    "Джерси",
+    "Jersey"
+  ],
+  "JO": [
+    "Иордания",
+    "Jordan"
+  ],
+  "KZ": [
+    "Казахстан",
+    "Kazakhstan"
+  ],
+  "KE": [
+    "Кения",
+    "Kenya"
+  ],
+  "KI": [
+    "Кирибати",
+    "Kiribati"
+  ],
+  "KP": [
+    "КНДР",
+    "North Korea"
+  ],
+  "KR": [
+    "Республика Корея",
+    "South Korea"
+  ],
+  "KW": [
+    "Кувейт",
+    "Kuwait"
+  ],
+  "KG": [
+    "Киргизия",
+    "Kyrgyzstan"
+  ],
+  "LA": [
+    "Лаос",
+    "Laos"
+  ],
+  "LV": [
+    "Латвия",
+    "Latvia"
+  ],
+  "LB": [
+    "Ливан",
+    "Lebanon"
+  ],
+  "LS": [
+    "Лесото",
+    "Lesotho"
+  ],
+  "LR": [
+    "Либерия",
+    "Liberia"
+  ],
+  "LY": [
+    "Ливия",
+    "Libya"
+  ],
+  "LI": [
+    "Лихтенштейн",
+    "Liechtenstein"
+  ],
+  "LT": [
+    "Литва",
+    "Lithuania"
+  ],
+  "LU": [
+    "Люксембург",
+    "Luxembourg"
+  ],
+  "MO": [
+    "Макао (САР)",
+    "Macao SAR China"
+  ],
+  "MG": [
+    "Мадагаскар",
+    "Madagascar"
+  ],
+  "MW": [
+    "Малави",
+    "Malawi"
+  ],
+  "MY": [
+    "Малайзия",
+    "Malaysia"
+  ],
+  "MV": [
+    "Мальдивы",
+    "Maldives"
+  ],
+  "ML": [
+    "Мали",
+    "Mali"
+  ],
+  "MT": [
+    "Мальта",
+    "Malta"
+  ],
+  "MH": [
+    "Маршалловы о-ва",
+    "Marshall Islands"
+  ],
+  "MQ": [
+    "Мартиника",
+    "Martinique"
+  ],
+  "MR": [
+    "Мавритания",
+    "Mauritania"
+  ],
+  "MU": [
+    "Маврикий",
+    "Mauritius"
+  ],
+  "YT": [
+    "Майотта",
+    "Mayotte"
+  ],
+  "MX": [
+    "Мексика",
+    "Mexico"
+  ],
+  "FM": [
+    "Федеративные Штаты Микронезии",
+    "Micronesia"
+  ],
+  "MD": [
+    "Молдова",
+    "Moldova"
+  ],
+  "MC": [
+    "Монако",
+    "Monaco"
+  ],
+  "MN": [
+    "Монголия",
+    "Mongolia"
+  ],
+  "ME": [
+    "Черногория",
+    "Montenegro"
+  ],
+  "MS": [
+    "Монтсеррат",
+    "Montserrat"
+  ],
+  "MA": [
+    "Марокко",
+    "Morocco"
+  ],
+  "MZ": [
+    "Мозамбик",
+    "Mozambique"
+  ],
+  "MM": [
+    "Мьянма (Бирма)",
+    "Myanmar (Burma)"
+  ],
+  "NA": [
+    "Намибия",
+    "Namibia"
+  ],
+  "NR": [
+    "Науру",
+    "Nauru"
+  ],
+  "NP": [
+    "Непал",
+    "Nepal"
+  ],
+  "NL": [
+    "Нидерланды",
+    "Netherlands"
+  ],
+  "NC": [
+    "Новая Каледония",
+    "New Caledonia"
+  ],
+  "NZ": [
+    "Новая Зеландия",
+    "New Zealand"
+  ],
+  "NI": [
+    "Никарагуа",
+    "Nicaragua"
+  ],
+  "NE": [
+    "Нигер",
+    "Niger"
+  ],
+  "NG": [
+    "Нигерия",
+    "Nigeria"
+  ],
+  "NU": [
+    "Ниуэ",
+    "Niue"
+  ],
+  "NF": [
+    "о-в Норфолк",
+    "Norfolk Island"
+  ],
+  "MK": [
+    "Северная Македония",
+    "North Macedonia"
+  ],
+  "MP": [
+    "Северные Марианские о-ва",
+    "Northern Mariana Islands"
+  ],
+  "NO": [
+    "Норвегия",
+    "Norway"
+  ],
+  "OM": [
+    "Оман",
+    "Oman"
+  ],
+  "PK": [
+    "Пакистан",
+    "Pakistan"
+  ],
+  "PW": [
+    "Палау",
+    "Palau"
+  ],
+  "PS": [
+    "Палестинские территории",
+    "Palestinian Territories"
+  ],
+  "PA": [
+    "Панама",
+    "Panama"
+  ],
+  "PG": [
+    "Папуа — Новая Гвинея",
+    "Papua New Guinea"
+  ],
+  "PY": [
+    "Парагвай",
+    "Paraguay"
+  ],
+  "PE": [
+    "Перу",
+    "Peru"
+  ],
+  "PH": [
+    "Филиппины",
+    "Philippines"
+  ],
+  "PN": [
+    "о-ва Питкэрн",
+    "Pitcairn Islands"
+  ],
+  "PL": [
+    "Польша",
+    "Poland"
+  ],
+  "PT": [
+    "Португалия",
+    "Portugal"
+  ],
+  "PR": [
+    "Пуэрто-Рико",
+    "Puerto Rico"
+  ],
+  "QA": [
+    "Катар",
+    "Qatar"
+  ],
+  "RE": [
+    "Реюньон",
+    "Réunion"
+  ],
+  "RO": [
+    "Румыния",
+    "Romania"
+  ],
+  "RU": [
+    "Россия",
+    "Russia"
+  ],
+  "RW": [
+    "Руанда",
+    "Rwanda"
+  ],
+  "BL": [
+    "Сен-Бартелеми",
+    "St. Barthélemy"
+  ],
+  "SH": [
+    "о-в Св. Елены",
+    "St. Helena"
+  ],
+  "KN": [
+    "Сент-Китс и Невис",
+    "St. Kitts & Nevis"
+  ],
+  "LC": [
+    "Сент-Люсия",
+    "St. Lucia"
+  ],
+  "MF": [
+    "Сен-Мартен",
+    "St. Martin"
+  ],
+  "PM": [
+    "Сен-Пьер и Микелон",
+    "St. Pierre & Miquelon"
+  ],
+  "VC": [
+    "Сент-Винсент и Гренадины",
+    "St. Vincent & Grenadines"
+  ],
+  "WS": [
+    "Самоа",
+    "Samoa"
+  ],
+  "SM": [
+    "Сан-Марино",
+    "San Marino"
+  ],
+  "ST": [
+    "Сан-Томе и Принсипи",
+    "São Tomé & Príncipe"
+  ],
+  "SA": [
+    "Саудовская Аравия",
+    "Saudi Arabia"
+  ],
+  "SN": [
+    "Сенегал",
+    "Senegal"
+  ],
+  "RS": [
+    "Сербия",
+    "Serbia"
+  ],
+  "SC": [
+    "Сейшельские о-ва",
+    "Seychelles"
+  ],
+  "SL": [
+    "Сьерра-Леоне",
+    "Sierra Leone"
+  ],
+  "SG": [
+    "Сингапур",
+    "Singapore"
+  ],
+  "SX": [
+    "Синт-Мартен",
+    "Sint Maarten"
+  ],
+  "SK": [
+    "Словакия",
+    "Slovakia"
+  ],
+  "SI": [
+    "Словения",
+    "Slovenia"
+  ],
+  "SB": [
+    "Соломоновы о-ва",
+    "Solomon Islands"
+  ],
+  "SO": [
+    "Сомали",
+    "Somalia"
+  ],
+  "ZA": [
+    "Южно-Африканская Республика",
+    "South Africa"
+  ],
+  "GS": [
+    "Южная Георгия и Южные Сандвичевы о-ва",
+    "South Georgia & South Sandwich Islands"
+  ],
+  "SS": [
+    "Южный Судан",
+    "South Sudan"
+  ],
+  "ES": [
+    "Испания",
+    "Spain"
+  ],
+  "LK": [
+    "Шри-Ланка",
+    "Sri Lanka"
+  ],
+  "SD": [
+    "Судан",
+    "Sudan"
+  ],
+  "SR": [
+    "Суринам",
+    "Suriname"
+  ],
+  "SJ": [
+    "Шпицберген и Ян-Майен",
+    "Svalbard & Jan Mayen"
+  ],
+  "SE": [
+    "Швеция",
+    "Sweden"
+  ],
+  "CH": [
+    "Швейцария",
+    "Switzerland"
+  ],
+  "SY": [
+    "Сирия",
+    "Syria"
+  ],
+  "TW": [
+    "Тайвань",
+    "Taiwan"
+  ],
+  "TJ": [
+    "Таджикистан",
+    "Tajikistan"
+  ],
+  "TZ": [
+    "Танзания",
+    "Tanzania"
+  ],
+  "TH": [
+    "Таиланд",
+    "Thailand"
+  ],
+  "TL": [
+    "Восточный Тимор",
+    "Timor-Leste"
+  ],
+  "TG": [
+    "Того",
+    "Togo"
+  ],
+  "TK": [
+    "Токелау",
+    "Tokelau"
+  ],
+  "TO": [
+    "Тонга",
+    "Tonga"
+  ],
+  "TT": [
+    "Тринидад и Тобаго",
+    "Trinidad & Tobago"
+  ],
+  "TN": [
+    "Тунис",
+    "Tunisia"
+  ],
+  "TR": [
+    "Турция",
+    "Türkiye"
+  ],
+  "TM": [
+    "Туркменистан",
+    "Turkmenistan"
+  ],
+  "TC": [
+    "Тёркс и Кайкос",
+    "Turks & Caicos Islands"
+  ],
+  "TV": [
+    "Тувалу",
+    "Tuvalu"
+  ],
+  "UG": [
+    "Уганда",
+    "Uganda"
+  ],
+  "UA": [
+    "Украина",
+    "Ukraine"
+  ],
+  "AE": [
+    "ОАЭ",
+    "United Arab Emirates"
+  ],
+  "GB": [
+    "Великобритания",
+    "United Kingdom"
+  ],
+  "US": [
+    "Соединенные Штаты",
+    "United States"
+  ],
+  "UM": [
+    "Внешние малые о-ва (США)",
+    "U.S. Outlying Islands"
+  ],
+  "UY": [
+    "Уругвай",
+    "Uruguay"
+  ],
+  "UZ": [
+    "Узбекистан",
+    "Uzbekistan"
+  ],
+  "VU": [
+    "Вануату",
+    "Vanuatu"
+  ],
+  "VE": [
+    "Венесуэла",
+    "Venezuela"
+  ],
+  "VN": [
+    "Вьетнам",
+    "Vietnam"
+  ],
+  "VG": [
+    "Виргинские о-ва (Великобритания)",
+    "British Virgin Islands"
+  ],
+  "VI": [
+    "Виргинские о-ва (США)",
+    "U.S. Virgin Islands"
+  ],
+  "WF": [
+    "Уоллис и Футуна",
+    "Wallis & Futuna"
+  ],
+  "EH": [
+    "Западная Сахара",
+    "Western Sahara"
+  ],
+  "YE": [
+    "Йемен",
+    "Yemen"
+  ],
+  "ZM": [
+    "Замбия",
+    "Zambia"
+  ],
+  "ZW": [
+    "Зимбабве",
+    "Zimbabwe"
+  ]
+}

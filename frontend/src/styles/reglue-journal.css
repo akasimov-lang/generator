@@ -1,0 +1,15 @@
+.reglueJournalCard { color: var(--text); text-decoration: none; }
+.reglueJournalCard small { color: var(--muted); font-size: 12px; }
+.reglueJournalToolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.reglueJournalToolbar > button { margin-left: auto; }
+.reglueJournalTableWrap { overflow-x: auto; }
+.reglueJournalTable { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.reglueJournalTable th, .reglueJournalTable td { padding: 14px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.reglueJournalTable th { font-size: 12px; color: var(--muted); }
+.reglueJournalTable th:first-child { width: 16%; }
+.reglueJournalTable th:nth-child(2) { width: 25%; }
+.reglueJournalTable small { display: block; color: var(--muted); font-size: 12px; margin-top: 6px; }
+.reglueJournalChange { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.reglueJournalChange > svg { flex: 0 0 auto; color: var(--muted); }
+.reglueJournalTable a { font-weight: 600; }
+@media (max-width: 800px) { .reglueJournalTable { min-width: 740px; } }

@@ -17,6 +17,8 @@ def enqueue_publication(db, item, actor):
     item.status = "publishing"
     db.add(models.BackgroundJob(kind="publication", payload={
         "content_id": item.id, "actor": actor, "previous_status": previous_status,
+        **({"pilot_internal_pages_job_id": item.generation_context["pilot_internal_pages_job_id"]}
+           if (item.generation_context or {}).get("pilot_internal_pages_job_id") else {}),
     }))
     refresh_task_status(db, item.task_id)
     # The dispatcher recovers a broker failure after this commit.
@@ -32,8 +34,11 @@ def dispatch_pending(db, send):
     ).order_by(models.BackgroundJob.created_at).limit(100).with_for_update(skip_locked=True)).all()
     sent = 0
     for job in jobs:
+        if job.kind == 'generation_retry':
+            from app.generation_retry import due
+            if not due(job): continue
         try:
-            send(job.id, {"publication": "publication", "site_template": "generation", "auto_lb": "generation", "project_page_ai": "generation"}.get(job.kind, "cache_sync"))
+            send(job.id, {"generation_retry": "generation", "pilot_text": "pilot_texts", "maintenance_report": "automation", "auto_pilot_preview": "automation", "mass_reglue_list": "automation", "pilot_internal_pages": "generation", "template_knowledge": "maintenance", "publication": "publication", "page_autolink": "publication", "transfer_report_check": "automation", "site_template": "generation", "auto_lb": "generation", "project_page_ai": "generation", "article_image": "generation"}.get(job.kind, "cache_sync"))
         except Exception:
             continue
         job.dispatched_at = now
@@ -43,6 +48,30 @@ def dispatch_pending(db, send):
 
 
 def run_job(db, job_id):
+    candidate = db.get(models.BackgroundJob, job_id)
+    if candidate and candidate.kind == 'publication' and candidate.status == 'queued' and candidate.payload.get('pilot_internal_pages_job_id'):
+        from app.pilot_internal_pages import publication_job_ready
+        if not publication_job_ready(db, candidate):
+            candidate.dispatched_at = None
+            db.commit()
+            return {'status': 'waiting_reglue'}
+    if candidate and candidate.kind == 'pilot_internal_pages':
+        from app.pilot_internal_pages import execute_step
+        from app.worker import run_task_pipeline_job
+        return execute_step(db, job_id, lambda task_id: run_task_pipeline_job.delay(task_id))
+    if candidate and candidate.kind == 'pilot_text':
+        from app.pilot_text_jobs import execute
+        return execute(db, job_id)
+    if candidate and candidate.kind == 'reserve_membership_refresh':
+        from app.reglue_reserve_refresh import execute_step
+        return execute_step(db, job_id)
+    if candidate and candidate.kind == 'maintenance_report' and candidate.payload.get('repeat'):
+        from app.maintenance_repeat import execute_step
+        return execute_step(db, job_id)
+    if candidate and candidate.kind in {'mass_reglue_list', 'auto_pilot_preview'}:
+        from app.mass_reglue_launch import execute_step
+        from app.worker import auto_reglue_job
+        return execute_step(db, job_id, lambda run_id: auto_reglue_job.delay(run_id), parallel_texts=True)
     job = db.scalar(select(models.BackgroundJob).where(models.BackgroundJob.id == job_id).with_for_update())
     if not job or job.status != "queued":
         db.rollback()
@@ -51,7 +80,25 @@ def run_job(db, job_id):
     job.started_at = datetime.now(timezone.utc)
     db.commit()  # Duplicated broker deliveries must never repeat remote mutations.
     try:
-        if job.kind == "auto_lb":
+        if job.kind == 'generation_retry':
+            from app.worker import run_content_item_pipeline_job
+            result = run_content_item_pipeline_job.run(job.payload['content_id'], job.payload['collect_competitors'])
+        elif job.kind == "article_image":
+            from app.article_images import retry
+            item = db.get(models.ContentItem, job.payload["content_id"])
+            if not item:
+                raise ValueError("Текст не найден.")
+            result = asyncio.run(retry(db, item))
+        elif job.kind == "template_knowledge":
+            from app.competitor_site_structure import execute
+            result = execute(db, job)
+        elif job.kind == "transfer_report_check":
+            from app.transfer_report_check import execute
+            result = execute(db, job)
+        elif job.kind == "page_autolink":
+            from app.project_page_autolink import execute
+            result = execute(db, job)
+        elif job.kind == "auto_lb":
             from app.auto_lb import generate
             row = db.get(models.AutoLbGeneration, job.payload["generation_id"])
             if not row:
@@ -62,6 +109,11 @@ def run_job(db, job_id):
             row = db.get(models.ProjectPageDraft, job.payload["draft_id"])
             if not row:
                 raise ValueError("Черновик не найден")
+            if job.payload.get('mass_filter'):
+                from app.mass_action_scope import MassActionFilter, matches
+                site = db.get(models.Site, row.site_id)
+                if not site or not matches(site, MassActionFilter.model_validate(job.payload['mass_filter'])):
+                    raise ValueError('Проект больше не соответствует фильтру массового действия. Обработка остановлена.')
             result = asyncio.run(generate(db, row))
         elif job.kind == "site_template":
             from app.site_templates import generate, audit_edited

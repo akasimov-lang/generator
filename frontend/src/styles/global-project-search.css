@@ -1,0 +1,21 @@
+.globalProjectSearchInput{position:relative;width:100%;max-width:420px;min-width:0}
+.globalProjectSearchInput .workspaceHeadingSearch{display:block;max-width:none;padding-right:38px}
+.globalProjectSearchInput input::-webkit-search-cancel-button{display:none}
+.globalProjectSearchClear{position:absolute;right:5px;top:50%;transform:translateY(-50%);display:grid;place-items:center;width:30px;height:30px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--muted);cursor:pointer}
+.globalProjectSearchClear:hover,.globalProjectSearchClear:focus-visible{color:var(--text);background:var(--surface-2)}
+.globalProjectSearchResults{padding:20px;margin-bottom:20px;min-width:0}
+.globalProjectSearchSummary{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.globalProjectSearchSummary h2{margin:0}
+.globalProjectSearchResults>p{margin:8px 0 16px}
+.globalProjectSearchResults table{width:100%;min-width:600px;border-collapse:collapse;font-size:13px}
+.globalProjectSearchResults th,.globalProjectSearchResults td{padding:12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--border);overflow-wrap:anywhere}
+.globalProjectSearchResults th{color:var(--muted)}
+.globalProjectSearchResults td:first-child a{font-weight:700}
+.globalProjectSearchGeo{display:flex;align-items:center;gap:5px;margin-top:4px;color:var(--muted);font-size:12px}
+.globalProjectSearchPagination{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-top:16px}
+@media(max-width:640px){.globalProjectSearchInput{max-width:none}.globalProjectSearchResults{padding:14px}.globalProjectSearchPagination{justify-content:center}.globalProjectSearchPagination .button{width:auto}}
+
+.massActionsTopbar{flex-wrap:wrap}
+.massActionsTopbar .workspaceTopbarTitle{flex:1 1 480px}
+.massActionsTopbar .topbarActions{flex-wrap:wrap}
+@media(max-width:640px){.massActionsTopbar .workspaceTopbarTitle{flex:0 0 auto;width:100%}}

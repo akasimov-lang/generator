@@ -75,6 +75,18 @@ def test_lost_response_never_retries(env):
         indexing.submit_network_indexing(db, op.id, client=client)
         indexing.submit_network_indexing(db, op.id, client=client)
     assert op.status == 'index_unknown' and len(sent) == 1
+    assert indexing.indexing_receipt(op)['error_code'] == 'ReadTimeout'
+    assert indexing.indexing_receipt(op)['response_status'] is None
+
+
+def test_indexing_unknown_keeps_actual_http_code(env):
+    db, site, _ = env
+    op = indexing.queue_indexing(db, site, network.read_network(db, site), str(uuid4()), 'admin'); db.commit()
+    with httpx.Client(transport=httpx.MockTransport(lambda _: httpx.Response(201, json={'message':'accepted'}))) as client:
+        indexing.submit_network_indexing(db, op.id, client=client)
+    receipt = indexing.indexing_receipt(op)
+    assert receipt['response_status'] == 201 and receipt['status'] == 'index_unknown'
+    assert not receipt['task_id'] and not receipt['error_code']
 
 
 def test_failed_reglue_does_not_queue(env):
@@ -132,3 +144,39 @@ def test_network_navigation_uses_saved_snapshot_and_refresh_is_explicit(monkeypa
         db.get(models.Site, site_id).network_state = {}; db.commit()
     assert client.get(f'/api/sites/{site_id}/network').json()['canon'] == 'fresh.test'
     assert calls == [site_id, site_id]
+
+
+def test_explicit_request_uses_fresh_network_and_deduplicates(env):
+    db, site, remote = env
+    site.project_status = 'hands_only'
+    site.cache_domains = ['stale.test']
+    remote.data['settings']['domains'] = ['main.test', 'amp.test', 'new.test']
+    remote.data['settings']['ampDomains'] = ['amp.test']
+    db.commit()
+    key = uuid4()
+    result = indexing.request_indexing(db, site, key, 'anton')
+    assert result['status'] == 'index_queued' and result['count'] == 2
+    op = db.get(models.NetworkOperation, result['id'])
+    assert op.request_payload['domains'] == ['https://main.test/', 'https://new.test/']
+    assert indexing.request_indexing(db, site, key, 'anton')['id'] == result['id']
+    assert indexing.request_indexing(db, site, uuid4(), 'anton')['id'] == result['id']
+    assert len(receipts(db)) == 1 and remote.calls == []
+    op.status = 'index_unknown'; db.commit()
+    assert indexing.request_indexing(db, site, uuid4(), 'anton')['id'] == result['id']
+    op.status = 'index_submitted'; db.commit()
+    assert indexing.request_indexing(db, site, uuid4(), 'anton')['id'] == result['id']
+
+
+def test_indexing_api_does_not_submit_on_get_and_validates_request(monkeypatch):
+    from test_api_serialization import make_client
+    client, sessions = make_client()
+    with sessions() as db:
+        site_id = db.scalar(select(models.Site.id))
+    monkeypatch.setattr(network, 'read_network', lambda *args: (_ for _ in ()).throw(AssertionError('No Webdev reads on GET')))
+    assert client.get(f'/api/sites/{site_id}/network/indexing').json() is None
+    assert client.get('/api/sites/missing/network/indexing').status_code == 404
+    assert client.post(f'/api/sites/{site_id}/network/indexing', json={'request_id': 'invalid'}).status_code == 422
+    monkeypatch.setattr(network, 'read_network', lambda *args: {'domains': ['main.test']})
+    result = client.post(f'/api/sites/{site_id}/network/indexing', json={'request_id': str(uuid4())})
+    assert result.status_code == 200 and result.json()['status'] == 'index_queued'
+    assert client.get(f'/api/sites/{site_id}/network/indexing').json()['id'] == result.json()['id']

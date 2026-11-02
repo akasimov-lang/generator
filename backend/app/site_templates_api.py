@@ -5,8 +5,10 @@ import json
 import io
 import zipfile
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
+from app.source_upload import extract_source_document, MAX_UPLOAD
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session, defer
 
 from app import models
@@ -28,17 +30,42 @@ def get_template(db, template_id):
     return row
 
 
-def summary(row):
+def summary(row, competitors=None, has_html=False):
     return {"id": row.id, "brand": row.brand, "geo": row.geo, "language": row.language,
             "status": row.status, "phase": row.phase, "error": row.error,
-            "revision": row.revision, "created_at": row.created_at, "updated_at": row.updated_at}
+            "revision": row.revision, "created_at": row.created_at, "updated_at": row.updated_at,
+            "competitors": competitors or [], "has_html": has_html}
 
 
 def detail(row):
-    return {**summary(row), "request": row.request_data, "document": row.document, "html": row.html}
+    return {**summary(row,has_html=bool(row.html)), "request": row.request_data, "document": row.document, "html": row.html}
+
+
+def save_collection(db, user, brand, geo, language, sources, provider_id=''):
+    from app.template_knowledge_library import competitor_identity
+    if not provider_id:
+        provider_id=db.scalar(select(models.AiProvider.id).where(models.AiProvider.provider_type=='gemini',
+            models.AiProvider.is_active.is_(True)).order_by(models.AiProvider.created_at)) or ''
+    row=models.SiteTemplate(created_by_user_id=user['id'],brand=brand,geo=geo or 'PL',language=language or 'pl',
+        status='sources_ready',phase='Конкуренты сохранены',request_data={
+            'brand':brand,'geo':geo or 'PL','language':language or 'pl','ai_provider_id':provider_id,
+            'collect_competitors':False,'uniqueness_scope':'brand_geo'})
+    db.add(row);db.flush()
+    collected=[]
+    for source in sources:
+        identity=competitor_identity(source.google_html,source.url)
+        copied=models.TemplateSource(template_id=row.id,url=identity['url'],google_html=source.google_html,
+            capture={**(getattr(source,'capture',None) or {}),'source':'manual_html','status':'google_ready','revision':0})
+        db.add(copied);db.flush()
+        collected.append({'source_id':copied.id,'url':identity['url'],'title':identity['title'],
+            'origin':'manual','position':len(collected)+1,'status':'google_ready'})
+    row.document={'research':{'sources':collected,'search_complete':True},'pipeline':{'stage':'research'}}
+    return row
 
 
 def enqueue(db, row, *, audit=False, stage="design"):
+    from app.template_knowledge_library import remember_template_sources
+    remember_template_sources(db, row)
     db.add(models.BackgroundJob(kind="site_template", payload={"template_id": row.id, "audit": audit, "stage": stage}))
     row.document = {**(row.document or {}), "pipeline": {**((row.document or {}).get("pipeline") or {}), "stage": stage}}
     row.status, row.phase, row.error = "queued", {"research": "Этап 1/3 · сбор конкурентов в очереди", "content": "Этап 2/3 · контент в очереди", "design": "Этап 3/3 · HTML в очереди"}[stage], None
@@ -50,7 +77,19 @@ def list_templates(user: AuthUser, db: Session = Depends(get_db)):
     rows = db.scalars(select(models.SiteTemplate).options(defer(models.SiteTemplate.document),
         defer(models.SiteTemplate.html), defer(models.SiteTemplate.request_data))
         .order_by(models.SiteTemplate.created_at.desc())).all()
-    return [summary(row) for row in rows]
+    from app.template_knowledge_library import competitor_identity
+    sources={row.id:[] for row in rows}
+    if sources:
+        # Fetch only the head of saved HTML, not megabytes of article bodies.
+        for template_id,url,capture,head in db.execute(select(models.TemplateSource.template_id,
+            models.TemplateSource.url,models.TemplateSource.capture,func.substr(models.TemplateSource.google_html,1,64000))
+            .where(models.TemplateSource.template_id.in_(sources),models.TemplateSource.google_html.is_not(None),models.TemplateSource.google_html!='')
+            .order_by(models.TemplateSource.created_at)):
+            if (capture or {}).get('status') not in {'google_ready','parsed'}:continue
+            identity=competitor_identity(head,url)
+            if identity not in sources[template_id]:sources[template_id].append(identity)
+    generated=set(db.scalars(select(models.SiteTemplate.id).where(models.SiteTemplate.html.is_not(None),models.SiteTemplate.html!='')))
+    return [summary(row,sources[row.id],row.id in generated) for row in rows]
 
 
 class SourceDraftRef(BaseModel):
@@ -69,7 +108,7 @@ class CreateTemplateRequest(TemplateRequest):
             return "Онлайн казино"
         return value
 
-    source_drafts: list[SourceDraftRef] = Field(default_factory=list, max_length=5)
+    source_drafts: list[SourceDraftRef] = Field(default_factory=list, max_length=10)
 
 
 @router.post("", status_code=202)
@@ -112,6 +151,8 @@ def create_template(payload: CreateTemplateRequest, user: AuthUser, db: Session 
                 entries.append({"url": url, "title": url, "position": len(entries) + 1, "origin": "manual"})
                 seen.add(url)
         row.document = {"research": {"sources": entries, "search_complete": not payload.collect_competitors}}
+    from app.template_knowledge import attach_sources
+    attach_sources(db, row)
     enqueue(db, row, stage="research")
     return detail(row)
 
@@ -120,6 +161,92 @@ class SourceDraft(BaseModel):
     html: str = Field(default="", max_length=MAX_HTML)
     url: str = Field(default="", max_length=2000)
     revision: int = Field(default=0, ge=0)
+
+
+class KnowledgeUpload(BaseModel):
+    model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
+    brand: str = Field(min_length=1,max_length=160)
+    geo: str = Field(default='',max_length=2)
+    html: str = Field(min_length=1,max_length=MAX_HTML)
+    url: str = Field(default='',max_length=2000)
+    filename: str = Field(default='',max_length=255)
+
+
+class SaveCompetitorsRequest(BaseModel):
+    model_config=ConfigDict(extra='forbid',str_strip_whitespace=True)
+    brand:str=Field(min_length=1,max_length=160)
+    geo:str=Field(default='',max_length=2)
+    language:str=Field(default='',max_length=40)
+    ai_provider_id:str=Field(default='',max_length=36)
+    source_drafts:list[SourceDraftRef]=Field(min_length=1,max_length=10)
+
+
+@router.get('/knowledge/history')
+def competitor_history(user:AuthUser,db:Session=Depends(get_db)):
+    from app.template_knowledge_library import entries, listing, competitor_identity
+    rows=entries(db)
+    # Existing imported examples and new uploads share one history.
+    return {'count':len(rows),'sources':rows,'scopes':listing(db)['scopes']}
+
+
+@router.get('/knowledge/examples/{example_id}')
+def competitor_example(example_id:str,user:AuthUser,db:Session=Depends(get_db)):
+    from app.template_knowledge_library import entries
+    # IDs are matched against the catalog; never accept an arbitrary file path.
+    source=next((source for source in entries(db,html=True) if source['id']==example_id),None)
+    if not source:raise HTTPException(404,'Пример не найден.')
+    return source
+
+
+@router.post('/knowledge/save-drafts',status_code=201)
+def save_competitor_drafts(payload:SaveCompetitorsRequest,user:AuthUser,db:Session=Depends(get_db)):
+    from app.template_knowledge_library import save, scope, competitor_identity
+    lock_draft_owner(db,user)
+    if len({ref.id for ref in payload.source_drafts})!=len(payload.source_drafts):
+        raise HTTPException(422,'Один HTML указан дважды.')
+    drafts=[]
+    for ref in payload.source_drafts:
+        source=get_source_draft(db,user,str(ref.id))
+        if source.capture.get('revision',0)!=ref.revision:
+            raise HTTPException(409,'HTML конкурента изменился. Обновите форму перед сохранением.')
+        if source.capture.get('status')!='google_ready' or not (source.google_html or '').strip():
+            raise HTTPException(422,'Добавьте корректный HTML главной страницы конкурента.')
+        drafts.append(source)
+    try:
+        name,_,country=scope(payload.brand,payload.geo)
+        saved=[save(db,name,country,source.google_html,source.url,'Загруженный конкурент.html',user['id'],
+            commit=False,allow_missing_general_url=True) for source in drafts]
+        collection=save_collection(db,user,name,payload.geo,payload.language,drafts,payload.ai_provider_id)
+        for source in drafts:db.delete(source)
+        db.commit()
+    except ValueError as error:
+        db.rollback();raise HTTPException(422,str(error))
+    return {'brand':name,'geo':country,'saved':sum(not source['duplicate'] for source in saved),
+            'duplicates':sum(source['duplicate'] for source in saved),'sources':saved,'collection':detail(collection)}
+
+
+@router.get('/knowledge')
+def knowledge_library(user: AuthUser, brand: str | None = None, geo: str = '', db: Session = Depends(get_db)):
+    from app.template_knowledge_library import listing
+    try:return listing(db,brand,geo)
+    except ValueError as error:raise HTTPException(422,str(error))
+
+
+@router.post('/knowledge',status_code=201)
+def upload_knowledge(payload: KnowledgeUpload,user: AuthUser,db: Session = Depends(get_db)):
+    from app.template_knowledge_library import save, listing
+    try:
+        source=save(db,payload.brand,payload.geo,payload.html,payload.url,payload.filename,user['id'],commit=False)
+        if not source['duplicate']:
+            from types import SimpleNamespace
+            stored=db.get(models.TemplateKnowledgeExample,source['id'])
+            languages={'CZ':'cs','PL':'pl','DE':'de','AT':'de','FR':'fr','ES':'es','IT':'it','PT':'pt'}
+            save_collection(db,user,source['brand'],payload.geo,languages.get(payload.geo.upper(),'en'),
+                [SimpleNamespace(url=stored.url,google_html=stored.html,capture={})])
+        db.commit()
+        return {'source':source,**listing(db,payload.brand,payload.geo)}
+    except ValueError as error:
+        db.rollback();raise HTTPException(422,str(error))
 
 
 def suggested_brand(html):
@@ -160,9 +287,12 @@ def suggested_brand(html):
 
 
 def source_detail(source):
+    from app.template_knowledge_library import competitor_identity
+    identity = competitor_identity(source.google_html or "", source.url or "")
     return {"id": source.id, "url": source.url, "html": source.google_html or "",
             "suggested_brand": suggested_brand(source.google_html),
             "capture": source.capture, "revision": source.capture.get("revision", 0),
+            "created_at": source.created_at, "title": identity["title"], "display_url": identity["url"],
             "updated_at": source.updated_at}
 
 
@@ -178,6 +308,20 @@ def get_source_draft(db, user, source_id):
     return source
 
 
+@router.post("/source-document")
+async def read_source_document(request: Request, user: AuthUser, extension: str):
+    data = bytearray()
+    async for chunk in request.stream():
+        data.extend(chunk)
+        if len(data) > MAX_UPLOAD:
+            raise HTTPException(422, "Файл превышает 2 МБ. Выберите файл меньшего размера.")
+    try:
+        html = await run_in_threadpool(extract_source_document, bytes(data), extension.lower())
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"html": html}
+
+
 @router.get("/source-drafts")
 def list_source_drafts(user: AuthUser, db: Session = Depends(get_db)):
     return [source_detail(row) for row in db.scalars(select(models.TemplateSourceDraft).where(
@@ -188,8 +332,8 @@ def list_source_drafts(user: AuthUser, db: Session = Depends(get_db)):
 def create_source_draft(payload: SourceDraft, user: AuthUser, db: Session = Depends(get_db)):
     lock_draft_owner(db, user)
     ids = db.scalars(select(models.TemplateSourceDraft.id).where(models.TemplateSourceDraft.user_id == user["id"])).all()
-    if len(ids) >= 5:
-        raise HTTPException(422, "Можно добавить до 5 HTML конкурентов.")
+    if len(ids) >= 10:
+        raise HTTPException(422, "Можно добавить до 10 HTML конкурентов.")
     source = models.TemplateSourceDraft(user_id=user["id"], url="", google_html="", capture={})
     db.add(source); db.flush()
     return save_source(db, None, source, payload)
@@ -266,7 +410,7 @@ def list_sources(template_id: str, user: AuthUser, db: Session = Depends(get_db)
 def add_source(template_id: str, payload: SourceDraft, user: AuthUser, db: Session = Depends(get_db)):
     row = get_template(db, template_id); editable_sources(row)
     sources = db.scalars(select(models.TemplateSource.id).where(models.TemplateSource.template_id == template_id)).all()
-    if len(sources) >= 5: raise HTTPException(422, "Можно добавить до 5 HTML конкурентов")
+    if len(sources) >= 10: raise HTTPException(422, "Можно добавить до 10 HTML конкурентов")
     source = models.TemplateSource(template_id=template_id, url="", capture={})
     db.add(source); db.flush()
     return save_source(db, row, source, payload)
@@ -305,16 +449,23 @@ def delete_source(template_id: str, source_id: str, revision: int, user: AuthUse
 @router.post("/{template_id}/generate-content", status_code=202)
 def generate_content(template_id: str, user: AuthUser, db: Session = Depends(get_db)):
     row = get_template(db, template_id); editable_sources(row)
+    if not row.request_data.get('ai_provider_id'):
+        provider=db.scalar(select(models.AiProvider).where(models.AiProvider.provider_type=='gemini',models.AiProvider.is_active.is_(True)))
+        if not provider or not provider.api_key:raise HTTPException(422,'Подключите Gemini в API Providers перед генерацией шаблона.')
+        row.request_data={**row.request_data,'ai_provider_id':provider.id}
+    from app.template_knowledge import attach_sources, source_excerpt
+    attach_sources(db, row)
     sources = db.scalars(select(models.TemplateSource).where(models.TemplateSource.template_id == template_id)).all()
     entries = []
     for source in sources:
         if not source.google_html: continue
         try:
-            evidence = excerpt(source.google_html)
+            evidence = source_excerpt(source)
         except ValueError:
             continue
         entries.append({"url": source.url, "source_id": source.id, "position": len(entries) + 1,
-                        "origin": "google", "status": "fetched", **evidence})
+                        "origin": "knowledge_base" if source.capture.get("knowledge_id") else "google",
+                        "status": "fetched", **evidence})
     if not entries:
         raise HTTPException(422, "Сначала добавьте HTML из Google хотя бы для одного конкурента.")
     row.document = {"research": {"query": "HTML конкурентов из Google", "sources": entries}, "pipeline": {"stage": "content"}}
@@ -370,37 +521,7 @@ def edit_template(template_id: str, payload: TemplateEdit, user: AuthUser, db: S
     return detail(row)
 
 
-def assets(row):
-    design = row.document["design"]
-    accent = PALETTES[design["palette"]][5 if design["hero"] == "feature_billboard" else 4]
-    result = {"assets/hero.svg": art_svg(row.document["design"]["visual_style"]).replace("currentColor", accent)}
-    from app.template_phones import frame_svg, FRAMES
-    media = row.document.get("brand_media") or {}
-    for i, screen in enumerate(media.get("screens", [])):
-        frame = media.get("frames", [FRAMES[0][0]] * len(media["screens"]))[i]
-        result[f"assets/phone-{i+1}.svg"] = frame_svg(frame, screen)
-    if media.get("logo"):
-        result["assets/brand-logo.png"] = base64.b64decode(media["logo"].split(",", 1)[1])
-    from app.template_asset_library import exported_assets
-    result.update(exported_assets(row.document))
-    return result
-
-
-def downloadable_html(row):
-    inline = art_svg(row.document["design"]["visual_style"])
-    html = row.html.replace(inline, '<img src="assets/hero.svg" alt="" width="600" height="400" decoding="async">').replace(
-        ".art svg{", ".art img{object-fit:contain;").replace(".composition-art svg{", ".composition-art img{")
-    if row.document.get("generated_css"):
-        html = row.html  # Preserve the generated currentColor instead of a preset palette.
-    for path, image in assets(row).items():
-        if path.startswith("assets/phone-"):
-            encoded = "data:image/svg+xml;base64," + base64.b64encode(image.encode()).decode()
-            html = html.replace(encoded, path)
-    logo = (row.document.get("brand_media") or {}).get("logo")
-    if logo:
-        html = html.replace(logo, "assets/brand-logo.png")
-    from app.template_asset_library import externalize
-    return externalize(html, row.document)
+from app.template_bundle import assets, downloadable_html
 
 
 @router.get("/{template_id}/download/{kind}")

@@ -1,0 +1,73 @@
+import os,mimetypes
+from pathlib import Path
+from urllib.parse import urlparse
+from playwright.sync_api import sync_playwright,expect
+DIST=Path(os.environ['TRANSFER_HARNESS_DIST'])
+with sync_playwright() as p:
+ browser=p.chromium.launch(executable_path=os.environ.get('CHROME','/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),headless=True)
+ page=browser.new_page(viewport={'width':1440,'height':1000});errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+ def route(r):
+  path=urlparse(r.request.url).path
+  f=DIST/path.lstrip('/')
+  if not f.is_file():f=DIST/'tests/transfer-progress.html'
+  r.fulfill(content_type=mimetypes.guess_type(str(f))[0] or 'application/octet-stream',body=f.read_bytes())
+ page.route('**/*',route);page.goto('http://localhost/tests/transfer-progress.html')
+ page.evaluate("fixture.waiting=true;fixture.confirmation={started_at:new Date(Date.now()-65000).toISOString(),next_check_at:new Date(Date.now()+15000).toISOString(),attempt:1,limit:10,interval_seconds:15}")
+ expect(page.locator('.compactTransferReports .transferConfirmation').first).to_contain_text('Ожидаем подтверждения',timeout=10000)
+ expect(page.locator('.compactTransferReports .transferReportErrorRow')).to_have_count(0)
+ expect(page.locator('.compactTransferReports .transferConfirmation').first).to_contain_text('Следующая проверка через')
+ page.evaluate("fixture.confirmation.next_check_at=null;fixture.confirmation.exhausted=true")
+ expect(page.locator('.compactTransferReports .transferConfirmation').first).to_contain_text('Автопроверки завершены',timeout=10000)
+ page.evaluate('fixture.waiting=false')
+ expect(page.locator('.compactTransferReports .transferConfirmation')).to_have_count(0,timeout=10000)
+ page.get_by_role('button',name='Move +2',exact=True).click()
+ progress=page.get_by_role('status',name='Ход переноса доменов')
+ expect(progress.locator('.transferProgressRows > div')).to_have_count(4)
+ expect(page.get_by_role('button',name='Move +1',exact=True)).to_be_disabled()
+ page.evaluate("advanceMove('extracted')")
+ expect(progress).to_contain_text('В очереди')
+ page.evaluate("advanceMove('adding')")
+ expect(page.get_by_role('progressbar',name='Выполнение переноса')).to_have_attribute('aria-valuenow','75')
+ page.evaluate("advanceMove('delivered')")
+ expect(progress).to_contain_text('Перенесено: 3 · Ошибок: 1')
+ expect(progress.get_by_text('Перенесён дроп вместо новорега',exact=True)).to_be_visible()
+ assert progress.get_by_text('Перенесён дроп вместо новорега',exact=True).evaluate('(e)=>e.tagName')=='STRONG'
+ error_row=progress.locator('.transferProgressErrorRow')
+ expect(error_row).to_have_count(1)
+ expect(error_row.locator('.transferProgressErrorDetail')).not_to_be_visible()
+ error_row.locator('> summary').click()
+ expect(error_row.locator('.transferProgressErrorDetail')).to_contain_text('DNS · Webdev не смог настроить DNS.')
+ error_row.locator('> summary').press('Enter')
+ expect(error_row.locator('.transferProgressErrorDetail')).not_to_be_visible()
+ expect(page.get_by_role('button',name='Move +1',exact=True)).to_be_enabled()
+ expect(page.locator('.compactTransferReports .transferDropNotice')).to_have_text('Вместо новорега выбран дроп')
+ assert page.locator('.compactTransferReports .transferDropNotice').evaluate('(e)=>e.tagName')=='STRONG'
+ page.get_by_role('button',name='Обновить отчёты',exact=True).click()
+ expect(page.get_by_role('button',name='Проверяем сетки…',exact=True)).to_be_disabled()
+ expect(page.get_by_role('region',name='Очередь доменов Fontan PL')).to_contain_text('2 / 5')
+ assert page.evaluate('fixture.checks.length')==1 and page.evaluate('fixture.checks[0].filter.geo')=='PL'
+ page.evaluate("fixture.check.status='completed';fixture.queue=[]")
+ expect(page.get_by_role('button',name='Обновить отчёты',exact=True)).to_be_enabled(timeout=10000)
+ expect(page.get_by_role('region',name='Очередь доменов Fontan PL')).to_contain_text('0 / 5')
+ expect(page.locator('.compactTransferReports .transferDropNotice')).to_have_text('Перенесён дроп вместо новорега')
+ table=page.get_by_role('table',name='Отчёт о переносе доменов')
+ expect(table).to_have_count(1)
+ expect(table.locator('tbody tr')).to_have_count(2)
+ expect(table.locator('tbody tr').first).to_contain_text('ОК · В целевой сетке, из исходной удалён')
+ expect(table.locator('tbody tr').nth(1)).to_contain_text('ОК · В целевой сетке, из исходной удалён')
+ assert table.locator('tbody tr').first.locator('td').nth(4).inner_text()=='small-0.test'
+ assert '→' not in table.locator('tbody tr').first.locator('td').nth(4).inner_text()
+ page.evaluate('fixture.failReport=true')
+ bad=table.locator('tr.transferReportErrorRow[data-domain="second.test"]')
+ expect(bad).to_be_visible(timeout=10000)
+ expect(table.locator('.transferReportErrorDetail')).to_have_count(0)
+ bad.click()
+ expect(table.locator('.transferReportErrorDetail')).to_contain_text('Target missing')
+ bad.press('Enter')
+ expect(table.locator('.transferReportErrorDetail')).to_have_count(0)
+ page.evaluate('fixture.failReport=false')
+ expect(table.locator('.transferReportErrorRow')).to_have_count(0,timeout=10000)
+ assert not errors,errors
+ page.screenshot(path='/tmp/pagepilot-transfer-queue-progress.png')
+ browser.close()
+print('PASS: 4-domain progress, bold Drop replacement, per-domain errors, async report checking, separate queue and completion refresh')

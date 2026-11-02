@@ -3,12 +3,60 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid5
 
 import httpx
+from pydantic import BaseModel
 from sqlalchemy import select
 
 from app import models
 from app.core.config import get_settings
 from app.indexing import _indexing_task_id
 from app.network_state import domain_name, validate_markup
+
+
+class IndexNetworkRequest(BaseModel):
+    request_id: UUID
+
+
+def indexing_receipt(op):
+    if not op:
+        return None
+    return {'id': op.id, 'status': op.status, 'message': op.message,
+            'response_status': op.response_status,
+            'error_code': (op.request_payload or {}).get('transport_error'),
+            'task_id': (op.request_payload or {}).get('task_id'),
+            'count': len((op.request_payload or {}).get('domains', [])),
+            'created_at': op.created_at}
+
+
+def latest_indexing(db, site):
+    return db.scalar(select(models.NetworkOperation).where(
+        models.NetworkOperation.site_id == site.id,
+        models.NetworkOperation.action == 'indexing')
+        .order_by(models.NetworkOperation.created_at.desc()).limit(1))
+
+
+def request_indexing(db, site, request_id, initiator):
+    from app.project_network import network_lock, read_network
+    # Scope the idempotency key to the project, including clients retrying after a timeout.
+    source_id = str(uuid5(UUID(site.id), str(request_id)))
+    receipt_id = str(uuid5(UUID(source_id), 'network-indexing'))
+    with network_lock(db, 'indexing-request:' + site.id):
+        existing = db.get(models.NetworkOperation, receipt_id)
+        if existing:
+            return indexing_receipt(existing)
+        recent = latest_indexing(db, site)
+        from app.reglue_history import utc
+        if recent and (recent.status in ('index_queued', 'index_submitting', 'index_unknown')
+                or (recent.status == 'index_submitted' and utc(recent.created_at) > datetime.now(timezone.utc) - timedelta(minutes=5))):
+            return indexing_receipt(recent)
+        # Refresh Webdev before building the list; never submit a stale cached network.
+        state = read_network(db, site)
+        # Reading can also recover an automatic post-reglue indexing receipt.
+        recent = latest_indexing(db, site)
+        if recent and recent.status in ('index_queued', 'index_submitting', 'index_unknown'):
+            return indexing_receipt(recent)
+        op = queue_indexing(db, site, state, source_id, initiator)
+        db.commit()
+        return indexing_receipt(op)
 
 
 def verified(state, expected):
@@ -30,6 +78,9 @@ def queue_indexing(db, site, state, source_id, initiator):
     existing = db.get(models.NetworkOperation, receipt)
     if existing:
         return existing
+    if state.get('canon'):
+        from app.network_sitemap import queue
+        queue(db, site, source_id, initiator)
     amp = {domain_name(d) for d in state.get('amp_domains', [])}
     amp.update(domain_name(d) for d, kind in (site.domain_types or {}).items() if kind == 'amp')
     domains = list(dict.fromkeys(domain_name(d) for d in state.get('domains', [])))
@@ -83,6 +134,7 @@ def submit_network_indexing(db, operation_id, *, client=None):
                 op.message = f'Сервис не подтвердил номер задачи (HTTP {response.status_code}). Автоматическая повторная отправка отключена: проверьте результат в сервисе индексации.'
         except Exception as error:
             op.status = 'index_unknown'
+            op.request_payload = {**op.request_payload, 'transport_error': type(error).__name__}
             op.message = f'Ответ сервиса индексации не подтверждён ({type(error).__name__}). Запрос мог выполниться; повторная отправка отключена.'
         finally:
             if client is None:
@@ -91,6 +143,8 @@ def submit_network_indexing(db, operation_id, *, client=None):
 
 
 def process_network_indexing(db, limit=20):
+    from app.network_sitemap import process_pending
+    process_pending(db, limit)
     from app.project_network import read_network, NetworkConflict
     # Recover confirmation when the browser closed or Webdev answered late.
     pending = db.scalars(select(models.NetworkOperation).where(

@@ -1,0 +1,4 @@
+.domainRedirectInlineField { position:relative; display:inline-flex; align-items:center; height:28px; min-width:120px; vertical-align:middle; }
+.domainRedirectInlineField > span { display:inline-flex; align-items:center; gap:6px; visibility:hidden; }
+.domainRedirectsTable .domainRedirectInlineField input { position:absolute; inset:0; width:100%; min-width:0; height:28px; min-height:28px; margin:0; padding:3px 6px; box-sizing:border-box; font:inherit; border-radius:6px; }
+.domainRedirectInlineActions { display:inline-flex; align-items:center; gap:6px; margin:0; padding:0; }

@@ -109,8 +109,13 @@ def project_network_state(project: dict) -> dict:
         "amp_domains": list(dict.fromkeys([*amp_domains, *filter(None, [amp, prev_amp])])),
         "canon": domain_name(settings.get("canon")),
         "prev": domain_name(settings.get("prev")),
-        "reserve": domain_name(settings.get("reserveOption", settings.get("reserve"))),
+        "reserve": domain_name(settings.get("reserveOption") or settings.get("reserve")),
+        "reserved_domains": list(dict.fromkeys(filter(None, [domain_name(settings.get("reserveOption")), domain_name(settings.get("reserve"))]))),
         "domains": list(dict.fromkeys(domains)),
+        "domain_redirects": settings.get("redirects") if isinstance(settings.get("redirects"), list) else [],
+        "has_domain_redirects": isinstance(settings.get("redirects"), list),
+        "page_redirects": settings.get("pageRedirects") if isinstance(settings.get("pageRedirects"), list) else [],
+        "has_page_redirects": isinstance(settings.get("pageRedirects"), list),
         "alternateMarkup": head.get("alternateMarkup") if isinstance(head.get("alternateMarkup"), str) else "",
         "enableAlternates": bool(head.get("enableAlternates")),
         "enableCanonical": bool(head.get("enableCanonical")),
@@ -122,9 +127,20 @@ def project_network_state(project: dict) -> dict:
 
 def observe_network(site, project: dict) -> dict:
     state = project_network_state(project)
+    from app.reglue_history import observe_main
+    observe_main(site, site.cache_canon, state['canon'])
     settings = project.get("settings") if isinstance(project.get("settings"), dict) else {}
+    if not any(key in settings for key in ("reserveOption", "reserve")):
+        for key in ("reserve", "reserved_domains"):
+            state[key] = (site.network_state or {}).get(key, state[key])
     if not isinstance(settings.get("domains"), list):
         state["domains"] = (site.network_state or {}).get("domains", [])
+    if "redirects" not in settings:
+        for key in ("domain_redirects", "has_domain_redirects"):
+            state[key] = (site.network_state or {}).get(key, state[key])
+    if "pageRedirects" not in settings:
+        for key in ("page_redirects", "has_page_redirects"):
+            state[key] = (site.network_state or {}).get(key, state[key])
     if not any(key in settings for key in ("amp", "prevAmp", "ampDomains", "ampList")):
         for key in ("amp", "prev_amp", "amp_domains"):
             state[key] = (site.network_state or {}).get(key, state[key])
@@ -154,25 +170,51 @@ def observe_network(site, project: dict) -> dict:
     ]))
     site.domain_types = {**(site.domain_types or {}), **{domain: "amp" for domain in state["amp_domains"]}}
     previous = site.network_state or {}
-    added_at = dict(previous.get("domain_added_at") or {})
-    addition_history = list(previous.get("domain_addition_history") or [])
-    # Establish a baseline without inventing dates for pre-existing domains.
-    if "domains" in previous and isinstance(settings.get("domains"), list):
-        known = set(previous.get("domains") or []) | set(previous.get("amp_domains") or [])
-        observed_at = datetime.now(timezone.utc).isoformat()
-        for domain in [*state["domains"], *state["amp_domains"]]:
-            if domain not in known:
-                if added_at.get(domain) and not any(event.get("domain") == domain and event.get("added_at") == added_at[domain] for event in addition_history):
-                    addition_history.append({"domain": domain, "added_at": added_at[domain]})
-                added_at[domain] = observed_at
-                addition_history.append({"domain": domain, "added_at": observed_at})
-    state["domain_added_at"] = added_at
-    state["domain_addition_history"] = addition_history
+    state["protected_main_domains"] = list(dict.fromkeys([
+        *previous.get("protected_main_domains", []),
+        *([state["canon"]] if getattr(site, "project_status", None) == "mass_actions" and state["canon"] else []),
+    ]))
+    track_domain_membership(previous, state, settings)
     state["history_overrides"] = previous.get("history_overrides", {})
     state["history_edits"] = previous.get("history_edits", [])
     apply_history_overrides(site, state["history_overrides"])
+    mark_project_identity(site, state["domains"])
     site.network_state = state
     return state
+
+
+def track_domain_membership(previous, state, settings):
+    """Keep observed membership periods; unknown historical dates remain unknown."""
+    added_at = dict(previous.get("domain_added_at") or {})
+    removed_at = dict(previous.get("domain_removed_at") or {})
+    addition_history = list(previous.get("domain_addition_history") or [])
+    periods = [dict(period) for period in previous.get("domain_membership_history") or []]
+    known = set(previous.get("domains") or []) | set(previous.get("amp_domains") or [])
+    current = set(state["domains"]) | set(state["amp_domains"])
+    # Existing members establish a baseline, without assigning today's date to old domains.
+    for domain in sorted(known if "domains" in previous else current):
+        if not any(period.get("domain") == domain and period.get("removed_at") is None for period in periods):
+            periods.append({"domain": domain, "added_at": added_at.get(domain), "removed_at": None})
+    authoritative = isinstance(settings.get("domains"), list) or any(
+        key in settings for key in ("amp", "prevAmp", "ampDomains", "ampList"))
+    if "domains" in previous and authoritative:
+        observed_at = datetime.now(timezone.utc).isoformat()
+        for domain in sorted(known - current):
+            removed_at[domain] = observed_at
+            for period in reversed(periods):
+                if period.get("domain") == domain and period.get("removed_at") is None:
+                    period["removed_at"] = observed_at
+                    break
+        for domain in sorted(current - known):
+            if added_at.get(domain) and not any(event.get("domain") == domain and event.get("added_at") == added_at[domain] for event in addition_history):
+                addition_history.append({"domain": domain, "added_at": added_at[domain]})
+            added_at[domain] = observed_at
+            addition_history.append({"domain": domain, "added_at": observed_at})
+            periods.append({"domain": domain, "added_at": observed_at, "removed_at": None})
+    state["domain_added_at"] = added_at
+    state["domain_removed_at"] = removed_at
+    state["domain_addition_history"] = addition_history
+    state["domain_membership_history"] = periods
 
 
 def state_revision(state: dict) -> str:
@@ -184,6 +226,22 @@ HISTORY_FIELDS = {
     "alternate": "alternate_domain_history",
     "x_default": "x_default_history",
 }
+
+
+def is_project_identity(site, domain):
+    """Webdev's immutable project name, allowing the equivalent www spelling."""
+    name = domain_name(site.name).removeprefix("www.")
+    return bool(name) and domain_name(domain).removeprefix("www.") == name
+
+
+def mark_project_identity(site, domains=None):
+    """Local protection flags; never change the remote Main or head markup."""
+    members = domains if domains is not None else [
+        *(site.network_state or {}).get("domains", []), *(site.cache_domains or []),
+    ]
+    identity = [domain_name(domain) for domain in members if is_project_identity(site, domain)]
+    for attribute in HISTORY_FIELDS.values():
+        setattr(site, attribute, list(dict.fromkeys([*(getattr(site, attribute) or []), *identity])))
 
 
 def apply_history_overrides(site, overrides):

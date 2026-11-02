@@ -32,7 +32,7 @@ def env(monkeypatch):
             def __init__(self):
                 self.calls, self.fail, self.delayed, self.reachable = [], None, False, True
                 self.data = {
-                    "settings": {"canon": "main.test", "prev": "old.test", "reserve": "reserve.test", "reserveOption": "reserve.test", "domains": ["main.test", "reserve.test", "next.test"], "alternate": {"fakeMain": ["/cz/"], "currentFakeMain": "/cz/"}},
+                    "settings": {"redirects": [], "canon": "main.test", "prev": "old.test", "reserve": "reserve.test", "reserveOption": "reserve.test", "domains": ["main.test", "reserve.test", "next.test"], "alternate": {"fakeMain": ["/cz/"], "currentFakeMain": "/cz/"}},
                     "head": {"alternateMarkup": MARKUP, "enableAlternates": True, "canonicalDefaultMarkup": "untouched", "customHeaders": [{"key": "X-Test", "value": "keep"}]},
                 }
             def project(self): return copy.deepcopy(self.data)
@@ -602,8 +602,10 @@ def test_transfer_calendar_month_and_unknown_date(env):
     assert require_transfer_allowed(db, site, 'next.test') is None
     site.network_state = {**site.network_state, 'domain_added_at': {'next.test': '2026-10-16T11:28:21+00:00'}}
     db.commit()
+    assert require_transfer_allowed(db, site, 'www.next.test', datetime(2026, 11, 16, 11, 28, 20, tzinfo=timezone.utc)) is None
+    site.cache_canon = 'next.test'; db.commit()
     with pytest.raises(ValueError, match='2026-11-16'):
-        require_transfer_allowed(db, site, 'www.next.test', datetime(2026, 11, 16, 11, 28, 20, tzinfo=timezone.utc))
+        require_transfer_allowed(db, site, 'next.test', datetime(2026, 11, 16, 11, 28, 20, tzinfo=timezone.utc))
     require_transfer_allowed(db, site, 'next.test', datetime(2026, 11, 16, 11, 28, 21, tzinfo=timezone.utc))
 
 
@@ -626,3 +628,158 @@ def test_partial_cache_event_does_not_reset_membership_dates(env):
     observe_network(site, {'settings': {'canon': 'main.test'}})
     assert 'next.test' in site.network_state['domains']
     assert observe_network(site, remote.data)['domain_added_at']['next.test'] == original
+
+
+@pytest.mark.parametrize('enabled', [True, False])
+def test_canonical_switch_preserves_markup_and_other_head_settings(env, enabled):
+    db, site, remote = env
+    remote.data['head']['enableCanonical'] = not enabled
+    state = network.read_network(db, site)
+    result = change(env, 'alternates', state['revision'], alternate_markup=MARKUP,
+                    enable_alternates=True, enable_canonical=enabled)
+    assert result['enableCanonical'] is enabled
+    assert result['operations'][0]['status'] == 'confirmed'
+    assert remote.calls[-1][0:2] == ('PATCH', '/projects/update-head')
+    assert remote.calls[-1][2]['enableCanonical'] is enabled
+    assert remote.data['head']['canonicalDefaultMarkup'] == 'untouched'
+    assert remote.data['head']['customHeaders'] == [{'key': 'X-Test', 'value': 'keep'}]
+
+
+@pytest.mark.parametrize('enabled', [True, False])
+def test_dynamic_routes_switch_preserves_paths_and_other_settings(env, enabled):
+    db, site, remote = env
+    alternate = remote.data['settings']['alternate']
+    alternate.update(enableDynamicRoutes=not enabled, fakeMain=['/cs/', '/bonus/'],
+                     currentFakeMain='/cs/', redirectFakeMainsToCurrent=True, custom={'keep': True})
+    state = network.read_network(db, site)
+    result = change(env, 'select_fake_main', state['revision'], enable_dynamic_routes=enabled)
+    assert result['fake_main_enabled'] is enabled
+    assert result['operations'][0]['status'] == 'confirmed'
+    assert remote.data['settings']['alternate'] == {**alternate, 'enableDynamicRoutes': enabled}
+    assert result['fake_main_paths'] == ['/cs/', '/bonus/']
+    assert result['fake_main_current'] == '/cs/'
+
+
+def test_toggle_is_pending_until_remote_confirms(env):
+    db, site, remote = env
+    state = network.read_network(db, site)
+    remote.delayed = True
+    result = change(env, 'alternates', state['revision'], alternate_markup=MARKUP,
+                    enable_canonical=True)
+    assert result['operations'][0]['status'] == 'pending'
+    assert result['enableCanonical'] is False
+
+
+def test_membership_history_tracks_unflagged_domains_and_every_visit(env):
+    db, site, remote = env
+    initial = network.read_network(db, site)
+    assert initial['domain_removed_at'] == {}
+    baseline = [period for period in initial['domain_membership_history'] if period['domain'] == 'reserve.test']
+    assert baseline == [{'domain': 'reserve.test', 'added_at': None, 'removed_at': None}]
+    remote.data['settings']['domains'].append('unflagged.test')
+    first = network.read_network(db, site)
+    added_at = first['domain_added_at']['unflagged.test']
+    remote.data['settings']['domains'].remove('unflagged.test')
+    removed = network.read_network(db, site)
+    removed_at = removed['domain_removed_at']['unflagged.test']
+    assert removed_at >= added_at
+    assert 'unflagged.test' not in removed['main_history'] + removed['alternate_history'] + removed['x_default_history']
+    assert removed['domain_membership_history'][-1] == {'domain': 'unflagged.test', 'added_at': added_at, 'removed_at': removed_at}
+    assert 'unflagged.test' in removed['domain_bans']
+    assert network.read_network(db, site)['domain_removed_at']['unflagged.test'] == removed_at
+    remote.data['settings']['domains'].append('unflagged.test')
+    reentered = network.read_network(db, site)
+    periods = [period for period in reentered['domain_membership_history'] if period['domain'] == 'unflagged.test']
+    assert len(periods) == 2
+    assert periods[0]['removed_at'] == removed_at
+    assert periods[1]['removed_at'] is None and periods[1]['added_at'] > added_at
+    # Historical domains can still be classified and their flags edited.
+    remote.data['settings']['domains'].remove('unflagged.test')
+    network.read_network(db, site)
+    saved = network.update_domain_type(db, site, network.DomainTypeUpdate(domain='unflagged.test', domain_type='drop'))
+    assert saved['domain_types']['unflagged.test'] == 'drop'
+    flags = network.update_domain_history(db, site, network.DomainHistoryUpdate(domain='unflagged.test', field='main', checked=True), 'test')
+    assert 'unflagged.test' in flags['main_history']
+
+
+def test_partial_observations_do_not_create_removals_or_duplicate_periods(env):
+    db, site, remote = env
+    initial = network.read_network(db, site)
+    assert observe_network(site, {'settings': {'canon': 'main.test'}})['domain_removed_at'] == {}
+    current = observe_network(site, remote.data)
+    assert current['domain_membership_history'] == initial['domain_membership_history']
+    assert current['domain_added_at'] == initial['domain_added_at']
+
+
+def test_preexisting_domain_removal_has_unknown_addition_date(env):
+    db, site, remote = env
+    network.read_network(db, site)
+    remote.data['settings']['domains'].remove('reserve.test')
+    removed = network.read_network(db, site)
+    period = next(period for period in removed['domain_membership_history'] if period['domain'] == 'reserve.test')
+    assert period['added_at'] is None
+    assert period['removed_at'] == removed['domain_removed_at']['reserve.test']
+
+
+def test_new_project_entry_date_is_recorded_and_returned(env):
+    db, site, remote = env
+    from datetime import datetime, timezone
+    stored = site.added_to_system_at
+    assert stored is not None
+    assert abs((stored.replace(tzinfo=timezone.utc) - datetime.now(timezone.utc)).total_seconds()) < 5
+    assert network.read_network(db, site)['added_to_system_at'] == stored
+
+
+def test_delete_multiple_domains_is_one_job_and_validates_entire_list(env,monkeypatch):
+    monkeypatch.setattr(network,"project_server_url",lambda *args:"https://server.test/")
+    db,site,remote=env
+    remote.data['settings']['domains'] += ['one.main.test','two.main.test','three.main.test']
+    state=network.read_network(db,site)
+    names=['one.main.test','two.main.test','three.main.test']
+    network.change_network(db,site,network.NetworkChange(request_id=uuid4(),action='delete_domain',
+        revision=state['revision'],domains=names),'user')
+    assert len(remote.calls)==1
+    assert remote.calls[0][1]=='/site-config/delete'
+    assert remote.calls[0][2]['domains']==names
+
+
+def test_multi_delete_never_sends_a_request_when_one_item_is_protected(env):
+    db,site,remote=env
+    remote.data['settings']['domains'] += ['one.main.test']
+    state=network.read_network(db,site)
+    with pytest.raises(ValueError,match='Main'):
+        network.change_network(db,site,network.NetworkChange(request_id=uuid4(),action='delete_domain',
+            revision=state['revision'],domains=['one.main.test','main.test']),'user')
+    assert remote.calls==[]
+
+
+def test_jp_net_network_refresh_classifies_newregs_not_children_of_suffix(env):
+    db,site,remote=env
+    remote.data['settings']['domains']+=['lemoncasino.jp.net','child.lemoncasino.jp.net']
+    site.domain_types={'jp.net':'drop'};db.commit()
+    result=network.read_network(db,site)
+    assert result['domain_types']['lemoncasino.jp.net']=='newreg'
+    assert result['domain_classification']['lemoncasino.jp.net']['is_subdomain'] is False
+    child=result['domain_classification']['child.lemoncasino.jp.net']
+    assert child['is_subdomain'] and child['parent_domain']=='lemoncasino.jp.net' and child['parent_type']=='newreg'
+    assert not remote.calls
+
+
+def test_network_read_updates_fibery_even_with_manual_flag_and_unchanged_revision(env):
+    db,site,remote=env
+    site.fibery_name_manual=True
+    site.project_status='hands_only'
+    db.commit()
+    before=network.read_network(db,site)
+    remote.data['settings']['webdevDuty']={'fibery':' #1715_lemon casino_PL_NEWSPLIT '}
+    result=network.read_network(db,site)
+    assert result['fibery_name']=='#1715_lemon casino_PL_NEWSPLIT'
+    assert result['revision']==before['revision']
+    db.refresh(site)
+    assert site.fibery_name==result['fibery_name']
+    assert site.fibery_name_manual is True and site.project_status=='hands_only'
+    remote.data['settings']['webdevDuty']={}
+    assert network.read_network(db,site)['fibery_name']==result['fibery_name']
+    remote.data['settings']['webdevDuty']['fibery']=''
+    assert network.read_network(db,site)['fibery_name'] is None
+    assert not remote.calls

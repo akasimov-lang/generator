@@ -10,6 +10,7 @@ BRANDS = {
     "Mostbet": ["mostbet", "most bet", "мостбет"], "Pin-Up": ["pinup", "pin-up", "pin up", "пин ап", "пинап"],
     "Pinco": ["pinco", "пинко"],
     "Pelican": ["pelican"],
+    "Ozwin": ["ozwin"], "SavaSpin": ["savaspin", "sava spin"], "69games": ["69games", "69 games"],
     "1xslots": ["1xslots", "1x slots"],
     "Qizilbilet": ["qizilbilet", "qızılbilet", "qizil bilet"],
     "MerkurXtip": ["merkurxtip", "merkur xtip", "merkur-xtip"],

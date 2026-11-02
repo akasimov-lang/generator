@@ -28,6 +28,8 @@ def refresh_task_status(db, task_id):
         task.status = 'scheduled'
     elif task.auto_publish and 'approved' in active:
         task.status = 'publishing'
+    elif active <= {'approved', 'published'}:
+        task.status = 'approved'
     elif active == {'draft'}:
         task.status = 'created'
     else:

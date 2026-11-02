@@ -10,6 +10,9 @@ def scoped_models(ids):
     result = [(models.Site, models.Site.id.in_(ids))]
     for mapper in models.Base.registry.mappers:
         cls = mapper.class_
+        # Global inventory is shared; its API redacts inaccessible assignment details.
+        if cls is models.ReglueReserveDomain:
+            continue
         if hasattr(cls, 'site_id'):
             condition = cls.site_id.in_(ids)
             if cls is models.PromptTemplate:
@@ -68,7 +71,7 @@ def guard_writes(db, flush_context, instances):
                 (db.info.get('allowed_project_keys') is not None and (obj.name, obj.cache_server_ip) not in db.info['allowed_project_keys'])):
             raise HTTPException(403, 'Нет доступа к проекту.')
         if hasattr(obj, 'site_id') and obj.site_id not in ids:
-            if not (isinstance(obj, models.PromptTemplate) and obj.site_id is None):
+            if not (isinstance(obj, (models.PromptTemplate, models.ReglueReserveDomain)) and obj.site_id is None):
                 raise HTTPException(403, 'Нет доступа к проекту.')
         guard_references(db, {key: getattr(obj, key) for key in
             ('task_id', 'content_item_id', 'section_id', 'parent_id', 'publication_campaign_id')

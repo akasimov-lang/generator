@@ -35,6 +35,18 @@ def content():
             for q in ['Where can I find current terms?', 'How do I check availability?', 'Where can I get support?']])
 
 
+def visual_art(seed=0):
+    def svg(n):
+        return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M {n} 10 L 90 {n} L 30 90 Z" fill="#389b6e"/></svg>'
+    return {'hero': svg(seed+1), 'icons': {section.id:svg(seed+i+2) for i,section in enumerate(content().sections)}, 'logo':svg(seed+6), 'favicon':svg(seed+7)}
+
+
+def generated_design():
+    return {'design': document()['design'], 'css': templates.design_css(document()['design']),
+            'rationale': 'Generated composition', 'visual_assets': visual_art(),
+            'menu_labels': {'overview':'Overview','conditions':'Conditions','support':'Support','faq':'FAQ'}}
+
+
 def document():
     c = content()
     return {'content': c.model_dump(), 'menu': templates.default_menu(c),
@@ -127,7 +139,8 @@ def test_download_html_uses_asset_and_bundle_is_self_contained():
     assert 'src="assets/hero.svg"' in downloadable_html(r)
     archive = zipfile.ZipFile(io.BytesIO(templates.build_archive(r)))
     assert {'index.html', 'template.json', 'validation.json'} <= set(archive.namelist())
-    assert b'<svg viewBox' in archive.read('index.html')
+    assert b'src="assets/hero.svg"' in archive.read('index.html')
+    assert archive.read('assets/hero.svg')
     r.status = 'failed'
     with pytest.raises(ValueError): templates.build_archive(r)
 
@@ -185,7 +198,7 @@ def test_generation_uses_gemini_and_persists_audited_result(db, monkeypatch):
     calls=[]
     async def fake(provider, prompt, **kwargs):
         calls.append(prompt)
-        result = {'design': document()['design'], 'css': templates.design_css(document()['design']), 'rationale': 'Generated composition'} if 'web art director' in prompt else content().model_dump()
+        result = generated_design() if 'web art director' in prompt else content().model_dump()
         return {'candidates': [{'content': {'parts': [{'text': json.dumps(result)}]}}], 'usageMetadata': {'totalTokenCount': 10}}
     async def capture(html):
         templates.validate_html(html)
@@ -272,12 +285,13 @@ def test_manual_competitors_without_search_provider(db, monkeypatch):
     assert [s['url'] for s in report['sources']] == ['https://example.com', 'https://example.org']
 
 
-def test_multiple_queries_merge_manual_sources(db, monkeypatch):
+@pytest.mark.parametrize('results_per_query', [1, 10])
+def test_multiple_queries_merge_manual_sources(db, monkeypatch, results_per_query):
     from app import services, template_sources
     queries = []
     async def serp(provider, query, geo, language):
         queries.append(query)
-        return [{'url': 'https://example.com/', 'position': 1}, {'url': f'https://{query}.org', 'position': 2}]
+        return [{'url': 'https://example.com/', 'position': 1}, *[{'url': f'https://{query}{i}.org', 'position': i+2} for i in range(results_per_query)]]
     async def fetch(url, profile):
         return {'google_html':'<html><body>'+('Source content. '*20)+'</body></html>', 'capture': {'status':'google_ready','source':'google_rich_results'}}
     async def gemini(*args, **kwargs):
@@ -295,7 +309,7 @@ def test_multiple_queries_merge_manual_sources(db, monkeypatch):
     db.add(r); db.commit()
     report = asyncio.run(templates.research_competitors(db, r, request, None))
     assert queries == ['one', 'two']
-    assert len(report['sources']) == 3
+    assert len(report['sources']) == min(10, 1+2*results_per_query)
     assert report['sources'][0]['origin'] == 'manual'
 
 
@@ -413,7 +427,8 @@ def test_rejects_public_generation_artifacts(patch):
     with pytest.raises(ValueError): templates.PageContent.model_validate({**content().model_dump(),**patch})
 
 
-def test_content_stage_does_not_call_designer(db,monkeypatch):
+@pytest.mark.parametrize('section_id', ['overview', 'metody-platnosci-wpłaty-wypłaty'])
+def test_content_stage_does_not_call_designer(db,monkeypatch,section_id):
     from app import services
     user=models.User(username='two-stage',password_hash='')
     provider=models.AiProvider(name='g',provider_type='gemini',endpoint_url='https://api.test',api_key='test')
@@ -422,12 +437,45 @@ def test_content_stage_does_not_call_designer(db,monkeypatch):
     r=models.SiteTemplate(created_by_user_id=user.id,brand='Brand',geo='DE',language='en',request_data=request.model_dump())
     db.add(r);db.commit()
     calls=[]
+    generated = content().model_dump()
+    generated['sections'][0]['id'] = section_id
     async def gemini(provider,prompt,**kwargs):
         calls.append(prompt)
-        return {'candidates':[{'content':{'parts':[{'text':json.dumps(content().model_dump())}]}}]}
+        return {'candidates':[{'content':{'parts':[{'text':json.dumps(generated)}]}}]}
     monkeypatch.setattr(services,'call_gemini',gemini)
     assert asyncio.run(templates.generate(db,r,content_only=True))['status']=='content_ready'
     assert len(calls)==1 and not r.html and 'design' not in r.document
+    expected = 'overview' if section_id == 'overview' else 'metody-platnosci-wplaty-wyplaty'
+    assert r.document['content']['sections'][0]['id'] == expected
+    assert r.document['menu'][0]['section_id'] == expected
+    assert r.document['content']['sections'][0]['paragraphs'] == generated['sections'][0]['paragraphs']
+
+
+@pytest.mark.parametrize('ids', [
+    ['wpłaty', 'wplaty', 'WPŁATY'],
+    ['a' * 60, 'a' * 59 + 'b', 'support'],
+    ['123 wpłaty', '💳', 'FAQ'],
+])
+def test_generated_section_ids_are_safe_unique_and_do_not_mutate_input(ids):
+    data = content().model_dump()
+    for section, anchor in zip(data['sections'], ids):
+        section['id'] = anchor
+    before = copy.deepcopy(data)
+    normalized = templates.normalize_generated_section_ids(data)
+    validated = templates.PageContent.model_validate(normalized)
+    assert data == before
+    assert len({s.id for s in validated.sections}) == len(ids)
+    for old, new in zip(data['sections'], normalized['sections']):
+        assert {**old, 'id': new['id']} == new
+    if 'wplaty' in ids:
+        assert normalized['sections'][1]['id'] == 'wplaty'
+
+
+def test_generated_section_id_repair_preserves_other_validation():
+    data = content().model_dump()
+    data['sections'][0]['id'] = None
+    with pytest.raises(ValueError):
+        templates.PageContent.model_validate(templates.normalize_generated_section_ids(data))
 
 
 def test_research_stage_waits_for_manual_html_without_generating_content(db, monkeypatch):
@@ -531,17 +579,18 @@ def test_manual_source_limit_and_revision_safe_deletion(db):
     app.dependency_overrides[require_auth] = lambda: actor
     client = TestClient(app)
     path = '/site-templates/source-drafts'
-    rows = [client.post(path, json={'html': '<title>Mostbet</title>'}).json() for _ in range(5)]
-    assert client.post(path, json={'html': 'sixth'}).status_code == 422
+    rows = [client.post(path, json={'html': '<title>Mostbet</title>'}).json() for _ in range(10)]
+    assert client.post(path, json={'html': 'eleventh'}).status_code == 422
     first = rows[0]
     assert first['suggested_brand'] == 'Mostbet'
+    assert first['title'] == 'Mostbet' and first['created_at']
     url = path + '/' + first['id']
     assert client.delete(url + '?revision=0').status_code == 409
     actor['id'] = other.id
     assert client.delete(url + '?revision=1').status_code == 404
     actor['id'] = user.id
     assert client.delete(url + '?revision=1').status_code == 200
-    assert len(client.get(path).json()) == 4
+    assert len(client.get(path).json()) == 9
     assert client.post(path, json={'html': 'replacement'}).status_code == 201
 
 
@@ -574,3 +623,83 @@ def test_template_source_deletion_invalidates_research_and_respects_busy(db):
     assert row.document['research']['analysis'] is None
     assert row.document['research']['sources'] == []
     assert client.get(path).json() == []
+
+
+def test_original_art_and_complete_offline_archive():
+    from app.template_visual_assets import validate_assets, image_uri
+    r=row();r.brand='Онлайн казино'
+    r.document['visual_assets']=validate_assets(visual_art(), content(), r.brand, [])
+    r.document['generated_css']=generated_design()['css']
+    r.html=templates.render(r,r.document)
+    assert 'data:image/svg+xml;base64,' in r.html
+    assert '<link rel="icon" type="image/svg+xml"' in r.html
+    archive=zipfile.ZipFile(io.BytesIO(templates.build_archive(r)))
+    html=archive.read('index.html').decode()
+    import re
+    refs=re.findall(r'(?:src|href)="(assets/[^"<>]+)"',html)+re.findall(r'url\((assets/[^)]+)\)',html)
+    assert len(refs)>=6
+    assert all(path in archive.namelist() for path in refs)
+    assert 'assets/generated-logo.svg' in refs and 'assets/generated-favicon.svg' in refs
+    assert all(image_uri(svg) not in html for svg in r.document['visual_assets']['svg'].values())
+    with pytest.raises(ValueError,match='повторяет'):
+        validate_assets(visual_art(),content(),r.brand,[r])
+    recolored=json.loads(json.dumps(visual_art()).replace('#389b6e','#123456'))
+    with pytest.raises(ValueError,match='повторяет'):
+        validate_assets(recolored,content(),r.brand,[r])
+    assert validate_assets(visual_art(10),content(),r.brand,[r])
+    missing=visual_art();del missing['logo']
+    with pytest.raises(ValueError):validate_assets(missing,content(),r.brand,[])
+
+
+@pytest.mark.parametrize('svg',[
+    '<svg viewBox="0 0 10 10"><script>alert(1)</script></svg>',
+    '<svg viewBox="0 0 10 10"><image href="https://external.test/x" width="10" height="10"/></svg>',
+    '<svg viewBox="0 0 10 10"><rect width="10" height="10" onclick="alert(1)" fill="red"/></svg>',
+    '<!DOCTYPE svg [<!ENTITY x SYSTEM "file:///etc/passwd">]><svg viewBox="0 0 10 10"><text>&x;</text></svg>',
+    '<svg viewBox="0 0 10 10"><rect width="10" height="10" fill="url(//external.test/a)"/></svg>',
+])
+def test_generated_svg_rejects_active_and_external_content(svg):
+    from app.template_visual_assets import safe_svg
+    with pytest.raises(ValueError):safe_svg(svg)
+
+
+def test_template_sources_allow_ten_and_reject_eleventh(db):
+    app=FastAPI();app.include_router(router);app.dependency_overrides[get_db]=lambda:db
+    user=models.User(username='ten-sources',password_hash='');db.add(user);db.flush()
+    r=models.SiteTemplate(created_by_user_id=user.id,brand='Brand',geo='PL',language='pl',request_data={},status='awaiting_sources')
+    db.add(r);db.commit()
+    app.dependency_overrides[require_auth]=lambda:{'id':user.id,'is_admin':True}
+    client=TestClient(app);path=f'/site-templates/{r.id}/sources'
+    for i in range(10):
+        response=client.post(path,json={'url':f'https://competitor-{i}.test/','html':f'<title>Competitor {i}</title>'})
+        assert response.status_code==201,response.text
+    assert len(client.get(path).json())==10
+    assert client.post(path,json={'html':'eleventh'}).status_code==422
+    from app.site_templates_api import CreateTemplateRequest
+    from uuid import uuid4
+    refs=[{'id':str(uuid4()),'revision':1} for i in range(10)]
+    assert len(CreateTemplateRequest(geo='PL',ai_provider_id='test',source_drafts=refs).source_drafts)==10
+    with pytest.raises(ValueError):CreateTemplateRequest(geo='PL',ai_provider_id='test',source_drafts=refs+[{'id':str(uuid4()),'revision':1}])
+
+
+def test_automatic_knowledge_attachment_stops_at_ten(db,monkeypatch):
+    import hashlib
+    from app import template_knowledge,template_knowledge_library
+    user=models.User(username='knowledge-ten',password_hash='');db.add(user);db.flush()
+    r=models.SiteTemplate(created_by_user_id=user.id,brand='Brand',geo='PL',language='pl',request_data={})
+    db.add(r);db.flush()
+    entries=[]
+    for i in range(12):
+        html=f'<html><head><title>Competitor {i}</title></head><body><p>'+('Useful content for readers. '*30)+'</p></body></html>'
+        entries.append({'id':str(i),'url':f'https://c-{i}.test/','html':html,'sha256':hashlib.sha256(html.encode()).hexdigest(),'brand':'Brand','geo':'PL','added_at':'2026-10-22','filename':f'{i}.html','title':f'Competitor {i}'})
+    monkeypatch.setattr(template_knowledge_library,'entries',lambda *args,**kwargs:entries)
+    template_knowledge.attach_sources(db,r)
+    template_knowledge.attach_sources(db,r)
+    assert len(db.scalars(select(models.TemplateSource).where(models.TemplateSource.template_id==r.id)).all())==10
+    assert len(r.document['research']['sources'])==10
+
+
+def test_manual_url_limit_is_ten():
+    args={'brand':'Brand','geo':'PL','ai_provider_id':'test'}
+    assert len(templates.TemplateRequest(**args,competitors=' '.join(f'c{i}.test' for i in range(10))).competitor_urls())==10
+    with pytest.raises(ValueError):templates.TemplateRequest(**args,competitors=' '.join(f'c{i}.test' for i in range(11)))

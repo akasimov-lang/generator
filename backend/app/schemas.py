@@ -84,6 +84,8 @@ class SiteBrandUpdate(BaseModel):
 
 
 class SiteResponse(BaseModel):
+    cache_reserve: str | None = None
+    added_to_system_at: datetime | None = None
     network_domain_counts: dict[str, int] = Field(default_factory=dict)
     project_team: str | None = None
     menu_warning: str | None = None
@@ -135,6 +137,8 @@ class SiteResponse(BaseModel):
         return f"{server_id}.{domain}" if domain else server_id
 
     project_status: str
+    reglue_participation: bool = True
+    last_reglue_at: datetime | None = None
     is_test_project: bool
     has_menu: bool
     cache_synced_at: datetime | None
@@ -395,6 +399,7 @@ class MenuStructureGenerationCreate(BaseModel):
     include_faq: bool = True
     generate_title: bool = True
     collect_competitors: bool = True
+    homepage_interlinking: bool = True
     menu_types: list[Literal["header", "footer"]] = Field(default_factory=lambda: ["header"])
     section_ids: list[str] = Field(default_factory=list, max_length=200)
     auto_publish: bool = False
@@ -403,15 +408,17 @@ class MenuStructureGenerationCreate(BaseModel):
 
 class GeneratedMenuItem(BaseModel):
     title: str = Field(min_length=1, max_length=160)
+    slug: str | None = Field(default=None, max_length=240)
     children: list["GeneratedMenuItem"] = Field(default_factory=list, max_length=20)
-    content_kind: Literal["menu_page", "casino_review"] = "menu_page"
+    content_kind: Literal["menu_page", "casino_review", "technical_page"] = "menu_page"
+    technical_page_key: str | None = Field(default=None, max_length=40)
 
 
 class MenuStructurePreviewRequest(BaseModel):
     menu_type: Literal["header", "footer"] = "header"
     levels: int = Field(default=2, ge=1, le=3)
-    top_level_count: int = Field(default=5, ge=2, le=8)
-    mode: Literal["thematic", "casino_reviews"] = "thematic"
+    top_level_count: int = Field(default=5, ge=1, le=10)
+    mode: Literal["thematic", "casino_reviews", "technical_pages"] = "thematic"
     ai_provider_id: str | None = None
 
 
@@ -419,7 +426,7 @@ class MenuStructurePreviewResponse(BaseModel):
     menu_type: Literal["header", "footer"]
     levels: int
     top_level_count: int
-    mode: Literal["thematic", "casino_reviews"]
+    mode: Literal["thematic", "casino_reviews", "technical_pages"]
     geo: str
     language: str
     items: list[dict[str, Any]]
@@ -428,8 +435,8 @@ class MenuStructurePreviewResponse(BaseModel):
 class GeneratedMenuStructureApply(BaseModel):
     menu_type: Literal["header", "footer"] = "header"
     levels: int = Field(default=2, ge=1, le=3)
-    top_level_count: int = Field(default=5, ge=2, le=8)
-    mode: Literal["thematic", "casino_reviews"] = "thematic"
+    top_level_count: int = Field(default=5, ge=1, le=20)
+    mode: Literal["thematic", "casino_reviews", "technical_pages"] = "thematic"
     items: list[GeneratedMenuItem] = Field(min_length=1, max_length=20)
 
 

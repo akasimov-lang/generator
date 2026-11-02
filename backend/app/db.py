@@ -66,6 +66,8 @@ def apply_lightweight_migrations() -> None:
             "network_snapshot_history": "JSON DEFAULT '[]' NOT NULL",
             "cache_server_ip": "VARCHAR(120)",
             "project_status": "VARCHAR(32) DEFAULT 'working' NOT NULL",
+            "reglue_participation": "BOOLEAN DEFAULT TRUE NOT NULL",
+            "last_reglue_at": "TIMESTAMP WITH TIME ZONE",
             "is_test_project": "BOOLEAN DEFAULT FALSE NOT NULL",
             "has_menu": "BOOLEAN DEFAULT FALSE NOT NULL",
             "cache_synced_at": "TIMESTAMP WITH TIME ZONE",

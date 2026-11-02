@@ -1264,3 +1264,26 @@ def test_adopted_nested_node_repairs_missing_parent_and_confirms_status():
         db.commit()
         sync_project_cache(db, [project])
         assert child.sync_status == "pending"
+
+
+def test_full_and_direct_webdev_snapshots_overwrite_fibery_independent_of_status():
+    from app.project_cache import _apply_direct_project_snapshot
+    with make_session() as db:
+        site=models.Site(name='fibery-sync.test',base_url='https://fibery-sync.test',publication_endpoint='/projects/update',
+            external_project_id='fibery-sync',fibery_name=None,fibery_name_manual=True,project_status='mass_actions')
+        db.add(site);db.commit()
+        project={'id':'fibery-sync','name':site.name,'settings':{'canon':site.name,'domains':[site.name],
+                 'webdevDuty':{'fibery':'#1715_Project'}},'data':{'pages':[],'menu':{'header':[],'footer':[]}}}
+        sync_project_cache(db,[project]);db.refresh(site)
+        assert site.fibery_name=='#1715_Project' and site.fibery_name_manual is True
+        assert site.project_status=='mass_actions'
+        site.project_status='hands_only';db.commit()
+        project['settings']['webdevDuty']['fibery']='#999_Changed'
+        _apply_direct_project_snapshot(db,site,project);db.refresh(site)
+        assert site.fibery_name=='#999_Changed' and site.project_status=='hands_only'
+        project['settings']['webdevDuty']={}
+        sync_project_cache(db,[project]);db.refresh(site)
+        assert site.fibery_name=='#999_Changed'
+        project['settings']['webdevDuty']['fibery']=None
+        sync_project_cache(db,[project]);db.refresh(site)
+        assert site.fibery_name is None

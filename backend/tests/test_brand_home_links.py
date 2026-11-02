@@ -49,3 +49,10 @@ def test_homepage_is_unchanged_and_each_internal_page_is_linked():
     result = apply_brand_home_links(source, SimpleNamespace(brand='MerkurXtip', site_type='monobrand'))
     assert result['pages'][0] == source['pages'][0]
     assert all(p['content']['blocks'][0]['data']['text'] == '<a href="/">MerkurXtip</a>' for p in result['pages'][1:])
+
+
+def test_never_adds_anchor_inside_inline_heading_even_in_a_paragraph_block():
+    source = content('<h2>BetOnRed</h2> Normal paragraph about Bet On Red.')
+    result, changed = link_brand_paragraph(source, 'BetOnRed')
+    assert changed
+    assert result['blocks'][0]['data']['text']=='<h2>BetOnRed</h2> Normal paragraph about <a href="/">Bet On Red</a>.'

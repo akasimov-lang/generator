@@ -117,11 +117,12 @@ def test_manual_site_type_survives_sync_without_changing_brand(site_type):
 
 
 @pytest.mark.parametrize('team', ['', ' Rankomen ', 'Kalendula', None])
-def test_team_cache_updates_even_with_manual_fibery_name(team):
+def test_team_and_fibery_cache_update_even_with_manual_flag(team):
     from app.project_cache import _apply_fibery_name
     site = models.Site(name='team.test', fibery_name='#1_Manual', fibery_name_manual=True)
     _apply_fibery_name(site, {'webdevDuty':{'team':team,'fibery':'overwrite'}})
     assert site.project_team == (team or '').strip()
-    assert site.fibery_name == '#1_Manual'
+    assert site.fibery_name == 'overwrite'
+    assert site.fibery_name_manual is True
     _apply_fibery_name(site, {'webdevDuty':{'fibery':'still no team'}})
     assert site.project_team == (team or '').strip()

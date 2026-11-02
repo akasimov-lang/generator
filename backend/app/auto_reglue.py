@@ -9,10 +9,11 @@ from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID, uuid5, NAMESPACE_URL
 
 import httpx
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator, model_serializer
 from sqlalchemy import select
 
 from app import models, project_network
+from app.mass_action_reports import refresh_run
 from app.subdomain_naming import next_subdomain
 from app.fake_main import normalize_fake_path, next_fake_path, fake_canonical_markup
 from app.domain_classification import classify_domains
@@ -20,8 +21,9 @@ from app.alternate_templates import template_catalog
 from app.alternate_language_pool import default_language_pool
 from app.project_cache import ProjectCacheError
 from app.network_state import alternate_links, domain_name, state_revision, validate_markup
+from app.mass_action_scope import MassActionFilter, matches as matches_mass_filter, stamp_plan
 
-ACTIVE = ('queued', 'running', 'waiting', 'partial')
+ACTIVE = ('planned', 'queued', 'running', 'waiting', 'partial')
 
 
 class DomainOptions(BaseModel):
@@ -42,15 +44,49 @@ class DomainOptions(BaseModel):
 
 
 class GlobalConfig(BaseModel):
-    execution_mode: Literal["within_network", "cross_network"] = "within_network"
+    selection_filter: MassActionFilter | None = None
+    execution_mode: Literal["within_network", "cross_network", "transfer_only"] = "within_network"
     apply_domain_settings: bool = False
     domain_settings: DomainOptions = Field(default_factory=DomainOptions)
     enabled: bool = False
     schedule_enabled: bool = False
     interval_days: Literal[0, 3, 4, 5, 7, 14] = 0
-    scheme_mode: Literal["preserve", "add_auxiliary", "base_only", "clean"] = "preserve"
+    scheme_mode: Literal["preserve", "add_auxiliary", "base_only", "clean", "locale_base"] = "preserve"
     auxiliary_hreflangs: list[str] = Field(default_factory=default_language_pool, max_length=200)
     max_projects: int = Field(default=20, ge=1, le=100)
+    main_target_mode: Literal['legacy', 'newreg', 'drop', 'mixed'] = 'legacy'
+    title_h1_rewrite_percent: int = Field(default=20, ge=0, le=100, strict=True)
+    newreg_subdomain_share: bool = False
+    drop_subdomain_share: bool = False
+
+    @model_serializer(mode='wrap')
+    def stable_legacy_snapshot(self, handler):
+        values = handler(self)
+        if self.title_h1_rewrite_percent == 20: values.pop('title_h1_rewrite_percent', None)
+        # Do not invalidate already reserved legacy operations merely by adding
+        # an unset filter field to the configuration fingerprint.
+        if self.selection_filter is None:
+            values.pop('selection_filter', None)
+        if self.main_target_mode == 'legacy' and not self.newreg_subdomain_share and not self.drop_subdomain_share:
+            for key in ('main_target_mode', 'newreg_subdomain_share', 'drop_subdomain_share'):
+                values.pop(key, None)
+        return values
+
+    @model_validator(mode='after')
+    def manual_transfer_only(self):
+        if self.execution_mode == 'transfer_only' and self.schedule_enabled:
+            raise ValueError('Перераспределение без переклея запускается вручную, не более двух доменов за нажатие.')
+        return self
+
+    @model_validator(mode='after')
+    def target_shares(self):
+        if self.main_target_mode == 'legacy' and (self.newreg_subdomain_share or self.drop_subdomain_share):
+            raise ValueError('Для долей поддоменов выберите тип Main: новореги, дропы или смешанный цикл.')
+        if self.main_target_mode == 'newreg' and self.drop_subdomain_share:
+            raise ValueError('В режиме «Только новореги» поддомены дропов не используются.')
+        if self.main_target_mode == 'drop' and self.newreg_subdomain_share:
+            raise ValueError('В режиме «Только дропы» поддомены новорегов не используются.')
+        return self
 
     @field_validator('auxiliary_hreflangs')
     @classmethod
@@ -157,13 +193,15 @@ def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
-def select_next_domain(site, state, cfg):
+def select_next_domain(site, state, cfg, *, allocation_index=None):
+    from app.domain_transfer_policy import blocked_transfer_zone
     parent = (cfg.drop_domain if cfg.parent_kind == 'drop' else cfg.newreg_domain).removeprefix('www.')
     if not parent:
         raise ValueError('Укажите родительский домен выбранного варианта.')
+    if blocked_transfer_zone(parent):raise ValueError('Родительский домен отмечен БАН: запрещённая зона.')
     if cfg.create_subdomains:
-        return next_subdomain(site, state, cfg, parent)
-    domains = [domain for domain in state['domains'] if domain not in state.get('amp_domains', [])]
+        return next_subdomain(site, state, cfg, parent, allocation_index=allocation_index)
+    domains = [domain for domain in state['domains'] if domain not in state.get('amp_domains', []) and not blocked_transfer_zone(domain)]
     start = domains.index(state['canon']) + 1 if state['canon'] in domains else 0
     used = {domain_name(x) for x in [*(site.main_domain_history or []), state['canon'], state.get('prev')]}
     # No wrap and no recycling of former Main domains.
@@ -173,8 +211,9 @@ def select_next_domain(site, state, cfg):
     raise ValueError('После текущего Main нет неиспользованного поддомена выбранного дропа/новорега. Добавьте резерв в сетку.')
 
 
-def select_root_and_subdomain(site, state, cfg):
-    domains = [domain for domain in state['domains'] if domain not in state.get('amp_domains', [])]
+def select_root_and_subdomain(site, state, cfg, *, allocation_index=None):
+    from app.domain_transfer_policy import blocked_transfer_zone
+    domains = [domain for domain in state['domains'] if domain not in state.get('amp_domains', []) and not blocked_transfer_zone(domain)]
     start = domains.index(state['canon']) + 1 if state['canon'] in domains else 0
     used_main = {domain_name(x) for x in [*(site.main_domain_history or []), state['canon'], state.get('prev')]}
     used_children = used_main | set(getattr(site, 'alternate_domain_history', None) or [])
@@ -187,7 +226,7 @@ def select_root_and_subdomain(site, state, cfg):
         if any(bare_root.endswith('.' + parent.removeprefix('www.')) for parent in domains if parent.removeprefix('www.') != bare_root):
             continue
         if cfg.create_subdomains:
-            return root, next_subdomain(site, state, cfg, root)
+            return root, next_subdomain(site, state, cfg, root, allocation_index=allocation_index)
         child = next((d for d in domains if d.endswith('.' + bare_root) and d != root and d != 'www.' + bare_root and d not in used_children), None)
         if child is None:
             raise ValueError(f'У следующего корневого домена {root} нет неиспользованного поддомена в сетке. Сначала создайте его.')
@@ -235,19 +274,35 @@ def effective_config(global_cfg, cfg):
     return global_cfg
 
 
-def require_eligible(site, global_cfg, cfg):
+def require_eligible(site, global_cfg, cfg, *, preview_only=False, manual=False):
+    if cfg.scope != 'personal' and getattr(site, 'reglue_participation', True) is False:
+        raise ValueError('Участвует в переклее: Нет.')
     if cfg.scope != 'personal' and site.project_status != 'mass_actions':
         raise ValueError('Проект не имеет статуса «Массовые действия».')
-    if not effective_config(global_cfg, cfg).enabled:
+    if not preview_only and not manual and not effective_config(global_cfg, cfg).enabled:
         raise ValueError('Автопереклей выключен в настройках.')
 
 
 
-def build_plan(site, state, global_cfg, cfg):
-    require_eligible(site, global_cfg, cfg)
+def build_plan(site, state, global_cfg, cfg, *, db=None):
+    from app.mass_reglue_launch import manual_pilot_allowed
+    require_eligible(site, global_cfg, cfg, preview_only=bool(db and db.info.get('auto_pilot_preview')),manual=bool(db and manual_pilot_allowed(db,site.id)))
     cfg = effective_project_config(global_cfg, cfg)
     global_cfg = effective_config(global_cfg, cfg)
+    naming_index = None
+    if db is not None and cfg.scope == 'mass':
+        from app.naming_variants import allocation_index
+        saved = db.info.get('canonical_replay_plan')
+        naming_index = (saved.get('naming_allocation_index') if saved else
+                        allocation_index(db.info.get('canonical_allocation_plans', []), site.id, subdomains=True))
+    if db is not None and 'auto_pilot_preview' in db.info and cfg.scope == 'mass' and cfg.use_current_fake_main:
+        cfg = cfg.model_copy(update={'use_current_fake_main': False, 'create_fake_main': True})
+    locale_base = global_cfg.scheme_mode == 'locale_base'
     geo = (site.cache_geo or '').strip().upper()
+    if locale_base:
+        geo = geo.replace('_', '-').split('-')[-1]
+        cfg = cfg.model_copy(update={'create_fake_main': True, 'use_current_fake_main': False,
+                                     'profile_id': ''})
     if not re.fullmatch(r'[A-Z]{2}', geo):
         raise ValueError('В проекте должно быть задано GEO из двух букв.')
     language = (getattr(site, 'cache_language', None) or cfg.language).strip().lower().replace('_', '-').split('-')[0]
@@ -255,18 +310,19 @@ def build_plan(site, state, global_cfg, cfg):
         raise ValueError('В проекте должен быть задан код языка, например az.')
     if not state.get('has_head'):
         raise ValueError('Не получены данные head проекта.')
-    if global_cfg.scheme_mode == 'clean' and cfg.domain_layout == 'root_main':
+    if global_cfg.scheme_mode in {'clean', 'locale_base'} and cfg.domain_layout == 'root_main':
         used = {domain_name(d) for d in [*(site.main_domain_history or []), state['canon'], state.get('prev')]}
         roles = classify_domains(state['domains'], site.domain_types or {})
-        target = next((d for d in state['domains'] if d not in used and d not in state.get('amp_domains', []) and not roles[d]['is_subdomain'] and (site.domain_types or {}).get(d) == cfg.parent_kind), None)
+        from app.domain_transfer_policy import blocked_transfer_zone
+        target = next((d for d in state['domains'] if not blocked_transfer_zone(d) and d not in used and d not in state.get('amp_domains', []) and not roles[d]['is_subdomain'] and (site.domain_types or {}).get(d) == cfg.parent_kind), None)
         if not target:
             raise ValueError('Нет неиспользованного корневого домена выбранного типа.')
         language_host = target; x_default = ''
     elif cfg.domain_layout == 'root_main':
-        target, language_host = select_root_and_subdomain(site, state, cfg)
+        target, language_host = select_root_and_subdomain(site, state, cfg, allocation_index=naming_index)
         x_default = target
     else:
-        target = select_next_domain(site, state, cfg)
+        target = select_next_domain(site, state, cfg, allocation_index=naming_index)
         language_host = target
         x_default = (select_unused_xdefault(site, state, cfg, target) if global_cfg.scheme_mode == 'base_only'
                      else cfg.x_default_newreg_domain if cfg.x_default_use_newreg else cfg.drop_domain)
@@ -277,18 +333,22 @@ def build_plan(site, state, global_cfg, cfg):
                 'required_page_urls': ['https://' + target + '/'],
                 'create_subdomain': target if cfg.create_subdomains and cfg.domain_layout != 'root_main' else None,
                 'revision': state.get('revision') or state_revision(state), 'config_hash': digest([global_cfg.model_dump(), cfg.model_dump()])}
+        if naming_index is not None: plan['naming_allocation_index'] = naming_index
         plan['preview_token'] = digest(plan)
         return plan
+    if locale_base:
+        language_host = x_default = target
     if not x_default:
         raise ValueError('Укажите новорег для x-default.' if cfg.x_default_use_newreg else 'Укажите дроп для x-default.')
     if any(domain in state.get('amp_domains', []) for domain in (target, language_host, x_default)):
         raise ValueError('AMP-домены не участвуют в автопереклеях, включая альтернейты и x-default.')
     known_type = (getattr(site, 'domain_types', None) or {}).get(x_default)
-    if known_type == 'newreg' and not cfg.x_default_use_newreg:
+    if not locale_base and known_type == 'newreg' and not cfg.x_default_use_newreg:
         raise ValueError('Домен x-default отмечен как новорег. Включите разрешение новорега в x-default.')
-    if known_type == 'drop' and cfg.x_default_use_newreg:
+    if not locale_base and known_type == 'drop' and cfg.x_default_use_newreg:
         raise ValueError('Домен x-default отмечен как дроп. Выключите режим новорега или выберите новорег.')
-    validate_markup(state['alternateMarkup'])
+    if not locale_base:
+        validate_markup(state['alternateMarkup'])
     source = []
     if cfg.profile_id:
         profile = next((p for p in template_catalog() if p['id'] == cfg.profile_id), None)
@@ -299,7 +359,7 @@ def build_plan(site, state, global_cfg, cfg):
         source = profile['variants'][cfg.variant]['links']
     fake_enabled = cfg.create_fake_main or cfg.use_current_fake_main
     links = {}
-    for link in [*source, *alternate_links(state['alternateMarkup'])]:
+    for link in ([] if locale_base else [*source, *alternate_links(state['alternateMarkup'])]):
         key = link['hreflang'].lower()
         if key != 'x-default' and key not in links:
             # Canon and all language variants move together; paths are retained.
@@ -309,7 +369,14 @@ def build_plan(site, state, global_cfg, cfg):
     regional = f'{language}-{geo}'
     regional_path = '/'
     if cfg.create_fake_main:
-        regional_path = next_fake_path(site, state, cfg)
+        if db is not None:
+            from app.fake_path_allocation import next_path
+            regional_path = next_path(db, site, state, cfg)
+        elif locale_base:
+            from app.alternate_templates import next_base_fake_path
+            regional_path = next_base_fake_path(site, state, language, geo)
+        else:
+            regional_path = next_fake_path(site, state, cfg)
     elif cfg.use_current_fake_main:
         current = state.get('fake_main_current')
         if not current or not state.get('fake_main_enabled'):
@@ -317,8 +384,11 @@ def build_plan(site, state, global_cfg, cfg):
         regional_path = normalize_fake_path(current)
         if regional_path not in state.get('fake_main_paths', []):
             raise ValueError('Текущий фейковый путь отсутствует в списке страниц проекта.')
+        if db is not None:
+            from app.fake_path_allocation import require_available
+            require_available(db, site, regional_path)
     links[regional.lower()] = {'hreflang': regional, 'href': f'https://{language_host}{regional_path}'}
-    if global_cfg.scheme_mode == 'base_only':
+    if global_cfg.scheme_mode in {'base_only', 'locale_base'}:
         links = {language: links[language], regional.lower(): links[regional.lower()]}
     added_hreflang = None
     if global_cfg.scheme_mode == 'add_auxiliary':
@@ -328,6 +398,9 @@ def build_plan(site, state, global_cfg, cfg):
             links[lang.lower()] = {'hreflang': lang, 'href': f'https://{language_host}/'}
     links['x-default'] = {'hreflang': 'x-default', 'href': f'https://{x_default}/'}
     markup = '\n'.join(f'<link rel="alternate" hreflang="{escape(x["hreflang"], quote=True)}" href="{escape(x["href"], quote=True)}" />' for x in links.values())
+    if locale_base:
+        from app.alternate_templates import base_alternate_markup
+        markup = base_alternate_markup(target, language, geo, regional_path)
     validate_markup(markup)
     plan = {'create_fake_main_path': regional_path if cfg.create_fake_main else None, 'create_subdomain': language_host if cfg.create_subdomains else None, 'site_id': site.id, 'project': site.name, 'geo': geo, 'old_main': state['canon'], 'new_main': target,
             'fake_main_path': regional_path if fake_enabled else None,
@@ -338,6 +411,7 @@ def build_plan(site, state, global_cfg, cfg):
             'revision': state.get('revision') or state_revision(state), 'config_hash': digest([global_cfg.model_dump(), cfg.model_dump()])}
     classification = classify_domains(state['domains'], getattr(site, 'domain_types', None) or {}, site.main_domain_history or [], state['canon'])
     plan['domain_classification'] = {domain: classification.get(domain) for domain in {target, language_host, x_default}}
+    if naming_index is not None: plan['naming_allocation_index'] = naming_index
     plan['alternates_before'] = {'markup': state['alternateMarkup'], 'enabled': state['enableAlternates']}
     plan['preview_token'] = digest(plan)
     return plan
@@ -352,7 +426,11 @@ def execution_config(db, site_id, launch_scope=None):
 
 
 def launch_plan(db, site, state, launch_scope=None):
-    plan = build_plan(site, state, config(db), execution_config(db, site.id, launch_scope))
+    plan = build_plan(site, state, config(db), execution_config(db, site.id, launch_scope), db=db)
+    from app.canonical_allocation import apply
+    apply(db, site, plan)
+    plan.pop('preview_token', None)
+    plan['preview_token'] = digest(plan)
     if launch_scope == 'project':
         plan['launch_scope'] = 'project'
         plan.pop('preview_token')
@@ -362,40 +440,87 @@ def launch_plan(db, site, state, launch_scope=None):
 
 def preview(db, site, launch_scope=None):
     state = project_network.read_network(db, site)
-    if launch_scope != 'project' and config(db).execution_mode == 'cross_network' and config(db, site.id).scope != 'personal':
+    if launch_scope != 'project' and config(db, site.id).scope != 'personal' and not db.info.get('mass_action_filter') and config(db).selection_filter:
+        db.info['mass_action_filter'] = config(db).selection_filter.model_dump()
+    if launch_scope != 'project' and config(db).execution_mode == 'transfer_only' and config(db, site.id).scope != 'personal':
+        from app.domain_redistribution import preview as transfer_preview
+        plan = transfer_preview(db, site, state)
+    elif launch_scope != 'project' and config(db).execution_mode == 'cross_network' and config(db, site.id).scope != 'personal':
         from app.cross_reglue import preview as cross_preview
-        return cross_preview(db, site, state)
-    return launch_plan(db, site, state, launch_scope)
+        plan = cross_preview(db, site, state)
+    else:
+        plan = launch_plan(db, site, state, launch_scope)
+    return stamp_plan(db, plan, state, site) if launch_scope != 'project' and config(db, site.id).scope != 'personal' else plan
+
+
+def active_participants(db):
+    # Cross-network integrity includes a visible donor reserved by a hidden target.
+    columns = models.AutoReglueRun.__table__.c
+    return db.execute(select(columns.id, columns.site_id, columns.plan, columns.status)
+                      .where(columns.status.in_(ACTIVE)))
 
 
 def active_run(db, site_id):
-    return next((run for run in db.scalars(select(models.AutoReglueRun).where(models.AutoReglueRun.status.in_(ACTIVE))) if run.site_id == site_id or run.plan.get('source_site_id') == site_id), None)
+    return next((run for run in active_participants(db)
+                 if run.site_id == site_id or run.plan.get('source_site_id') == site_id), None)
+
+
+def blocking_run(db, site_id, permitted):
+    for run in active_participants(db):
+        if run.site_id != site_id and run.plan.get('source_site_id') != site_id:
+            continue
+        if permitted and run.id == permitted.id:
+            continue
+        if (permitted and permitted.plan.get('batch_id')
+                and run.plan.get('batch_id') == permitted.plan['batch_id']
+                and site_id in {permitted.site_id, permitted.plan.get('source_site_id')}):
+            continue
+        return run
+    return None
 
 
 def serialize(run):
+    from sqlalchemy.orm import object_session
+    from app.domain_transfer_queue import progress
+    from app.transfer_confirmation import view as confirmation_view
+    db=object_session(run)
     return {'id': run.id, 'site_id': run.site_id, 'status': run.status, 'phase': run.phase,
-            'message': run.message, 'plan': run.plan, 'created_at': run.created_at}
+            'message': run.message, 'plan': run.plan, 'created_at': run.created_at, 'confirmation': confirmation_view(run),
+            'domain_progress': progress(db,run) if db and not run.plan.get('local_target') and run.plan.get('execution_mode') in {'transfer_only','cross_network'} else []}
 
 
-def prepare_run(db, site, request_id, token, username, scope=None):
+def prepare_run(db, site, request_id, token, username, scope=None, saved_plan=None):
     if scope == 'mass' and config(db, site.id).scope == 'personal':
         raise ValueError('У проекта персональные настройки: участие в массовом автопереклее запрещено.')
     existing = db.get(models.AutoReglueRun, str(request_id))
     if existing:
         if existing.site_id != site.id: raise ValueError('Этот запуск принадлежит другому проекту.')
+        if db.info.get('mass_action_filter') and existing.plan.get('mass_filter') != db.info['mass_action_filter']:
+            raise ValueError('Идентификатор запуска уже использован с другим фильтром.')
         return existing, False
-    plan = preview(db, site, 'project') if scope == 'project' else preview(db, site)
+    from app.canonical_allocation import replay
+    with replay(db, saved_plan):
+        plan = preview(db, site, 'project') if scope == 'project' else preview(db, site)
     if plan['preview_token'] != token:
         raise project_network.NetworkConflict('Состояние изменилось после предпросмотра. Подготовьте план снова.')
     from app.cross_reglue import participant_locks
-    with participant_locks(db, site.id, plan):
+    from app.fake_path_allocation import group_lock, require_available
+    with project_network.network_lock(db, 'reglue-reserve-pool'), participant_locks(db, site.id, plan), group_lock(db, site):
         existing = db.get(models.AutoReglueRun, str(request_id))
         if existing:
             if existing.site_id != site.id: raise ValueError('Этот запуск принадлежит другому проекту.')
             return existing, False
         if any(active_run(db, key) for key in {site.id, plan.get('source_site_id', site.id)}): raise project_network.NetworkConflict('Одна из сеток уже участвует в незавершённом автопереклее.')
+        require_available(db, site, plan.get('fake_main_path'))
         run = models.AutoReglueRun(id=str(request_id), site_id=site.id, initiator=username, plan=plan, status='queued', phase='prepared')
-        db.add(run); db.commit()
+        if plan.get('reserve_pool_id'):
+            from app.reglue_reserves import validate_plan
+            validate_plan(db, site, project_network.read_network(db, site), plan)
+        db.add(run); db.flush()
+        if plan.get('reserve_pool_id'):
+            from app.reglue_reserves import claim
+            claim(db, run)
+        db.commit()
     return run, True
 
 
@@ -408,27 +533,54 @@ def verify_pages(urls):
 
 
 def execute(db, run_id):
+    from app.mass_reglue_launch import manual_pilot_allowed
+    run=db.get(models.AutoReglueRun,run_id)
+    previous=db.info.get('manual_pilot_job_id')
+    db.info['manual_pilot_job_id']=run.plan.get('list_launch_id') if run and manual_pilot_allowed(db,run.site_id,run) else None
+    try:return _execute(db,run_id)
+    finally:
+        if previous is None:db.info.pop('manual_pilot_job_id',None)
+        else:db.info['manual_pilot_job_id']=previous
+
+
+def _execute(db, run_id):
     # Separate lock serializes duplicate Celery deliveries across all phases.
     with project_network.network_lock(db, 'auto-run:' + run_id):
         run = db.get(models.AutoReglueRun, run_id)
         if run is None or run.status not in {'queued', 'waiting', 'running'}: return
+        if run.plan.get('execution_mode') == 'transfer_only':
+            from app.domain_redistribution import execute as execute_transfer
+            return execute_transfer(db, run)
         if run.plan.get('execution_mode') == 'cross_network':
             from app.cross_reglue import execute as execute_cross
             return execute_cross(db, run)
         site = db.get(models.Site, run.site_id)
         plan = run.plan
         try:
+            from app.pilot_schemes import validate_single_alternate
+            validate_single_alternate(plan)
             if not site: raise ValueError('Проект не найден.')
             cfg = execution_config(db, site.id, plan.get('launch_scope'))
             if plan.get('scope', 'mass') != cfg.scope: raise ValueError('Режим участия изменился; запуск остановлен.')
-            require_eligible(site, config(db), cfg)
+            from app.mass_reglue_launch import manual_pilot_allowed
+            require_eligible(site, config(db), cfg,manual=manual_pilot_allowed(db,site.id,run))
             if plan.get('scheduled') and not effective_config(config(db), cfg).schedule_enabled: raise ValueError('Расписание выключено.')
             state = project_network.read_network(db, site)
-            if run.phase == 'prepared':
-                current = launch_plan(db, site, state, plan.get('launch_scope'))
+            from app.subdomain_naming import validate_unstarted_plan
+            validate_unstarted_plan(db, run, state)
+            if run.plan.get('content_return_phase', run.phase) == 'prepared':
+                from app.canonical_allocation import replay
+                with replay(db, plan):
+                    current = launch_plan(db, site, state, plan.get('launch_scope'))
+                if plan.get('mass_filter'):
+                    from app.mass_action_scope import require_run_scope
+                    require_run_scope(db, run)
+                    current = stamp_plan(db, current, state, site, plan['mass_filter'])
                 if current['preview_token'] != plan['preview_token']: raise ValueError('Состояние изменилось до начала запуска. Нужен новый предпросмотр.')
-                if not plan.get('create_subdomain') and not plan.get('create_fake_main_path'):
-                    verify_pages(plan['required_page_urls'])
+            from app.reglue_content import before_network
+            if not before_network(db, run, state): return
+            if run.phase == 'prepared' and not plan.get('create_subdomain') and not plan.get('create_fake_main_path'):
+                verify_pages(plan['required_page_urls'])
             if plan.get('create_fake_main_path') and run.phase in {'prepared', 'create_fake_main', 'fake_main_ready'}:
                 fake_path = plan['create_fake_main_path']
                 receipt = str(uuid5(UUID(run.id), 'create_fake_main'))
@@ -484,7 +636,7 @@ def execute(db, run_id):
                 db.refresh(site)
                 cfg = execution_config(db, site.id, plan.get('launch_scope'))
                 if plan.get('scope', 'mass') != cfg.scope: raise ValueError('Режим участия изменился; запуск остановлен.')
-                require_eligible(site, config(db), cfg)
+                require_eligible(site, config(db), cfg,manual=manual_pilot_allowed(db,site.id,run))
                 if plan.get('scheduled') and not effective_config(config(db), cfg).schedule_enabled: raise ValueError('Расписание выключено.')
                 receipt = str(uuid5(UUID(run.id), action))
                 existing = db.get(models.NetworkOperation, receipt)
@@ -503,7 +655,8 @@ def execute(db, run_id):
                 if state['canon'] != expected: raise ValueError('Canonical изменился вне этого запуска. Проверьте сетку.')
                 run.phase = action; db.commit()
                 payload = project_network.NetworkChange(request_id=UUID(receipt), action=action, revision=state['revision'], domain=plan['new_main'], alternate_markup=plan['alternateMarkup'], enable_alternates=plan.get('enableAlternates', True),
-                    fake_main_path=(plan.get('fake_main_path') or '') if action == 'alternates' else '')
+                    fake_main_path=(plan.get('fake_main_path') or '') if action == 'alternates' else '',
+                    canonical_fake_main_markup=plan.get('canonicalFakeMainMarkup') if action == 'alternates' else None)
                 project_network.change_network(db, site, payload, run.initiator, auto_run_id=run.id)
                 operation = db.get(models.NetworkOperation, receipt); db.refresh(operation)
                 if operation.status == 'failed': raise ValueError(operation.message or 'Ошибка Webdev.')
@@ -518,11 +671,13 @@ def execute(db, run_id):
                 run.status = 'waiting'; run.message = 'Ждём подтверждения текущего фейкового внутряка и его canonical.'; db.commit(); return
             if not verified(state, {'canon': plan['new_main'], 'alternateMarkup': plan['alternateMarkup'], 'enableAlternates': plan.get('enableAlternates', True)}):
                 run.status = 'waiting'; run.message = 'Ждём подтверждения canonical и альтернейтов перед индексацией.'; db.commit(); return
+            from app.network_sitemap import queue as queue_sitemap
+            queue_sitemap(db, site, run.id, run.initiator); db.commit()
             queue_indexing(db, site, state, run.id, run.initiator)
             # Immutable report snapshot of confirmed settings, not just the preview.
             alternates_receipt = db.get(models.NetworkOperation, str(uuid5(UUID(run.id), 'alternates')))
             before = (alternates_receipt.request_payload or {}).get('alternates_before', plan.get('alternates_before'))
-            run.plan = {**plan, 'alternates_before': before, 'alternates_after': {'markup': state['alternateMarkup'], 'enabled': state['enableAlternates']}, 'applied_result': {
+            run.plan = {**run.plan, 'alternates_before': before, 'alternates_after': {'markup': state['alternateMarkup'], 'enabled': state['enableAlternates']}, 'applied_result': {
                 'project': site.name, 'old_main': plan['old_main'], 'new_main': state['canon'],
                 'fake_main_path': state.get('fake_main_current') or None,
                 'alternateMarkup': state['alternateMarkup'],
@@ -532,12 +687,13 @@ def execute(db, run_id):
                 'canonicalFakeMainResolved': (state.get('canonicalFakeMainMarkup') or '').replace('{{settings.canon}}', state['canon']),
                 'confirmed_at': datetime.now(timezone.utc).isoformat(),
             }}
-            run.status = 'completed'; run.phase = 'completed'; run.message = 'Новый Main и альтернейты подтверждены.'; db.commit()
+            run.status = 'completed'; run.phase = 'completed'; run.message = 'Новый Main и альтернейты подтверждены.'; refresh_run(db, run); db.commit()
         except Exception as error:
             db.rollback(); run = db.get(models.AutoReglueRun, run_id)
             if run and run.status != 'cancelled':
-                run.status = 'partial' if run.phase in {'reglue', 'alternates'} else 'failed'
-                run.message = str(error)[:2000]; db.commit()
+                from app.reglue_content import failure_status
+                run.status = 'partial' if run.phase in {'reglue', 'alternates'} else failure_status(db, run, True)
+                run.message = str(error)[:2000]; refresh_run(db, run); db.commit()
 
 
 def utc(value):
@@ -546,6 +702,10 @@ def utc(value):
 
 def schedule_eligible(site, global_cfg, cfg):
     rules = effective_config(global_cfg, cfg)
+    if cfg.scope != 'personal' and (not global_cfg.selection_filter or not matches_mass_filter(site, global_cfg.selection_filter)):
+        return False
+    if cfg.scope != 'personal' and global_cfg.execution_mode == 'transfer_only':
+        return False
     return bool(rules.enabled and rules.schedule_enabled
                 and (cfg.scope == 'personal' or site.project_status == 'mass_actions'))
 
@@ -616,17 +776,25 @@ def advance_schedule(row, due, now):
 
 def schedule_tick(db, enqueue, now=None):
     now = utc(now or datetime.now(timezone.utc))
+    db.info.pop('mass_action_filter', None)
+    db.info.pop('mass_participant_ids', None)
+    db.info.pop('cross_allowed_site_ids', None)
     started = []
     with project_network.network_lock(db, 'auto-schedule'):
         sync_schedules(db, now)
         db.commit()
         settings = config(db)
+        if settings.execution_mode == 'cross_network':
+            from app.cross_reglue_batch import schedule
+            started.extend(schedule(db, enqueue, now))
         schedules = db.scalars(select(models.AutoReglueSchedule).where(models.AutoReglueSchedule.enabled.is_(True))
                                .order_by(models.AutoReglueSchedule.next_run_at, models.AutoReglueSchedule.site_id)).all()
         for schedule in schedules:
             if len(started) >= settings.max_projects:
                 break
             site = db.get(models.Site, schedule.site_id)
+            if settings.execution_mode == 'cross_network' and config(db, site.id).scope != 'personal':
+                continue
             pending = active_run(db, site.id)
             if pending:
                 if pending.status == 'queued' and pending.plan.get('scheduled'):
@@ -647,12 +815,19 @@ def schedule_tick(db, enqueue, now=None):
                 plan, status, message = {'project': site.name}, 'failed', str(error)[:2000]
             # Atomic durable receipt + advancement; crash/retry cannot consume the same slot twice.
             from app.cross_reglue import participant_locks
-            with participant_locks(db, site.id, plan):
+            from app.fake_path_allocation import group_lock, require_available
+            with participant_locks(db, site.id, plan), group_lock(db, site):
                 db.refresh(schedule, with_for_update=True)
                 if any(active_run(db, key) for key in {site.id, plan.get('source_site_id', site.id)}):
                     continue
                 existing = db.get(models.AutoReglueRun, request_id)
                 if existing is None:
+                    if status == 'queued' and plan.get('fake_main_path'):
+                        try:
+                            plan = preview(db, site)
+                            require_available(db, site, plan.get('fake_main_path'))
+                        except (ValueError, ProjectCacheError, httpx.HTTPError) as error:
+                            status, message = 'failed', str(error)[:2000]
                     run = models.AutoReglueRun(id=request_id, site_id=site.id, initiator='scheduler',
                         status=status, phase='prepared', plan={**plan, 'scheduled': True, 'scheduled_for': due.isoformat()},
                         message=message)
@@ -661,6 +836,10 @@ def schedule_tick(db, enqueue, now=None):
                     run = existing
                 advance_schedule(schedule, due, now)
                 db.commit()
+            if config(db, site.id).scope != 'personal' and settings.selection_filter:
+                from app.mass_action_reports import save as save_report
+                report_id = uuid5(NAMESPACE_URL, 'mass-schedule:' + digest(settings.selection_filter.model_dump()) + ':' + due.isoformat())
+                save_report(db, report_id, settings.selection_filter.model_dump(), [{'site_id': site.id, 'run_id': run.id}], 'scheduler')
             started.append(run.id)
             if run.status == 'queued':
                 enqueue(run.id)

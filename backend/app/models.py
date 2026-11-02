@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, LargeBinary, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -84,6 +84,22 @@ class TemplateSource(Base, TimestampMixin):
     capture: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
+class TemplateKnowledgeExample(Base, TimestampMixin):
+    __tablename__ = "template_knowledge_examples"
+    __table_args__ = (UniqueConstraint("brand_key", "geo", "sha256", name="uq_template_knowledge_scope_sha"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    brand: Mapped[str] = mapped_column(String(160), nullable=False)
+    brand_key: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    geo: Mapped[str] = mapped_column(String(2), nullable=False)
+    url: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    title: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    filename: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    html: Mapped[str] = mapped_column(Text, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    structure: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+
+
 class AutoLbGeneration(Base, TimestampMixin):
     __tablename__ = "auto_lb_generations"
 
@@ -101,6 +117,11 @@ class AutoLbGeneration(Base, TimestampMixin):
 
 class Site(Base, TimestampMixin):
     @property
+    def cache_reserve(self):
+        from app.network_reserve import selected_reserve
+        return selected_reserve(self.network_state or {}) or None
+
+    @property
     def network_domain_counts(self):
         from app.site_statistics import network_domain_counts
         return network_domain_counts(self)
@@ -108,6 +129,7 @@ class Site(Base, TimestampMixin):
     __tablename__ = "sites"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    added_to_system_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=func.now(), nullable=False)
     menu_warning: Mapped[str | None] = mapped_column(String(40), nullable=True)
     core_update_notice: Mapped[str | None] = mapped_column(String(160), nullable=True)
     core_update_acknowledged: Mapped[str | None] = mapped_column(String(160), nullable=True)
@@ -147,6 +169,8 @@ class Site(Base, TimestampMixin):
     network_snapshot_history: Mapped[list] = mapped_column(JSON, default=list)
     cache_server_ip: Mapped[str | None] = mapped_column(String(120), nullable=True)
     project_status: Mapped[str] = mapped_column(String(32), default="working", index=True)
+    reglue_participation: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
+    last_reglue_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_test_project: Mapped[bool] = mapped_column(Boolean, default=False)
     has_menu: Mapped[bool] = mapped_column(Boolean, default=False)
     cache_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -284,6 +308,21 @@ class ContentItem(Base, TimestampMixin):
     task: Mapped[GenerationTask] = relationship(back_populates="items")
 
 
+class ArticleImage(Base, TimestampMixin):
+    """Durable public assets; drafts and published pages retain the same immutable URL."""
+    __tablename__ = "article_images"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id"), nullable=False, index=True)
+    request_key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
+    model: Mapped[str] = mapped_column(String(120), nullable=False)
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    error: Mapped[str | None] = mapped_column(Text)
+    sha256: Mapped[str | None] = mapped_column(String(64), index=True)
+    image_data: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
 class TechnicalPageText(Base, TimestampMixin):
     """Immutable comparison corpus, retained even when tasks are archived/deleted."""
     __tablename__ = "technical_page_texts"
@@ -388,6 +427,21 @@ class NetworkOperation(Base, TimestampMixin):
     message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class ProjectNotification(Base, TimestampMixin):
+    __tablename__ = "project_notifications"
+    __table_args__ = (UniqueConstraint("site_id", "event_key", name="uq_project_notification_event"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), nullable=False, index=True)
+    event_key: Mapped[str] = mapped_column(String(240), nullable=False)
+    code: Mapped[str] = mapped_column(String(100), nullable=False)
+    severity: Mapped[str] = mapped_column(String(12), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    context: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    occurrences: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class PublicationLog(Base, TimestampMixin):
     __tablename__ = "publication_logs"
 
@@ -398,6 +452,20 @@ class PublicationLog(Base, TimestampMixin):
     response_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
     response_body: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class ReglueReserveDomain(Base, TimestampMixin):
+    __tablename__ = "reglue_reserve_domains"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    domain: Mapped[str] = mapped_column(String(253), unique=True)
+    domain_type: Mapped[str] = mapped_column(String(12), default="drop")
+    brand: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    status: Mapped[str] = mapped_column(String(24), default="available", index=True)
+    added_by: Mapped[str] = mapped_column(String(160))
+    site_id: Mapped[str | None] = mapped_column(ForeignKey("sites.id", ondelete="SET NULL"), nullable=True)
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("auto_reglue_runs.id", ondelete="SET NULL"), nullable=True)
+    assigned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class AutoReglueConfig(Base, TimestampMixin):
@@ -461,8 +529,10 @@ class ProjectPageDraft(Base, TimestampMixin):
     site_id: Mapped[str] = mapped_column(ForeignKey("sites.id"), nullable=False, index=True)
     page_key: Mapped[str] = mapped_column(String(64), nullable=False)
     requested_by: Mapped[str] = mapped_column(String(160), nullable=False)
-    provider_id: Mapped[str] = mapped_column(ForeignKey("ai_providers.id"), nullable=False)
+    provider_id: Mapped[str | None] = mapped_column(ForeignKey("ai_providers.id"), nullable=True)
     action: Mapped[str] = mapped_column(String(24), nullable=False)
+    input_metadata: Mapped[dict | None] = mapped_column(JSON)
+    result_metadata: Mapped[dict | None] = mapped_column(JSON)
     input_content: Mapped[dict] = mapped_column(JSON, nullable=False)
     result_content: Mapped[dict | None] = mapped_column(JSON)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="queued")

@@ -9,10 +9,12 @@ import hashlib
 import json
 import re
 from typing import Literal
+from types import SimpleNamespace
 from urllib.parse import unquote, urlsplit
 import zipfile
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from slugify import slugify
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
@@ -71,8 +73,8 @@ class TemplateRequest(StrictModel):
             url = parts._replace(fragment="").geturl().rstrip("/")
             if url not in urls:
                 urls.append(url)
-        if len(urls) > 20:
-            raise ValueError("Укажите не более 20 конкурентов")
+        if len(urls) > 10:
+            raise ValueError("Укажите не более 10 конкурентов")
         return urls
 
 
@@ -180,8 +182,8 @@ class TemplateEdit(StrictModel):
 
 
 def default_menu(content):
-    return [MenuItem(id=s.id, label=s.title, section_id=s.id).model_dump() for s in content.sections] + [
-        MenuItem(id="faq", label=content.faq_title, section_id="faq").model_dump()]
+    return [MenuItem(id=s.id, label=" ".join(s.title.split()[:2]), section_id=s.id).model_dump() for s in content.sections] + [
+        MenuItem(id="faq", label="FAQ", section_id="faq").model_dump()]
 
 
 def history_rows(db, row):
@@ -208,6 +210,35 @@ def parse_json(raw):
     return json.loads(raw)
 
 
+def normalize_generated_section_ids(data):
+    """Repair AI-generated anchors before validation and default menu creation."""
+    if not isinstance(data, dict) or not isinstance(data.get("sections"), list):
+        return data
+    reserved = {"hero", "faq", "mobile-screens", "brand-payments", "brand-providers"}
+    # Keep valid anchors, even when an earlier repaired ID would collide with them.
+    used = reserved | {s["id"] for s in data["sections"] if isinstance(s, dict)
+                       and isinstance(s.get("id"), str)
+                       and re.fullmatch(r"[a-z][a-z0-9-]{0,49}", s["id"])}
+    sections = []
+    for section in data["sections"]:
+        if isinstance(section, dict) and isinstance(section.get("id"), str):
+            original = section["id"]
+            if not re.fullmatch(r"[a-z][a-z0-9-]{0,49}", original):
+                base = slugify(original) or "section"
+                if not base[0].isalpha():
+                    base = "section-" + base
+                base = base[:50].rstrip("-")
+                anchor, number = base, 2
+                while anchor in used:
+                    suffix = f"-{number}"
+                    anchor = base[:50 - len(suffix)].rstrip("-") + suffix
+                    number += 1
+                used.add(anchor)
+                section = {**section, "id": anchor}
+        sections.append(section)
+    return {**data, "sections": sections}
+
+
 async def research_competitors(db, row, request, provider):
     from app.services import (get_dataforseo_provider, call_dataforseo_google_serp,
         extract_organic_serp_items, call_gemini, extract_gemini_text, apply_provider_usage)
@@ -226,10 +257,11 @@ async def research_competitors(db, row, request, provider):
             serp = await call_dataforseo_google_serp(search_provider, term, request.geo, request.language.split("-")[0])
             for item in extract_organic_serp_items(serp)[:10]:
                 key = item["url"].split("#")[0].rstrip("/")
-                if key not in seen:
+                if key not in seen and len(items) < 10:
                     seen.add(key)
                     items.append({**item, "origin": "search", "query": term})
-    items = items[:30]
+    # Existing snapshots are preserved; only new collections are capped.
+    items = items[:max(10, len(stored_report.get("sources") or []))]
     if not items:
         raise ValueError("Поиск не вернул конкурентов. Уточните запрос или отключите сбор выдачи.")
     sources, blocked = [], False
@@ -253,7 +285,8 @@ async def research_competitors(db, row, request, provider):
         entry = {**item, "source_id": source.id, "status": "needs_google_html", "excerpt": ""}
         if source.google_html:
             try:
-                entry.update(excerpt(source.google_html), status="fetched", html_source=source.capture.get("source", "google_manual"))
+                from app.template_knowledge import source_excerpt
+                entry.update(source_excerpt(source), status="fetched", html_source=source.capture.get("source", "google_manual"))
             except ValueError:
                 pass
         sources.append(entry)
@@ -293,15 +326,22 @@ def render(row, document):
     from app.template_generated_design import validate_generated_css
     css = (validate_generated_css(document["generated_css"]) if document.get("generated_css") else design_css(d)) + PHONE_CSS
     from app.template_asset_library import ASSET_CSS, markup, uri
-    css += ASSET_CSS
+    from app.template_visual_assets import COMPACT_HEADER_CSS, image_uri
+    css += ASSET_CSS + COMPACT_HEADER_CSS
+    visuals = (document.get("visual_assets") or {}).get("svg", {})
     library = document.get("library_assets") or {}
     media = document.get("brand_media") or {}
     logo = media.get("logo") or (uri(library["logo"]) if library.get("logo") else None)
     favicon = f'<link rel="icon" type="{library["favicon"]["mime"]}" href="{uri(library["favicon"])}">' if library.get("favicon") else ''
+    if visuals.get("logo"):
+        logo = image_uri(visuals["logo"])
+    if visuals.get("favicon"):
+        favicon = f'<link rel="icon" type="image/svg+xml" href="{image_uri(visuals["favicon"])}">'
     if logo:
         css += ".logo::before{display:none}.logo{background:url(" + logo + ") left center/contain no-repeat}"
-    if logo and not media.get("logo") and (library.get("logo") or {}).get("kind") == "brand_mark":
+    if logo and not visuals.get("logo") and not media.get("logo") and (library.get("logo") or {}).get("kind") == "brand_mark":
         css += ".logo{background-size:48px auto;padding-left:60px}.logo::before{display:block;content:attr(data-brand);font:700 1.2rem var(--body,Arial,sans-serif)}"
+    hero_art = f'<img src="{image_uri(visuals["hero"])}" alt="" width="600" height="400">' if visuals.get("hero") else art_svg(d["visual_style"])
     e = escape
     def nav(where):
         links = []
@@ -313,7 +353,7 @@ def render(row, document):
         return "".join(links)
     parts = [f'<!doctype html><html lang="{e(row.language)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{e(content.title)}</title><meta name="description" content="{e(content.description)}"><meta name="robots" content="noindex,follow"><meta property="og:title" content="{e(content.title)}"><meta property="og:description" content="{e(content.description)}"><meta property="og:type" content="website">{favicon}<style>{css}</style></head><body>',
         f'<header><div class="logo" data-brand="{e(row.brand)}" role="img" aria-label="{e(row.brand)}"></div><nav class="desktop-nav" aria-label="{e(content.menu_label)}">{nav("header")}</nav><details class="mobile-nav"><summary>{e(content.menu_label)}</summary><nav aria-label="{e(content.menu_label)}">{nav("header")}</nav></details></header>',
-        f'<section class="section" id="hero"><div class="hero"><div class="art" aria-hidden="true">{art_svg(d["visual_style"])}</div><h1>{e(content.heading)}</h1><p>{e(content.intro)}</p><a class="cta" href="#{content.sections[0].id}">{e(content.cta_label)}</a></div></section>']
+        f'<section class="section" id="hero"><div class="hero"><div class="art" aria-hidden="true">{hero_art}</div><h1>{e(content.heading)}</h1><p>{e(content.intro)}</p><a class="cta" href="#{content.sections[0].id}">{e(content.cta_label)}</a></div></section>']
     if d["hero"] in CONCEPTS and not document.get("generated_css"):
         parts[-1] = f'<section class="section" id="hero"><div class="hero">{hero_markup(d["hero"], content, art_svg(d["visual_style"]))}</div></section>'
     # Hero rules target the internal component; root sections retain exactly class="section".
@@ -325,7 +365,8 @@ def render(row, document):
             head = "".join(f'<th scope="col">{e(c)}</th>' for c in section.table[0])
             rows = "".join('<tr>' + ''.join(f'<td>{e(c)}</td>' for c in cells) + '</tr>' for cells in section.table[1:])
             table = f'<div class="table-wrap" tabindex="0" role="region" aria-label="{e(section.title)}"><table><thead><tr>{head}</tr></thead><tbody>{rows}</tbody></table></div>'
-        parts.append(f'<section class="section" id="{section.id}"><h2>{e(section.title)}</h2><div class="content-body"><div class="copy">{paragraphs}</div><ul class="points">{bullets}</ul></div>{table}</section>')
+        icon = f'<img class="section-icon" src="{image_uri(visuals["icon-" + section.id])}" alt="" width="36" height="36">' if visuals.get("icon-" + section.id) else ""
+        parts.append(f'<section class="section" id="{section.id}"><h2>{icon}{e(section.title)}</h2><div class="content-body"><div class="copy">{paragraphs}</div><ul class="points">{bullets}</ul></div>{table}</section>')
     parts.append(gallery(document, row.brand))
     parts.append(markup(document))
     faq = ''.join(f'<article class="faq-item"><h3>{e(f.question)}</h3><p>{e(f.answer)}</p></article>' for f in content.faq)
@@ -421,6 +462,12 @@ async def screenshots(html):
                 await context.route("**/*", lambda route: route.abort())
                 page = await context.new_page()
                 await page.set_content(html, wait_until="load")
+                header = await page.locator('body > header').bounding_box()
+                if not header or header['height'] > (110 if width > 1100 else 90):
+                    raise ValueError(f"Шапка должна быть компактной на ширине {width}px")
+                images_broken = await page.locator('.art img, .section-icon').evaluate_all("els => els.some(e => !e.complete || !e.naturalWidth)")
+                if images_broken:
+                    raise ValueError("Не удалось загрузить сгенерированную графику")
                 overflow = await page.evaluate("document.documentElement.scrollWidth > innerWidth + 1")
                 if overflow:
                     raise ValueError(f"Горизонтальное переполнение на ширине {width}px")
@@ -484,10 +531,13 @@ async def generate(db, row, *, content_only=False, research_only=False):
     from app.services import call_gemini, extract_gemini_text, apply_provider_usage
     from app.editorial_skill import prepend_editorial_skill
     from app.template_asset_library import catalog, build_snapshot
+    original_document = dict(row.document or {})
     request = TemplateRequest.model_validate(row.request_data)
     provider = db.get(models.AiProvider, request.ai_provider_id)
     if not provider or not provider.is_active or provider.provider_type != "gemini" or not provider.api_key:
         raise ValueError("Нужен активный Gemini-провайдер с API-ключом")
+    from app.template_knowledge import attach_sources
+    attach_sources(db, row)
     row.status, row.phase, row.error = "generating", "Этап 1/3 · сбор конкурентов", None
     row.document = {**(row.document or {}), "pipeline": {**((row.document or {}).get("pipeline") or {}),
         "stage": "research" if research_only else "content" if content_only else "design"}}
@@ -512,6 +562,7 @@ async def generate(db, row, *, content_only=False, research_only=False):
         prompt = prepend_editorial_skill(
             "Create a factual single-page informational brand website in the requested language and GEO. "
             "Return JSON only matching the supplied schema. 700–1200 useful words. Use supplied facts and source analysis "
+            "Section IDs must be unique ASCII slugs matching ^[a-z][a-z0-9-]{0,49}$; never use accented letters in IDs. "
             "for brand-specific claims, contacts, bonuses, licences, payment methods, fees and limits. "
             "No additional web tools are available in this call. Never invent research or facts. When facts are sparse, "
             "write useful guidance on what the reader must check, not invented brand features. List missing "
@@ -534,10 +585,12 @@ async def generate(db, row, *, content_only=False, research_only=False):
             + json.dumps({"brand": request.brand, "geo": request.geo, "language": request.language,
                           "facts": request.facts, "competitor_analysis": research,
                           "asset_library": {k: [{"id": e["id"], "name": e["name"]} for e in catalog()[k]] for k in ["payments", "providers"]}, "schema": PageContent.model_json_schema()}, ensure_ascii=False))
+        from app import reference_context
+        prompt += reference_context.prompt(reference_context.collect(db, brand=request.brand, geo=request.geo))
         response = await call_gemini(provider, prompt)
         apply_provider_usage(provider, response.get("usageMetadata", {}))
         db.commit()
-        content = PageContent.model_validate(parse_json(extract_gemini_text(response)))
+        content = PageContent.model_validate(normalize_generated_section_ids(parse_json(extract_gemini_text(response))))
     base_document = {"content": content.model_dump(), "menu": (row.document or {}).get("menu") or default_menu(content), "protocol_version": PROTOCOL_VERSION, "research": research}
     if content_only:
         row.document = {**base_document, "pipeline": {"text_ready": True, "stage": "content"}}
@@ -558,7 +611,10 @@ async def generate(db, row, *, content_only=False, research_only=False):
         base_document["brand_media"] = media
     if row.document and row.document.get("menu"):
         base_document["menu"] = row.document["menu"]
-    from app.template_generated_design import DESIGN_PROMPT, validate_generated_css
+    from app.template_generated_design import DESIGN_PROMPT, validate_generated_css, design_response_text
+    from app.template_visual_assets import general_brand, validate_assets
+    def artwork_history():
+        return [*db.scalars(select(models.SiteTemplate).where(models.SiteTemplate.id != row.id, models.SiteTemplate.document.is_not(None))).all(), SimpleNamespace(document=original_document)]
     feedback = []
     for attempt in range(3):
         row.phase = f"Этап 3/3 · генерация HTML · попытка {attempt + 1}/3"
@@ -570,15 +626,22 @@ async def generate(db, row, *, content_only=False, research_only=False):
         response = await call_gemini(provider, DESIGN_PROMPT + json.dumps({
             "brand": row.brand, "geo": row.geo, "language": row.language,
             "content": content.model_dump(), "passport_axes": AXES,
+            "menu": base_document["menu"],
+            "original_identity_required": general_brand(row.brand),
+            "generation_id": f"{row.id}-{attempt}",
             "previous_passports": passports, "composition_inspiration": CONCEPTS,
             "feedback": feedback[-3:], "competitor_analysis": (research or {}).get("analysis", "")
         }, ensure_ascii=False))
         apply_provider_usage(provider, response.get("usageMetadata", {}))
         try:
-            generated = parse_json(extract_gemini_text(response))
+            generated = parse_json(design_response_text(response))
             design = generated["design"]
             validate_design(design)
             css = validate_generated_css(generated["css"])
+            visuals = validate_assets(generated.get("visual_assets"), content, row.brand, artwork_history())
+            labels = generated.get("menu_labels")
+            if not isinstance(labels, dict) or any(not isinstance(labels.get(m["section_id"]), str) or not 1 <= len(labels[m["section_id"]].split()) <= 2 or len(labels[m["section_id"]]) > 40 for m in base_document["menu"]):
+                raise ValueError("Нужны краткие menu_labels: 1–2 слова на языке сайта для каждой секции и faq")
         except (ValueError, KeyError, TypeError) as error:
             feedback.append(str(error))
             db.commit()
@@ -591,7 +654,15 @@ async def generate(db, row, *, content_only=False, research_only=False):
             feedback.append({"formal_conflicts": [c for c in conflicts if not c["passed"]]})
             db.commit()
             continue
+        try:
+            visuals = validate_assets(generated.get("visual_assets"), content, row.brand, artwork_history())
+        except ValueError as error:
+            feedback.append(str(error))
+            db.commit()
+            continue
         document = {**base_document, "design": design, "generated_css": css,
+                    "visual_assets": visuals,
+                    "menu": [{**m, "label": labels[m["section_id"]].strip()} for m in base_document["menu"]],
                     "design_origin": "gemini_generated", "design_status": "planned",
                     "design_rationale": str(generated.get("rationale", ""))[:3000],
                     "scope": request.uniqueness_scope, "comparisons": conflicts}
@@ -637,21 +708,34 @@ async def generate(db, row, *, content_only=False, research_only=False):
             if {p.id: history_signature(p) for p in history_rows(db, row)} != compared_versions:
                 db.rollback()
                 continue
+        try:
+            validate_assets(generated.get("visual_assets"), content, row.brand, artwork_history())
+        except ValueError as error:
+            feedback.append(str(error))
+            db.commit()
+            continue
         document["comparisons"] = [{"template_id": p.id, **compare(document["design"], p.document["design"])} for p in latest]
         row.document = {**document, "visual_comparisons": visual, "design_status": "built"}
         row.html, row.status, row.phase = html, "ready", "Готово"
+        # Assemble now, so an incomplete bundle cannot be marked ready.
+        bundle = build_archive(row)
+        row.document = {**row.document, "archive": {"ready": True, "size": len(bundle)}}
         db.commit()
         return {"template_id": row.id, "status": "ready"}
-    raise ValueError("Сгенерированный дизайн не прошёл проверки за три попытки. Шаблон не готов к скачиванию; повторите генерацию.")
+    raise ValueError("Сгенерированный дизайн не прошёл проверки за три попытки. Шаблон не готов к скачиванию; повторите генерацию. " + str(feedback[-1] if feedback else "Параллельная генерация изменила историю")[:1200])
 
 
 def build_archive(row):
     if row.status != "ready" or row.document.get("design_status") != "built":
         raise ValueError("Шаблон ещё не прошёл проверки")
     validate_html(row.html)
+    from app.template_bundle import assets, downloadable_html
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr("index.html", row.html)
+        archive.writestr("index.html", downloadable_html(row))
+        for path, asset in assets(row).items():
+            archive.writestr(path, asset)
+        archive.writestr("README.txt", "Open index.html or upload the entire extracted folder to your hosting. Keep the assets folder beside index.html. No build step or external dependencies are required.\n")
         archive.writestr("template.json", json.dumps({"version": 1, "brand": row.brand, "geo": row.geo,
             "language": row.language, "site_type": "single_page", "content": row.document["content"],
             "menu": row.document["menu"], "design": row.document["design"]}, ensure_ascii=False, indent=2))
