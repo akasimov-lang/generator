@@ -392,3 +392,95 @@ GitHub main (`fcaf194`) отставал от production Git на 70 комми�
 - `A` — `infra/nginx/whitelists/whitelist_vpn.conf`
 - `A` — `scripts/check_changes.py`
 - `A` — `scripts/tests/test_check_changes.py`
+
+## Результат расширенной проверки
+
+Полный backend-набор снимка: **1198 passed, 72 failed** (235,97 с).
+Все 72 упавших теста повторно проверены на исходном снимке `2ebaa3d`:
+те же 72 ошибки, новых падений от текущей задачи не обнаружено.
+Это существующий долг тестов production, а не полностью зелёный набор.
+Четыре теста защиты Git-deploy прошли отдельно без браузера.
+
+## Журнал миграций
+
+Alembic показывал 0064, но объекты миграций 0065–0069 уже существовали.
+`backend/scripts/reconcile_production_migrations.py` проверяет типы и nullable,
+ключи и ограничения, индексы, точные тела функций, триггеры и backfill.
+Read-only проверка на production подтвердила соответствие всех объектов.
+`--apply` разрешает изменить только alembic_version с 0064 на 0069 после
+повторной проверки; таблицы, данные проектов и функции не переписываются.
+
+## Существующие падающие тесты
+
+- `tests/test_api_serialization.py::test_inactive_sites_are_hidden_from_project_lists_and_lookup`
+- `tests/test_auto_lb.py::test_prompt_adapts_every_available_language_and_project`
+- `tests/test_auto_lb_keywords.py::test_all_supported_languages_and_other_geos_have_localization_contract`
+- `tests/test_auto_lb_keywords.py::test_older_general_jobs_are_not_reinterpreted`
+- `tests/test_auto_pilot.py::test_update_labels_require_saved_fields_and_include_removed_alternates`
+- `tests/test_auto_pilot.py::test_new_preview_cancels_only_own_unfinished_preview_and_retries_are_idempotent`
+- `tests/test_auto_pilot.py::test_task_history_only_launches_with_access_pagination_and_no_side_effects`
+- `tests/test_auto_reglue.py::test_new_fake_is_current_in_scheme_canonical_and_confirmed_report`
+- `tests/test_auto_reglue.py::test_head_without_canonical_confirmation_cannot_complete_or_resend`
+- `tests/test_auto_reglue.py::test_subdomain_names_collisions_casino_and_exhaustion`
+- `tests/test_auto_reglue.py::test_mixed_naming_is_stable_and_varies_after_each_creation`
+- `tests/test_auto_reglue.py::test_general_keywords_names_and_exhaustion[joined-\u041e\u0431\u0449\u0438\u0435 \u043a\u043b\u044e\u0447\u0438]`
+- `tests/test_auto_reglue.py::test_general_keywords_names_and_exhaustion[joined-]`
+- `tests/test_auto_reglue.py::test_general_keywords_names_and_exhaustion[joined-None]`
+- `tests/test_auto_reglue.py::test_general_keywords_names_and_exhaustion[hyphen-\u041e\u0431\u0449\u0438\u0435 \u043a\u043b\u044e\u0447\u0438]`
+- `tests/test_auto_reglue.py::test_general_keywords_names_and_exhaustion[hyphen-]`
+- `tests/test_auto_reglue.py::test_general_keywords_names_and_exhaustion[hyphen-None]`
+- `tests/test_auto_reglue.py::test_general_keywords_names_and_exhaustion[mixed-\u041e\u0431\u0449\u0438\u0435 \u043a\u043b\u044e\u0447\u0438]`
+- `tests/test_auto_reglue.py::test_general_keywords_names_and_exhaustion[mixed-]`
+- `tests/test_auto_reglue.py::test_general_keywords_names_and_exhaustion[mixed-None]`
+- `tests/test_auto_reglue.py::test_new_fake_chooses_unused_path_each_iteration_and_current_stays_fixed`
+- `tests/test_auto_reglue.py::test_fake_path_templates_exhaustion_and_brand[]`
+- `tests/test_auto_reglue.py::test_fake_path_templates_exhaustion_and_brand[\u041e\u0431\u0449\u0438\u0435 \u043a\u043b\u044e\u0447\u0438]`
+- `tests/test_auto_reglue.py::test_fake_path_templates_exhaustion_and_brand[Pin-Up]`
+- `tests/test_auto_reglue.py::test_fake_path_templates_exhaustion_and_brand[Casino]`
+- `tests/test_auto_reglue.py::test_fake_path_casino_brands_use_first_word_without_casino[Ice Casino-ice]`
+- `tests/test_auto_reglue.py::test_fake_path_casino_brands_use_first_word_without_casino[Nine CASINO-nine]`
+- `tests/test_auto_reglue.py::test_fake_path_casino_brands_use_first_word_without_casino[888 Casino-888]`
+- `tests/test_auto_reglue.py::test_fake_path_casino_brands_use_first_word_without_casino[King Billy Casino-king]`
+- `tests/test_auto_reglue.py::test_fake_path_casino_brands_use_first_word_without_casino[CatCasino-cat]`
+- `tests/test_auto_reglue.py::test_fake_path_casino_brands_use_first_word_without_casino[JoyCasino-joy]`
+- `tests/test_auto_reglue.py::test_fake_path_casino_brands_use_first_word_without_casino[Casino-X-x]`
+- `tests/test_auto_reglue.py::test_fake_path_casino_brands_use_first_word_without_casino[  Verde   Casino  -verde]`
+- `tests/test_auto_reglue.py::test_fake_path_skips_normalized_content_and_current_and_validates_metadata`
+- `tests/test_auto_reglue.py::test_fake_path_ignores_home_page_but_respects_occupied_internal_pages[/]`
+- `tests/test_auto_reglue.py::test_fake_path_ignores_home_page_but_respects_occupied_internal_pages[//]`
+- `tests/test_auto_reglue.py::test_fake_path_ignores_home_page_but_respects_occupied_internal_pages[ / ]`
+- `tests/test_auto_reglue.py::test_fake_path_ignores_home_page_but_respects_occupied_internal_pages[///]`
+- `tests/test_base_alternates.py::test_mass_within_network_replaces_all_links_and_creates_new_current_path[PL-pl]`
+- `tests/test_base_alternates.py::test_mass_within_network_replaces_all_links_and_creates_new_current_path[CZ-cs]`
+- `tests/test_base_alternates.py::test_mass_within_network_replaces_all_links_and_creates_new_current_path[AZ-az]`
+- `tests/test_base_alternates.py::test_mass_within_network_replaces_all_links_and_creates_new_current_path[BR-pt]`
+- `tests/test_base_alternates.py::test_cross_missing_language_rejected_before_any_mutation`
+- `tests/test_factual_research.py::test_language_retry_does_not_start_fact_check_even_with_competitors_enabled`
+- `tests/test_factual_research.py::test_research_opt_out_and_technical_pages_skip_planner[False-False]`
+- `tests/test_factual_research.py::test_research_opt_out_and_technical_pages_skip_planner[True-True]`
+- `tests/test_fake_path_allocation.py::test_paths_share_a_scope_across_geo_and_brand_spellings_but_not_other_groups`
+- `tests/test_fake_path_allocation.py::test_pending_run_and_uncertain_native_assignment_reserve_paths[queued]`
+- `tests/test_fake_path_allocation.py::test_pending_run_and_uncertain_native_assignment_reserve_paths[running]`
+- `tests/test_fake_path_allocation.py::test_pending_run_and_uncertain_native_assignment_reserve_paths[waiting]`
+- `tests/test_fake_path_allocation.py::test_pending_run_and_uncertain_native_assignment_reserve_paths[partial]`
+- `tests/test_fake_path_allocation.py::test_batch_allocates_different_paths_before_any_worker_starts`
+- `tests/test_fake_path_allocation.py::test_preserved_scheme_replaces_old_fake_path_with_group_unique_path`
+- `tests/test_mass_content_actions.py::test_mass_actions_are_idempotent_drafts_and_never_publish[meta_headings]`
+- `tests/test_mass_content_actions.py::test_mass_actions_are_idempotent_drafts_and_never_publish[paragraphs]`
+- `tests/test_mass_reserves.py::test_selected_reserve_promotes_without_extracting_or_importing[locale_base]`
+- `tests/test_page_backups.py::test_rewrite_backs_up_exact_unsaved_source_and_shortcodes_before_gemini`
+- `tests/test_pilot_subdomain_names.py::test_no_numbered_names_without_current_numbered_subdomains[Pinco]`
+- `tests/test_pilot_subdomain_names.py::test_no_numbered_names_without_current_numbered_subdomains[22Bet]`
+- `tests/test_pilot_subdomain_names.py::test_no_numbered_names_without_current_numbered_subdomains[\u041e\u0431\u0449\u0438\u0435 \u043a\u043b\u044e\u0447\u0438]`
+- `tests/test_pilot_subdomain_names.py::test_numeric_fallback_requires_existing_numbered_label_and_preserves_history`
+- `tests/test_pilot_variations.py::test_reviewed_canonical_and_redirects_reach_webdev`
+- `tests/test_pilot_variations.py::test_one_row_refresh_is_idempotent_and_exact_plan_executes`
+- `tests/test_project_pages.py::test_ai_jobs_are_durable_and_never_publish`
+- `tests/test_redirect_transfer_guards.py::test_redirect_timeout_never_replays_reglue_or_redirect_write_and_no_early_indexing`
+- `tests/test_reglue_title_h1.py::test_long_h1_is_fully_shortened_preserving_markup_and_neighbor_content`
+- `tests/test_reglue_title_h1.py::test_forced_refresh_uses_fresh_snapshot_and_discards_previous_draft`
+- `tests/test_reglue_title_h1.py::test_title_h1_only_backup_and_modified_date_once`
+- `tests/test_reglue_title_h1.py::test_preview_only_generates_then_execution_saves_exact_review_once[False]`
+- `tests/test_reglue_title_h1.py::test_preview_only_generates_then_execution_saves_exact_review_once[True]`
+- `tests/test_structure_research.py::test_topic_precedes_queries_and_serp_and_is_reused`
+- `tests/test_transfer_confirmation.py::test_preview_handles_unicode_editorial_urls_and_keeps_ascii_collision_guard`
