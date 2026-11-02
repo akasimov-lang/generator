@@ -1,0 +1,114 @@
+"""Validated native showcase logo uploads; mutations are never retried."""
+import base64
+import binascii
+from io import BytesIO
+from urllib.parse import urlsplit
+import xml.etree.ElementTree as ET
+
+from fastapi import HTTPException
+from PIL import Image, UnidentifiedImageError
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class LogoUpload(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    name: str = Field(min_length=1, max_length=200)
+    data: str = Field(max_length=2800000)
+
+
+def prepare(logo):
+    try:
+        raw = base64.b64decode(logo.data, validate=True)
+        if not raw or len(raw) > 2 * 1024 * 1024:
+            raise ValueError('size')
+        if logo.name.lower().endswith('.svg'):
+            text = raw.decode('utf-8-sig')
+            if '<!DOCTYPE' in text.upper() or '<!ENTITY' in text.upper():
+                raise ValueError('doctype')
+            root = ET.fromstring(text)
+            if root.tag.split('}')[-1] != 'svg':
+                raise ValueError('svg')
+            allowed = {'svg', 'g', 'path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon', 'defs', 'linearGradient', 'radialGradient', 'stop', 'clipPath', 'mask', 'title', 'desc', 'text', 'tspan', 'use', 'style'}
+            for el in root.iter():
+                if el.tag.split('}')[-1] not in allowed:
+                    raise ValueError('active svg')
+                for key, value in el.attrib.items():
+                    key = key.split('}')[-1].lower()
+                    if key.startswith('on') or (key in {'href', 'src'} and not value.startswith('#')):
+                        raise ValueError('external svg')
+                content = ' '.join(el.attrib.values()) + (el.text or '')
+                import re
+                if re.search(r'@import|expression\s*\(|javascript:|url\s*\(\s*[\'"]?\s*(?!#)[^\s]', content, re.I):
+                    # Fragment-only paint/clip references are safe.
+                    stripped = re.sub(r'url\(\s*[\'"]?#[\w.-]+[\'"]?\s*\)', '', content, flags=re.I)
+                    if re.search(r'@import|expression\s*\(|javascript:|url\s*\(', stripped, re.I):
+                        raise ValueError('external css')
+            return '.svg', text
+        with Image.open(BytesIO(raw)) as img:
+            if img.format not in {'PNG', 'JPEG', 'WEBP'} or img.width * img.height > 16000000:
+                raise ValueError('format or dimensions')
+            img.load()
+            output = BytesIO()
+            img.convert('RGBA').save(output, format='PNG')
+            if output.tell() > 4 * 1024 * 1024:
+                raise ValueError('decoded size')
+            return '.png', base64.b64encode(output.getvalue()).decode()
+    except (ValueError, binascii.Error, UnicodeError, ET.ParseError, UnidentifiedImageError, OSError, Image.DecompressionBombError):
+        raise HTTPException(422, 'Загрузите PNG, JPEG, WebP или SVG без внешних ресурсов, размером до 2 МБ.')
+
+
+def target(casinos, row_id):
+    import json
+    group, index = json.loads(row_id)
+    if not isinstance(casinos, dict) or not isinstance(casinos.get('basic'), list):
+        raise HTTPException(422, 'У этой витрины нет галереи логотипов.')
+    record = casinos[group][index]
+    gallery = next((g for g in casinos['basic'] if g.get('key') == 'logo' and g.get('type') == 'gallery' and isinstance(g.get('data'), list)), None)
+    field = next((f for f in record if isinstance(f, dict) and f.get('key') == 'logo' and f.get('type') == 'logo'), None) if isinstance(record, list) else None
+    if gallery is None or field is None:
+        raise HTTPException(422, 'Эта карточка не поддерживает загрузку логотипа.')
+    return gallery, field
+
+
+def upload(remote, project_name, request_id, prepared):
+    extension, buffer = prepared
+    code, response = remote.request('POST', '/projects/image', {
+        'name': f'brand-{request_id}{extension}', 'folder': project_name,
+        'buffer': buffer, 'customPath': 'vitrina/logo'})
+    if not isinstance(response, dict) or response.get('error') != 'none':
+        raise ValueError('Image upload not confirmed')
+    path = response.get('webpPath') or response.get('imagePath')
+    if not isinstance(path, str) or not path.startswith('/uploads/') or '..' in path or urlsplit(path).netloc:
+        raise ValueError('Invalid uploaded image path')
+    return path
+
+
+def attach(casinos, row_id, path, name, logo_id):
+    gallery, field = target(casinos, row_id)
+    while any(str(item.get('id')) == str(logo_id) for item in gallery['data']):
+        logo_id += 1
+    gallery['data'].append({'id': logo_id, 'src': path, 'alt': name})
+    field['id'] = logo_id
+
+
+def url(project, record):
+    if not isinstance(record, list):
+        return None
+    casinos = (project.get('data') or {}).get('casinos')
+    if not isinstance(casinos, dict):
+        return None
+    logo_id = next((f.get('id') for f in record if isinstance(f, dict) and f.get('key') == 'logo'), None)
+    for gallery in casinos.get('basic', []):
+        if gallery.get('key') != 'logo':
+            continue
+        for item in gallery.get('data', []):
+            if logo_id is not None and str(item.get('id')) == str(logo_id):
+                src = item.get('src', '')
+                if isinstance(src, str) and src.startswith('/uploads/'):
+                    canon = (project.get('settings') or {}).get('canon', '')
+                    if canon:
+                        origin = canon if '://' in canon else 'https://' + canon
+                        return origin.rstrip('/') + src
+                if isinstance(src, str) and urlsplit(src).scheme in {'https', 'http'}:
+                    return src
+    return None

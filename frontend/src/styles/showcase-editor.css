@@ -23,3 +23,5 @@
 .showcaseError { color:#bd3434; }
 .showcaseSuccess { color:#27803d; }
 @media(max-width:750px) { .showcaseFields { grid-template-columns:1fr; } .showcaseTable { min-width:620px; } .showcaseTools { width:100%; } .showcaseSearch { flex:1; } .showcaseSearch input { width:100%; } }
+
+.showcaseLogo{width:88px;height:48px;object-fit:contain;background:#263044;border-radius:6px;padding:4px}.showcaseLogoUpload{display:grid;gap:8px;margin-top:12px;font-size:12px;max-width:240px}.showcaseLogoUpload input{max-width:100%;font-size:12px}

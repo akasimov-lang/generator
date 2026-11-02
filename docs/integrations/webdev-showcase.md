@@ -29,3 +29,5 @@
 При проверке `pl-kasyno.online` кеш доступен, но прямой GET сервера cow возвращал
 HTTP 500, в том числе с Accept v2. Чтение таблицы от этого не зависит; сохранение
 не должно обходить проверку актуального объекта или выдавать кеш за подтверждение Webdev.
+
+Logo uploads: the row editor accepts PNG/JPEG/WebP/SVG up to 2 MiB. Raster files are decoded and encoded as PNG; SVG is restricted to static local shapes. Upload uses the native `POST /projects/image` contract with `customPath: vitrina/logo`, then appends the returned path to `casinos.basic` and assigns its unique ID to the edited card. Existing gallery entries and other cards remain intact. The durable edit receipt records the upload phase before contacting Webdev; an uncertain card save is checked by reading, never automatically resent. If the asset upload is uncertain, checking reports that no card was posted and permits an explicit new save. Refresh requests live data with cached fallback.

@@ -6,9 +6,9 @@ import "./styles/showcase-editor.css";
 
 type Api = <T>(path: string, options?: RequestInit) => Promise<T>;
 type Field = { id: string; key: string; label: string; value: string; list: boolean };
-type Row = { id: string; brand: string; fields: Field[]; editable: boolean; group: string };
+type Row = { id: string; brand: string; fields: Field[]; editable: boolean; group: string; logo?: string };
 type Showcase = { revision: string; rows: Row[]; count: number; source: string; message: string; warning?: string };
-type Draft = { rowId: string; revision: string; fields: Record<string, string>; requestId?: string };
+type Draft = { rowId: string; revision: string; fields: Record<string, string>; requestId?: string; logo?: { name: string; data: string } };
 type Receipt = { id: string; status: string; error?: string; showcase?: Showcase | null };
 const isBrand = (field: Field) => field.key === "brand" || field.key === "name";
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Не удалось получить данные витрины.";
@@ -25,10 +25,10 @@ export function ShowcaseBrands({ siteId, api }: { siteId: string; api: Api }) {
   const savingRef = React.useRef(false);
   const storageKey = `pagepilot-showcase-draft:${siteId}`;
   const endpoint = `/sites/${siteId}/showcase`;
-  const load = React.useCallback(async () => {
+  const load = React.useCallback(async (refresh = false) => {
     setLoading(true); setError("");
     try {
-      const next = await api<Showcase>(endpoint, { cache: "no-store" });
+      const next = await api<Showcase>(`${endpoint}${refresh ? "?refresh=true" : ""}`, { cache: "no-store" });
       if (!Array.isArray(next.rows)) throw new Error("Не получен список брендов витрины.");
       if (active.current) setData(next);
     } catch (cause) { if (active.current) setError(errorText(cause)); }
@@ -55,6 +55,17 @@ export function ShowcaseBrands({ siteId, api }: { siteId: string; api: Api }) {
   function change(field: Field, value: string) {
     if (draft) changeDraft({ ...draft, fields: { ...draft.fields, [field.id]: value } });
   }
+  async function selectLogo(file?: File) {
+    if (!file || !draft) return;
+    if (file.size > 2 * 1024 * 1024) { setError("Логотип должен быть не больше 2 МБ."); return; }
+    const current = draft;
+    try {
+      const buffer = new Uint8Array(await file.arrayBuffer());
+      let binary = "";
+      for (const byte of buffer) binary += String.fromCharCode(byte);
+      if (active.current) { changeDraft({ ...current, logo: { name: file.name, data: btoa(binary) } }); setError(""); }
+    } catch { setError("Не удалось прочитать логотип."); }
+  }
   async function save() {
     if (!draft || savingRef.current) return;
     savingRef.current = true; setSaving(true); setError(""); setMessage("");
@@ -65,11 +76,11 @@ export function ShowcaseBrands({ siteId, api }: { siteId: string; api: Api }) {
     try {
       const receipt = checking
         ? await api<Receipt>(`${endpoint}/edits/${requestId}`, { cache: "no-store" })
-        : await api<Receipt>(endpoint, { method: "PUT", body: JSON.stringify({ request_id: requestId, revision: draft.revision, row_id: draft.rowId, fields: draft.fields }) });
+        : await api<Receipt>(endpoint, { method: "PUT", body: JSON.stringify({ request_id: requestId, revision: draft.revision, row_id: draft.rowId, fields: draft.fields, logo: draft.logo }) });
       if (!active.current) return;
       if (receipt.status === "confirmed") {
         if (receipt.showcase) setData(receipt.showcase); else await load();
-        changeDraft(null); setMessage("Текст бренда сохранён и подтверждён в Webdev."); projectChanged(siteId);
+        changeDraft(null); setMessage("Карточка бренда сохранена и подтверждён в Webdev."); projectChanged(siteId);
       } else {
         setError(receipt.error || "Сохранение ещё не подтверждено. Нажмите «Проверить сохранение».");
         if (receipt.status === "failed") changeDraft({ ...pending, requestId: undefined });
@@ -90,7 +101,7 @@ export function ShowcaseBrands({ siteId, api }: { siteId: string; api: Api }) {
     <div className="showcaseToolbar">
       <div className="projectShowcaseHeading"><Store size={18} aria-hidden="true" /><h3>Бренды витрины</h3>{data && <span>{data.count}</span>}</div>
       <div className="showcaseTools"><label className="showcaseSearch"><Search size={16} aria-hidden="true" /><input aria-label="Поиск по брендам и тексту витрины" value={query} onChange={event => setQuery(event.target.value)} placeholder="Бренд или текст" /></label>
-        <button type="button" className="button compact secondary" disabled={loading || saving} onClick={() => void load()}><RefreshCcw size={15} className={loading ? "spin" : ""} aria-hidden="true" />Обновить</button></div>
+        <button type="button" className="button compact secondary" disabled={loading || saving} onClick={() => void load(true)}><RefreshCcw size={15} className={loading ? "spin" : ""} aria-hidden="true" />Обновить</button></div>
     </div>
     {error && <p className="showcaseError" role="alert">{error}</p>}
     {message && <p className="showcaseSuccess" role="status">{message}</p>}
@@ -103,7 +114,7 @@ export function ShowcaseBrands({ siteId, api }: { siteId: string; api: Api }) {
         const brandField = row.fields.find(isBrand);
         const textFields = row.fields.filter(field => !isBrand(field));
         return <tr key={row.id} className={editing ? "isEditing" : ""}>
-          <td><div className="showcaseBrand"><BrandIcon brand={row.brand} />{editing && brandField ? <input aria-label={`Бренд ${row.brand}`} value={draft.fields[brandField.id] ?? ""} disabled={saving || !!draft.requestId} onChange={event => change(brandField, event.target.value)} /> : <strong>{row.brand}</strong>}</div></td>
+          <td><div className="showcaseBrand">{row.logo ? <img className="showcaseLogo" src={row.logo} alt={row.brand} loading="lazy" /> : <BrandIcon brand={row.brand} />}{editing && brandField ? <input aria-label={`Бренд ${row.brand}`} value={draft.fields[brandField.id] ?? ""} disabled={saving || !!draft.requestId} onChange={event => change(brandField, event.target.value)} /> : <strong>{row.brand}</strong>}</div>{editing && <label className="showcaseLogoUpload">Логотип: PNG, JPEG, WebP, SVG (до 2 МБ)<input type="file" accept=".png,.jpg,.jpeg,.webp,.svg" disabled={saving || !!draft.requestId} onChange={event => void selectLogo(event.target.files?.[0])} />{draft.logo && <small>Выбран: {draft.logo.name}</small>}</label>}</td>
           <td>{editing ? <div className="showcaseFields">{textFields.map(field => <label key={field.id}>{field.label}<textarea aria-label={`${field.label} — ${row.brand}`} rows={field.list || ["bonus", "description", "text"].includes(field.key) ? 2 : 1} value={draft.fields[field.id] ?? ""} disabled={saving || !!draft.requestId} onChange={event => change(field, event.target.value)} /></label>)}</div>
             : <div className="showcaseTexts">{textFields.filter(field => field.value.trim()).map(field => <span key={field.id} className={["bonus", "description", "text"].includes(field.key) ? "showcasePrimaryText" : ""}><small>{field.label}: </small>{field.value}</span>)}{!textFields.some(field => field.value.trim()) && <span className="muted">{row.editable ? "Текст не заполнен" : "Текст находится в HTML-шаблоне витрины."}</span>}</div>}</td>
           <td><div className="showcaseRowActions">{editing ? <><button type="button" className="button compact" disabled={saving} onClick={() => void save()}><Check size={15} aria-hidden="true" />{saving ? "Сохраняем…" : draft.requestId ? "Проверить сохранение" : "Сохранить"}</button>{!draft.requestId && <button type="button" className="button compact secondary" disabled={saving} onClick={() => { changeDraft(null); setError(""); }}><X size={15} aria-hidden="true" />Отмена</button>}</>

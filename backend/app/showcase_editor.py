@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from app import models
+from app import models, showcase_logos
 from app.core.config import get_settings
 from app.db import get_db
 from app.project_cache import ProjectCacheError
@@ -88,7 +88,7 @@ def rows(project):
             brand = brand_name(values.get('brand') or values.get('name'))
             if brand:
                 result.append({'id': json.dumps([group, index], separators=(',', ':')), 'brand': brand,
-                               'fields': fields, 'editable': bool(fields), 'group': group})
+                               'fields': fields, 'editable': bool(fields), 'group': group, 'logo': showcase_logos.url(project, record)})
     return result
 
 
@@ -129,6 +129,7 @@ class ShowcaseEdit(BaseModel):
     revision: str = Field(pattern=r'^[0-9a-f]{64}$')
     row_id: str = Field(max_length=300)
     fields: dict[str, str]
+    logo: showcase_logos.LogoUpload | None = None
 
 
 def allowed_site(db, site_id, user):
@@ -148,8 +149,12 @@ def result(operation, project=None):
 
 
 def confirm(db, operation, remote):
+    if operation.after_page.get('logo_upload_pending'):
+        operation.status, operation.error = 'failed', 'Загрузка логотипа не подтверждена. Карточка не отправлялась; выберите файл и сохраните заново.'
+        db.commit()
+        return result(operation)
     project = remote.project()
-    if (project.get('data') or {}).get('casinos') == operation.after_page['casinos']:
+    if not operation.after_page.get('logo_upload_pending') and (project.get('data') or {}).get('casinos') == operation.after_page['casinos']:
         operation.status, operation.error = 'confirmed', None
     else:
         operation.status, operation.error = 'unknown', 'Webdev пока не подтвердил изменения. Проверьте сохранение; повторной отправки не было.'
@@ -158,9 +163,9 @@ def confirm(db, operation, remote):
 
 
 @router.get('')
-def load(site_id: str, user: AuthUser, db: Session = Depends(get_db)):
+def load(site_id: str, user: AuthUser, db: Session = Depends(get_db), refresh: bool = False):
     site = allowed_site(db, site_id, user)
-    project, source, warning = read_project(db, site)
+    project, source, warning = read_project(db, site, refresh=refresh)
     return view(project, source, warning)
 
 
@@ -169,6 +174,7 @@ def save(site_id: str, payload: ShowcaseEdit, user: AuthUser, db: Session = Depe
     site = allowed_site(db, site_id, user)
     if len(payload.fields) > 100 or sum(len(v) for v in payload.fields.values()) > 100000:
         raise HTTPException(422, 'Текст карточки слишком большой.')
+    prepared_logo = showcase_logos.prepare(payload.logo) if payload.logo else None
     fingerprint = digest(payload.model_dump(mode='json'))
     with remote_errors(), network_lock(db, site_id):
         operation = db.get(models.ProjectPageEdit, str(payload.request_id))
@@ -183,13 +189,20 @@ def save(site_id: str, payload: ShowcaseEdit, user: AuthUser, db: Session = Depe
             if digest(before) != payload.revision:
                 raise HTTPException(409, 'Витрина изменилась в Webdev. Скопируйте свои изменения и обновите список.')
             after = edited_casinos(project, payload.row_id, payload.fields)
+            if prepared_logo:
+                showcase_logos.target(after, payload.row_id)
             operation = models.ProjectPageEdit(id=str(payload.request_id), site_id=site_id, page_key=PAGE_KEY,
                 requested_by=user['username'], fingerprint=fingerprint, before_page={'casinos': before},
-                after_page={'casinos': after}, status='confirmed' if before == after else 'pending')
+                after_page={'casinos': after, 'logo_upload_pending': bool(prepared_logo)}, status='confirmed' if before == after and not prepared_logo else 'pending')
             db.add(operation); db.commit()
-            if before == after:
+            if before == after and not prepared_logo:
                 return result(operation, project)
             try:
+                if prepared_logo:
+                    path = showcase_logos.upload(remote, site.name, payload.request_id, prepared_logo)
+                    showcase_logos.attach(after, payload.row_id, path, payload.logo.name, int(payload.request_id.int % (2**52)))
+                    operation.after_page = {'casinos': after, 'logo_upload_pending': False}
+                    db.commit()
                 code, response = remote.request('POST', '/projects/casinos', {
                     'project': site.name, 'casinos': after, 'initiator': get_settings().project_cache_username})
                 operation.response_status = code

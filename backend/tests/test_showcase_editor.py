@@ -77,7 +77,13 @@ def api_setup(setup, monkeypatch):
             self.client = SimpleNamespace(headers={})
         def request(self, method, path, payload):
             assert self.client.headers['Accept'] == 'application/json;v=2'
-            assert method == 'POST' and path == '/projects/casinos'
+            assert method == 'POST'
+            if path == '/projects/image':
+                state.setdefault('uploads', []).append(deepcopy(payload))
+                if state.get('upload_failure'):
+                    raise state['upload_failure']
+                return 201, {'error': 'none', 'webpPath': '/uploads/img/vitrina/logo/webp/new.webp'}
+            assert path == '/projects/casinos'
             state['requests'].append(deepcopy(payload))
             if state['failure']:
                 raise state['failure']
@@ -86,7 +92,7 @@ def api_setup(setup, monkeypatch):
             return 201, {'success': True}
     monkeypatch.setattr(editor, 'Remote', Remote)
     monkeypatch.setattr(editor, 'get_settings', lambda: SimpleNamespace(project_cache_username='service-account'))
-    monkeypatch.setattr(editor, 'read_project', lambda *_: (deepcopy(state['project']), 'cache', None))
+    monkeypatch.setattr(editor, 'read_project', lambda *_, **kw: (deepcopy(state['project']), 'cache', None))
     client.app.include_router(editor.router)
     return client, db, site, state
 
@@ -173,3 +179,57 @@ def test_confirmed_receipt_is_not_downgraded_after_later_changes(api_setup):
     state['project']['data']['casinos']['standard'][0][1]['value'] = 'Later legitimate edit'
     assert client.get(path + '/edits/' + payload['request_id']).json()['status'] == 'confirmed'
     assert len(state['requests']) == 1
+
+
+def logo_payload():
+    import base64
+    return {'name': 'logo.svg', 'data': base64.b64encode(b'<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h10v10z"/></svg>').decode()}
+
+
+def test_logo_upload_preserves_gallery_other_cards_and_is_idempotent(api_setup):
+    client, db, site, state = api_setup
+    before = deepcopy(state['project']['data']['casinos'])
+    path, payload = edit_request(client, site)
+    payload['logo'] = logo_payload()
+    response = client.put(path, json=payload)
+    assert response.json()['status'] == 'confirmed'
+    after = state['project']['data']['casinos']
+    assert after['standard'][1:] == before['standard'][1:]
+    assert after['basic'][0]['data'][0] == before['basic'][0]['data'][0]
+    assert after['standard'][0][3]['id'] == after['basic'][0]['data'][-1]['id']
+    assert state['uploads'][0]['customPath'] == 'vitrina/logo'
+    assert state['uploads'][0]['buffer'].startswith('<svg')
+    assert client.put(path, json=payload).json()['status'] == 'confirmed'
+    assert len(state['uploads']) == len(state['requests']) == 1
+
+
+def test_logo_upload_timeout_never_posts_card_and_readcheck_allows_explicit_new_save(api_setup):
+    client, db, site, state = api_setup
+    path, payload = edit_request(client, site)
+    payload['logo'] = logo_payload()
+    state['upload_failure'] = httpx.ReadTimeout('upload stalled')
+    assert client.put(path, json=payload).json()['status'] == 'unknown'
+    assert client.put(path, json=payload).json()['status'] == 'unknown'
+    assert not state['requests'] and len(state['uploads']) == 1
+    assert client.get(path + '/edits/' + payload['request_id']).json()['status'] == 'failed'
+    assert not state['requests'] and len(state['uploads']) == 1
+
+
+def test_logo_card_timeout_confirms_without_reupload(api_setup):
+    client, db, site, state = api_setup
+    path, payload = edit_request(client, site)
+    payload['logo'] = logo_payload()
+    state['failure'] = httpx.ReadTimeout('card stalled')
+    assert client.put(path, json=payload).json()['status'] == 'unknown'
+    state['project']['data']['casinos'] = deepcopy(state['requests'][0]['casinos'])
+    assert client.get(path + '/edits/' + payload['request_id']).json()['status'] == 'confirmed'
+    assert len(state['uploads']) == len(state['requests']) == 1
+
+
+def test_invalid_logo_never_contacts_remote(api_setup):
+    client, db, site, state = api_setup
+    path, payload = edit_request(client, site)
+    import base64
+    payload['logo'] = {'name': 'bad.svg', 'data': base64.b64encode(b'<svg><script>alert(1)</script></svg>').decode()}
+    assert client.put(path, json=payload).status_code == 422
+    assert not state['requests'] and not state.get('uploads')
