@@ -10543,3 +10543,13 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .massLaunchDialog table { width:100%; text-align:left; border-collapse:collapse; }
 .massLaunchDialog td,.massLaunchDialog th { padding:10px; border-bottom:1px solid var(--border); }
 .siteDomainsTable .massParticipation .searchableSelectControl { min-height: 26px; padding: 3px 7px; }
+
+.networkFakePages { list-style: none; padding: 0; }
+.networkFakePages li { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.networkFakeButton { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 1px solid currentColor; border-radius: 6px; background: transparent; cursor: pointer; }
+.networkFakeButton.select { color: #788491; }
+.networkFakeButton.selected { color: #27803d; background: #e8f6eb; }
+.networkFakeButton.delete { color: #d83232; }
+.networkFakeButton:disabled { cursor: default; opacity: .45; }
+.networkFakeButton.selected:disabled { opacity: 1; }
+.networkFakeButton:focus-visible { outline: 2px solid #3769d7; outline-offset: 2px; }

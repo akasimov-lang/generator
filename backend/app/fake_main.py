@@ -73,6 +73,23 @@ def select_fake_settings(project, value):
     return alternate
 
 
+def delete_fake_settings(project, value):
+    path = normalize_fake_path(value)
+    alternate = dict((project.get('settings') or {}).get('alternate') or {})
+    if path not in fake_paths(alternate):
+        raise ValueError('Выбранная фейковая страница отсутствует в актуальных настройках проекта.')
+    current = alternate.get('currentFakeMain')
+    if current and normalize_fake_path(current) == path:
+        raise ValueError('Перед удалением текущей фейковой страницы назначьте другую.')
+    def keep(value):
+        try:
+            return normalize_fake_path(value) != path
+        except ValueError:
+            return True
+    alternate['fakeMain'] = [value for value in alternate.get('fakeMain', []) if keep(value)]
+    return alternate
+
+
 def next_fake_path(site, state, cfg, *, allocation_index=None):
     from app.site_brands import GENERAL
 

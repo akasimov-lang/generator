@@ -783,3 +783,47 @@ def test_network_read_updates_fibery_even_with_manual_flag_and_unchanged_revisio
     remote.data['settings']['webdevDuty']['fibery']=''
     assert network.read_network(db,site)['fibery_name'] is None
     assert not remote.calls
+
+
+def test_delete_fake_main_preserves_current_and_other_settings(env):
+    db, site, remote = env
+    alternate = remote.data['settings']['alternate']
+    alternate.update(fakeMain=['/cz/', 'old', '/old/'], custom='keep', enableDynamicRoutes=True)
+    state = network.read_network(db, site)
+    payload = network.NetworkChange(request_id=uuid4(), action='select_fake_main',
+        revision=state['revision'], fake_main_path='/old/', delete_fake_main=True)
+    result = network.change_network(db, site, payload, 'editor')
+    assert result['fake_main_paths'] == ['/cz/']
+    assert result['fake_main_current'] == '/cz/'
+    assert result['fake_main_enabled'] is True
+    assert remote.data['settings']['alternate']['custom'] == 'keep'
+    assert remote.data['head']['alternateMarkup'] == MARKUP
+    assert result['operations'][0]['status'] == 'confirmed'
+    network.change_network(db, site, payload, 'editor')
+    assert len(remote.calls) == 1
+
+
+def test_delete_current_fake_main_requires_replacement(env):
+    db, site, remote = env
+    state = network.read_network(db, site)
+    with pytest.raises(ValueError, match='назначьте другую'):
+        change(env, 'select_fake_main', state['revision'], fake_main_path='/cz/', delete_fake_main=True)
+    assert not remote.calls
+
+
+def test_delete_fake_main_rejects_missing_path(env):
+    db, site, remote = env
+    state = network.read_network(db, site)
+    with pytest.raises(ValueError, match='отсутствует'):
+        change(env, 'select_fake_main', state['revision'], fake_main_path='/missing/', delete_fake_main=True)
+    assert not remote.calls
+
+
+def test_delete_fake_main_waits_for_remote_confirmation(env):
+    db, site, remote = env
+    remote.data['settings']['alternate']['fakeMain'].append('/old/')
+    state = network.read_network(db, site)
+    remote.delayed = True
+    result = change(env, 'select_fake_main', state['revision'], fake_main_path='/old/', delete_fake_main=True)
+    assert result['operations'][0]['status'] != 'confirmed'
+    assert '/old/' in result['fake_main_paths']

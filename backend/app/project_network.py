@@ -19,7 +19,7 @@ from app.project_cache import ProjectCacheError, project_server_url, refresh_pro
 from app.webdev import webdev_origin_headers
 
 
-from app.fake_main import create_fake_settings, select_fake_settings, normalize_fake_path, fake_canonical_markup
+from app.fake_main import create_fake_settings, select_fake_settings, delete_fake_settings, normalize_fake_path, fake_canonical_markup
 
 
 class NetworkConflict(ValueError):
@@ -54,6 +54,7 @@ class NetworkChange(BaseModel):
     canonical_default_markup: str | None = Field(default=None, max_length=100000)
     canonical_fake_main_markup: str | None = Field(default=None, max_length=100000)
     fake_main_path: str = Field(default="", max_length=250)
+    delete_fake_main: bool = Field(default=False, strict=True)
     activate_fake_main: bool = False
     domains: list[str] = Field(default_factory=list, max_length=100)
     redirect_source: str = Field(default="", max_length=253)
@@ -542,12 +543,16 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
                 payload.page_redirect_original_source, payload.page_redirect_delete)
         elif payload.action in {"create_fake_main", "select_fake_main"}:
             path = "/projects/update-value"
-            if payload.fake_main_path and (payload.activate_fake_main or payload.action == 'select_fake_main'):
+            if not payload.delete_fake_main and payload.fake_main_path and (payload.activate_fake_main or payload.action == 'select_fake_main'):
                 require_available(db, site, payload.fake_main_path)
             if payload.action == 'create_fake_main' and payload.activate_fake_main:
                 if normalize_fake_path(payload.fake_main_path) in state.get('fake_main_history', []):
                     raise ValueError('Путь новой фейковой страницы уже использован. Подготовьте новый план.')
-            if payload.action == "select_fake_main" and payload.enable_dynamic_routes is not None:
+            if payload.delete_fake_main:
+                if payload.action != "select_fake_main" or payload.enable_dynamic_routes is not None:
+                    raise ValueError("Удаление страницы нельзя совмещать с созданием или переключением динамических страниц.")
+                request["alternate"] = delete_fake_settings(project, payload.fake_main_path)
+            elif payload.action == "select_fake_main" and payload.enable_dynamic_routes is not None:
                 alternate = (project.get("settings") or {}).get("alternate") or {}
                 if not isinstance(alternate, dict):
                     raise ValueError("Не удалось прочитать настройки динамических страниц. Обновите данные проекта.")

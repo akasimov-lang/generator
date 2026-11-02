@@ -4,7 +4,7 @@ import { validateReserveSave } from "./networkReserve";
 import { readNetworkWithRetry } from "./networkReadRetry";
 import { LastReglueSummary, type LastReglue } from "./LastReglueSummary";
 import { matchesProjectSearch, normalizeDomainQuery } from "./projectSearch";
-import { Trash2, X, Search } from "lucide-react";
+import { Trash2, X, Search, Check } from "lucide-react";
 import { buildBaseAlternates } from "./standardAlternates";
 import { DomainRedirects, domainRedirectTargets, domainRedirectTarget, type DomainRedirect, type RedirectEdit } from "./DomainRedirects";
 import { PageRedirects, type PageRedirectGroup, type PageRedirectEdit } from "./PageRedirects";
@@ -92,7 +92,6 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
   const [savedMarkup, setSavedMarkup] = React.useState<Partial<Record<MarkupSection, string>>>({});
   const [pendingMarkupSections, setPendingMarkupSections] = React.useState<MarkupSection[]>([]);
   const pendingMarkupSave = React.useRef<{ id: string; sections: MarkupSection[] } | null>(null);
-  const [fakeMainSelection, setFakeMainSelection] = React.useState("");
   const [fakeMainInput, setFakeMainInput] = React.useState("");
   const [subdomainsInput, setSubdomainsInput] = React.useState("");
   const [removeDomainInput, setRemoveDomainInput] = React.useState("");
@@ -122,7 +121,6 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
       standard: next.canonicalDefaultMarkup ?? "", fake: next.canonicalFakeMainMarkup ?? "",
       originalStandard: next.canonicalDefaultMarkup ?? "", originalFake: next.canonicalFakeMainMarkup ?? "",
     });
-    setFakeMainSelection(next.fake_main_current || "");
     setReserve((old) => !replaceReserve && old !== previous?.reserve && old && next.domains.includes(old) && old !== next.canon ? old : (next.reserve === next.canon ? "" : next.reserve));
     setDraft((old) => old && (old.markup !== old.originalMarkup || old.enabled !== old.originalEnabled) && (!sameMarkup(old.markup,next.alternateMarkup) || old.enabled !== next.enableAlternates) ? old : {
       markup: next.alternateMarkup, enabled: next.enableAlternates,
@@ -212,7 +210,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
     if (data?.domains.includes(domain)) return [domain + ": уже есть в сетке"];
     return [];
   });
-  async function mutate(action: Exclude<NetworkOperation["action"], "indexing" | "reglue_redirects" | "structured_data">, targetDomain?: string, markupDraft = draft, settings?: { enable_canonical?: boolean; enable_dynamic_routes?: boolean } & Partial<RedirectEdit & PageRedirectEdit>, revision?: string): Promise<boolean> {
+  async function mutate(action: Exclude<NetworkOperation["action"], "indexing" | "reglue_redirects" | "structured_data">, targetDomain?: string, markupDraft = draft, settings?: { fake_main_path?: string; delete_fake_main?: boolean; enable_canonical?: boolean; enable_dynamic_routes?: boolean } & Partial<RedirectEdit & PageRedirectEdit>, revision?: string): Promise<boolean> {
     if (!data || !markupDraft || busyRef.current) return false;
     if(action === "alternates") {
       let problem="";
@@ -239,7 +237,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
         return false;
       }
     }
-    const payload = { action, ...settings, ...(action === "create_fake_main" ? { activate_fake_main: true } : {}), fake_main_path: action === "select_fake_main" ? fakeMainSelection : action === "create_fake_main" ? fakeMainInput : "", ...(action === "alternates" && canonicalDirty && canonicalDraft ? { canonical_default_markup: canonicalDraft.standard, canonical_fake_main_markup: canonicalDraft.fake } : {}), revision: revision || dataRef.current?.revision || data.revision, domain: action === "delete_domain" ? targetDomain || "" : targetDomain || reserve, alternate_markup: markupDraft.markup, enable_alternates: markupDraft.enabled, ...(action === "delete_domain" ? { domains: targetDomain ? [targetDomain] : removeDomains } : {}), ...((action === "create_subdomains" || action === "create_domains") ? { domains: subdomains } : {}) };
+    const payload = { action, ...settings, ...(action === "create_fake_main" ? { activate_fake_main: true } : {}), fake_main_path: action === "select_fake_main" ? settings?.fake_main_path ?? "" : action === "create_fake_main" ? fakeMainInput : "", ...(action === "alternates" && canonicalDirty && canonicalDraft ? { canonical_default_markup: canonicalDraft.standard, canonical_fake_main_markup: canonicalDraft.fake } : {}), revision: revision || dataRef.current?.revision || data.revision, domain: action === "delete_domain" ? targetDomain || "" : targetDomain || reserve, alternate_markup: markupDraft.markup, enable_alternates: markupDraft.enabled, ...(action === "delete_domain" ? { domains: targetDomain ? [targetDomain] : removeDomains } : {}), ...((action === "create_subdomains" || action === "create_domains") ? { domains: subdomains } : {}) };
     if (action === "delete_domain") setSubmittingDeletion(payload.domains || []);
     const receiptKey = `network-request:${username}:${site.id}`;
     let requestId = crypto.randomUUID();
@@ -498,9 +496,16 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
               onClick={() => void mutate("select_fake_main", undefined, draft, { enable_dynamic_routes: !data.fake_main_enabled })}><span aria-hidden="true" /></button>
             {markupStatus("dynamic")}
           </div>
-          {!!data.fake_main_paths?.length ? <ul>{data.fake_main_paths.map(path => <li key={path}><a href={`https://${data.canon}${path}`} target="_blank" rel="noreferrer">{path}</a>{path === data.fake_main_current ? " — текущая" : ""}</li>)}</ul> : <p className="muted">В кеше нет фейковых внутренних страниц.</p>}
-          <div className="networkFakeForms"><div>          <label className="networkFakePath">Путь фейковой главной<input aria-label="Путь фейковой главной" value={fakeMainInput} onChange={e => setFakeMainInput(e.target.value)} disabled={disabled} placeholder="test1 или /events/" /></label>
-          <div className="networkActions"><button type="button" className="button compact secondary" disabled={disabled || !fakeMainInput.trim() || !!data.fake_main_paths?.includes("/" + fakeMainInput.trim().replace(/^\/+|\/+$/g, "") + "/")} onClick={() => void mutate("create_fake_main")}>{busy === "create_fake_main" ? "Создаём и назначаем…" : "Создать и назначить"}</button></div></div><div className="networkFakeSelectorRow"><fieldset disabled={disabled} className="networkReserveField"><TemplateCombobox label="Фейковый внутряк" value={fakeMainSelection} placeholder="Выберите страницу" onChange={setFakeMainSelection} options={(data.fake_main_paths || []).map(path => ({ value: path, label: path }))} /></fieldset><button type="button" className="button compact secondary" disabled={disabled || !fakeMainSelection || fakeMainSelection === data.fake_main_current} onClick={() => void mutate("select_fake_main")}>{busy === "select_fake_main" ? "Сохраняем…" : "Сохранить страницу"}</button></div></div>
+          {!!data.fake_main_paths?.length ? <ul className="networkFakePages">{data.fake_main_paths.map(path => {
+            const current = path === data.fake_main_current;
+            return <li key={path}>
+              <a href={`https://${data.canon}${path}`} target="_blank" rel="noreferrer">{path}</a>
+              <button type="button" className={`networkFakeButton select${current ? " selected" : ""}`} aria-label={`Назначить ${path}`} aria-pressed={current} title={current ? "Текущая страница" : "Назначить текущей"} disabled={disabled || current} onClick={() => void mutate("select_fake_main", undefined, draft, { fake_main_path: path })}><Check size={18} aria-hidden="true" /></button>
+              <button type="button" className="networkFakeButton delete" aria-label={`Удалить ${path}`} title={current ? "Перед удалением назначьте другую страницу" : "Удалить страницу"} disabled={disabled || current} onClick={() => void mutate("select_fake_main", undefined, draft, { fake_main_path: path, delete_fake_main: true })}><X size={18} aria-hidden="true" /></button>
+            </li>;
+          })}</ul> : <p className="muted">В кеше нет фейковых внутренних страниц.</p>}
+          <div className="networkFakeForms"><div>          <label className="networkFakePath">Путь фейковой главной<input aria-label="Путь фейковой главной" value={fakeMainInput} onChange={e => setFakeMainInput(e.target.value)} disabled={disabled} placeholder="events или /events/" /></label>
+          <div className="networkActions"><button type="button" className="button compact secondary" disabled={disabled || !fakeMainInput.trim() || !!data.fake_main_paths?.includes("/" + fakeMainInput.trim().replace(/^\/+|\/+$/g, "") + "/")} onClick={() => void mutate("create_fake_main")}>{busy === "create_fake_main" ? "Создаём и назначаем…" : "Создать и назначить"}</button></div></div></div>
         </div>}
         {mode === "network" && networkView === "main" && <ProjectStructuredData key={site.id} siteId={site.id} api={api} refreshKey={`${structuredDataRevision}:${refreshToken}:${data.revision}`}/>}
         {!!data.operations.length && <div className="networkSection"><h3>История операций</h3><ul className="networkOperations">{data.operations.map((operation) => <li key={operation.id}>
