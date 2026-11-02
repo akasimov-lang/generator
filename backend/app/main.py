@@ -7,6 +7,7 @@ from app.auto_reglue_api import router as auto_reglue_router
 from app.site_templates_api import router as site_templates_router
 from app.auto_lb_api import router as auto_lb_router
 from app.project_pages import router as project_pages_router
+from app.showcase_editor import router as showcase_editor_router
 from app.project_page_autolink import router as page_autolink_router
 from app.article_images_api import router as article_images_router
 from app.project_notifications_api import router as project_notifications_router
@@ -42,6 +43,7 @@ app.include_router(site_templates_router, prefix="/api")
 app.include_router(auto_lb_router, prefix="/api")
 
 app.include_router(project_pages_router, prefix="/api")
+app.include_router(showcase_editor_router, prefix="/api")
 app.include_router(page_autolink_router, prefix="/api")
 app.include_router(article_images_router, prefix="/api")
 app.include_router(project_notifications_router, prefix="/api")

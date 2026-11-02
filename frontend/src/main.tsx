@@ -2868,7 +2868,7 @@ function ProjectWorkspaceView({
             />
           </WorkspaceTabPane>
           <WorkspaceTabPane active={activeTab === "content" || activeTab === "publication"} storagePrefix={`${currentUsername}:${selectedSite.id}:content`}>
-            {publicationWorkflowSection === "pages" ? <>{generalNetworksOnly && <ShowcaseBrands status={projectContentStatus?.siteId === selectedSite.id ? projectContentStatus.status : null} />}<ProjectPages key={selectedSite.id} siteId={selectedSite.id} api={api} onCount={updatePageCount} /></> : null}
+            {publicationWorkflowSection === "pages" ? <>{generalNetworksOnly && <ShowcaseBrands key={selectedSite.id} siteId={selectedSite.id} api={api} />}<ProjectPages key={selectedSite.id} siteId={selectedSite.id} api={api} onCount={updatePageCount} /></> : null}
             {publicationWorkflowSection === "campaigns" ? <>
               <FastProjectPublicationPanel key={`${selectedSite.id}:publication-launch`} mode="launch" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} promptTemplates={promptTemplates} onPoll={pollProject} onChanged={refreshProject} />
               <FastProjectPublicationPanel key={`${selectedSite.id}:publication-campaigns`} mode="campaigns" api={api} site={selectedSite} content={siteContent} sections={sections} campaigns={campaigns} logs={logs} promptTemplates={promptTemplates} onPoll={pollProject} onChanged={refreshProject} />

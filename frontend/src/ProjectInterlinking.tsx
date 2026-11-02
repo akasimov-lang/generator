@@ -1,6 +1,5 @@
 import React from "react";
 import { CheckCircle2, Store } from "lucide-react";
-import { BrandIcon } from "./BrandIcon";
 import { PROJECT_CHANGED_EVENT, projectNotice } from "./projectNotificationEvents";
 
 export type ProjectContentStatus = { complete: boolean; internal_count: number; linked_from_home: number; linked_to_home: number; message: string; warning?: string | null; showcase?: { count: number; brands: string[]; message?: string } };
@@ -48,11 +47,4 @@ export function ProjectInterlinking({ siteId, api, refreshToken, generalSite = f
   </button>}</>;
 }
 
-export function ShowcaseBrands({ status }: { status: ProjectContentStatus | null }) {
-  const showcase = status?.showcase;
-  return <section className="projectShowcaseBrands" aria-label="Бренды витрины">
-    <div className="projectShowcaseHeading"><Store size={17} aria-hidden="true" /><h3>Бренды витрины</h3>{showcase && <span>{showcase.count}</span>}</div>
-    {showcase?.brands.length ? <div className="projectShowcaseTiles">{showcase.brands.map(brand => <span className="projectShowcaseTile" key={brand}><BrandIcon brand={brand} /><span>{brand}</span></span>)}</div> : <p>{showcase ? showcase.message || "На витрине пока нет брендов." : "Список брендов пока не получен. Нажмите «Перелинковка» для повторной проверки."}</p>}
-    {status?.warning && <small>{status.warning}</small>}
-  </section>;
-}
+export { ShowcaseBrands } from "./ShowcaseBrands";

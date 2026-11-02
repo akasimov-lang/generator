@@ -1,0 +1,25 @@
+.showcaseToolbar,.showcaseTools { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.showcaseToolbar { margin-bottom:12px; }
+.showcaseSearch { display:flex; align-items:center; gap:6px; border:1px solid var(--border); border-radius:8px; padding:4px 8px; }
+.showcaseSearch input { width:210px; border:0; background:transparent; padding:4px; min-height:28px; }
+.showcaseTableWrap { max-height:560px; overflow:auto; border:1px solid var(--border); border-radius:10px; margin-bottom:8px; }
+.showcaseTable { width:100%; border-collapse:collapse; text-align:left; font-size:13px; }
+.showcaseTable th { position:sticky; top:0; z-index:1; background:var(--surface,#f6f8fb); color:var(--muted); font-size:12px; }
+.showcaseTable th,.showcaseTable td { padding:9px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+.showcaseTable th:first-child { width:170px; }
+.showcaseTable th:last-child { width:130px; }
+.showcaseTable tr:last-child td { border-bottom:0; }
+.showcaseBrand { display:flex; align-items:center; gap:8px; min-width:130px; }
+.showcaseBrand input { width:150px; padding:6px; }
+.showcaseTexts { display:flex; flex-wrap:wrap; gap:4px 18px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.showcaseTexts small { color:var(--muted); }
+.showcasePrimaryText { flex-basis:100%; }
+.showcaseRowActions { display:flex; flex-direction:column; align-items:flex-start; gap:6px; }
+.showcaseRowActions .button { white-space:nowrap; font-size:12px; }
+.showcaseFields { display:grid; grid-template-columns:repeat(2,minmax(140px,1fr)); gap:8px 12px; }
+.showcaseFields label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
+.showcaseFields textarea { width:100%; min-height:34px; padding:6px 8px; resize:vertical; font:inherit; color:var(--text); }
+.showcaseTable .isEditing { background:var(--surface,#f6f8fb); }
+.showcaseError { color:#bd3434; }
+.showcaseSuccess { color:#27803d; }
+@media(max-width:750px) { .showcaseFields { grid-template-columns:1fr; } .showcaseTable { min-width:620px; } .showcaseTools { width:100%; } .showcaseSearch { flex:1; } .showcaseSearch input { width:100%; } }
