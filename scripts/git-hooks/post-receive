@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+repo=$(pwd)
+while read -r old new ref; do
+  [ "$ref" = refs/heads/main ] || continue
+  script=$(mktemp)
+  trap 'rm -f "$script"' EXIT HUP INT TERM
+  git --git-dir="$repo" show "$new:scripts/deploy-production.sh" > "$script"
+  PAGEPILOT_REPOSITORY="$repo" sh "$script" "$new"
+  rm -f "$script"
+  trap - EXIT HUP INT TERM
+done

@@ -18,3 +18,14 @@ frontend/node_modules/
 frontend/dist/
 backend/.venv/
 курс/
+
+# Production runtime data and transfer artifacts; source changes must stay visible.
+._*
+.deploy-backups/
+backups/
+ops/
+infra/certbot/
+infra/nginx/whitelist-backup-*/
+infra/nginx/whitelists/*~
+*.prepared
+certbot-renew.log

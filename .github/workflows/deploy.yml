@@ -3,29 +3,37 @@ name: Deploy
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: pagepilot-production
+  cancel-in-progress: false
+
 jobs:
   deploy:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Upload project over SSH
+        with:
+          fetch-depth: 0
+      - name: Deploy main through production Git hooks
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
+          set -euo pipefail
           mkdir -p ~/.ssh
           printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
-          rsync -az --delete \
-            --exclude '.git' \
-            --exclude '.ssh' \
-            --exclude 'PROJECT_MEMORY.local.md' \
-            --exclude '.env' \
-            --exclude 'курс' \
-            -e "ssh -i ~/.ssh/deploy_key" \
-            ./ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
-          ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" \
-            "cd $DEPLOY_PATH && docker-compose up -d --build"
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes"
+          production_repo="${DEPLOY_PATH%/}.git"
+          git push "$DEPLOY_USER@$DEPLOY_HOST:$production_repo" HEAD:refs/heads/main
+          printf -v revision_file '%q' "$production_repo/deployed-revision"
+          deployed=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
+            "$DEPLOY_USER@$DEPLOY_HOST" "cat $revision_file")
+          test "$deployed" = "$(git rev-parse HEAD)"
