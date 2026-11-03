@@ -179,6 +179,11 @@ def build(db, targets, username, *, persist=True):
         if site.id not in received:
             skipped.append({'site_id': site.id, 'project': site.name, 'error': reasons.get(site.id,
                 'Нет свободного домена в сетках того же бренда и GEO с учётом лимита 10 извлечений и одного добавления.')})
+            if db.info.get('auto_pilot_preview') and db.info.get('prefer_own_domains'):
+                from app.priority_main_targets import retry_snapshot
+                state = retry_snapshot(reasons.get(site.id), states.get(site.id))
+                if state:
+                    skipped[-1]['retry_state'] = state
     if not persist:
         return {'plans': plans, 'skipped': skipped, 'distribution': distribution}
     batch_id = str(uuid4())

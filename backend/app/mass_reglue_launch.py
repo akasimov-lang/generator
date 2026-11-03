@@ -11,7 +11,7 @@ from app.reglue_history import changed_this_week, utc, weekly_reason
 
 KIND = 'mass_reglue_list'
 PREVIEW_KIND = 'auto_pilot_preview'
-PLANNER_VERSION = 5
+PLANNER_VERSION = 6
 TERMINAL = {'completed', 'failed', 'partial', 'cancelled'}
 
 
@@ -199,6 +199,8 @@ def execute_step(db, job_id, send, *, parallel_texts=False):
                             group.update(batch_id=preview['batch_id'], plans=preview['plans'])
                             for skip in preview['skipped']:
                                 result['items'][skip['site_id']].update(status='skipped', reason=skip['error'])
+                                if skip.get('retry_state'):
+                                    result['items'][skip['site_id']]['retry_state'] = skip['retry_state']
                         else:
                             group['plans'] = []
                             for site in ready:

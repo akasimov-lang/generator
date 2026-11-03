@@ -6,6 +6,21 @@ from app.mass_action_scope import stamp_plan
 from app.domain_transfer_policy import domain_key
 
 
+CAPACITY_REASONS = (
+    'Резерв в БАН; нет разрешённого новорега другой сетки или доступного дропа в базе резервов.',
+    'Нет неиспользованных новорегов и дропов своей сетки, доступного дропа в базе резервов и разрешённого новорега другой сетки того же бренда и GEO.',
+)
+
+
+def retry_snapshot(reason, state):
+    """Only allocation exhaustion may be retried; preserve the reviewed snapshot."""
+    if not state or not str(reason or '').startswith(CAPACITY_REASONS):
+        return None
+    keys = ('domains', 'revision', 'head_verified', 'fake_main_enabled', 'fake_main_current',
+            'fake_main_paths', 'fake_main_history', 'page_metadata')
+    return {**cross.source_guard(state), **{key: state[key] for key in keys if key in state}}
+
+
 def build(db, cfg, targets, sites, states, free):
     plans, reasons = [], {}
     used = {domain_key(d) for d in db.info.get('reglue_preview_domains', ())}
@@ -138,6 +153,6 @@ def build(db, cfg, targets, sites, states, free):
                 save(fallback, target)
                 mark(db, target, state)
                 continue
-            reasons[target.id] = ('Резерв в БАН; нет разрешённого новорега другой сетки или доступного дропа в базе резервов.' if blocked else
-                'Нет неиспользованных новорегов и дропов своей сетки, доступного дропа в базе резервов и разрешённого новорега другой сетки того же бренда и GEO.' + (' Дропы из базы исключены для AZ.' if cross.geo_key(target.cache_geo) == 'AZ' else ''))
+            reasons[target.id] = (CAPACITY_REASONS[0] if blocked else
+                CAPACITY_REASONS[1] + (' Дропы из базы исключены для AZ.' if cross.geo_key(target.cache_geo) == 'AZ' else ''))
     return plans, reasons

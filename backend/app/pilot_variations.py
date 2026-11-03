@@ -101,51 +101,23 @@ def finalize(db, job, result):
         return
     cfg = auto.config(db)
     all_plans = [p for g in result['groups'] for p in g.get('plans', [])]
-    total = len(all_plans)
     mixed = job.payload.get('planning_mode') == 'mixed'
     shares = percentages(db, job)
+    plans = all_plans
+    from app.pilot_released_reserves import recover
+    # Each iteration can only add a previously skipped target. Bound the loop by
+    # the saved selection, and never revise a finalized/reviewed plan on a read.
+    for _ in range(len(result['items']) + 1):
+        previous = plans
+        desired = count_share(len(plans), shares['subdomains'])
+        plans = allocate_subdomains(db, job, cfg, previous, desired, mixed)
+        recovered = recover(db, job, result, previous, plans)
+        if not recovered:
+            break
+        plans = [*plans, *recovered]
+    total = len(plans)
     desired = count_share(total, shares['subdomains'])
-    subplans = [p for p in all_plans if p.get('create_subdomain') or str(p.get('main_target_kind', '')).startswith('sub_')]
-    assigned = {domain_key(p['new_main']) for p in all_plans}
-    replacements = {}
-    reasons = []
-    # Existing selected reserves keep their priority. Pick local parents without transfers.
-    candidates = [] if mixed else [p for p in all_plans if p not in subplans and not p.get('use_selected_reserve') and p.get('execution_mode') == 'cross_network' and not p.get('replace_banned_reserve')]
-    for old in distributed(candidates, job.id + ':subdomains'):
-        if len(subplans) >= desired: break
-        site = db.get(models.Site, old['site_id'])
-        state = {**old['target_guard'], 'domains':old['target_domains'], 'revision':old['revision']}
-        allowed = {**state, 'domains':[d for d in state['domains'] if domain_key(d) not in assigned or domain_key(d) == domain_key(old['new_main'])]}
-        from app.mass_main_targets import subdomain_candidate
-        choice = None
-        types = ('newreg', 'drop') if len(subplans) % 2 == 0 else ('drop', 'newreg')
-        for kind in types:
-            if cfg.main_target_mode in ('newreg','drop') and kind != cfg.main_target_mode: continue
-            try:
-                parent, child = subdomain_candidate(db, site, allowed, 'sub_' + kind, cfg, prefer_geo=True, allocation_plans=subplans)
-                if domain_key(child) in assigned: continue
-                choice = parent, child, kind; break
-            except ValueError: continue
-        if not choice: continue
-        parent, child, kind = choice
-        try:
-            with replay(db, old):
-                plan = cross.make_plan(cfg, site, state, site, state, child, mode='local_subdomain', db=db,
-                    plans=[p for p in all_plans if p['site_id'] != site.id])
-            # Keep the already reviewed, collision-free fake path instead of allocating again.
-            for key in ('title_h1_current','fake_main_path','create_fake_main_path','new_fake_main_path','canonicalFakeMainMarkup','canonical_mode'):
-                if key in old: plan[key] = old[key]
-            if old.get('fake_main_path') and plan.get('fake_main_path'):
-                plan['alternateMarkup'] = old.get('alternateMarkup','').replace(old['new_main'], child)
-            plan.update(local_target=True, parent_domain=parent, create_subdomain=child, main_target_kind='sub_'+kind,
-                required_domain_type=kind, domain_type=kind, requires_newreg=False, pilot_subdomain=True)
-            parent_alternate(plan, parent, (site.cache_language or '').replace('_','-').split('-')[0])
-            plan['required_page_urls'] = ['https://' + child + '/'] + (['https://' + child + plan['fake_main_path']] if plan.get('fake_main_path') else [])
-            plan = stamp_plan(db, plan, state, site, old.get('mass_filter'))
-            replacements[site.id] = plan; subplans.append(plan); assigned.add(domain_key(child))
-            # Do not reuse released stock/domain in this finalized preview; it remains unclaimed.
-        except ValueError as error: reasons.append(str(error))
-    plans = [replacements.get(p['site_id'],p) for p in all_plans]
+    subplans = [p for p in plans if p.get('create_subdomain') or str(p.get('main_target_kind', '')).startswith('sub_')]
     redirect_count = count_share(total,shares['redirects'])
     # Avoid redirecting the parent required as an alternate for a subdomain Main.
     redirect_candidates = [p for p in plans if domain_key(p.get('old_main','')) != domain_key(p.get('parent_alternate_domain',''))]
@@ -196,7 +168,8 @@ def finalize(db, job, result):
         if g.get('batch_id'):
             validate(g['plans'])
             ledger = db.get(models.AutoReglueConfig,key(g['batch_id']))
-            ledger.value = {**ledger.value, 'plans':deepcopy(g['plans'])}
+            ledger.value = {**ledger.value, 'plans':deepcopy(g['plans']),
+                            'skipped':[row for row in ledger.value.get('skipped', []) if row['site_id'] not in by_id]}
     counts = Counter(mode(p.get('canonicalFakeMainMarkup'),p.get('fake_main_path')) for p in plans)
     result['variation_summary'] = {'total':total,'subdomains':len(subplans),'emergency_subdomains':sum(bool(p.get('emergency_subdomain')) for p in plans),'subdomains_requested':desired,'subdomains_percent':shares['subdomains'], 'redirects_percent':shares['redirects'], 'without_alternates_percent':shares['without_alternates'],
         'redirects':len(redirects),'redirects_requested':redirect_count,'title_h1':len(rewrites),
@@ -217,6 +190,49 @@ def finalize(db, job, result):
         if max((counts[m] for m in TITLE_REWRITE_LABELS), default=0) - min((counts[m] for m in TITLE_REWRITE_LABELS), default=0) > 1:
             result['variation_summary']['warning'] += ' Режимы заголовков распределены не поровну: часть страниц поддерживает не все способы переписывания.'
     prepare_titles(db,job,result)
+
+
+def allocate_subdomains(db, job, cfg, all_plans, desired, mixed):
+    subplans = [p for p in all_plans if p.get('create_subdomain') or str(p.get('main_target_kind', '')).startswith('sub_')]
+    assigned = {domain_key(p.get(key)) for p in all_plans for key in ('new_main', 'parent_domain', 'parent_alternate_domain') if p.get(key)}
+    replacements = {}
+    reasons = []
+    # Existing selected reserves keep their priority. Pick local parents without transfers.
+    candidates = [] if mixed else [p for p in all_plans if p not in subplans and not p.get('use_selected_reserve') and p.get('execution_mode') == 'cross_network' and not p.get('replace_banned_reserve')]
+    for old in distributed(candidates, job.id + ':subdomains'):
+        if len(subplans) >= desired: break
+        site = db.get(models.Site, old['site_id'])
+        state = {**old['target_guard'], 'domains':old['target_domains'], 'revision':old['revision']}
+        allowed = {**state, 'domains':[d for d in state['domains'] if domain_key(d) not in assigned or domain_key(d) == domain_key(old['new_main'])]}
+        from app.mass_main_targets import subdomain_candidate
+        choice = None
+        types = ('newreg', 'drop') if len(subplans) % 2 == 0 else ('drop', 'newreg')
+        for kind in types:
+            if cfg.main_target_mode in ('newreg','drop') and kind != cfg.main_target_mode: continue
+            try:
+                parent, child = subdomain_candidate(db, site, allowed, 'sub_' + kind, cfg, prefer_geo=True, allocation_plans=subplans)
+                if domain_key(child) in assigned: continue
+                choice = parent, child, kind; break
+            except ValueError: continue
+        if not choice: continue
+        parent, child, kind = choice
+        try:
+            with replay(db, old):
+                plan = cross.make_plan(cfg, site, state, site, state, child, mode='local_subdomain', db=db,
+                    plans=[p for p in all_plans if p['site_id'] != site.id])
+            # Keep the already reviewed, collision-free fake path instead of allocating again.
+            for key in ('title_h1_current','fake_main_path','create_fake_main_path','new_fake_main_path','canonicalFakeMainMarkup','canonical_mode'):
+                if key in old: plan[key] = old[key]
+            if old.get('fake_main_path') and plan.get('fake_main_path'):
+                plan['alternateMarkup'] = old.get('alternateMarkup','').replace(old['new_main'], child)
+            plan.update(local_target=True, parent_domain=parent, create_subdomain=child, main_target_kind='sub_'+kind,
+                required_domain_type=kind, domain_type=kind, requires_newreg=False, pilot_subdomain=True)
+            parent_alternate(plan, parent, (site.cache_language or '').replace('_','-').split('-')[0])
+            plan['required_page_urls'] = ['https://' + child + '/'] + (['https://' + child + plan['fake_main_path']] if plan.get('fake_main_path') else [])
+            plan = stamp_plan(db, plan, state, site, old.get('mass_filter'))
+            replacements[site.id] = plan; subplans.append(plan); assigned.add(domain_key(child))
+        except ValueError as error: reasons.append(str(error))
+    return [replacements.get(p['site_id'], p) for p in all_plans]
 
 
 def naming_summary(plans):
