@@ -13,6 +13,7 @@ from app.article_images_api import router as article_images_router
 from app.project_notifications_api import router as project_notifications_router
 from app.project_structured_data import router as project_structured_data_router
 from app.reglue_journal import router as reglue_journal_router
+from app.dashboard_activity import router as dashboard_activity_router
 from app.core.config import get_settings
 from app.db import init_db
 
@@ -49,3 +50,4 @@ app.include_router(article_images_router, prefix="/api")
 app.include_router(project_notifications_router, prefix="/api")
 app.include_router(project_structured_data_router, prefix="/api")
 app.include_router(reglue_journal_router, prefix="/api")
+app.include_router(dashboard_activity_router, prefix="/api")

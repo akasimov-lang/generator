@@ -1,4 +1,5 @@
 import { ReglueJournalCard, ReglueJournalPage } from "./ReglueJournal";
+import { DashboardActivity } from "./DashboardActivity";
 import { siteGeoFilterCode } from "./siteGeoFilter";
 import { ReservePoolButton, ReglueReservesPage } from "./ReglueReserves";
 import type { MenuLibraryItem } from "./menuLibrary";
@@ -1980,6 +1981,7 @@ function DashboardView({ api, dashboard, tasks, content, sites, onOpenTask, onCh
         <KpiCard icon={<Activity />} label="Опубликовано" value={dashboard.stats.published} />
         <KpiCard icon={<AlertTriangle />} label="Ошибки" value={dashboard.stats.errors} danger />
       </div>
+      <DashboardActivity api={api} />
       {reviewExpanded ? (
         <DataPanel title={`Тексты на согласование · ${awaitingItems.length}`}>
           <div className="bulkToolbar">
