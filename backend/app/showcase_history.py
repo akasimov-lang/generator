@@ -58,16 +58,18 @@ def events(db, site_id):
 def remember_report(db, job, entry):
     inventory=entry.get('inventory')
     change=entry.get('showcase_change')
+    if entry.get('migration') and not change:return
     if not inventory and not change:return
     if inventory:
         home=(inventory.get('home') or {}).get('public') or {}
-        brands=home.get('brands') if home.get('presence')=='present' else [] if home.get('presence')=='none' else None
+        source=inventory.get('home') or {}
+        brands=home.get('brands') if home.get('presence')=='present' else [] if home.get('presence')=='none' and source.get('presence')=='none' else None
         delta=brand_delta(brands,brands)
         delta.update(added=0,removed=0)
         title='Проверка витрины и внутренних страниц'
         message=summary_text(delta)+' · Изменения сайта не выполнялись.'
     else:
-        delta=change;title='Изменение витрины';message=summary_text(delta)
+        delta=change;title='Изменение витрины';message=summary_text(delta)+((' · '+change['description']) if change.get('description') else '')
     saved={'title':title,'message':message,'delta':delta,'report_id':job.id,'result_status':entry['status']}
     key=str(uuid5(NAMESPACE_URL,'pagepilot:showcase-report:'+job.id+':'+entry['site_id']))
     digest=hashlib.sha256(json.dumps(saved,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
