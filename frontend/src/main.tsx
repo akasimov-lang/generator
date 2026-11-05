@@ -1,3 +1,4 @@
+import { projectType, projectTypeFilter, matchesProjectType, type ProjectTypeFilter } from "./projectTypeFilter";
 import { ArrowLeft } from "lucide-react";
 import { pilotFilterReturnPath, projectFromPilotFilter } from "./pilotFilterNavigation";
 import { showcaseBrandCount, type ShowcaseSummary } from "./showcaseCount";
@@ -1569,9 +1570,9 @@ function App() {
         {activeView === "guide" && <React.Suspense fallback={<p>Загрузка инструкции…</p>}><UserGuideView /></React.Suspense>}
         {activeView === "autoReglue" && <><GlobalProjectSearchResults sites={siteSnapshot} query={massSearchQuery} onOpen={openMassSearchProject} loading={!catalogLoaded&&!catalogError}/><div style={{display:globalMassQuery?"none":undefined}}><AutoReglueView refreshToken={massRefreshToken} api={api} onNetworksChanged={loadAll} renderReport={(onScopeChange, selectionIds, onSelection, moveActions, headerContainer) => <MassActionStatistics massOnly refreshToken={massRefreshToken} catalogReady={catalogLoaded} catalogError={catalogError} onInventoryChanged={loadAll} headerContainer={headerContainer} api={api} onScopeChange={onScopeChange} renderProjects={(ids, refresh, scopeLabel) => <SitesView projectScopeLabel={scopeLabel} embedded massActions api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={updates => { mergeSites(updates); refresh(); }} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll} selectionIds={selectionIds} onSelectionChange={onSelection} headerActions={moveActions} />} />} /></div></>}
         {activeView === "reglueReserves" && <ReglueReservesPage api={api} />}
-        {activeView === "autoPilot" && <AutoPilotPage api={api} renderProjects={(ids, label) => catalogError ? <p role="alert">{catalogError}</p> : !catalogLoaded ? <p role="status">Загружаем проекты…</p> : <SitesView key={label} embedded api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} projectScopeLabel={label} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/>}/>}
-        {activeView === "autoPilotLogs" && <AutoPilotPage api={api} logs renderProjects={(ids, label) => catalogError ? <p role="alert">{catalogError}</p> : !catalogLoaded ? <p role="status">Загружаем проекты…</p> : <SitesView key={label} embedded api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} projectScopeLabel={label} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/>}/>}
-        {activeView === "autoPilotReport" && <AutoPilotPage api={api} reports renderProjects={(ids, label) => catalogError ? <p role="alert">{catalogError}</p> : !catalogLoaded ? <p role="status">Загружаем проекты…</p> : <SitesView key={label} embedded api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} projectScopeLabel={label} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/>}/>}
+        {activeView === "autoPilot" && <AutoPilotPage api={api} renderProjects={(ids, label) => catalogError ? <p role="alert">{catalogError}</p> : !catalogLoaded ? <p role="status">Загружаем проекты…</p> : <SitesView key={label} embedded showProjectTypeFilters api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} projectScopeLabel={label} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/>}/>}
+        {activeView === "autoPilotLogs" && <AutoPilotPage api={api} logs renderProjects={(ids, label) => catalogError ? <p role="alert">{catalogError}</p> : !catalogLoaded ? <p role="status">Загружаем проекты…</p> : <SitesView key={label} embedded showProjectTypeFilters api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} projectScopeLabel={label} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/>}/>}
+        {activeView === "autoPilotReport" && <AutoPilotPage api={api} reports renderProjects={(ids, label) => catalogError ? <p role="alert">{catalogError}</p> : !catalogLoaded ? <p role="status">Загружаем проекты…</p> : <SitesView key={label} embedded showProjectTypeFilters api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} projectScopeLabel={label} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/>}/>}
         {activeView === "autoReglueGuide" && <><a className="button secondary" href="/guide" onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("guide"); } }}>Все инструкции</a><AutoReglueGuide backLabel="Вернуться к автопереклею" onBack={() => navigateTo("autoReglue")} /></>}
         {activeView === "settings" && <SettingsView api={api} currentUser={currentUser} designVersion={designVersion} onDesignVersionChange={setDesignVersion} inputStyle={inputStyle} onInputStyleChange={setInputStyle} onChanged={loadAll} />}
       </main>
@@ -8740,8 +8741,16 @@ function PeerProjectPicker({ sites, geo, brand, onChange }: { sites: Site[]; geo
   </section>;
 }
 
-function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsername, favoritesOnly = false, readOnly = false, embedded = false, massActions = false, onChanged, onSelectionChange, selectionIds, headerActions, moveFilter, projectScopeLabel }: ViewProps & { massActions?: boolean; projectScopeLabel?:string; moveFilter?: MassActionFilter; headerActions?: React.ReactNode; sites: Site[]; snapshotUpdatedAt: string | null; onSitesChanged: (sites: Site[], replace?: boolean) => void; currentUsername: string; favoritesOnly?: boolean; readOnly?: boolean; embedded?: boolean; selectionIds?: string[]; onSelectionChange?: (ids: string[]) => void }) {
+function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsername, favoritesOnly = false, readOnly = false, embedded = false, massActions = false, onChanged, onSelectionChange, selectionIds, headerActions, moveFilter, projectScopeLabel, showProjectTypeFilters = false }: ViewProps & { showProjectTypeFilters?: boolean; massActions?: boolean; projectScopeLabel?:string; moveFilter?: MassActionFilter; headerActions?: React.ReactNode; sites: Site[]; snapshotUpdatedAt: string | null; onSitesChanged: (sites: Site[], replace?: boolean) => void; currentUsername: string; favoritesOnly?: boolean; readOnly?: boolean; embedded?: boolean; selectionIds?: string[]; onSelectionChange?: (ids: string[]) => void }) {
   const [showStatistics, setShowStatistics] = React.useState(() => window.location.hash === "#mass-action-statistics");
+  const [typeFilter, setTypeFilter] = React.useState<ProjectTypeFilter|null>(() => showProjectTypeFilters ? projectTypeFilter(window.location.search) : null);
+  function changeTypeFilter(next: ProjectTypeFilter|null) {
+    const url = new URL(window.location.href);
+    if (next) url.searchParams.set("projectType", next); else url.searchParams.delete("projectType");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    setTypeFilter(next);
+    setCurrentPage(1);
+  }
   const preferencesKey = `sites-table-preferences:${currentUsername}`;
   const storedPreferences = React.useMemo(() => {
     try {
@@ -8954,6 +8963,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       id: site.id,
       name: site.name,
       brand: site.brand || "Общие ключи",
+      siteType: projectType(site),
       baseUrl: site.base_url,
       isFavorite: favoriteSiteIds.includes(site.id),
       reserve: site.cache_reserve || "",
@@ -9043,7 +9053,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       && (!geoFilter || siteGeoFilterCode(row.geo) === geoFilter)
       && (!normalizedBrandFilter || matchesProjectSearch(row.brand, normalizedBrandFilter))
     );
-    return matchesSearch && (exactNetworkDomainMatch || matchesActiveFilters);
+    return matchesProjectType({site_type:row.siteType}, typeFilter) && matchesSearch && (exactNetworkDomainMatch || matchesActiveFilters);
   });
   const statusCounts = new Map(statusFilterOptions.map(option => [option.value, rowsBeforeStatus.filter(row => row.projectStatus === option.value).length]));
   const filteredRows = rowsBeforeStatus.filter(row => statusFilters.includes(row.projectStatus) && matchesSummaryFilter(row)).sort((left, right) => {
@@ -9323,6 +9333,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
             <button type="button" className="button secondary compact siteExportButton" disabled={exportingTable || !filteredRows.length}
               title={`Скачать Excel: ${filteredRows.length} проектов со всех страниц текущей выборки`}
               onClick={() => void downloadProjectTable()}><Download size={15} />{exportingTable ? "Готовим Excel…" : "Скачать таблицу"}</button>
+            {showProjectTypeFilters && <span role="group" aria-label="Тип проектов" style={{display:"inline-flex",gap:6}}>{([['monobrand','Монобренды'],['general','Общие ключи']] as const).map(([value,label]) => <button key={value} type="button" className={`button compact ${typeFilter === value ? "primary" : "secondary"}`} aria-pressed={typeFilter === value} onClick={() => changeTypeFilter(typeFilter === value ? null : value)}>{label}</button>)}</span>}
             {headerActions}
             {massActions && !readOnly && <MassReglueLaunch api={api} siteIds={filteredRows.map(row => row.id)} onChanged={onChanged} />}
             {moveFilter && !readOnly && <NetworkMoveButtons key={JSON.stringify(moveFilter)} api={api} filter={moveFilter} siteIds={filteredRows.filter(row => row.projectStatus === "mass_actions" && row.isActive && (!selectedProjectNames.length || selectedProjectNames.includes(row.name))).map(row => row.id)} onChanged={onChanged} />}
