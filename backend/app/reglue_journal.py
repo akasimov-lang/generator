@@ -142,6 +142,33 @@ def latest_for_site(db, site):
     return {key: entry[key] for key in ("at", "old_main", "new_main", "old_path", "new_path")}
 
 
+def recent_for_site(db, site, limit=7):
+    """Confirmed Main and active fake-path changes by any actor, newest first."""
+    operations = db.scalars(select(models.NetworkOperation).where(
+        models.NetworkOperation.site_id == site.id,
+        models.NetworkOperation.status == 'confirmed',
+        models.NetworkOperation.action.in_(['reglue', 'create_fake_main', 'select_fake_main']))).all()
+    items = []
+    for op in operations:
+        payload = op.request_payload or {}
+        before, after = payload.get('journal_before') or {}, payload.get('journal_after') or {}
+        if op.action == 'reglue':
+            old_main, new_main = domain_name(payload.get('source_domain')), domain_name(payload.get('reserve'))
+            if not new_main or old_main == new_main:
+                continue
+            items.append({'id': op.id, 'kind': 'reglue', 'at': confirmed_at(op).isoformat(),
+                          'old_main': old_main or None, 'new_main': new_main,
+                          'old_path': before.get('fake_path'), 'new_path': after.get('fake_path')})
+        else:
+            change = path_change(op)
+            if not change or change['before'] == change['after']:
+                continue
+            items.append({'id': op.id, 'kind': 'fake_path', 'at': change['at'],
+                          'old_main': before.get('main'), 'new_main': after.get('main') or before.get('main'),
+                          'old_path': change['before'], 'new_path': change['after']})
+    return sorted(items, key=lambda item: (utc(item['at']), item['id']), reverse=True)[:limit]
+
+
 @router.get("/summary")
 def summary(user: AuthUser, db: Session = Depends(get_db)):
     today = datetime.now(timezone.utc).astimezone(MOSCOW).date().isoformat()

@@ -5,7 +5,7 @@ import { fakeQueueActive, normalizedFakePath } from "./fakeMainQueue";
 import { TemplateCombobox } from "./TemplateCombobox";
 import { validateReserveSave } from "./networkReserve";
 import { readNetworkWithRetry } from "./networkReadRetry";
-import { LastReglueSummary, type LastReglue } from "./LastReglueSummary";
+import { LastReglueSummary, type LastReglue, type RecentNetworkChange } from "./LastReglueSummary";
 import { matchesProjectSearch, normalizeDomainQuery } from "./projectSearch";
 import { Trash2, X, Search, Check, ExternalLink } from "lucide-react";
 import { buildBaseAlternates } from "./standardAlternates";
@@ -20,6 +20,7 @@ type DomainClassification = { is_subdomain: boolean; parent_domain: string | nul
 type Network = {
   last_reglue_at?: string | null;
   last_reglue?: LastReglue | null;
+  recent_network_changes?: RecentNetworkChange[];
   stock_warning?: string | null;
   domain_redirects?: DomainRedirect[]; has_domain_redirects?: boolean;
   page_redirects?: PageRedirectGroup[]; has_page_redirects?:boolean;
@@ -424,7 +425,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
           <button type="button" aria-pressed={networkView === "amp"} onClick={() => setNetworkView("amp")}>Ампы</button>
         </div>}</div>
       <div className="networkRefreshStatus"><button type="button" className="button secondary compact" disabled={Boolean(busy)} onClick={() => void load(true, true)}>{busy === "refresh" ? "Обновляем…" : "Обновить данные"}</button>{message && message !== "Ручной переклей: подтверждено." && <small role="status">{message}</small>}
-        <LastReglueSummary last={data?.last_reglue} observedAt={data?.last_reglue_at} />
+        <LastReglueSummary last={data?.last_reglue} recent={data?.recent_network_changes} observedAt={data?.last_reglue_at} />
       </div>
     </div>
     <div className="dataPanelBody">

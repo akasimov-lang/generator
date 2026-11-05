@@ -286,7 +286,7 @@ def operation_history(db, site):
 def result(db, site, state):
     from app.network_stock_warning import notice
     from app.domain_transfer_policy import banned_domains
-    from app.reglue_journal import latest_for_site
+    from app.reglue_journal import latest_for_site, recent_for_site
     return {
         "stock_warning": notice(db, site, state),
         "added_to_system_at": site.added_to_system_at,
@@ -299,6 +299,7 @@ def result(db, site, state):
         "operations": operation_history(db, site),
         "last_reglue_at": site.last_reglue_at,
         "last_reglue": latest_for_site(db, site),
+        "recent_network_changes": recent_for_site(db, site),
     }
 
 

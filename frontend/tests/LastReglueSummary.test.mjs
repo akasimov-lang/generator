@@ -1,0 +1,40 @@
+import assert from 'node:assert/strict';
+import {after,test} from 'node:test';
+import React from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {createServer} from 'vite';
+const server=await createServer({configFile:false,root:new URL('..',import.meta.url).pathname,server:{middlewareMode:true,hmr:false},optimizeDeps:{noDiscovery:true,include:[]},appType:'custom'});
+after(()=>server.close());
+const {LastReglueSummary}=await server.ssrLoadModule('/src/LastReglueSummary.tsx');
+const render=props=>renderToStaticMarkup(React.createElement(LastReglueSummary,props));
+const last={at:'2026-10-30T12:47:32Z',old_main:'mostbetuz1.atticrestaurant.com',new_main:'atticrestaurant.com',old_path:'/uz/',new_path:'/uz/'};
+test('confirmed change shows Moscow time and complete historical scheme for tooltip and keyboard focus',()=>{
+ const html=render({last});
+ assert.match(html,/30.10.2026, 15:47:32 МСК/);
+ assert.match(html,/mostbetuz1.atticrestaurant.com → atticrestaurant.com/);
+ assert.match(html,/Внутряк: \/uz\/ → \/uz\//);
+ assert.match(html,/tabindex="0"/);assert.match(html,/title=/);
+});
+test('newer externally observed change never displays an outdated local scheme as the last change',()=>{
+ const html=render({last,observedAt:'2026-10-30T13:00:00Z'});
+ assert.match(html,/Смена Main обнаружена.*16:00:00 МСК/);
+ assert.doesNotMatch(html,/mostbetuz1|Внутряк/);
+ assert.equal(render({observedAt:'invalid'}),'');
+});
+
+test('recent fake-path replacements show before and after with Moscow time and a seven-entry limit',()=>{
+ const recent=Array.from({length:9},(_,i)=>({id:String(i),kind:'fake_path',at:`2026-11-05T09:0${i}:00Z`,old_main:'main.test',new_main:'main.test',old_path:'/old/',new_path:'/new-'+i}));
+ const html=render({last,recent});
+ assert.equal((html.match(/<article/g)||[]).length,7);
+ assert.match(html,/Замена внутряка: 05.11.2026, 12:08:00 МСК/);
+ assert.match(html,/Внутряк: \/old\/ → \/new-8/);
+ assert.doesNotMatch(html,/new-0|new-1|Последний переклей/);
+ assert.ok(html.indexOf('new-8')<html.indexOf('new-7'));
+});
+
+test('recent history preserves a newer externally observed Main change without inventing its addresses',()=>{
+ const html=render({last,recent:[{...last,id:'confirmed',kind:'reglue'}],observedAt:'2026-10-30T13:00:00Z'});
+ assert.match(html,/Смена Main обнаружена: 30.10.2026, 16:00:00 МСК/);
+ assert.ok(html.indexOf('Смена Main обнаружена')<html.indexOf('Переклей:'));
+ assert.equal((html.match(/Внутряк:/g)||[]).length,1);
+});

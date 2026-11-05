@@ -24,7 +24,9 @@ attempt=1
 while [ "$attempt" -le 30 ]; do
   if compose exec -T backend curl -fsS http://127.0.0.1:8000/api/health >/dev/null \
     && compose exec -T nginx wget -q -O /dev/null http://backend:8000/api/health \
-    && compose exec -T nginx wget -q -O /dev/null http://frontend:80/; then
+    && compose exec -T nginx wget -q -O /dev/null http://frontend:80/ \
+    && compose ps --status running --services | grep -qx celery_beat \
+    && compose exec -T backend python -c "from app.worker import celery_app; replies=celery_app.control.inspect(timeout=2).ping() or {}; expected={'generation','menu','publication','automation','pilot_texts','confirmation','cache_sync','maintenance'}; missing=expected-{name.split('@')[0] for name in replies}; print('Workers missing:', sorted(missing)) if missing else None; raise SystemExit(bool(missing))"; then
     printf '%s\n' "$revision" > "$repo/deployed-revision"
     echo "Production health checks passed: $revision"
     exit 0
