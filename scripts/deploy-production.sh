@@ -13,6 +13,8 @@ cd "$worktree"
 test -f .env
 compose() { docker compose -f docker-compose.yml -f docker-compose.production.yml "$@"; }
 compose build
+# Validate broker transport compatibility before replacing running services.
+compose run --rm --no-deps backend python -c "from kombu.transport.redis import Channel; Channel.__new__(Channel)._get_client()"
 compose up -d postgres redis
 compose run --rm backend alembic upgrade head
 compose up -d
