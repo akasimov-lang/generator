@@ -1,3 +1,4 @@
+import { pilotDomainFilter } from "./pilotFilterNavigation";
 import React from "react";
 import { pilotTextError, needsTextRetry } from "./pilotTextError";
 import { TemplateCombobox } from "./TemplateCombobox";
@@ -105,7 +106,14 @@ function AutoPilotDetail({api,logs=false,renderProjects}:{api:Api;logs?:boolean;
  const [loaded,setLoaded]=React.useState(false);
  const [job,setJob]=React.useState<Pilot|null>(null),[busy,setBusy]=React.useState(false),[error,setError]=React.useState("");
  const issuesOnly=new URLSearchParams(window.location.search).get("issues")==="1";
- const [domainFilter,setDomainFilter]=React.useState<DomainFilter|null>(null);
+ const [domainFilter,setDomainFilterState]=React.useState<DomainFilter|null>(()=>pilotDomainFilter(window.location.search));
+ function setDomainFilter(value: React.SetStateAction<DomainFilter|null>) {
+  const next=typeof value==="function"?value(domainFilter):value;
+  const url=new URL(window.location.href);
+  if(next)url.searchParams.set("domainFilter",next);else url.searchParams.delete("domainFilter");
+  window.history.replaceState(window.history.state,"",url.pathname+url.search+url.hash);
+  setDomainFilterState(next);
+ }
  const [issueTab,setIssueTab]=React.useState<"results"|"journal">("results");
  const initialId=React.useRef(new URLSearchParams(window.location.search).get("id"));
  const starting=React.useRef(false);

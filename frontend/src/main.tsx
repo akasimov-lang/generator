@@ -1,3 +1,5 @@
+import { ArrowLeft } from "lucide-react";
+import { pilotFilterReturnPath, projectFromPilotFilter } from "./pilotFilterNavigation";
 import { showcaseBrandCount, type ShowcaseSummary } from "./showcaseCount";
 import { ReglueJournalCard, ReglueJournalPage } from "./ReglueJournal";
 import { DashboardActivity } from "./DashboardActivity";
@@ -1050,7 +1052,10 @@ function App() {
 
   const navigateTo = React.useCallback((view: AppView, nextWorkspaceTab: WorkspaceTab = workspaceTab, replace = false, projectName?: string | null) => {
     const normalizedWorkspaceTab = view === "workspace" ? nextWorkspaceTab : workspaceTab;
-    const nextPath = pathForRoute(view, normalizedWorkspaceTab, projectName);
+    let nextPath = pathForRoute(view, normalizedWorkspaceTab, projectName);
+    if (view === "workspace" && activeView === "workspace" && (!projectName || projectName === workspaceProjectNameFromPath(window.location.pathname))) {
+      nextPath = projectFromPilotFilter(nextPath, new URLSearchParams(window.location.search).get("pilotReturn"));
+    }
     setMobileMenuOpen(false);
     setActiveView(view);
     if (view === "sites" && activeView !== "sites") setSitesSearchQuery("");
@@ -2765,6 +2770,7 @@ function ProjectWorkspaceView({
 
       </DataPanel>
         <nav className="workspaceTabs" aria-label="Вкладки проекта">
+          {pilotFilterReturnPath(new URLSearchParams(window.location.search).get("pilotReturn")) ? <a className="tabButton tabButtonIconOnly" href={pilotFilterReturnPath(new URLSearchParams(window.location.search).get("pilotReturn"))!} title="Назад к фильтру отчёта" aria-label="Назад к фильтру отчёта"><ArrowLeft size={18} aria-hidden="true" /></a> : (
           <TabButton
             href={pathForRoute("workspace", "overview", selectedSite?.name)}
             icon={<Search size={18} aria-hidden="true" />}
@@ -2773,6 +2779,7 @@ function ProjectWorkspaceView({
             active={activeTab === "overview"}
             onClick={() => onTabChange("overview", selectedSite?.name)}
           />
+          )}
           <TabButton href={pathForRoute("workspace", "network", selectedSite?.name)} icon={<Database size={16} />} label="Сетка" active={activeTab === "network"} onClick={() => onTabChange("network", selectedSite?.name)} />
           <TabButton href={pathForRoute("workspace", "redirects", selectedSite?.name)} icon={<CornerDownRight size={16} />} label="Переклей" active={activeTab === "redirects"} onClick={() => onTabChange("redirects", selectedSite?.name)} />
           {canManageAutomation && selectedSite && <a
@@ -9462,7 +9469,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
                     {localeFlag(localeCountryCode(row.geo || row.language || "")) ? <span aria-hidden="true">{localeFlag(localeCountryCode(row.geo || row.language || ""))}</span> : null}
                     {<a
                       className="siteProjectDomainLink"
-                      href={pathForRoute("workspace", "network", row.name)}
+                      href={projectFromPilotFilter(pathForRoute("workspace", "network", row.name), window.location.pathname + window.location.search + window.location.hash)}
                       onClick={() => {
                         localStorage.setItem(`workspace_site_id:${currentUsername}`, row.id);
                         localStorage.removeItem("workspace_site_id");
@@ -9542,7 +9549,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
               subdomainsCount: massActions ? readOnly ? (row.participation ? "Да" : "Нет") : <fieldset className="massParticipation" disabled={savingParticipation.includes(row.id)}>
                 <SearchableSelect value={row.participation ? "yes" : "no"} searchable={false} compact ariaLabel={`Участвует в переклее ${row.name}`} searchPlaceholder="Найти значение" options={[{value:"yes",label:"Да"},{value:"no",label:"Нет"}]} onChange={value => void updateParticipation(row.id, value === "yes")} />
               </fieldset> : <span title={row.subdomainsCount === null ? "Состав витрины не определён или ещё загружается" : "Количество уникальных брендов на витрине"}>{row.subdomainsCount === null ? "—" : formatNumber(row.subdomainsCount)}</span>,
-              domainsCount: row.isActive ? <a href={pathForRoute("workspace", "network", row.name)} aria-label={`Открыть сетку проекта ${row.name}`}>{formatNumber(row.domainsCount)}</a> : <span title="Сохранённое число доменов неактивного проекта">{formatNumber(row.domainsCount)}</span>
+              domainsCount: row.isActive ? <a href={projectFromPilotFilter(pathForRoute("workspace", "network", row.name), window.location.pathname + window.location.search + window.location.hash)} aria-label={`Открыть сетку проекта ${row.name}`}>{formatNumber(row.domainsCount)}</a> : <span title="Сохранённое число доменов неактивного проекта">{formatNumber(row.domainsCount)}</span>
             };
             return visibleColumnOrder.map((column) => cells[column]);
           })}
