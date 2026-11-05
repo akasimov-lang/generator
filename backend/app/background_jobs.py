@@ -62,6 +62,9 @@ def run_job(db, job_id):
     if candidate and candidate.kind == 'pilot_text':
         from app.pilot_text_jobs import execute
         return execute(db, job_id)
+    if candidate and candidate.kind == 'fake_main_queue':
+        from app.fake_main_queue import execute_step
+        return execute_step(db, job_id)
     if candidate and candidate.kind == 'reserve_membership_refresh':
         from app.reglue_reserve_refresh import execute_step
         return execute_step(db, job_id)

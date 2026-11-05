@@ -23,12 +23,13 @@ def allow_numeric_fake_paths(state):
 
 
 def normalize_fake_path(value):
-    path = str(value or '').strip().strip('/')
-    if not path or len(path) > 248 or not re.fullmatch(r'[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*', path):
-        raise ValueError('Укажите путь страницы, например test1 или /events/, без домена и параметров.')
+    raw = str(value or '').strip()
+    path = raw.strip('/')
+    if not path or len(path) > 248 or not re.fullmatch(r'[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*(?:/[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)*', path):
+        raise ValueError('Укажите путь страницы, например /events, /events/ или /index.php, без домена и параметров.')
     if path.split('/')[0].lower() in {'api', 'admin', 'assets', 'static'}:
         raise ValueError('Этот путь зарезервирован системой.')
-    return '/' + path + '/'
+    return '/' + path + ('/' if raw.endswith('/') else '')
 
 
 def fake_paths(alternate):
@@ -50,7 +51,7 @@ def create_fake_settings(project, value, *, activate=False):
     alternate = dict(settings.get('alternate') or {})
     data = project.get('data') or {}
     for page in data.get('pages', []) if isinstance(data, dict) else []:
-        if isinstance(page, dict) and '/' + str(page.get('slug') or '').strip('/') + '/' == path:
+        if isinstance(page, dict) and str(page.get('slug') or '').strip('/') == path.strip('/'):
             raise ValueError('По этому пути уже есть обычная страница. Выберите другой путь.')
     current = alternate.get('currentFakeMain') or ''
     if not activate and alternate.get('redirectFakeMainsToCurrent') and current and normalize_fake_path(current) != path:
@@ -124,18 +125,18 @@ def next_fake_path(site, state, cfg, *, allocation_index=None):
     occupied = set()
     for value in [*state.get('fake_main_history', []), *state.get('fake_main_paths', []), state.get('fake_main_current')]:
         if value and str(value).strip().strip('/'):
-            occupied.add(normalize_fake_path(value).casefold())
+            occupied.add(normalize_fake_path(value).rstrip('/').casefold() + '/')
     # Existing editorial URLs may contain Unicode, dots or other valid URL characters.
     # Compare their paths for collisions without validating them as new fake paths.
     occupied.update(('/' + str(value).strip().strip('/') + '/').casefold() for value in state.get('content_page_paths', []) if value)
     for name in dict.fromkeys(names):
-        candidate = normalize_fake_path(name)
+        candidate = normalize_fake_path(name + '/')
         if candidate.casefold() not in occupied:
             return candidate
     # A finite occupied set always leaves a free alphabetic suffix, including
     # when historical names or same-brand peer plans occupy the simple names.
     for index in range(len(occupied) + 1):
-        candidate = normalize_fake_path(names[0] + '-' + alphabetic_suffix(index))
+        candidate = normalize_fake_path(names[0] + '-' + alphabetic_suffix(index) + '/')
         if candidate.casefold() not in occupied:
             return candidate
 

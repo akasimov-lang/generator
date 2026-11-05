@@ -395,7 +395,7 @@ def test_fake_main_creation_preserves_settings_and_receipt(env):
     db,site,remote=env
     remote.data['settings']['alternate']['custom']='keep'
     state=network.read_network(db,site)
-    payload=network.NetworkChange(request_id=uuid4(),action='create_fake_main',revision=state['revision'],fake_main_path='test1')
+    payload=network.NetworkChange(request_id=uuid4(),action='create_fake_main',revision=state['revision'],fake_main_path='/test1/')
     result=network.change_network(db,site,payload,'admin')
     assert result['operations'][0]['status']=='confirmed'
     assert result['fake_main_paths']==['/cz/','/test1/']
@@ -412,7 +412,7 @@ def test_fake_main_rejects_existing_content_and_unsafe_paths(env):
     remote.data['data']={'pages':[{'slug':'/test1/'}]}
     state=network.read_network(db,site)
     with pytest.raises(ValueError,match='обычная страница'):
-        change(env,'create_fake_main',state['revision'],fake_main_path='test1')
+        change(env,'create_fake_main',state['revision'],fake_main_path='/test1/')
     for path in ['/', '../test1', 'https://example.com/a', 'test?x=1', 'api/test']:
         with pytest.raises(ValueError):change(env,'create_fake_main',state['revision'],fake_main_path=path)
     assert not remote.calls
@@ -436,7 +436,7 @@ def test_select_existing_fake_main_preserves_other_settings_and_is_idempotent(en
                      redirectFakeMainsToCurrent=True, custom='keep')
     state = network.read_network(db, site)
     payload = network.NetworkChange(request_id=uuid4(), action='select_fake_main',
-                                    revision=state['revision'], fake_main_path='test1')
+                                    revision=state['revision'], fake_main_path='/test1/')
     result = network.change_network(db, site, payload, 'editor')
     assert result['fake_main_current'] == '/test1/'
     assert result['fake_main_paths'] == ['/cz/', '/test1/']
@@ -793,7 +793,7 @@ def test_delete_fake_main_preserves_current_and_other_settings(env):
     payload = network.NetworkChange(request_id=uuid4(), action='select_fake_main',
         revision=state['revision'], fake_main_path='/old/', delete_fake_main=True)
     result = network.change_network(db, site, payload, 'editor')
-    assert result['fake_main_paths'] == ['/cz/']
+    assert result['fake_main_paths'] == ['/cz/', '/old']
     assert result['fake_main_current'] == '/cz/'
     assert result['fake_main_enabled'] is True
     assert remote.data['settings']['alternate']['custom'] == 'keep'

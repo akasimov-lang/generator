@@ -1,4 +1,6 @@
 import React from "react";
+import { useFakeMainQueue } from "./useFakeMainQueue";
+import { fakeQueueActive, normalizedFakePath } from "./fakeMainQueue";
 import { TemplateCombobox } from "./TemplateCombobox";
 import { validateReserveSave } from "./networkReserve";
 import { readNetworkWithRetry } from "./networkReadRetry";
@@ -97,7 +99,19 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
   const [removeDomainInput, setRemoveDomainInput] = React.useState("");
   const [submittingDeletion, setSubmittingDeletion] = React.useState<string[]>([]);
   const mounted = React.useRef(true);
-  const uncertain = data?.operations.some((op) => ["pending", "unknown"].includes(op.status)) || false;
+  const fakeQueue = useFakeMainQueue<Network>(site.id, api, !!busy);
+  const queueOperationIds = new Set(fakeQueue.items.flatMap(item => item.operation_ids));
+  const uncertain = data?.operations.some((op) => ["pending", "unknown"].includes(op.status) && !queueOperationIds.has(op.id)) || false;
+  const appliedQueueNetwork = React.useRef<Network | null>(null);
+  React.useEffect(() => {
+    const next = fakeQueue.server.network;
+    if (!next || next === appliedQueueNetwork.current) return;
+    if (busyRef.current) { appliedQueueNetwork.current = next; return; }
+    appliedQueueNetwork.current = next;
+    if (next.revision !== dataRef.current?.revision || JSON.stringify(next.operations) !== JSON.stringify(dataRef.current?.operations)) {
+      accept(next); setStructuredDataRevision(value => value + 1);
+    }
+  }, [fakeQueue.server.network, busy]);
   const alternatesDirty = Boolean(draft && (draft.markup !== draft.originalMarkup || draft.enabled !== draft.originalEnabled));
   const dirty = canonicalDirty || alternatesDirty;
   const conflict = canonicalConflict || Boolean(data && draft && dirty && (data.alternateMarkup !== draft.originalMarkup || data.enableAlternates !== draft.originalEnabled));
@@ -365,7 +379,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
     const signatures = markupSignatures(data);
     const current = section === "canonical" ? JSON.stringify([canonicalDraft?.standard ?? "", canonicalDraft?.fake ?? "", data.enableCanonical ?? null])
       : section === "alternates" ? JSON.stringify([draft?.markup ?? "", !!draft?.enabled]) : signatures.dynamic;
-    const path = "/" + fakeMainInput.trim().replace(/^\/+|\/+$/g, "") + "/";
+    const path = normalizedFakePath(fakeMainInput);
     const edited = section === "canonical" ? canonicalDirty : section === "alternates" ? alternatesDirty
       : !!fakeMainInput.trim() && !data.fake_main_paths?.includes(path);
     const status = edited || pendingMarkupSections.includes(section) ? "Upload" : savedMarkup[section] === current ? "All Good" : "Actual";
@@ -499,14 +513,23 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
           {!!data.fake_main_paths?.length ? <ul className="networkFakePages">{data.fake_main_paths.map(path => {
             const current = path === data.fake_main_current;
             return <li key={path}>
-              <a href={`https://${data.canon}${path}`} target="_blank" rel="noreferrer">{path}</a>
-              <button type="button" className={`networkFakeButton select${current ? " selected" : ""}`} aria-label={`Назначить ${path}`} aria-pressed={current} title={current ? "Текущая страница" : "Назначить текущей"} disabled={disabled || current} onClick={() => void mutate("select_fake_main", undefined, draft, { fake_main_path: path })}><Check size={18} aria-hidden="true" /></button>
-              <button type="button" className="networkFakeButton delete" aria-label={`Удалить ${path}`} title={current ? "Перед удалением назначьте другую страницу" : "Удалить страницу"} disabled={disabled || current} onClick={() => void mutate("select_fake_main", undefined, draft, { fake_main_path: path, delete_fake_main: true })}><X size={18} aria-hidden="true" /></button>
+              <a href={`https://${data.canon}${path}`} target="_blank" rel="noreferrer">{current ? <strong>{path}</strong> : path}</a>
+              <button type="button" className={`networkFakeButton select${current ? " selected" : ""}`} aria-label={`Назначить ${path}`} aria-pressed={current} title={current ? "Текущая страница" : "Назначить текущей"} disabled={disabled || current || fakeQueue.busyPath(path)} onClick={() => void mutate("select_fake_main", undefined, draft, { fake_main_path: path })}><Check size={18} aria-hidden="true" /></button>
+              <button type="button" className="networkFakeButton delete" aria-label={`Удалить ${path}`} title={current ? "Перед удалением назначьте другую страницу" : "Удалить страницу"} disabled={current || fakeQueue.busyPath(path) || fakeQueue.count >= 10} onClick={() => fakeQueue.enqueue("delete", path)}><X size={18} aria-hidden="true" /></button>
+              {fakeQueue.items.filter(item => item.path === path && fakeQueueActive(item)).map(item => <small key={item.id} role="status">{item.message}</small>)}
             </li>;
           })}</ul> : <p className="muted">В кеше нет фейковых внутренних страниц.</p>}
-          <div className="networkFakeForms"><div>          <label className="networkFakePath">Путь фейковой главной<input aria-label="Путь фейковой главной" value={fakeMainInput} onChange={e => setFakeMainInput(e.target.value)} disabled={disabled} placeholder="events или /events/" /></label>
-          <div className="networkActions"><button type="button" className="button compact secondary" disabled={disabled || !fakeMainInput.trim() || !!data.fake_main_paths?.includes("/" + fakeMainInput.trim().replace(/^\/+|\/+$/g, "") + "/")} onClick={() => void mutate("create_fake_main")}>{busy === "create_fake_main" ? "Создаём и назначаем…" : "Создать и назначить"}</button></div></div></div>
+          <div className="networkFakeForms"><div>          <label className="networkFakePath">Путь фейковой главной<input aria-label="Путь фейковой главной" value={fakeMainInput} onChange={e => setFakeMainInput(e.target.value)} placeholder="/events, /events/ или /index.php" /></label>
+          <div className="networkActions"><button type="button" className="button compact secondary" disabled={!fakeMainInput.trim() || fakeQueue.count >= 10 || fakeQueue.busyPath(fakeMainInput) || !!data.fake_main_paths?.includes(normalizedFakePath(fakeMainInput))} onClick={() => fakeQueue.enqueue("create", fakeMainInput)}>Создать и назначить</button></div></div></div>
         </div>}
+        {!!fakeQueue.items.length && <div className="networkSection" aria-label="Очередь фейковых страниц">
+          <h4>Очередь фейковых страниц · {fakeQueue.count}/10</h4>
+          <ul className="networkOperations">{fakeQueue.items.map(item => <li key={item.id}>
+            <strong>{item.action === "delete" ? "Удаление" : "Создание и назначение"}: {item.path}</strong> — <span role="status">{item.message}</span>
+            {item.status === "unconfirmed" && <button type="button" className="button secondary compact" onClick={() => fakeQueue.retry(item.id)}>Проверить отправку</button>}
+          </li>)}</ul>
+        </div>}
+        {fakeQueue.error && <p role="alert">{fakeQueue.error}</p>}
         {mode === "network" && networkView === "main" && <ProjectStructuredData key={site.id} siteId={site.id} api={api} refreshKey={`${structuredDataRevision}:${refreshToken}:${data.revision}`}/>}
         {!!data.operations.length && <div className="networkSection"><h3>История операций</h3><ul className="networkOperations">{data.operations.map((operation) => <li key={operation.id}>
           <strong>{actionLabels[operation.action]}{operation.action === "reglue" && operation.domain ? `: ${operation.source_domain || "Исходный домен не сохранён"} -> ${operation.domain}` : operation.domain ? `: ${operation.domain}` : ""}</strong> — {statusLabels[operation.status] || operation.status}

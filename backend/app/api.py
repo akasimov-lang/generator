@@ -1,3 +1,4 @@
+from app import fake_main_queue
 from app.project_access import external_projects
 from app.project_table_export import ProjectTableExport, export_table
 import asyncio
@@ -637,6 +638,16 @@ def get_site_network(site_id: str, _: AuthUser, db: Session = Depends(get_db), r
     if not refresh and state.get("has_head") and isinstance(state.get("domains"), list) and "has_page_redirects" in state:
         return project_network.result(db, site, state)
     return _network_call(project_network.read_network, db, site)
+
+
+@router.get("/sites/{site_id}/network/fake-main-queue")
+def get_fake_main_queue(site_id: str, _: AuthUser, db: Session = Depends(get_db)):
+    return fake_main_queue.snapshot(db, _get_site_or_404(db, site_id))
+
+
+@router.post("/sites/{site_id}/network/fake-main-queue", status_code=202)
+def enqueue_fake_main(site_id: str, payload: fake_main_queue.Request, user: AuthUser, db: Session = Depends(get_db)):
+    return _network_call(fake_main_queue.enqueue, db, _get_site_or_404(db, site_id), payload, _request_username(user) or "user")
 
 
 @router.get("/sites/{site_id}/network/operations")
