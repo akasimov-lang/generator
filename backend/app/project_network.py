@@ -264,8 +264,12 @@ def observe(db, site, project):
 
 
 def operation_history(db, site):
-    operations = db.scalars(select(models.NetworkOperation).where(models.NetworkOperation.site_id == site.id)
-                           .order_by(models.NetworkOperation.created_at.desc()).limit(20)).all()
+    active = ('pending', 'unknown', 'queued', 'running', 'waiting', 'index_queued', 'index_submitting', 'index_unknown')
+    query = select(models.NetworkOperation).where(models.NetworkOperation.site_id == site.id)
+    operations = [
+        *db.scalars(query.where(models.NetworkOperation.status.in_(active)).order_by(models.NetworkOperation.created_at.desc())).all(),
+        *db.scalars(query.where(models.NetworkOperation.status.not_in(active)).order_by(models.NetworkOperation.created_at.desc()).limit(20)).all(),
+    ]
     return [{"id": op.id, "action": op.action, "status": op.status, "message": op.message,
                         "initiator": op.initiator, "created_at": op.created_at,
                         "source_domain": op.request_payload.get("source_domain") if op.action == "reglue" else None,

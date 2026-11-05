@@ -1,4 +1,5 @@
 import React from "react";
+import { networkOperationHistory, fakeQueueStatus } from "./networkOperationHistory";
 import { useFakeMainQueue } from "./useFakeMainQueue";
 import { fakeQueueActive, normalizedFakePath } from "./fakeMainQueue";
 import { TemplateCombobox } from "./TemplateCombobox";
@@ -99,6 +100,9 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
   const [removeDomainInput, setRemoveDomainInput] = React.useState("");
   const [submittingDeletion, setSubmittingDeletion] = React.useState<string[]>([]);
   const mounted = React.useRef(true);
+  const historySite = React.useRef(site.id); historySite.current = site.id;
+  const historySaving = React.useRef(new Set<string>());
+  const [historyStatus, setHistoryStatus] = React.useState<Record<string, {saving:boolean; checked?:boolean; message:string; error?:boolean}>>({});
   const fakeQueue = useFakeMainQueue<Network>(site.id, api, !!busy);
   const queueOperationIds = new Set(fakeQueue.items.flatMap(item => item.operation_ids));
   const uncertain = data?.operations.some((op) => ["pending", "unknown"].includes(op.status) && !queueOperationIds.has(op.id)) || false;
@@ -169,6 +173,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
   React.useEffect(() => {
     mounted.current = true;
     setNetworkView("main"); setShowNetworkHistory(false);
+    historySaving.current.clear(); setHistoryStatus({});
     void load(false);
     return () => { mounted.current = false; loadController.current?.abort(); loadController.current = null; busyRef.current = false; };
   }, [site.id]);
@@ -296,16 +301,35 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
     return false;
   }
   async function saveHistory(domain: string, field: string, checked: boolean) {
-    if (!data || busyRef.current) return;
-    busyRef.current = true; setBusy("history"); setError(""); setMessage("");
+    const requestSite = site.id;
+    const key = `${domain}:${field}`;
+    if (!dataRef.current || historySaving.current.has(key)) return;
+    historySaving.current.add(key);
+    setHistoryStatus(old => ({...old, [key]: {saving: true, checked, message: "Сохраняем…"}}));
     try {
-      const next = await api<Network>(`/sites/${site.id}/network/domain-history`, {
+      const saved = await api<Network>(`/sites/${site.id}/network/domain-history`, {
         method: "PATCH", body: JSON.stringify({ domain, field, checked }),
       });
-      accept(next); onChanged();
-      if (mounted.current) setMessage("История сохранена для всех пользователей.");
-    } catch (err) { if (mounted.current) setError(errorText(err)); }
-    finally { busyRef.current = false; if (mounted.current) setBusy(""); }
+      if (!mounted.current || historySite.current !== requestSite || !dataRef.current) return;
+      const next = {...dataRef.current};
+      if (field === "ban") next.domain_bans = {...next.domain_bans, [domain]: !!saved.domain_bans?.[domain]};
+      else {
+        const property = ({main:"main_history",alternate:"alternate_history",x_default:"x_default_history"} as const)[field as "main"|"alternate"|"x_default"];
+        next[property] = [...next[property].filter(value => value !== domain), ...(saved[property].includes(domain) ? [domain] : [])];
+      }
+      dataRef.current = next; setData(next);
+      setHistoryStatus(old => ({...old, [key]: {saving:false, message:"Сохранено"}}));
+      projectChanged(site.id);
+    } catch (err) {
+      if (mounted.current && historySite.current === requestSite) setHistoryStatus(old => ({...old, [key]: {saving:false, message:errorText(err), error:true}}));
+    } finally { historySaving.current.delete(key); }
+  }
+  function historyCheckbox(domain: string, field: string, checked: boolean, label: string) {
+    const status = historyStatus[`${domain}:${field}`];
+    return <><input type="checkbox" className="networkHistoryCheck" disabled={!!status?.saving}
+      checked={status?.saving ? !!status.checked : checked} aria-label={`${domain}: ${label}`}
+      onChange={event => void saveHistory(domain, field, event.target.checked)} />
+      {status && <small role={status.error ? "alert" : "status"}>{status.message}</small>}</>;
   }
   async function saveDomainType(domain: string, domainType: string) {
     if (!data || busyRef.current) return;
@@ -428,8 +452,8 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
                   {data.domain_classification[domain].unused_as_main && <small>Не был Main</small>}
                 </span>}</span>
               </td><td data-label="Статус">{deletingDomains.has(domain) ? <span className="networkDeletionStatus" role="status">Удаление</span> : domainRedirectTarget(domain, redirectTargets) ? <span title={`301 → ${domainRedirectTarget(domain, redirectTargets)}`}>301</span> : networkView === "amp" && domain === data.amp ? "Текущий AMP" : networkView === "amp" && domain === data.prev_amp ? "Предыдущий AMP" : domain === data.canon ? <strong>Main</strong> : domain === data.reserve ? <strong>Резерв</strong> : data.domains.includes(domain) ? "В сетке" : "В истории"}</td>
-              {[data.main_history, data.alternate_history, data.x_default_history].map((history, i) => <td key={i} data-label={["Был Main", "Был в альтернейтах", "x-default"][i]}><input type="checkbox" className="networkHistoryCheck" disabled={Boolean(busy)} checked={history.includes(domain)} onChange={event => void saveHistory(domain, ["main", "alternate", "x_default"][i], event.target.checked)} aria-label={`${domain}: ${["был Main", "был в альтернейтах", "x-default"][i]}`} /></td>)}
-              <td data-label="БАН"><input type="checkbox" className="networkHistoryCheck" aria-label={`${domain}: БАН`} title="Запрет переноса между сетками в GEO проекта" disabled={Boolean(busy)} checked={Boolean(data.domain_bans?.[domain])} onChange={event => void saveHistory(domain, "ban", event.target.checked)} /></td>
+              {[data.main_history, data.alternate_history, data.x_default_history].map((history, i) => <td key={i} data-label={["Был Main", "Был в альтернейтах", "x-default"][i]}>{historyCheckbox(domain, ["main", "alternate", "x_default"][i], history.includes(domain), ["был Main", "был в альтернейтах", "x-default"][i])}</td>)}
+              <td data-label="БАН">{historyCheckbox(domain, "ban", Boolean(data.domain_bans?.[domain]), "БАН")}</td>
               <td data-label="Действия"><button type="button" className="networkDeleteButton" aria-label={`Удалить ${domain} из сетки`}
                 title={domain === data.canon || domain === data.reserve || domain === site.name || domain === data.amp ? "Домен проекта, Main, AMP и резерв защищены от удаления" : "Удалить домен из сетки"}
                 disabled={disabled || !data.domains.includes(domain) || [data.canon, data.reserve, site.name, data.amp].includes(domain)}
@@ -522,18 +546,24 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
             </li>;
           })}</ul> : <p className="muted">В кеше нет фейковых внутренних страниц.</p>}
           <div className="networkFakeForms"><div>          <label className="networkFakePath">Путь фейковой главной<input aria-label="Путь фейковой главной" value={fakeMainInput} onChange={e => setFakeMainInput(e.target.value)} placeholder="/events, /events/ или /index.php" /></label>
-          <div className="networkActions"><button type="button" className="button compact secondary" disabled={!fakeMainInput.trim() || fakeQueue.count >= 10 || fakeQueue.busyPath(fakeMainInput) || !!data.fake_main_paths?.includes(normalizedFakePath(fakeMainInput))} onClick={() => fakeQueue.enqueue("create", fakeMainInput)}>Создать и назначить</button></div></div></div>
+          <div className="networkActions"><button type="button" className="button compact secondary" disabled={!fakeMainInput.trim() || fakeQueue.count >= 10 || fakeQueue.busyPath(fakeMainInput) || !!data.fake_main_paths?.includes(normalizedFakePath(fakeMainInput))} onClick={() => { if (fakeQueue.enqueue("create", fakeMainInput)) setFakeMainInput(""); }}>Создать и назначить</button></div></div></div>
         </div>}
-        {!!fakeQueue.items.length && <div className="networkSection" aria-label="Очередь фейковых страниц">
-          <h4>Очередь фейковых страниц · {fakeQueue.count}/10</h4>
-          <ul className="networkOperations">{fakeQueue.items.map(item => <li key={item.id}>
-            <strong>{item.action === "delete" ? "Удаление" : "Создание и назначение"}: {item.path}</strong> — <span role="status">{item.message}</span>
-            {item.status === "unconfirmed" && <button type="button" className="button secondary compact" onClick={() => fakeQueue.retry(item.id)}>Проверить отправку</button>}
-          </li>)}</ul>
-        </div>}
-        {fakeQueue.error && <p role="alert">{fakeQueue.error}</p>}
         {mode === "network" && networkView === "main" && <ProjectStructuredData key={site.id} siteId={site.id} api={api} refreshKey={`${structuredDataRevision}:${refreshToken}:${data.revision}`}/>}
-        {!!data.operations.length && <div className="networkSection"><h3>История операций</h3><ul className="networkOperations">{data.operations.map((operation) => <li key={operation.id}>
+        {(!!data.operations.length || !!fakeQueue.items.length || !!fakeQueue.error) && <div className="networkSection"><h3>История операций{fakeQueue.count > 0 ? ` · Фейковые страницы в работе: ${fakeQueue.count}` : ""}</h3>
+          {fakeQueue.error && <p role="alert">Не удалось обновить статус: {fakeQueue.error}</p>}
+          <ul className="networkOperations">{networkOperationHistory(data.operations, fakeQueue.items).map(entry => {
+            if (entry.kind === "queue") {
+              const item = entry.item;
+              return <li key={item.id}>
+                <strong>{item.action === "delete" ? "Удаление фейковой страницы" : "Создание и назначение фейковой страницы"}: {item.path}</strong> — <span role="status">{fakeQueueStatus[item.status] || item.status}</span>
+                {item.created_at && <small>{new Date(item.created_at).toLocaleString("ru-RU", {timeZone:"Europe/Moscow"})} · МСК</small>}
+                {fakeQueueActive(item) && <progress aria-label={`Выполнение: ${item.path}`} />}
+                <p>{item.message}</p>
+                {item.status === "unconfirmed" && <button type="button" className="button secondary compact" onClick={() => fakeQueue.retry(item.id)}>Проверить отправку</button>}
+              </li>;
+            }
+            const operation = entry.item;
+            return <li key={operation.id}>
           <strong>{actionLabels[operation.action]}{operation.action === "reglue" && operation.domain ? `: ${operation.source_domain || "Исходный домен не сохранён"} -> ${operation.domain}` : operation.domain ? `: ${operation.domain}` : ""}</strong> — {statusLabels[operation.status] || operation.status}
           <small>{new Date(operation.created_at).toLocaleString("ru-RU")} · {operation.initiator}</small><p>{operation.message}</p>
           {operation.action === "alternates" && <details className="networkAlternatesHistory">
@@ -552,7 +582,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
           {(operation.action === "domain_redirect" || operation.action === "domain_redirects_main" || operation.action === "reglue_redirects" || operation.action === "reglue" && operation.redirects_before) && <details className="networkAlternatesHistory"><summary>Редиректы: было / {operation.status === "confirmed" ? "стало" : "запрошено"}</summary><div className="networkAlternatesComparison">{[operation.redirects_before,operation.redirects_after].map((rows,index)=><div key={index}><strong>{index?"Стало / запрошено":"Было"}</strong>{rows?.map((row,i)=><p key={i}>{row.url} → {row.value}</p>)}</div>)}</div></details>}
           {operation.action === "indexing" && <>{operation.task_id && <p>Номер задачи: <strong>{operation.task_id}</strong></p>}<details><summary>Домены для индексации ({operation.domains?.length || 0})</summary><ul>{operation.domains?.map(domain => <li key={domain}>{domain}</li>)}</ul></details></>}
           {operation.action === 'page_redirect' && <details className="networkAlternatesHistory"><summary>Постраничные редиректы: было / {operation.status==='confirmed'?'стало':'запрошено'}</summary><div className="networkAlternatesComparison">{[operation.page_redirects_before,operation.page_redirects_after].map((groups,i)=><div key={i}><strong>{i?'Стало / запрошено':'Было'}</strong>{groups?.flatMap(g=>g.redirects.map((r,j)=><p key={`${g.domain}:${j}`}>{g.domain}{r.url} → {r.value}</p>))}</div>)}</div></details>}
-        </li>)}</ul></div>}
+        </li>;})}</ul></div>}
       </>}
       {(data?.added_to_system_at || site.added_to_system_at) && <p className="networkSystemAdded">Добавлен в систему: <time dateTime={data?.added_to_system_at || site.added_to_system_at || undefined}>{new Date((data?.added_to_system_at || site.added_to_system_at)!).toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" })}</time></p>}
     </div>

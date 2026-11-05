@@ -1,5 +1,5 @@
 export type FakeAction = "delete" | "create";
-export type FakeQueueItem = { id: string; action: FakeAction; path: string; status: string; message: string; operation_ids: string[] };
+export type FakeQueueItem = { id: string; action: FakeAction; path: string; status: string; message: string; operation_ids: string[]; created_at?: string; finished_at?: string | null };
 export type FakeQueueSnapshot<T> = { items: FakeQueueItem[]; limit: number; active_count: number; network: T | null };
 type Api = <T>(path: string, options?: RequestInit) => Promise<T>;
 export const fakeQueueActive = (item: FakeQueueItem) => !["completed", "failed"].includes(item.status);
@@ -46,7 +46,7 @@ export class FakeMainQueue<T> {
     if (this.busyPath(path)) return false;
     if (this.count >= this.server.limit) { this.error = "В очереди уже 10 страниц."; this.emit(); return false; }
     const id = crypto.randomUUID();
-    this.pending.set(id, { id, action, path, status: "submitting", message: "Добавляем в очередь…", operation_ids: [id] });
+    this.pending.set(id, { id, action, path, status: "submitting", message: "Добавляем в очередь…", created_at: new Date().toISOString(), operation_ids: [id] });
     this.outbox.push(id); this.epoch++; this.error = ""; this.emit(); void this.send();
     return true;
   }

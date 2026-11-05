@@ -1417,7 +1417,7 @@ function App() {
   const accountActions = (
           <div className="topbarActions">
             {activeView === "workspace" && <a className="button secondary" href={pathForRoute("autoPilotReport")} title="Черновики и отчёты Auto Pilot" onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); setMobileMenuOpen(false); navigateTo("autoPilotReport"); } }}><Bot size={18} /> Автопилот</a>}
-            {(activeView === "autoReglue" || activeView === "massActionReport" || activeView === "sites") && <a className="button secondary" href={pathForRoute("autoPilotReport")} onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("autoPilotReport"); } }}><FileText size={18} /> AutoPilot-Report</a>}
+            {(activeView === "autoReglue" || activeView === "massActionReport" || activeView === "sites") && <a className="button secondary" href={pathForRoute("autoPilotReport")} onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("autoPilotReport"); } }}><FileText size={18} /> Автопилот Отчет</a>}
             {activeView === "autoReglue" && <a className="button primary autoReglueGuideButton" href={pathForRoute("autoReglueGuide")} onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("autoReglueGuide"); } }}><BookOpen size={18} /> Инструкция по автопереклеям</a>}
             {currentUser ? (
               <div className="userPill">
@@ -1487,7 +1487,7 @@ function App() {
               <NavButton href={pathForRoute("workspace", "content")} icon={<Send />} label="Контент и публикации" active={activeView === "workspace" && (workspaceTab === "content" || workspaceTab === "publication")} onClick={openWorkspaceContent} />
               <NavButton href={pathForRoute("providers")} icon={<Bot />} label="API Providers" active={activeView === "providers"} onClick={() => navigateTo("providers")} />
               <NavButton href={pathForRoute("sites")} icon={<Globe2 />} label="Сайты" active={activeView === "sites"} onClick={() => navigateTo("sites")} />
-              <NavButton href={pathForRoute("massActionReport")} icon={<FileText />} label="Массовые действия Отчет" active={activeView === "massActionReport"} onClick={() => navigateTo("massActionReport")} />
+              <NavButton href={pathForRoute("autoPilotReport")} icon={<FileText />} label="Автопилот Отчет" active={["massActionReport", "autoPilotReport", "autoPilotLogs", "autoPilot"].includes(activeView)} onClick={() => navigateTo("autoPilotReport")} />
               <NavButton href={pathForRoute("favorites")} icon={<Star className="favoriteNavIcon" fill="currentColor" />} label="Избранное" active={activeView === "favorites"} onClick={() => navigateTo("favorites")} />
             </>
           ) : (
@@ -1497,12 +1497,12 @@ function App() {
               <NavButton href={pathForRoute("taskArchive")} icon={<Archive />} label="Архив" active={activeView === "taskArchive"} onClick={() => navigateTo("taskArchive")} />
               <NavButton href={pathForRoute("workspace", "content")} icon={<Send />} label="Контент и публикации" active={activeView === "workspace" && (workspaceTab === "content" || workspaceTab === "publication")} onClick={openWorkspaceContent} />
               <NavButton href={pathForRoute("sites")} icon={<Globe2 />} label="Сайты" active={activeView === "sites"} onClick={() => navigateTo("sites")} />
-              <NavButton href={pathForRoute("massActionReport")} icon={<FileText />} label="Массовые действия Отчет" active={activeView === "massActionReport"} onClick={() => navigateTo("massActionReport")} />
+              <NavButton href={pathForRoute("autoPilotReport")} icon={<FileText />} label="Автопилот Отчет" active={["massActionReport", "autoPilotReport", "autoPilotLogs", "autoPilot"].includes(activeView)} onClick={() => navigateTo("autoPilotReport")} />
               <NavButton href={pathForRoute("favorites")} icon={<Star className="favoriteNavIcon" fill="currentColor" />} label="Избранное" active={activeView === "favorites"} onClick={() => navigateTo("favorites")} />
             </>
           )}
           <NavButton href={pathForRoute("templateGenerator")} icon={<FilePlus2 />} label="Генератор шаблона" active={activeView === "templateGenerator"} onClick={() => navigateTo("templateGenerator")} />
-          <NavButton href={pathForRoute("autoReglue")} icon={<RefreshCcw />} label="Массовые действия" active={activeView === "autoReglue" || activeView === "reglueReserves" || activeView === "autoPilot" || activeView === "autoPilotLogs" || activeView === "autoPilotReport"} onClick={() => navigateTo("autoReglue")} />
+          <NavButton href={pathForRoute("autoReglue")} icon={<RefreshCcw />} label="Массовые действия" active={activeView === "autoReglue" || activeView === "reglueReserves"} onClick={() => navigateTo("autoReglue")} />
           <NavButton href={pathForRoute("settings")} icon={<Settings />} label="Настройки" active={activeView === "settings"} onClick={() => navigateTo("settings")} />
           {isAdmin ? <NavButton href={pathForRoute("published")} icon={<CheckCircle2 />} label="Опубликовано" active={activeView === "published"} onClick={() => navigateTo("published")} /> : null}
           <NavButton href={pathForRoute("guide")} icon={<BookOpen />} label="Инструкции" active={activeView === "guide" || activeView === "autoReglueGuide"} onClick={() => navigateTo("guide")} />
@@ -1560,7 +1560,7 @@ function App() {
           navigateTo("workspace", "content", false, site.name);
         }} onChanged={loadAll} />}
         {isAdmin && activeView === "providers" && <ProvidersView api={api} providers={providers} onChanged={loadAll} />}
-        {activeView === "massActionReport" && <MassActionStatistics api={api} renderProjects={(ids, refresh) => <SitesView embedded api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={updates => { mergeSites(updates); refresh(); }} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll} />} />}
+
         {activeView === "sites" && projectListFilters && <section className="viewStack">{listParams.has("from")&&<div><a className="button secondary compact peerProjectsBack" href={projectListBackPath} aria-label="Назад к проекту"><ChevronLeft size={16}/>Назад</a></div>}
           <PeerProjectPicker sites={siteSnapshot} geo={projectListFilters.geo} brand={projectListFilters.brand} onChange={(geo,brand)=>{const params=new URLSearchParams(window.location.search);params.set("geo",geo);if(brand)params.set("brand",brand);else params.delete("brand");window.history.replaceState(null,"",`/sites?${params}`);setRouteVersion(v=>v+1);}}/>
           <div id="sites-search-results">{globalSitesQuery&&<p role="status">Поиск по всем GEO и брендам · Найдено проектов: {projectListSites.length}</p>}<details key={globalSitesQuery?"search":`${projectListFilters.geo}:${projectListFilters.brand}`} open className="massStatisticsDetails"><summary>{globalSitesQuery?"Результаты поиска":"Проекты в выборке"} · {projectListSites.length}</summary><SitesView key={globalSitesQuery?"global-sites-search":window.location.search} embedded api={api} sites={projectListSites} projectScopeLabel={globalSitesQuery?"Результаты поиска":projectListFilters.brand?`${projectListFilters.brand} — ${projectListGeoLabel}`:`Список проектов — ${projectListGeoLabel}`} moveFilter={!globalSitesQuery&&projectListFilters.brand&&projectListFilters.geo!=="ALL"?{...projectListFilters,include_general:false,site_type:null}:undefined} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/></details></div>
@@ -1572,7 +1572,7 @@ function App() {
         {activeView === "reglueReserves" && <ReglueReservesPage api={api} />}
         {activeView === "autoPilot" && <AutoPilotPage api={api} renderProjects={(ids, label) => catalogError ? <p role="alert">{catalogError}</p> : !catalogLoaded ? <p role="status">Загружаем проекты…</p> : <SitesView key={label} embedded showProjectTypeFilters api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} projectScopeLabel={label} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/>}/>}
         {activeView === "autoPilotLogs" && <AutoPilotPage api={api} logs renderProjects={(ids, label) => catalogError ? <p role="alert">{catalogError}</p> : !catalogLoaded ? <p role="status">Загружаем проекты…</p> : <SitesView key={label} embedded showProjectTypeFilters api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} projectScopeLabel={label} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/>}/>}
-        {activeView === "autoPilotReport" && <AutoPilotPage api={api} reports renderProjects={(ids, label) => catalogError ? <p role="alert">{catalogError}</p> : !catalogLoaded ? <p role="status">Загружаем проекты…</p> : <SitesView key={label} embedded showProjectTypeFilters api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} projectScopeLabel={label} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/>}/>}
+        {(activeView === "autoPilotReport" || activeView === "massActionReport") && <AutoPilotPage api={api} reports renderProjects={(ids, label) => catalogError ? <p role="alert">{catalogError}</p> : !catalogLoaded ? <p role="status">Загружаем проекты…</p> : <SitesView key={label} embedded showProjectTypeFilters api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} projectScopeLabel={label} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/>}/>}
         {activeView === "autoReglueGuide" && <><a className="button secondary" href="/guide" onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("guide"); } }}>Все инструкции</a><AutoReglueGuide backLabel="Вернуться к автопереклею" onBack={() => navigateTo("autoReglue")} /></>}
         {activeView === "settings" && <SettingsView api={api} currentUser={currentUser} designVersion={designVersion} onDesignVersionChange={setDesignVersion} inputStyle={inputStyle} onInputStyleChange={setInputStyle} onChanged={loadAll} />}
       </main>
@@ -9271,7 +9271,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
   return (
     <section className="viewStack sitesManagementView">
       {!embedded && !favoritesOnly ? <>
-        <a className="secondary massStatisticsLink" href="/mass-actions-report">Массовые действия Отчет →</a>
+        <a className="secondary massStatisticsLink" href="/mass-actions-report">Автопилот Отчет →</a>
         {showStatistics ? <div id="mass-action-statistics"><MassActionStatistics api={api} renderProjects={(ids, refresh) => <SitesView embedded api={api} sites={managedSites.filter(site => ids.includes(site.id))} snapshotUpdatedAt={snapshotUpdatedAt} onSitesChanged={updates => { applySiteUpdates(updates); refresh(); }} currentUsername={currentUsername} readOnly={readOnly} onChanged={onChanged} />} /><button className="secondary" type="button" onClick={() => { setShowStatistics(false); window.history.replaceState(null, "", window.location.pathname); }}>Скрыть статистику</button></div> : null}
       </> : null}
       {!embedded ? <DataPanel title={readOnly ? "Обзор сайтов" : "Панель управления сайтами"}>
@@ -11258,14 +11258,14 @@ function viewTitle(view: AppView, _workspaceTab: WorkspaceTab) {
     published: "Опубликовано",
     providers: "API Providers",
     sites: "Сайты",
-    massActionReport: "Массовые действия Отчет",
+    massActionReport: "Автопилот Отчет",
     favorites: "Избранное",
     guide: "Инструкции",
     autoReglue: "Массовые действия",
     reglueReserves: "База резервов под переклей",
     autoPilot: "Auto Pilot",
     autoPilotLogs: "Auto Pilot — выполнение",
-    autoPilotReport: "AutoPilot-Report",
+    autoPilotReport: "Автопилот Отчет",
     autoReglueGuide: "Инструкция по автопереклеям",
     settings: "Настройки"
   };
