@@ -164,6 +164,13 @@ def confirm(db, operation, remote):
     return result(operation, project)
 
 
+@router.get('/history')
+def history(site_id: str, user: AuthUser, db: Session = Depends(get_db)):
+    allowed_site(db, site_id, user)
+    from app.showcase_history import events
+    return {'items': events(db, site_id)}
+
+
 @router.get('')
 def load(site_id: str, user: AuthUser, db: Session = Depends(get_db), refresh: bool = False):
     site = allowed_site(db, site_id, user)

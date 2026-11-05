@@ -29,11 +29,13 @@ def upsert(db, report_id, name, actor, site_ids, entries=(), status='running'):
             if not site:
                 raise ValueError('Проект отчёта не найден.')
             rows[site_id] = {'site_id': site_id, 'project': site.name, 'status': 'pending'}
+    changed_ids = set()
     for entry in entries:
         site_id = str(entry.get('site_id', ''))
         if site_id not in ids or entry.get('status', rows[site_id]['status']) not in STATUSES:
             raise ValueError('Некорректная строка отчёта.')
         rows[site_id] = {**rows[site_id], **deepcopy(entry), 'site_id': site_id}
+        changed_ids.add(site_id)
     if status == 'completed' and any(row['status'] not in {'completed', 'skipped'} for row in rows.values()):
         raise ValueError('В отчёте остались незавершённые проекты.')
     now = datetime.now(timezone.utc)
@@ -43,6 +45,9 @@ def upsert(db, report_id, name, actor, site_ids, entries=(), status='running'):
         db.add(job)
     job.payload = {**job.payload, 'name': name.strip()}
     job.result = {'entries': [rows[site_id] for site_id in job.payload['site_ids']]}
+    from app.showcase_history import remember_report
+    for site_id in changed_ids:
+        remember_report(db, job, rows[site_id])
     job.status = status
     job.finished_at = None if status == 'running' else now
     db.commit()
@@ -65,7 +70,7 @@ def get(db, report_id, user):
 def summary(job, report_id=None, *, entries=None):
     entries = (job.result or {}).get('entries', []) if entries is None else entries
     repeat = bool(job.payload.get('repeat'))
-    factual = job.payload.get('task_type') in {'toc_repair', 'showcase_audit'}
+    factual = job.payload.get('task_type') in {'toc_repair', 'showcase_audit', 'showcase_inventory', 'showcase_standardization'}
     done = sum(row['status'] in {'completed', 'partial', 'failed', 'skipped'} for row in entries)
     active = any(row['status'] in {'pending','running','waiting'} for row in entries)
     progress = [entry_progress(row, content_only=bool(job.payload.get('text_revision_20261027')),
@@ -153,7 +158,13 @@ def paragraph_metrics(page):
 
 def view(job, db=None):
     entries = deepcopy((job.result or {}).get('entries', []))
-    factual = job.payload.get('task_type') in {'toc_repair', 'showcase_audit'}
+    factual = job.payload.get('task_type') in {'toc_repair', 'showcase_audit', 'showcase_inventory', 'showcase_standardization'}
+    if job.payload.get('task_type') in {'showcase_inventory', 'showcase_standardization'}:
+        from app import report_ids
+        compact = [{key: row[key] for key in ('site_id','project','status','main','geo','inventory','error','migration') if key in row} for row in entries]
+        return {**summary(job, report_ids.get(db, job) if db is not None else None, entries=compact),
+                'updated_at': job.updated_at, 'entries': compact,
+                'inventory_excluded': job.payload.get('scope', {}).get('excluded_today', [])}
     if factual:
         from app.maintenance_evidence import enrich
         entries = enrich(job, entries, db)

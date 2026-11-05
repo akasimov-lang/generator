@@ -1,3 +1,4 @@
+import { ShowcaseHistory } from "./AutomaticActions";
 import React from "react";
 import { activeStatuses, networkOperationHistory, fakeQueueStatus } from "./networkOperationHistory";
 import { useFakeMainQueue } from "./useFakeMainQueue";
@@ -550,6 +551,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
           <div className="networkActions"><button type="button" className="button compact secondary" disabled={!fakeMainInput.trim() || fakeQueue.count >= 10 || fakeQueue.busyPath(fakeMainInput) || !!data.fake_main_paths?.includes(normalizedFakePath(fakeMainInput))} onClick={() => { if (fakeQueue.enqueue("create", fakeMainInput)) setFakeMainInput(""); }}>Создать и назначить</button></div></div></div>
         </div>}
         {mode === "network" && networkView === "main" && <ProjectStructuredData key={site.id} siteId={site.id} api={api} refreshKey={refreshToken} backgroundRefreshKey={`${structuredDataRevision}:${data.revision}`}/>}
+        <ShowcaseHistory siteId={site.id} api={api} refreshKey={refreshToken}/>
         {(data.operations.some(op => op.action !== "indexing") || !!fakeQueue.items.length || !!fakeQueue.error) && <div className="networkSection"><h3>История операций{fakeQueue.count > 0 ? ` · Фейковые страницы в работе: ${fakeQueue.count}` : ""}</h3>
           {fakeQueue.error && <p role="alert">Не удалось обновить статус: {fakeQueue.error}</p>}
           {[true,false].map(activeOnly => {

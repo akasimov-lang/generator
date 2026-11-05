@@ -1,3 +1,4 @@
+import { ShowcaseInventoryReport, normalizeInventory, type InventoryReportData } from "./ShowcaseInventoryReport";
 import React from "react";
 import { ArrowLeft, RefreshCw, ScrollText, Repeat2 } from "lucide-react";
 import { createMaintenanceRepeat, maintenanceEntriesActive, maintenanceCanRepeat, maintenanceReportLink } from "./maintenanceRepeat";
@@ -9,7 +10,7 @@ type Values = {words?:number;unique_words?:number;brand_mentions?:number;h1?:str
 type Stage = {key:string;label:string;state:string};
 type Operation = {id:string;kind?:string;action?:string;status:string;started_at?:string;finished_at?:string;before?:Values;after?:Values};
 type Entry = {facts?:{label:string;value:string}[];kind?:string;structured_data?:StructuredDataEvidence;started_at?:string;finished_at?:string;progress?:{done:number;total:number;percent:number;label:string;stages?:Stage[]};site_id:string;project:string;status:string;phase?:string;message?:string;before?:Values;after?:Values;planned?:Values;content_started_at?:string;content_finished_at?:string;words_scope?:string;operations?:Operation[];copy_changes?:{field:string;old:string;new:string}[];table_changes?:{block:number|string;rows_before:number;rows_after:number}[];table_emojis?:boolean;paragraphs?:{count?:number;status?:string};uniqueness_percent?:number;shortened_percent?:number;brand_count_term?:string;paragraphs_before?:number;paragraphs_after?:number;paragraphs_added?:number;paragraphs_removed?:number;edit_ids?:string[];network_operation_ids?:string[];run_id?:string;error?:string;pending_reason?:string;notes?:string[]};
-export type MaintenanceReportData = {task_type?:string;source_reports?:{id:string;report_id:number}[];id?:string;report_id?:number;repeat?:boolean;parent_report_id?:string;allow_reserve?:boolean;phase?:string;message?:string;progress?:{done:number;total:number;percent:number;unit?:string};name:string;status:string;total:number;counts:Record<string,number>;launched_at:string;finished_at?:string;updated_at:string;entries:Entry[]};
+export type MaintenanceReportData = {inventory?:InventoryReportData;task_type?:string;source_reports?:{id:string;report_id:number}[];id?:string;report_id?:number;repeat?:boolean;parent_report_id?:string;allow_reserve?:boolean;phase?:string;message?:string;progress?:{done:number;total:number;percent:number;unit?:string};name:string;status:string;total:number;counts:Record<string,number>;launched_at:string;finished_at?:string;updated_at:string;entries:Entry[]};
 const labels:Record<string,string>={queued:"В очереди",pending:"Ожидается",running:"Выполняется",waiting:"Ждём подтверждения",completed:"Выполнено",partial:"Частично",failed:"Ошибка",skipped:"Пропущено",confirmed:"Подтверждено",unconfirmed:"Не подтверждено",ready:"Текст подготовлен"};
 const date=(value?:string)=>value&&!Number.isNaN(Date.parse(value))?new Date(value).toLocaleString("ru-RU",{timeZone:"Europe/Moscow"}):"Нет данных";
 const object=(value:unknown):Record<string,unknown>=>value&&typeof value==="object"&&!Array.isArray(value)?value as Record<string,unknown>:{};
@@ -43,7 +44,7 @@ export function normalizeMaintenanceReport(raw:unknown):MaintenanceReportData {
  const counts=Object.fromEntries(Object.entries(object(report.counts)).filter(([,value])=>typeof value==="number"&&Number.isFinite(value))) as Record<string,number>;
  const number=(value:unknown)=>typeof value==="number"&&Number.isFinite(value)?Math.max(0,value):0;
  const steps=entries.length&&entries.every(entry=>entry.progress&&entry.progress.total>0)?entries.reduce((sum,entry)=>({done:sum.done+(entry.progress?.done||0),total:sum.total+(entry.progress?.total||0)}),{done:0,total:0}):undefined;
- return {task_type:text(report.task_type),source_reports:(Array.isArray(report.source_reports)?report.source_reports:[]).flatMap(item=>{const source=object(item);return typeof source.id==="string"&&count(source.report_id)!==undefined?[{id:source.id,report_id:source.report_id as number}]:[];}),id:text(report.id),report_id:count(report.report_id),repeat:report.repeat===true,parent_report_id:text(report.parent_report_id),allow_reserve:report.allow_reserve===true,phase:text(report.phase),message:text(report.message),
+ return {inventory:["showcase_inventory","showcase_standardization"].includes(text(report.task_type))?normalizeInventory(raw):undefined,task_type:text(report.task_type),source_reports:(Array.isArray(report.source_reports)?report.source_reports:[]).flatMap(item=>{const source=object(item);return typeof source.id==="string"&&count(source.report_id)!==undefined?[{id:source.id,report_id:source.report_id as number}]:[];}),id:text(report.id),report_id:count(report.report_id),repeat:report.repeat===true,parent_report_id:text(report.parent_report_id),allow_reserve:report.allow_reserve===true,phase:text(report.phase),message:text(report.message),
   progress:steps?{...steps,percent:Math.min(entries.some(entry=>["pending","running","waiting","queued"].includes(entry.status))?99:100,Math.round(100*steps.done/steps.total)),unit:"steps"}:report.progress?{done:number(progress.done),total:number(progress.total),percent:Math.min(100,number(progress.percent)),unit:text(progress.unit)}:undefined,
   name:text(report.name,"Отчёт по задаче"),status:text(report.status,"pending"),total:typeof report.total==="number"?report.total:entries.length,counts,
   launched_at:text(report.launched_at),updated_at:text(report.updated_at),finished_at:text(report.finished_at),entries};
@@ -59,6 +60,7 @@ function Changes({before,after,planned,contentOnly=false,brandTerm}:{before?:Val
 }
 
 export function MaintenanceReportBody({report}:{report:MaintenanceReportData}) {
+ if(report.inventory)return <ShowcaseInventoryReport report={report.inventory}/>;
  if(["toc_repair","showcase_audit"].includes(report.task_type||""))return <><p>Показаны сохранённые результаты проверок и подтверждённых операций. План будущих работ указан отдельно.</p><p>Проектов: {report.total} · Обновлено: {date(report.updated_at)} МСК</p>{report.entries.map(entry=><article className="maintenanceEntry" key={entry.site_id}><header><h3><a href={`/project-network/${encodeURIComponent(entry.project)}/`}>{entry.project}</a></h3><strong>{labels[entry.status]||entry.status}</strong></header><div className="maintenanceChangesScroll"><table className="maintenanceChanges maintenanceFacts"><tbody>{entry.facts?.map((fact,index)=><tr key={index}><th>{fact.label}</th><td style={{whiteSpace:"pre-wrap"}}>{fact.value}</td></tr>)}</tbody></table></div>{entry.error&&<p role="alert">{entry.error}</p>}</article>)}</>;
  return <>
   {!!report.source_reports?.length&&<p>Исходные задания: {report.source_reports.map((source,index)=><React.Fragment key={source.id}>{index>0?" · ":""}<a href={maintenanceReportLink(source.id)}>ID {source.report_id}</a></React.Fragment>)}</p>}
@@ -120,7 +122,7 @@ export function MaintenanceReport({api,id}:{api:Api;id:string}) {
  },[api,id]);
  React.useEffect(()=>{setReport(null);void load();return()=>{request.current++;};},[load]);
  React.useEffect(()=>{if(!maintenanceEntriesActive(report))return;const timer=setInterval(()=>void load(),5000);return()=>clearInterval(timer);},[load,report]);
- const ready=!["structured_data","toc_repair","showcase_audit"].includes(report?.task_type||"")&&maintenanceCanRepeat(report);
+ const ready=!["structured_data","toc_repair","showcase_audit","showcase_inventory","showcase_standardization"].includes(report?.task_type||"")&&maintenanceCanRepeat(report);
  async function repeatGroup(){
   if(!ready||repeating||createdUrl)return;
   setRepeating(true);setRepeatError("");
@@ -131,7 +133,7 @@ export function MaintenanceReport({api,id}:{api:Api;id:string}) {
  return <section className="dataPanel pilotPanel maintenanceReport">
   <header className="pilotTools"><a className="button secondary compact" href="/auto-reglue/pilot/report"><ArrowLeft size={16}/>Все отчёты</a><h2><ScrollText size={20}/><span>{report?.report_id!==undefined&&<a className="maintenanceReportId" href={maintenanceReportLink(id)}>ID {report.report_id}</a>}{report?.name||"Отчёт по задаче"}</span></h2><button type="button" className="button secondary compact" disabled={loading} onClick={()=>void load()}><RefreshCw size={16}/>{loading?"Обновляем…":"Обновить"}</button></header>
   {error&&<p role="alert">{error}</p>}{!report&&!error&&<p role="status">Загружаем отчёт…</p>}
-  {report&&!["structured_data","toc_repair","showcase_audit"].includes(report.task_type||"")&&<MaintenanceRepeatControls ready={ready} pending={repeating} uncertain={uncertain} allowReserve={allowReserve} createdUrl={createdUrl} onReserve={setAllowReserve} onRepeat={()=>void repeatGroup()}/>}
+  {report&&!["structured_data","toc_repair","showcase_audit","showcase_inventory","showcase_standardization"].includes(report.task_type||"")&&<MaintenanceRepeatControls ready={ready} pending={repeating} uncertain={uncertain} allowReserve={allowReserve} createdUrl={createdUrl} onReserve={setAllowReserve} onRepeat={()=>void repeatGroup()}/>}
   {repeatError&&<p role="alert">{repeatError}</p>}
   {report&&<MaintenanceReportBody report={report}/>}
  </section>;

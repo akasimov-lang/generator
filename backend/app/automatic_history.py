@@ -17,7 +17,9 @@ def changes(before, after, prefix=''):
 
 
 def timeline(db, site_id):
-    result = []
+    from app.showcase_history import events, summary_text
+    result = events(db, site_id)
+    saved_reports = {row.get('report_id') for row in result if row.get('report_id')}
     for run in db.scalars(select(models.AutoReglueRun).where(models.AutoReglueRun.site_id == site_id).order_by(models.AutoReglueRun.created_at.desc())):
         plan = run.plan or {}
         diff = []
@@ -29,7 +31,7 @@ def timeline(db, site_id):
                        'changes': diff, 'confirmed': run.status == 'completed',
                        'url': f'/auto-reglue/pilot/logs?id={run.id}'})
     for job in db.scalars(select(models.BackgroundJob).order_by(models.BackgroundJob.created_at.desc())):
-        if 'index' in job.kind:
+        if job.id in saved_reports or 'index' in job.kind:
             continue
         payload, outcome = job.payload or {}, job.result or {}
         entries = outcome.get('entries', []) if isinstance(outcome, dict) else []
@@ -38,13 +40,17 @@ def timeline(db, site_id):
             if payload.get('site_id') != site_id or not (payload.get('batch_id') or payload.get('report_id') or payload.get('mass_filter')):
                 continue
             entry = outcome if isinstance(outcome, dict) else {}
-        diff = changes(entry.get('before'), entry.get('after'))
+        showcase = entry.get('showcase_change')
+        inventory = entry.get('inventory') if payload.get('task_type') == 'showcase_inventory' else None
+        diff = [] if inventory or showcase else changes(entry.get('before'), entry.get('after'))
         # Project-specific page results have their own receipts; link to the complete report.
         status = entry.get('status', job.status)
         result.append({'id': job.id, 'title': payload.get('name') or payload.get('action') or 'Групповые действия',
                        'status': status, 'created_at': job.started_at or job.created_at,
                        'actor': payload.get('actor') or payload.get('initiator') or '',
-                       'message': entry.get('message') or entry.get('error') or '', 'changes': diff,
+                       'kind': 'showcase' if showcase or inventory else 'group',
+                       'showcase_delta': showcase,
+                       'message': summary_text(showcase) if showcase else ('Проверка витрины и внутренних страниц. Изменения сайта не выполнялись.' if inventory else entry.get('message') or entry.get('error') or ''), 'changes': diff,
                        'confirmed': status == 'completed',
                        'url': f'/auto-reglue/pilot/report?maintenance={job.id}' if job.kind == 'maintenance_report' else None})
     return sorted(result, key=lambda row: row['created_at'].isoformat(), reverse=True)
