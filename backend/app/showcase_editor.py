@@ -169,7 +169,7 @@ def load(site_id: str, user: AuthUser, db: Session = Depends(get_db), refresh: b
     site = allowed_site(db, site_id, user)
     project, source, warning = read_project(db, site, refresh=refresh)
     response = view(project, source, warning)
-    if not response['rows'] and not response['management']['complete'] and not refresh:
+    if not response['management']['complete'] and not refresh:
         project, source, warning = read_project(db, site, refresh=True)
         response = view(project, source, warning)
     response['management']['record_id'] = showcase_management.remember(db, site, user, response['management'])

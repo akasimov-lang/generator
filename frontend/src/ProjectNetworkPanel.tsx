@@ -1,5 +1,5 @@
 import React from "react";
-import { networkOperationHistory, fakeQueueStatus } from "./networkOperationHistory";
+import { activeStatuses, networkOperationHistory, fakeQueueStatus } from "./networkOperationHistory";
 import { useFakeMainQueue } from "./useFakeMainQueue";
 import { fakeQueueActive, normalizedFakePath } from "./fakeMainQueue";
 import { TemplateCombobox } from "./TemplateCombobox";
@@ -550,9 +550,12 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
           <div className="networkActions"><button type="button" className="button compact secondary" disabled={!fakeMainInput.trim() || fakeQueue.count >= 10 || fakeQueue.busyPath(fakeMainInput) || !!data.fake_main_paths?.includes(normalizedFakePath(fakeMainInput))} onClick={() => { if (fakeQueue.enqueue("create", fakeMainInput)) setFakeMainInput(""); }}>Создать и назначить</button></div></div></div>
         </div>}
         {mode === "network" && networkView === "main" && <ProjectStructuredData key={site.id} siteId={site.id} api={api} refreshKey={refreshToken} backgroundRefreshKey={`${structuredDataRevision}:${data.revision}`}/>}
-        {(!!data.operations.length || !!fakeQueue.items.length || !!fakeQueue.error) && <div className="networkSection"><h3>История операций{fakeQueue.count > 0 ? ` · Фейковые страницы в работе: ${fakeQueue.count}` : ""}</h3>
+        {(data.operations.some(op => op.action !== "indexing") || !!fakeQueue.items.length || !!fakeQueue.error) && <div className="networkSection"><h3>История операций{fakeQueue.count > 0 ? ` · Фейковые страницы в работе: ${fakeQueue.count}` : ""}</h3>
           {fakeQueue.error && <p role="alert">Не удалось обновить статус: {fakeQueue.error}</p>}
-          <ul className="networkOperations">{networkOperationHistory(data.operations, fakeQueue.items).map(entry => {
+          {[true,false].map(activeOnly => {
+          const entries = networkOperationHistory(data.operations, fakeQueue.items).filter(entry => activeStatuses.has(entry.item.status) === activeOnly);
+          if (!entries.length) return null;
+          const list = <ul className="networkOperations">{entries.map(entry => {
             if (entry.kind === "queue") {
               const item = entry.item;
               return <li key={item.id}>
@@ -583,7 +586,9 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
           {(operation.action === "domain_redirect" || operation.action === "domain_redirects_main" || operation.action === "reglue_redirects" || operation.action === "reglue" && operation.redirects_before) && <details className="networkAlternatesHistory"><summary>Редиректы: было / {operation.status === "confirmed" ? "стало" : "запрошено"}</summary><div className="networkAlternatesComparison">{[operation.redirects_before,operation.redirects_after].map((rows,index)=><div key={index}><strong>{index?"Стало / запрошено":"Было"}</strong>{rows?.map((row,i)=><p key={i}>{row.url} → {row.value}</p>)}</div>)}</div></details>}
           {operation.action === "indexing" && <>{operation.task_id && <p>Номер задачи: <strong>{operation.task_id}</strong></p>}<details><summary>Домены для индексации ({operation.domains?.length || 0})</summary><ul>{operation.domains?.map(domain => <li key={domain}>{domain}</li>)}</ul></details></>}
           {operation.action === 'page_redirect' && <details className="networkAlternatesHistory"><summary>Постраничные редиректы: было / {operation.status==='confirmed'?'стало':'запрошено'}</summary><div className="networkAlternatesComparison">{[operation.page_redirects_before,operation.page_redirects_after].map((groups,i)=><div key={i}><strong>{i?'Стало / запрошено':'Было'}</strong>{groups?.flatMap(g=>g.redirects.map((r,j)=><p key={`${g.domain}:${j}`}>{g.domain}{r.url} → {r.value}</p>))}</div>)}</div></details>}
-        </li>;})}</ul></div>}
+        </li>;})}</ul>;
+          return activeOnly ? <div key="active">{list}</div> : <details key="history"><summary>Завершённые операции ({entries.length})</summary>{list}</details>;
+          })}</div>}
       </>}
       {(data?.added_to_system_at || site.added_to_system_at) && <p className="networkSystemAdded">Добавлен в систему: <time dateTime={data?.added_to_system_at || site.added_to_system_at || undefined}>{new Date((data?.added_to_system_at || site.added_to_system_at)!).toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" })}</time></p>}
     </div>

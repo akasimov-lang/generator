@@ -2165,6 +2165,7 @@ function ProjectWorkspaceView({
   const [menuCapabilitiesError, setMenuCapabilitiesError] = React.useState("");
   const [projectRefreshStatus, setProjectRefreshStatus] = React.useState<"idle" | "loading" | "success" | "error">("idle");
   const [projectRefreshResponseCode, setProjectRefreshResponseCode] = React.useState("");
+  const [projectRefreshError, setProjectRefreshError] = React.useState("");
   const [pageCounts, setPageCounts] = React.useState<Record<string, number>>({});
   const [homeEditorLoading, setHomeEditorLoading] = React.useState(false);
   const [homeEditor, setHomeEditor] = React.useState<{ siteId: string; projectName: string; sourceLabel: string; row: PageRow; position: { left: number; top: number } } | null>(null);
@@ -2177,7 +2178,7 @@ function ProjectWorkspaceView({
   const updateProjectContentStatus = React.useCallback((siteId: string, status: ProjectContentStatus | null) => setProjectContentStatus({ siteId, status }), []);
   const generalNetworksOnly = selectedSite?.site_type === "general" || !selectedSite?.site_type && (!selectedSite?.brand || selectedSite.brand.trim().toLowerCase() === "общие ключи");
   const brandNetworks = selectedSite ? sites.filter(item => item.is_active !== false
-    && (!generalNetworksOnly || item.project_status === "mass_actions")
+    && item.project_team?.trim() === "4:19"
     && (item.brand || "Общие ключи").trim().toLocaleLowerCase() === (selectedSite.brand || "Общие ключи").trim().toLocaleLowerCase()).sort((a, b) => {
     const currentGeo = siteGeoFilterCode(selectedSite.cache_geo);
     return Number(siteGeoFilterCode(b.cache_geo) === currentGeo) - Number(siteGeoFilterCode(a.cache_geo) === currentGeo) || siteGeoFilterCode(a.cache_geo).localeCompare(siteGeoFilterCode(b.cache_geo)) || a.name.localeCompare(b.name);
@@ -2201,7 +2202,7 @@ function ProjectWorkspaceView({
   async function openHomePageEditor() {
     if (!selectedSite || homeEditorLoading) return;
     const { id: siteId, name: projectName } = selectedSite;
-    const labels: Record<WorkspaceTab, string> = { overview: "Обзор", topics: "Генерация", content: "Контент и публикация", publication: "Контент и публикация", menu: "Меню", network: "Сетка", redirects: "Переклей", autoReglue: "Автопереклей", autoLb: "АвтоЛБ", logs: "Логи проекта" };
+    const labels: Record<WorkspaceTab, string> = { overview: "Обзор", topics: "Генерация", content: "Контент и публикация", publication: "Контент и публикация", menu: "Меню", network: "Сетка", redirects: "Переклей", autoReglue: "Автодействия", autoLb: "АвтоЛБ", logs: "Логи проекта" };
     const sourceLabel = labels[activeTab];
     const sourcePath = window.location.pathname;
     const position = { left: window.scrollX, top: window.scrollY };
@@ -2393,7 +2394,7 @@ function ProjectWorkspaceView({
       setMenuCapabilitiesError("");
       setHomeEditor(null);
       setProjectRefreshStatus("idle");
-      setProjectRefreshResponseCode("");
+      setProjectRefreshResponseCode(""); setProjectRefreshError("");
       setWorkspaceError("");
       loadedWorkspaceTabRef.current = "";
     }
@@ -2471,18 +2472,19 @@ function ProjectWorkspaceView({
     return {
       success: loaded.success && (!changesResult || changesResult.success),
       errorCode: loaded.errorCode || (changesResult && !changesResult.success ? "TARGET" : ""),
-      statusCode: changesResult?.last_status_code ?? null
+      statusCode: changesResult?.last_status_code ?? null,
+      error: changesResult?.results.filter(row => !row.success).map(row => row.error).filter(Boolean).join(" · ") || ""
     };
   }, [api, loadProject, onChanged, selectedSite, requestCache]);
 
   const handleProjectRefresh = React.useCallback(async () => {
     if (!selectedSite || projectRefreshStatus === "loading") return;
     setProjectRefreshStatus("loading");
-    setProjectRefreshResponseCode("");
+    setProjectRefreshResponseCode(""); setProjectRefreshError("");
     setWorkspaceError("");
     try {
       const result = await refreshProject(true);
-      setProjectRefreshStatus(result.success ? "success" : "error");
+      setProjectRefreshStatus(result.success ? "success" : "error"); setProjectRefreshError(result.error);
       setProjectRefreshResponseCode(result.statusCode ? String(result.statusCode) : result.errorCode.replace(/^HTTP\s+/, ""));
     } catch (error) {
       setProjectRefreshStatus("error");
@@ -2499,7 +2501,7 @@ function ProjectWorkspaceView({
       setProjectRefreshStatus("loading");
       try {
         const result = await refreshProject(true);
-        setProjectRefreshStatus(result.success ? "success" : "error");
+        setProjectRefreshStatus(result.success ? "success" : "error"); setProjectRefreshError(result.error);
         setProjectRefreshResponseCode(result.statusCode ? String(result.statusCode) : result.errorCode);
         if (!result.success) setWorkspaceError("Не все данные проекта удалось сверить с Webdev. Проверка меню продолжается.");
       } catch (error) {
@@ -2742,7 +2744,7 @@ function ProjectWorkspaceView({
               </span>
               {projectRefreshStatus === "loading" ? "Обновление" : projectRefreshStatus === "success" ? "Готово" : projectRefreshStatus === "error" ? "Ошибка" : "Обновить проект"}
             </span>
-            {selectedSite ? <span className="projectRefreshMeta"><small title={selectedSite.cache_server_host || "Сервер не указан"}>{selectedSite.cache_server_host || "—"}</small>{projectRefreshStatus === "success" || projectRefreshStatus === "error" ? <em className={projectRefreshStatus === "success" ? "success" : ""}>Status Code: {projectRefreshResponseCode || "UNKNOWN"}</em> : null}</span> : null}
+            {selectedSite ? <span className="projectRefreshMeta"><small title={selectedSite.cache_server_host || "Сервер не указан"}>{selectedSite.cache_server_host || "—"}</small>{projectRefreshStatus === "success" || projectRefreshStatus === "error" ? <em className={projectRefreshStatus === "success" ? "success" : ""}>Status Code: {projectRefreshResponseCode || "UNKNOWN"}</em> : null}{projectRefreshStatus === "error" && projectRefreshError && <small className="projectRefreshError" title={projectRefreshError}>{projectRefreshError}</small>}</span> : null}
           </button>
         </div>
         {selectedSite ? (
@@ -2789,7 +2791,7 @@ function ProjectWorkspaceView({
             href={pathForRoute("workspace", "autoReglue", selectedSite.name)}
             aria-current={activeTab === "autoReglue" ? "page" : undefined}
             onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onTabChange("autoReglue", selectedSite.name); }}
-          ><Star size={15} /> Автопереклей</a>}
+          ><Star size={15} /> Автодействия</a>}
 
           <TabButton
             href={pathForRoute("workspace", "topics", selectedSite?.name)}
@@ -10815,7 +10817,7 @@ function PublishedPageEditor({ api, onChanged, readOnly = false, actorId }: View
   const sourcePath = new URL(detailReturnPath("/project-content"), window.location.origin).pathname;
   const sourceRoute = routeFromPath(sourcePath);
   const sourceProject = workspaceProjectNameFromPath(sourcePath);
-  const tabLabels: Record<WorkspaceTab, string> = { overview: "Обзор", topics: "Генерация", content: "Контент и публикация", publication: "Контент и публикация", menu: "Меню", network: "Сетка", redirects: "Переклей", autoReglue: "Автопереклей", autoLb: "АвтоЛБ", logs: "Логи проекта" };
+  const tabLabels: Record<WorkspaceTab, string> = { overview: "Обзор", topics: "Генерация", content: "Контент и публикация", publication: "Контент и публикация", menu: "Меню", network: "Сетка", redirects: "Переклей", autoReglue: "Автодействия", autoLb: "АвтоЛБ", logs: "Логи проекта" };
   const back = () => backFromDetail("/project-content");
   const breadcrumbs = [
     ...(sourceProject ? [{ label: sourceProject, onClick: () => { window.history.pushState(null, "", pathForRoute("workspace", "overview", sourceProject)); window.dispatchEvent(new PopStateEvent("popstate")); } }] : []),

@@ -41,6 +41,7 @@ def matches(site, filters):
     kind = 'general' if general else 'monobrand'
     brand_matches = brand_key('Общие ключи' if general else site.brand) == brand_key(filters.brand)
     return bool(site.is_active and not site.hidden_from_projects and site.project_status == 'mass_actions'
+                and getattr(site, 'reglue_participation', True) is not False
                 and geo_key(site.cache_geo) == filters.geo
                 and (brand_matches or filters.include_general and general)
                 and (filters.site_type is None or filters.site_type == kind))

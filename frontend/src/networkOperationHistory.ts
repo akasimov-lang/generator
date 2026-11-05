@@ -1,11 +1,11 @@
 import type { FakeQueueItem } from "./fakeMainQueue";
 
-type Operation = { id: string; status: string; created_at: string };
-const activeStatuses = new Set(["pending", "unknown", "queued", "running", "waiting", "processing", "submitting", "unconfirmed", "index_queued", "index_submitting", "index_unknown"]);
+type Operation = { action?: string; id: string; status: string; created_at: string };
+export const activeStatuses = new Set(["pending", "unknown", "queued", "running", "waiting", "processing", "submitting", "unconfirmed", "index_queued", "index_submitting", "index_unknown"]);
 export function networkOperationHistory<T extends Operation>(operations: T[], queue: FakeQueueItem[]) {
   const receipts = new Set(queue.flatMap(item => item.operation_ids));
   const rows = [
-    ...operations.filter(item => !receipts.has(item.id)).map(item => ({ kind: "operation" as const, item })),
+    ...operations.filter(item => item.action !== "indexing" && !receipts.has(item.id)).map(item => ({ kind: "operation" as const, item })),
     ...queue.map(item => ({ kind: "queue" as const, item })),
   ];
   return rows.sort((a, b) => Number(activeStatuses.has(b.item.status)) - Number(activeStatuses.has(a.item.status))

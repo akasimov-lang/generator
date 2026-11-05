@@ -22,6 +22,7 @@ class StructuredDataUpdate(BaseModel):
     request_id: UUID
     revision: str = Field(min_length=64, max_length=64)
     markup: str = Field(max_length=100000)
+    enabled: bool | None = None
 
 
 def validate_markup(markup):
@@ -107,13 +108,17 @@ def check_structured_data(site_id: str, operation_id: UUID, user: AuthUser, db: 
 @router.put('/{site_id}/structured-data')
 def save_structured_data(site_id: str, payload: StructuredDataUpdate, user: AuthUser, db: Session = Depends(get_db)):
     site = get_site(db, site_id, user)
-    markup = validate_markup(payload.markup)
+    markup = payload.markup if payload.enabled is not None else validate_markup(payload.markup)
     with remote_errors(), project_network.network_lock(db, site.id), project_network.Remote(db, site) as remote:
         existing = db.get(models.NetworkOperation, str(payload.request_id))
         if existing and (existing.site_id != site.id or existing.action != 'structured_data'
                          or existing.initiator != user['username'] or existing.request_payload.get('jsonMarkup') != markup):
             raise HTTPException(409, 'Идентификатор запроса уже используется другой операцией.')
         current = view(remote.project())
+        if payload.enabled is not None and payload.markup != current['markup']:
+            raise HTTPException(409, 'Код изменился. Обновите данные перед переключением.')
+        if existing and payload.enabled is not None and existing.request_payload.get('enableJsonMarkup') is not payload.enabled:
+            raise HTTPException(409, 'Идентификатор запроса уже используется.')
         if existing:
             return with_receipt(db, current, existing)  # A repeated request only verifies; never sends again.
         if current['revision'] != payload.revision:
@@ -125,7 +130,7 @@ def save_structured_data(site_id: str, payload: StructuredDataUpdate, user: Auth
             models.NetworkOperation.status.in_(['pending', 'unknown'])).limit(1))
         if pending:
             raise HTTPException(409, 'Предыдущее сохранение микроразметки ещё не подтверждено. Обновите данные сетки.')
-        fields = {'enableJsonMarkup': current['enabled'], 'jsonMarkup': markup}
+        fields = {'enableJsonMarkup': current['enabled'] if payload.enabled is None else payload.enabled, 'jsonMarkup': markup}
         operation = models.NetworkOperation(id=str(payload.request_id), site_id=site.id,
             action='structured_data', status='pending', initiator=user['username'],
             request_payload={**fields, 'before': current}, message='Сохранение отправляется в Webdev.')

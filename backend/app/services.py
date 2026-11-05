@@ -4957,7 +4957,7 @@ async def sync_project_menus(
                     site.default_menu = current_menu
                     from app.project_cache import _confirm_synchronized_sections
                     _confirm_synchronized_sections(db, site, current_menu)
-                results.append({"type": menu_type, "status_code": response.status_code, "success": successful})
+                results.append({"type": menu_type, "status_code": response.status_code, "success": successful, "error": None if successful else str(response_body.get("message") or response_body.get("error") or f"HTTP {response.status_code}")[:500] if isinstance(response_body, dict) else f"HTTP {response.status_code}"})
                 db.commit()
             except Exception as exc:
                 db.add(models.PublicationLog(

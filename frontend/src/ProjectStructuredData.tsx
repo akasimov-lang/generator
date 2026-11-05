@@ -13,10 +13,11 @@ export async function readStructuredData(api: Api, siteId: string): Promise<Stru
  return value;
 }
 
-export function StructuredDataView({data,loading=false,error=""}:{data:StructuredData|null;loading?:boolean;error?:string}) {
+export function StructuredDataView({data,loading=false,error="",actions}:{data:StructuredData|null;loading?:boolean;error?:string;actions?:React.ReactNode}) {
  const verified=data?.verified_at?new Date(data.verified_at):null;
  return <section className="networkSection projectStructuredData" aria-label="Микроразметка проекта">
   <div className="networkMarkupHeading"><h3><Code2 size={18}/>Микроразметка</h3>
+   {actions}
    {data&&!loading&&!error&&<span className={`structuredDataState ${data.enabled===null?"unknown":data.enabled?"on":"off"}`}>{data.enabled===null?"Состояние не подтверждено":data.enabled?"Включена":"Выключена"}</span>}
   </div>
   {loading?<p role="status" className="muted">Загружаем микроразметку…</p>:error?<p role="alert">Не удалось получить микроразметку. {error}</p>:data?<>
@@ -26,7 +27,7 @@ export function StructuredDataView({data,loading=false,error=""}:{data:Structure
  </section>;
 }
 
-type SaveRequest = { request_id: string; revision: string; markup: string };
+type SaveRequest = { request_id: string; revision: string; markup: string; enabled?: boolean };
 type SaveResult = { data: StructuredData | null; operation: { id: string; status: string; message: string } };
 
 export function ProjectStructuredData({api,siteId,refreshKey,backgroundRefreshKey}:{api:Api;siteId:string;refreshKey?:string|number;backgroundRefreshKey?:string|number}) {
@@ -72,6 +73,14 @@ export function ProjectStructuredData({api,siteId,refreshKey,backgroundRefreshKe
    // Keep both the text and request id: a retry cannot submit the same write twice.
   } finally {setBusy(false);}
  }
+ async function toggle() {
+  if(!data?.revision||data.enabled===null)return;
+  const payload={request_id:crypto.randomUUID(),revision:data.revision,markup:data.markup,enabled:!data.enabled};
+  attempt.current=payload;setBusy(true);setError("");
+  try {receive(await api<SaveResult>(`/sites/${encodeURIComponent(siteId)}/structured-data`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}));}
+  catch(reason){setError(reason instanceof Error?reason.message:"Не удалось переключить микроразметку.");}
+  finally{setBusy(false);}
+ }
  async function check() {
   if(!attempt.current)return;
   setBusy(true);setError("");
@@ -90,13 +99,14 @@ export function ProjectStructuredData({api,siteId,refreshKey,backgroundRefreshKe
    <textarea className="structuredDataCode" aria-label="Код микроразметки" spellCheck={false} rows={18} value={draft} disabled={busy||waiting} onChange={event=>setDraft(event.target.value)}/>
    <small className="muted">{data?.enabled?"Включена":"Выключена"} · Сохранение в Webdev</small>
   </section>:<>
-   <StructuredDataView data={data} loading={loading} error={error}/>
-   {data&&!loading&&!error&&<button type="button" className="button secondary compact structuredDataEdit" disabled={!data.revision||data.enabled===null} onClick={()=>{
+   <StructuredDataView data={data} loading={loading} error={error} actions={data&&!loading?<>
+    <button type="button" role="switch" className="networkMarkupSwitch" aria-label="Микроразметка" aria-checked={data.enabled===true} disabled={busy||waiting||!data.revision||data.enabled===null} onClick={()=>void toggle()}><span aria-hidden="true"/></button>
+   <button type="button" className="button secondary compact structuredDataEdit" disabled={busy||waiting||!data.revision||data.enabled===null} onClick={()=>{
     setDraft(data.markup);editRevision.current=data.revision||"";setEditing(true);setMessage("");setError("");attempt.current=null;
-   }}><Pencil size={15}/>Редактировать</button>}
+   }}><Pencil size={15}/>Редактировать</button></>:null}/>
   </>}
   {editing&&error&&<p role="alert" className="error">{error}</p>}
   {message&&<p role="status" className="muted">{message}</p>}
-  {editing&&attempt.current&&<button type="button" className="button secondary compact" disabled={busy} onClick={()=>void check()}>Проверить сохранение</button>}
+  {attempt.current&&<button type="button" className="button secondary compact" disabled={busy} onClick={()=>void check()}>Проверить сохранение</button>}
  </div>;
 }

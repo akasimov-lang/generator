@@ -65,11 +65,14 @@ def get(db, report_id, user):
 def summary(job, report_id=None, *, entries=None):
     entries = (job.result or {}).get('entries', []) if entries is None else entries
     repeat = bool(job.payload.get('repeat'))
+    factual = job.payload.get('task_type') in {'toc_repair', 'showcase_audit'}
     done = sum(row['status'] in {'completed', 'partial', 'failed', 'skipped'} for row in entries)
     active = any(row['status'] in {'pending','running','waiting'} for row in entries)
     progress = [entry_progress(row, content_only=bool(job.payload.get('text_revision_20261027')),
                               group_program=job.payload.get('task_type') == 'brand_content_network_program')
                 for row in entries]
+    if factual:
+        progress = [{'done': int(row['status'] in {'completed', 'skipped', 'partial', 'failed'}), 'total': 1} for row in entries]
     steps_done, steps_total = sum(p['done'] for p in progress), sum(p['total'] for p in progress)
     percent = round(100 * steps_done / steps_total) if steps_total else 0
     if active: percent = min(percent, 99)
@@ -87,7 +90,7 @@ def summary(job, report_id=None, *, entries=None):
             ],
             'allow_reserve': bool(job.payload.get('allow_reserve')),
             'progress': {'done': steps_done, 'total': steps_total, 'percent': percent,
-                         'projects_done': done, 'projects_total': len(entries), 'unit': 'steps'}}
+                         'projects_done': done, 'projects_total': len(entries), 'unit': 'projects' if factual else 'steps'}}
 
 
 def page_values(page):
@@ -150,7 +153,11 @@ def paragraph_metrics(page):
 
 def view(job, db=None):
     entries = deepcopy((job.result or {}).get('entries', []))
-    if db is not None:
+    factual = job.payload.get('task_type') in {'toc_repair', 'showcase_audit'}
+    if factual:
+        from app.maintenance_evidence import enrich
+        entries = enrich(job, entries, db)
+    if db is not None and not factual:
         from app.content_metrics import counts as content_counts, comparison, brand_term
         brands = dict(db.execute(select(models.Site.id, models.Site.brand).where(
             models.Site.id.in_([row['site_id'] for row in entries]))).all())
@@ -194,6 +201,9 @@ def view(job, db=None):
                 'before': page_values(edit.before_page), 'after': page_values(edit.after_page),
             } for edit in own]]
     for row in entries:
+        if factual:
+            row.pop('progress', None)
+            continue
         row['progress'] = entry_progress(row, content_only=bool(job.payload.get('text_revision_20261027')),
                                          group_program=job.payload.get('task_type') == 'brand_content_network_program')
     from app import report_ids

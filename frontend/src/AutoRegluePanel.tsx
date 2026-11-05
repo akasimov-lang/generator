@@ -1,3 +1,4 @@
+import { AutomaticActions } from "./AutomaticActions";
 import { Bot, Scissors, AlignLeft, ArrowLeftRight, Globe2, ListChecks, WandSparkles } from "lucide-react";
 import React from "react";
 import {TransferProgress} from "./TransferProgress";
@@ -19,7 +20,7 @@ type Template = { id: string; project: string; brand: string; geo: string; varia
 type Plan = { reserve_pool_id?:string; main_target_kind?:string; parent_domain?:string; fallback_reason?:string; local_target?:boolean; use_selected_reserve?: boolean; manual_action?:string; brand?:string; domain_errors?:import("./TransferProgress").TransferRun["plan"]["domain_errors"]; replacement_pending?:boolean; geo?: string; execution_mode?: string; rollback_of?: string; rollback_run_id?: string; rolled_back_at?: string; domains?: { domain: string; domain_type: string }[]; source_before?: { domains: string[] }; source_after?: { domains: string[] }; target_before?: { domains: string[] }; target_after?: { domains: string[] }; transfer_not_before?: string; batch_id?: string; source_count?: number; target_count?: number; balance_mode?: string; source_project?: string; added_at?: string; elapsed_seconds?: number; alternates_before?: { markup: string; enabled: boolean }; alternates_after?: { markup: string; enabled: boolean }; canonicalFakeMainMarkup?: string | null; create_fake_main_path?: string | null; create_subdomain?: string | null; site_id: string; project: string; old_main: string; new_main: string; drop_domain: string; x_default_domain?: string; language_domain?: string; alternateMarkup: string; required_page_urls: string[]; added_hreflang?: string | null; pool_exhausted?: boolean; preview_token: string; requestId: string };
 type Run = { domain_progress?: import("./TransferProgress").TransferRun["domain_progress"]; id: string; site_id: string; status: string; phase: string; message: string; plan: Plan };
 type ScheduleTask = { site_id: string; project: string; enabled: boolean; scope: string; interval_days: number; status: string; next_run_at?: string | null; url: string };
-type ProjectData = { task?: ScheduleTask | null; next_run_at?: string | null; language_pool?: string[]; config: Config; settings: GlobalConfig; eligible: boolean; geo: string; templates: Template[]; runs: Run[] };
+type ProjectData = { participation: boolean; task?: ScheduleTask | null; next_run_at?: string | null; language_pool?: string[]; config: Config; settings: GlobalConfig; eligible: boolean; geo: string; templates: Template[]; runs: Run[] };
 const active = ["planned", "queued", "running", "waiting", "partial"];
 const labels: Record<string, string> = { planned: "Запланирован в группе", queued: "В очереди", running: "Выполняется", waiting: "Ожидает подтверждения", partial: "Нужна проверка результата", completed: "Завершён", failed: "Ошибка", cancelled: "Остановлен" };
 const phases: Record<string, string> = { cross_create_fake_main: "Создание фейкового внутряка", cross_delete_domain: "Извлечение из исходной сетки", cross_create_domains: "Добавление в новую сетку", cross_reserve: "Сохранение резерва", cross_reglue: "Смена Main", cross_alternates: "Обновление альтернейтов", transfer_delete: "Извлечение доменов", transfer_create: "Добавление доменов", prepared: "Подготовлен", create_fake_main: "Создание фейковой главной", fake_main_ready: "Проверка фейковой страницы", create_subdomains: "Создание поддомена", subdomain_ready: "Проверка готовности поддомена", reserve: "Сохранение резерва", reglue: "Смена Main", alternates: "Обновление альтернейтов", completed: "Все этапы подтверждены" };
@@ -147,11 +148,19 @@ function ProjectConfigEditor({ siteId, api, onTask }: { siteId: string; api: Api
   const baseOnly = draft.scheme_mode === "base_only";
   const template = data.templates.find(t => t.id === draft.profile_id);
   return <div className="autoReglueSettings">{error && <div className="notice" role="alert">{error}</div>}
+    <div className="networkMarkupHeading"><h3>Участие в массовых и автоматических действиях</h3>
+      <button type="button" role="switch" className="networkMarkupSwitch" aria-label="Участие в массовых и автоматических действиях" aria-checked={data.participation !== false} disabled={busy}
+        onClick={() => void perform(async () => {
+          const saved = await api<{reglue_participation: boolean}>(`/auto-reglue/projects/${siteId}/participation`, {method: "PATCH", headers: {"Content-Type": "application/json"}, body: JSON.stringify({enabled: data.participation === false})});
+          setData(current => current ? {...current, participation: saved.reglue_participation} : current);
+        })}><span aria-hidden="true" /></button><span>{data.participation !== false ? "Включено" : "Выключено"}</span>
+    </div>
+    <details><summary>Настройки автопереклея</summary>
     <p>GEO проекта: <b>{data.geo || "не задано"}</b>. Допуск: {draft.scope === "personal" ? "Персональные настройки" : data.eligible ? "Массовые действия" : "нужен статус «Массовые действия»"}.</p>
     {draft.scope !== "personal" && !data.settings.enabled && <p className="notice">Глобальный автопереклей выключен. Запуск из настроек этого проекта доступен отдельно и использует только его собственные правила.</p>}
     <label className="checkboxRow"><input type="checkbox" checked={draft.scope === "personal"} onChange={e => change({ scope: e.target.checked ? "personal" : "mass" })} /> Персональный автопереклей — исключить проект из массовых запусков</label>
     {draft.scope === "personal" && <p className="notice">Персональное расписание имеет приоритет: проект исключён из глобальных запусков. Выключение персонального расписания после сохранения возвращает проект в массовый запуск при статусе «Массовые действия». Собственные настройки сохраняются.</p>}
-    {draft.scope === "personal" ? <label className="checkboxRow"><input type="checkbox" checked={draft.enabled} onChange={e => change({ enabled: e.target.checked })} /> Участвует в автопереклеях</label> : <p className="muted">Участие в массовом запуске разрешает статус «Массовые действия». Отдельное разрешение внутри проекта не требуется.</p>}
+    {draft.scope === "personal" ? <label className="checkboxRow"><input type="checkbox" checked={draft.enabled} onChange={e => change({ enabled: e.target.checked })} /> Участвует в автопереклеях</label> : <p className="muted">Для массового запуска необходимы статус «Массовые действия» и включённый переключатель участия в автодействиях.</p>}
     {draft.scope !== "personal" && data.settings.apply_domain_settings && <div className="notice"><p>Для массового запуска схема доменов, источник поддомена и формат имени берутся из общих настроек. Включение и сохранение персонального расписания исключает проект из глобальных запусков. При выключенном персональном расписании проект участвует по общему расписанию; собственные настройки остаются сохранёнными.</p>
       <label>Дроп проекта для общих правил<input value={draft.drop_domain} onChange={e => change({ drop_domain: e.target.value })} /></label>
       <label>Новорег проекта для общих правил<input value={draft.newreg_domain} onChange={e => change({ newreg_domain: e.target.value })} /></label>
@@ -195,7 +204,7 @@ function ProjectConfigEditor({ siteId, api, onTask }: { siteId: string; api: Api
     <div className="networkActions"><button className="button secondary" disabled={busy || !dirty} onClick={() => void perform(async () => { const saved = await api<Config>(`/auto-reglue/projects/${siteId}`, body("PUT", draft)); setDraft(saved); setPlan(null); await load(); })}>Сохранить настройки</button>
       <button className="button secondary" disabled={busy || dirty || pending} onClick={() => void perform(async () => { const next = await api<Plan>(`/auto-reglue/projects/${siteId}/preview?scope=project`, { method: "POST" }); setPlan({ ...next, requestId: crypto.randomUUID() }); })}>Подготовить переклей</button></div>
     {plan && <><PlanPreview plan={plan} /><button className="button primary" disabled={busy || dirty || pending} onClick={() => void perform(async () => { const result = await api<{ results: { error?: string }[] }>("/auto-reglue/start", body("POST", { scope: "project", items: [{ site_id: siteId, preview_token: plan.preview_token, request_id: plan.requestId }] })); if (result.results[0]?.error) throw new Error(result.results[0].error); setPlan(null); await load(); })}>Запустить автопереклей проекта</button></>}
-    <Runs runs={data.runs} api={api} refresh={load} />
+    <Runs runs={data.runs} api={api} refresh={load} /></details>
   </div>;
 }
 
@@ -203,7 +212,7 @@ export function ProjectAutoReglue({ siteId, api }: { siteId: string; api: Api })
   const [task, setTask] = React.useState<ScheduleTask | null>(null);
   return <section className="projectAutoReglueCard">
     {task && <div className="notice autoReglueTaskNotice" role="status">Задача автопереклея проекта сохранена. <a href={task.url}>Открыть задачу автопереклея →</a></div>}
-    <section className="dataPanel"><div className="dataPanelHeader"><h2>Автопереклей проекта</h2></div><div className="dataPanelBody"><ProjectConfigEditor key={siteId} siteId={siteId} api={api} onTask={setTask} /></div></section>
+    <section className="dataPanel"><div className="dataPanelHeader"><h2>Автодействия</h2></div><div className="dataPanelBody"><AutomaticActions siteId={siteId} api={api}/><ProjectConfigEditor key={siteId} siteId={siteId} api={api} onTask={setTask} /></div></section>
   </section>;
 }
 

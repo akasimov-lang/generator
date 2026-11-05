@@ -275,7 +275,7 @@ def effective_config(global_cfg, cfg):
 
 
 def require_eligible(site, global_cfg, cfg, *, preview_only=False, manual=False):
-    if cfg.scope != 'personal' and getattr(site, 'reglue_participation', True) is False:
+    if getattr(site, 'reglue_participation', True) is False:
         raise ValueError('Участвует в переклее: Нет.')
     if cfg.scope != 'personal' and site.project_status != 'mass_actions':
         raise ValueError('Проект не имеет статуса «Массовые действия».')
@@ -706,7 +706,7 @@ def schedule_eligible(site, global_cfg, cfg):
         return False
     if cfg.scope != 'personal' and global_cfg.execution_mode == 'transfer_only':
         return False
-    return bool(rules.enabled and rules.schedule_enabled
+    return bool(getattr(site, 'reglue_participation', True) is not False and rules.enabled and rules.schedule_enabled
                 and (cfg.scope == 'personal' or site.project_status == 'mass_actions'))
 
 

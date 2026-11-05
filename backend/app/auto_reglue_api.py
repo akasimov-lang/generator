@@ -161,7 +161,7 @@ def project_settings(site_id: str, user: AuthUser, db: Session = Depends(get_db)
     site = site_or_404(db, site_id, user)
     runs = db.scalars(select(models.AutoReglueRun).where(models.AutoReglueRun.site_id==site.id).order_by(models.AutoReglueRun.created_at.desc()).limit(20)).all()
     return {'task': schedule_task(db, site), 'config':auto.config(db,site.id).model_dump(), 'settings':auto.config(db).model_dump(),
-            'eligible':site.project_status=='mass_actions' or auto.config(db,site.id).scope=='personal', 'geo':site.cache_geo, 'next_run_at':auto.next_scheduled_at(db,site),
+            'participation': site.reglue_participation is not False, 'eligible':site.project_status=='mass_actions' or auto.config(db,site.id).scope=='personal', 'geo':site.cache_geo, 'next_run_at':auto.next_scheduled_at(db,site),
             'language_pool':auto.default_language_pool(), 'templates':[p for p in template_catalog() if auto.domain_name(p['project'])==auto.domain_name(site.name)],
             'runs':[auto.serialize(r) for r in runs]}
 
@@ -630,3 +630,10 @@ class PilotVersionRequest(BaseModel):
 def select_pilot_version(job_id: UUID, site_id: UUID, payload: PilotVersionRequest, user: AuthUser, db: Session = Depends(get_db)):
     from app import auto_pilot, pilot_versions
     return auto_pilot.view(db, call(pilot_versions.select_version, db, job_id, site_id, payload.version, user))
+
+
+@router.get("/projects/{site_id}/history")
+def automatic_history(site_id: str, user: AuthUser, db: Session = Depends(get_db)):
+    site = site_or_404(db, site_id, user)
+    from app.automatic_history import timeline
+    return {"items": timeline(db, site.id)}
