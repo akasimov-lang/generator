@@ -12,4 +12,9 @@ def domain_projects(plans, items, *, confirmed=False):
             kind = 'drop'
         key = 'newregs' if kind in ('newreg', 'sub_newreg', 'newreg_subdomain') else 'drops' if kind in ('drop', 'sub_drop', 'drop_subdomain') else 'other'
         groups[key].append(site_id)
+    groups['internal_pages'] = list(dict.fromkeys(
+        row['site_id'] for row in items
+        if (row.get('internal_pages') or {}).get('published', 0) > 0
+        or not confirmed and (row.get('internal_pages') or {}).get('enabled') is True
+    ))
     return groups

@@ -23,3 +23,10 @@ test('unknown filters and unrelated internal routes are rejected',()=>{
 test('resetting the filter removes the return context',()=>{
  assert.equal(pilotFilterReturnPath('/auto-reglue/pilot/logs?id=report-id&domainFilter='),null);
 });
+
+test('added pages filter preserves return navigation and project type',()=>{
+ const path='/auto-reglue/pilot/logs?id=report-id&domainFilter=internal_pages&projectType=general';
+ assert.equal(pilotDomainFilter('?domainFilter=internal_pages'),'internal_pages');
+ assert.equal(pilotFilterReturnPath(path),path);
+ assert.equal(new URL(projectFromPilotFilter('/project-network/example.com/',path),'https://local.test').searchParams.get('pilotReturn'),path);
+});

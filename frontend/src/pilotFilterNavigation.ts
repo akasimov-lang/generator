@@ -1,4 +1,4 @@
-const filters = ["reserve_drops", "newregs", "drops", "other"] as const;
+const filters = ["reserve_drops", "newregs", "drops", "other", "internal_pages"] as const;
 export type PilotDomainFilter = typeof filters[number];
 export function pilotDomainFilter(search: string): PilotDomainFilter | null {
   const value = new URLSearchParams(search).get("domainFilter");

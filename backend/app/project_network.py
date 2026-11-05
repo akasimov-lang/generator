@@ -181,7 +181,9 @@ def operation_matches(operation, state):
                 and (operation.action != "domain_redirects_main" or state["canon"] == payload["expected_canon"]))
     if operation.action in {"create_fake_main", "select_fake_main"}:
         return (all(state.get("fake_main_settings", {}).get(key) == value for key, value in payload["alternate"].items())
-                and all(state.get(key) == value for key, value in payload.get('head_sync', {}).items()))
+                and all(state.get(key) == value for key, value in payload.get('head_sync', {}).items())
+                and ('redirects' not in payload or state.get('has_domain_redirects') and state.get('domain_redirects') == payload['redirects'])
+                and ('pageRedirects' not in payload or state.get('has_page_redirects') and state.get('page_redirects') == payload['pageRedirects']))
     if payload.get('fake_main_parent_id'):
         return (state.get('fake_main_current') == payload['expected_fake_main']
                 and all(state.get(key) == value for key, value in payload['head_sync'].items()))
@@ -604,6 +606,10 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
                 request.update(enableCanonical=True, canonicalFakeMainMarkup=payload.canonical_fake_main_markup if payload.canonical_fake_main_markup is not None else fake_canonical_markup(fake_path))
                 if not state['canonicalDefaultMarkup']:
                     request['canonicalDefaultMarkup'] = '<link rel="canonical" href="https://{{settings.canon}}{{reqPath}}" />'
+        if payload.action in {"create_fake_main", "select_fake_main"} and not payload.delete_fake_main:
+            from app.fake_main_redirects import retarget
+            request.update(retarget(project, state.get('fake_main_current'),
+                                    request['alternate'].get('currentFakeMain'), state['canon']))
         stored_request = dict(request)
         if payload.action in {"reglue", "create_fake_main", "select_fake_main"}:
             from app.reglue_journal import snapshot

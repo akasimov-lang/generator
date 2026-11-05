@@ -6,7 +6,7 @@ import { validateReserveSave } from "./networkReserve";
 import { readNetworkWithRetry } from "./networkReadRetry";
 import { LastReglueSummary, type LastReglue } from "./LastReglueSummary";
 import { matchesProjectSearch, normalizeDomainQuery } from "./projectSearch";
-import { Trash2, X, Search, Check } from "lucide-react";
+import { Trash2, X, Search, Check, ExternalLink } from "lucide-react";
 import { buildBaseAlternates } from "./standardAlternates";
 import { DomainRedirects, domainRedirectTargets, domainRedirectTarget, type DomainRedirect, type RedirectEdit } from "./DomainRedirects";
 import { PageRedirects, type PageRedirectGroup, type PageRedirectEdit } from "./PageRedirects";
@@ -474,7 +474,9 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
             {markupStatus("canonical")}
           </div>
           <label>Каноникл всех страниц<input type="text" aria-label="Каноникл всех страниц" className="networkMarkup" onKeyDown={saveMarkupOnEnter} onBlur={saveMarkupOnBlur} spellCheck={false} disabled={disabled || !data.has_head || !canonicalDraft} value={canonicalDraft?.standard ?? ""} onChange={event => canonicalDraft && setCanonicalDraft({ ...canonicalDraft, standard: event.target.value })} placeholder={data.canonicalDefaultMarkup === undefined ? "Нет сохранённых данных" : "Не задан"} /></label>
-          <label>Каноникл главной и фейковых внутренних страниц<input type="text" aria-label="Каноникл главной и фейковых внутренних страниц" className="networkMarkup" onKeyDown={saveMarkupOnEnter} onBlur={saveMarkupOnBlur} spellCheck={false} disabled={disabled || !data.has_head || !canonicalDraft} value={canonicalDraft?.fake ?? ""} onChange={event => canonicalDraft && setCanonicalDraft({ ...canonicalDraft, fake: event.target.value })} placeholder={data.canonicalFakeMainMarkup === undefined ? "Нет сохранённых данных" : "Не задан"} /></label>
+          <label><span className="networkMarkupHeading">Каноникл главной и фейковых внутренних страниц
+            {data.canon && data.fake_main_current && <a className="iconButton" href={`https://${data.canon}/${data.fake_main_current.replace(/^\/+/, "")}`} target="_blank" rel="noopener noreferrer" aria-label="Открыть текущую фейковую страницу на Main в новой вкладке" title="Открыть текущую фейковую страницу на Main в новой вкладке"><ExternalLink size={18} aria-hidden="true" /></a>}
+          </span><input type="text" aria-label="Каноникл главной и фейковых внутренних страниц" className="networkMarkup" onKeyDown={saveMarkupOnEnter} onBlur={saveMarkupOnBlur} spellCheck={false} disabled={disabled || !data.has_head || !canonicalDraft} value={canonicalDraft?.fake ?? ""} onChange={event => canonicalDraft && setCanonicalDraft({ ...canonicalDraft, fake: event.target.value })} placeholder={data.canonicalFakeMainMarkup === undefined ? "Нет сохранённых данных" : "Не задан"} /></label>
           <p className="muted">Клик вне полей или Enter — сохранить изменения в Webdev.</p>
           {dirty && <div className="networkActions"><button type="button" className="button secondary compact" disabled={!canSaveMarkup} onClick={()=>void mutate("alternates")}>Сохранить разметку</button><button type="button" className="button secondary compact" disabled={disabled} onClick={useSavedMarkup}>Использовать сохранённую разметку</button></div>}
           {data.fake_main_current && <p className="muted">Текущая фейковая внутренняя страница: {data.fake_main_current}</p>}
