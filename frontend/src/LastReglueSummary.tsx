@@ -14,7 +14,6 @@ export function LastReglueSummary({ last, observedAt, recent }: { last?: LastReg
     const changes = [...recent, ...observed].filter(item => Number.isFinite(Date.parse(item.at))).sort((a,b) => Date.parse(b.at)-Date.parse(a.at)).slice(0,7);
     const path = (value: string | null) => value === null ? "нет данных" : value || "не задан";
     return <div className="lastReglueSummary lastReglueHistory" aria-label="Последние изменения проекта" tabIndex={0}>
-      <strong>Последние изменения · {changes.length}</strong>
       {changes.map(item => <article key={item.id}>
         <time dateTime={item.at}>{item.kind === "fake_path" ? "Замена внутряка" : item.kind === "observed" ? "Смена Main обнаружена" : "Переклей"}: {new Date(item.at).toLocaleString("ru-RU", {timeZone:"Europe/Moscow"})} МСК</time>
         {item.kind === "reglue" && <span>Main: {item.old_main || "нет данных"} → {item.new_main}</span>}
