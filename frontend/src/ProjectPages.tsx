@@ -1,7 +1,7 @@
 import { openDetailPage } from "./detailNavigation";
 import { PageContentTools } from "./PageContentTools";
 import React from "react";
-import { ArrowLeft, ArrowDown, ArrowUp, Check, ChevronRight, Copy, FileText, Home, Link2, Plus, RefreshCcw, Save, Search, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowDown, ArrowUp, Check, ChevronRight, Copy, ExternalLink, FileText, Home, Link2, Plus, RefreshCcw, Save, Search, Trash2, X } from "lucide-react";
 import { TemplateCombobox } from "./TemplateCombobox";
 import { ShortcodeSidebar, type ShortcodeInfo } from "./ShortcodeSidebar";
 import { clearPageDraft, editablePageFingerprint, newestPageDraft, pageDraftStorageKey, persistPageDraft, preparePageDraft, readPageDraft, recoverPageSave, writePageDraft, type SavedPageDraft } from "./pageEditorDraft";
@@ -203,6 +203,24 @@ export function PageEditor({ siteId, row, api, onClose, onSaved, breadcrumbs, re
   const fingerprint=page?editablePageFingerprint(page):"";
   const isHome=page?.is_home??row.is_home;
   const slug=page?.slug||row.slug;
+  const [siteBaseUrl, setSiteBaseUrl] = React.useState("");
+  React.useEffect(() => {
+    let active = true;
+    setSiteBaseUrl("");
+    void api<{cache_canon?: string | null; base_url: string; name: string}>(`/sites/lookup?site_id=${encodeURIComponent(siteId)}`).then(site => {
+      const base = (site.cache_canon || site.base_url || site.name).trim();
+      const url = new URL(/^https?:\/\//i.test(base) ? base : `https://${base}`);
+      if (active) setSiteBaseUrl(url.origin);
+    }).catch(() => { /* The editor remains usable if the site address is unavailable. */ });
+    return () => { active = false; };
+  }, [api, siteId]);
+  const publicPageUrl = React.useMemo(() => {
+    if (!siteBaseUrl || (!isHome && !slug)) return "";
+    try {
+      const path = new URL(isHome ? "/" : slug, `${siteBaseUrl}/`);
+      return `${siteBaseUrl}${path.pathname}${path.search}${path.hash}`;
+    } catch { return ""; }
+  }, [siteBaseUrl, isHome, slug]);
   const dirty = !!page && fingerprint !== original;
   const unsavedChanges = !!page && fingerprint !== (durableFingerprint || original);
   const path = `/sites/${siteId}/pages/${row.key}`;
@@ -403,7 +421,7 @@ export function PageEditor({ siteId, row, api, onClose, onSaved, breadcrumbs, re
   const validContent = page?.content && Array.isArray(page.content.blocks);
   if (!fullPage) return null;
   return <div className={`pp-page-editor pp-page-editor-route ${documentMode ? "pp-document-mode" : ""}`} ref={dialog} tabIndex={-1} role="region" aria-label={`Редактор страницы: ${page?.title || row.title}`} onKeyDown={handleKeys}>
-    <header className="pp-editor-header"><div><button type="button" className="pp-editor-back" disabled={busy} onClick={close}><ArrowLeft size={16} />Назад</button><nav className="pp-editor-breadcrumbs" aria-label="Хлебные крошки редактора"><ol>{(breadcrumbs || [{ label: "Все страницы", onClick: onClose }]).map((item, index) => <li key={index}><button type="button" disabled={busy} onClick={() => leave(item.onClick)}>{item.label}</button><ChevronRight size={13} aria-hidden="true" /></li>)}<li aria-current="page">{isHome ? "Главная страница" : (page?.title || row.title)}</li></ol></nav><h2>{page?.title || row.title}</h2><small>{slug}</small></div><div className="pp-editor-actions"><button type="button" className="button secondary" disabled={busy} onClick={() => void reloadFromSite()}><RefreshCcw size={16} />Загрузить заново</button><button type="button" className="button primary" disabled={(!dirty && !unsavedChanges) || busy || loading || !!unresolved || !validContent} onClick={() => void save()}><Save size={16} />{busy ? "Проверяем…" : "Сохранить на сайте"}</button><button className="pp-icon" type="button" aria-label="Закрыть редактор" disabled={busy} onClick={close}><X size={24} /></button></div></header>
+    <header className="pp-editor-header"><div><button type="button" className="pp-editor-back" disabled={busy} onClick={close}><ArrowLeft size={16} />Назад</button><nav className="pp-editor-breadcrumbs" aria-label="Хлебные крошки редактора"><ol>{(breadcrumbs || [{ label: "Все страницы", onClick: onClose }]).map((item, index) => <li key={index}><button type="button" disabled={busy} onClick={() => leave(item.onClick)}>{item.label}</button><ChevronRight size={13} aria-hidden="true" /></li>)}<li aria-current="page">{isHome ? "Главная страница" : (page?.title || row.title)}</li></ol></nav><h2>{page?.title || row.title}</h2><small>{slug}</small></div><div className="pp-editor-actions"><button type="button" className="button secondary" disabled={!publicPageUrl} title={publicPageUrl || "Адрес страницы недоступен"} onClick={() => window.open(publicPageUrl, "_blank", "noopener,noreferrer")}><ExternalLink size={16} />Посмотреть на сайте</button><button type="button" className="button secondary" disabled={busy} onClick={() => void reloadFromSite()}><RefreshCcw size={16} />Загрузить заново</button><button type="button" className="button primary" disabled={(!dirty && !unsavedChanges) || busy || loading || !!unresolved || !validContent} onClick={() => void save()}><Save size={16} />{busy ? "Проверяем…" : "Сохранить на сайте"}</button><button className="pp-icon" type="button" aria-label="Закрыть редактор" disabled={busy} onClick={close}><X size={24} /></button></div></header>
     <main className="pp-editor-main">{loading && <p role="status">Загрузка страницы…</p>}{error && <div className="pp-page-error" role="alert">{error}{unresolved && <button className="button secondary" disabled={busy} onClick={() => void check()}>Проверить сохранение</button>}</div>}{message && <p role="status" className="pp-page-success"><Check size={18} />{message}</p>}
       {!loading && page && <><div className="pp-shortcode-layout"><ShortcodeSidebar content={page.content} catalog={shortcodes} onNavigate={index=>{const element=document.getElementById(`page-editor-block-${index}`);element?.scrollIntoView({block:"center",behavior:"smooth"});element?.querySelector<HTMLElement>('input,textarea,[contenteditable="true"]')?.focus({preventScroll:true});}}/><div className="pp-editor-content"><div className="pp-editor-info"><span>{unsavedChanges ? "Есть несохранённые изменения" : dirty ? `Черновик сохранён ${draftLocation}; ещё не опубликован` : "Загружена сохранённая версия"} · Изменения публикуются кнопкой «Сохранить на сайте».</span><button type="button" className="button secondary compact" onClick={() => void navigator.clipboard.writeText(JSON.stringify({ title: page.title, description: page.description, content: page.content }, null, 2)).then(() => setMessage("Черновик скопирован")).catch(() => setError("Браузер не разрешил копирование."))}><Copy size={14} />Скопировать черновик</button></div>
       {page?.source === "cache" && <p className="muted" role="status">{page.warning || "Сохранённая версия из серверного кеша. При сохранении проверяется актуальная версия в Webdev."}</p>}

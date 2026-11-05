@@ -232,6 +232,8 @@ def test_domain_summary_counts_reserve_as_subset_of_drops(pool):
     stock.import_domains(db,'pool-drop.test','drop','','test')
     view=pilot.view(db,preview(db))
     assert view['domain_summary']=={'reserve_drops':1,'drops':1,'newregs':0,'other':0}
+    assert len(view['domain_projects']['reserve_drops']) == 1
+    assert view['domain_projects']['reserve_drops'] == view['domain_projects']['drops']
 
 
 def test_new_preview_cancels_only_own_unfinished_preview_and_retries_are_idempotent(pool):

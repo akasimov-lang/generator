@@ -1,3 +1,4 @@
+import { showcaseBrandCount, type ShowcaseSummary } from "./showcaseCount";
 import { ReglueJournalCard, ReglueJournalPage } from "./ReglueJournal";
 import { DashboardActivity } from "./DashboardActivity";
 import { siteGeoFilterCode } from "./siteGeoFilter";
@@ -1140,10 +1141,10 @@ function App() {
     const key = `${view}:${name || savedId}`;
     if (refreshFlight.current?.key === key) return refreshFlight.current.promise;
     const promise = (async () => {
-      if (["sites", "favorites", "massActionReport", "autoReglue", "templateGenerator"].includes(view) || (view === "workspace" && !snapshotTimeRef.current)) {
+      if (["sites", "favorites", "massActionReport", "autoReglue", "templateGenerator", "autoPilot", "autoPilotLogs", "autoPilotReport"].includes(view) || (view === "workspace" && !snapshotTimeRef.current)) {
         if (!initialSitesFlight.current) {
           setCatalogError("");
-          initialSitesFlight.current = api<Site[]>(["sites", "favorites", "massActionReport", "autoReglue", "templateGenerator"].includes(view) ? "/sites?include_grouped_inactive=true" : "/sites")
+          initialSitesFlight.current = api<Site[]>(["sites", "favorites", "massActionReport", "autoReglue", "templateGenerator", "autoPilot", "autoPilotLogs", "autoPilotReport"].includes(view) ? "/sites?include_grouped_inactive=true" : "/sites")
             .then(result => { if (userRef.current?.id === user.id) mergeSites(result, true); })
             .catch(error=>{if(userRef.current?.id===user.id)setCatalogError(error instanceof Error?error.message:"Не удалось загрузить список сайтов. Нажмите «Обновить».");throw error;})
             .finally(() => { initialSitesFlight.current = null; });
@@ -1563,9 +1564,9 @@ function App() {
         {activeView === "guide" && <React.Suspense fallback={<p>Загрузка инструкции…</p>}><UserGuideView /></React.Suspense>}
         {activeView === "autoReglue" && <><GlobalProjectSearchResults sites={siteSnapshot} query={massSearchQuery} onOpen={openMassSearchProject} loading={!catalogLoaded&&!catalogError}/><div style={{display:globalMassQuery?"none":undefined}}><AutoReglueView refreshToken={massRefreshToken} api={api} onNetworksChanged={loadAll} renderReport={(onScopeChange, selectionIds, onSelection, moveActions, headerContainer) => <MassActionStatistics massOnly refreshToken={massRefreshToken} catalogReady={catalogLoaded} catalogError={catalogError} onInventoryChanged={loadAll} headerContainer={headerContainer} api={api} onScopeChange={onScopeChange} renderProjects={(ids, refresh, scopeLabel) => <SitesView projectScopeLabel={scopeLabel} embedded massActions api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={updates => { mergeSites(updates); refresh(); }} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll} selectionIds={selectionIds} onSelectionChange={onSelection} headerActions={moveActions} />} />} /></div></>}
         {activeView === "reglueReserves" && <ReglueReservesPage api={api} />}
-        {activeView === "autoPilot" && <AutoPilotPage api={api}/>}
-        {activeView === "autoPilotLogs" && <AutoPilotPage api={api} logs/>}
-        {activeView === "autoPilotReport" && <AutoPilotPage api={api} reports/>}
+        {activeView === "autoPilot" && <AutoPilotPage api={api} renderProjects={(ids, label) => catalogError ? <p role="alert">{catalogError}</p> : !catalogLoaded ? <p role="status">Загружаем проекты…</p> : <SitesView key={label} embedded api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} projectScopeLabel={label} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/>}/>}
+        {activeView === "autoPilotLogs" && <AutoPilotPage api={api} logs renderProjects={(ids, label) => catalogError ? <p role="alert">{catalogError}</p> : !catalogLoaded ? <p role="status">Загружаем проекты…</p> : <SitesView key={label} embedded api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} projectScopeLabel={label} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/>}/>}
+        {activeView === "autoPilotReport" && <AutoPilotPage api={api} reports renderProjects={(ids, label) => catalogError ? <p role="alert">{catalogError}</p> : !catalogLoaded ? <p role="status">Загружаем проекты…</p> : <SitesView key={label} embedded api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} projectScopeLabel={label} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/>}/>}
         {activeView === "autoReglueGuide" && <><a className="button secondary" href="/guide" onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("guide"); } }}>Все инструкции</a><AutoReglueGuide backLabel="Вернуться к автопереклею" onBack={() => navigateTo("autoReglue")} /></>}
         {activeView === "settings" && <SettingsView api={api} currentUser={currentUser} designVersion={designVersion} onDesignVersionChange={setDesignVersion} inputStyle={inputStyle} onInputStyleChange={setInputStyle} onChanged={loadAll} />}
       </main>
@@ -8437,7 +8438,7 @@ const SITE_COLUMN_LABELS: Record<SiteTableColumn, string> = {
   menuType: "Тип меню",
   menuCount: "Пункты меню",
   fiberyName: "Name Fibery",
-  subdomainsCount: "Поддоменов",
+  subdomainsCount: "Витрина",
   domainsCount: "Domains"
 };
 const SITE_COLUMN_SORT_KEYS: Record<SiteTableColumn, string | null> = {
@@ -8755,6 +8756,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
     }
   }, [preferencesKey]);
   const [managedSites, setManagedSites] = React.useState<Site[]>(sites);
+  const [showcaseCounts, setShowcaseCounts] = React.useState<Record<string, number | null>>({});
   const [cacheResult, setCacheResult] = React.useState<ProjectCacheSyncResult | null>(null);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [geoFilter, setGeoFilter] = React.useState(() => siteGeoFilterCode(storedPreferences.geoFilter));
@@ -8974,7 +8976,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       fiberyNameManual: Boolean(site.fibery_name_manual),
       projectTeam: site.project_team,
       needsTeamReview: typeof site.project_team === "string" && ["", "rankomen"].includes(site.project_team.trim().toLowerCase()),
-      subdomainsCount: site.network_domain_counts?.subdomains ?? null,
+      subdomainsCount: showcaseCounts[site.id] ?? null,
       domainsCount: site.domains_count,
       domains: Array.isArray(site.cache_domains) ? site.cache_domains : [],
       syncedAt: site.cache_synced_at
@@ -9043,6 +9045,27 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       - Number(isExactNetworkDomainSearch(left.domains, normalizedQuery));
   });
   const networkRefreshScope = JSON.stringify(filteredRows.map(row=>row.id).sort());
+  React.useEffect(() => {
+    if (massActions) return;
+    let active = true;
+    const pending: string[] = JSON.parse(networkRefreshScope);
+    setShowcaseCounts({});
+    async function loadCounts() {
+      while (active && pending.length) {
+        const id = pending.shift()!;
+        let count: number | null = null;
+        try {
+          const endpoint = `/sites/${encodeURIComponent(id)}/showcase`;
+          let showcase = await api<ShowcaseSummary>(endpoint);
+          if (active && !showcase.management?.complete) showcase = await api<ShowcaseSummary>(`${endpoint}?refresh=true`);
+          count = showcaseBrandCount(showcase);
+        } catch { /* Unknown is distinct from an empty showcase. */ }
+        if (active) setShowcaseCounts(current => ({...current, [id]: count}));
+      }
+    }
+    void Promise.all([loadCounts(), loadCounts(), loadCounts()]);
+    return () => { active = false; };
+  }, [api, networkRefreshScope, snapshotUpdatedAt, massActions]);
   async function downloadProjectTable() {
     if (exportingTable || !filteredRows.length) return;
     setExportingTable(true); setExportTableError("");
@@ -9518,7 +9541,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
               fiberyName: <span className="siteFiberyName" title={row.projectTeam == null ? "Нет сохранённых данных о команде" : `Команда: ${row.projectTeam || "не заполнена"}`}><FiberyProjectName value={row.fiberyName} projectName={row.name} className="siteFiberyNameText" />{row.needsTeamReview && <a className="siteFiberyReviewButton" href={`https://webdev-alfasearch.ru/projects/${encodeURIComponent(row.name)}`} target="_blank" rel="noopener noreferrer" aria-label={`Проверить команду проекта ${row.name} в Webdev`}>Проверить</a>}</span>,
               subdomainsCount: massActions ? readOnly ? (row.participation ? "Да" : "Нет") : <fieldset className="massParticipation" disabled={savingParticipation.includes(row.id)}>
                 <SearchableSelect value={row.participation ? "yes" : "no"} searchable={false} compact ariaLabel={`Участвует в переклее ${row.name}`} searchPlaceholder="Найти значение" options={[{value:"yes",label:"Да"},{value:"no",label:"Нет"}]} onChange={value => void updateParticipation(row.id, value === "yes")} />
-              </fieldset> : row.subdomainsCount === null ? "—" : formatNumber(row.subdomainsCount),
+              </fieldset> : <span title={row.subdomainsCount === null ? "Состав витрины не определён или ещё загружается" : "Количество уникальных брендов на витрине"}>{row.subdomainsCount === null ? "—" : formatNumber(row.subdomainsCount)}</span>,
               domainsCount: row.isActive ? <a href={pathForRoute("workspace", "network", row.name)} aria-label={`Открыть сетку проекта ${row.name}`}>{formatNumber(row.domainsCount)}</a> : <span title="Сохранённое число доменов неактивного проекта">{formatNumber(row.domainsCount)}</span>
             };
             return visibleColumnOrder.map((column) => cells[column]);

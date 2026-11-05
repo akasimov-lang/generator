@@ -435,6 +435,8 @@ def view(db,job):
         if p.get('reserve_pool_id'):domain_counts['reserve_drops']+=1;kind='drop'
         domain_counts['newregs' if kind in ('newreg','sub_newreg','newreg_subdomain') else 'drops' if kind in ('drop','sub_drop','drop_subdomain') else 'other']+=1
     snapshot['domain_summary']=domain_counts
+    from app.pilot_domain_filters import domain_projects
+    snapshot['domain_projects'] = domain_projects(plans, snapshot['items'], confirmed=not preparing)
     snapshot.update(mode='preview' if preparing else 'execution',ready=sum(r['status']=='ready' for r in snapshot['items']),events=events,
                     progress={'percent':round(sum(r['progress'] for r in snapshot['items'])/total) if total else 100,'done':done,'total':total},
                     updated_at=job.updated_at,launched_at=job.payload.get('launched_at'),finished_at=job.finished_at)
