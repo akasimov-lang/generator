@@ -9618,7 +9618,7 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 
 .networkReglueButton { justify-self: start; width: auto; max-width: 100%; }
 .networkRedirectTitle { position: relative; display: inline-block; width: fit-content; margin-right: 18px; }
-.networkRedirectCount { position: absolute; right: -10px; bottom: -5px; z-index: 1; display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 3px; border-radius: 999px; background: #28764d; color: #fff; box-shadow: 0 0 0 2px var(--surface, #fff); font-size: 10px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.networkRedirectCount { position: absolute; right: -10px; bottom: -5px; z-index: 1; display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 3px; border-radius: 999px; background: rgba(110, 118, 130, .35); color: #fff; -webkit-text-stroke: .4px #000; text-shadow: 0 0 1px #000; box-shadow: 0 0 0 2px var(--surface, #fff); font-size: 10px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
 
 .searchableSelectDropdownCompact {
   padding: 4px;
@@ -10405,7 +10405,7 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .compactTransferReports .transferReportErrorDetail > td { background:rgba(220,38,38,.04); padding:8px 12px; }
 .compactTransferReports .transferReportErrorDetail p { margin:4px 0; font-size:11px; }
 
-.networkRedirectsHeading { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.networkRedirectsHeading { display:flex; align-items:center; justify-content:flex-start; gap:24px; flex-wrap:wrap; }
 .networkRedirects { min-width:0; max-width:100%; }
 .domainRedirectsTable { display:table; width:max-content; min-width:0; border-collapse:collapse; font-size:12px; }
 .domainRedirectsTable thead { display:table-header-group; }

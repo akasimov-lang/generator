@@ -29,7 +29,7 @@ export function StructuredDataView({data,loading=false,error=""}:{data:Structure
 type SaveRequest = { request_id: string; revision: string; markup: string };
 type SaveResult = { data: StructuredData | null; operation: { id: string; status: string; message: string } };
 
-export function ProjectStructuredData({api,siteId,refreshKey}:{api:Api;siteId:string;refreshKey?:string|number}) {
+export function ProjectStructuredData({api,siteId,refreshKey,backgroundRefreshKey}:{api:Api;siteId:string;refreshKey?:string|number;backgroundRefreshKey?:string|number}) {
  const [data,setData]=React.useState<StructuredData|null>(null);
  const [loading,setLoading]=React.useState(true),[error,setError]=React.useState("");
  const [editing,setEditing]=React.useState(false),[draft,setDraft]=React.useState("");
@@ -37,13 +37,18 @@ export function ProjectStructuredData({api,siteId,refreshKey}:{api:Api;siteId:st
  const [message,setMessage]=React.useState("");
  const attempt=React.useRef<SaveRequest|null>(null);
  const editRevision=React.useRef("");
+ const snapshot=React.useRef<StructuredData|null>(null); snapshot.current=data;
+ const lastRead=React.useRef<{siteId:string;refreshKey?:string|number}|null>(null);
  React.useEffect(()=>{
+  const previous=lastRead.current;
+  if(previous?.siteId===siteId&&previous.refreshKey===refreshKey&&snapshot.current?.enabled===false&&!snapshot.current.markup.trim())return;
+  lastRead.current={siteId,refreshKey};
   let current=true;setLoading(true);setError("");
   void readStructuredData(api,siteId).then(value=>{if(current)setData(value);}).catch(reason=>{
    if(current)setError(reason instanceof Error?reason.message:"Повторите обновление данных.");
   }).finally(()=>{if(current)setLoading(false);});
   return()=>{current=false;};
- },[api,siteId,refreshKey]);
+ },[api,siteId,refreshKey,backgroundRefreshKey]);
  function receive(value:SaveResult) {
   if(value.data)setData(value.data);
   setMessage(value.operation.message);

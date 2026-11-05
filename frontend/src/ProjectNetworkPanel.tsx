@@ -549,7 +549,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
           <div className="networkFakeForms"><div>          <label className="networkFakePath">Путь фейковой главной<input aria-label="Путь фейковой главной" value={fakeMainInput} onChange={e => setFakeMainInput(e.target.value)} placeholder="/events, /events/ или /index.php" /></label>
           <div className="networkActions"><button type="button" className="button compact secondary" disabled={!fakeMainInput.trim() || fakeQueue.count >= 10 || fakeQueue.busyPath(fakeMainInput) || !!data.fake_main_paths?.includes(normalizedFakePath(fakeMainInput))} onClick={() => { if (fakeQueue.enqueue("create", fakeMainInput)) setFakeMainInput(""); }}>Создать и назначить</button></div></div></div>
         </div>}
-        {mode === "network" && networkView === "main" && <ProjectStructuredData key={site.id} siteId={site.id} api={api} refreshKey={`${structuredDataRevision}:${refreshToken}:${data.revision}`}/>}
+        {mode === "network" && networkView === "main" && <ProjectStructuredData key={site.id} siteId={site.id} api={api} refreshKey={refreshToken} backgroundRefreshKey={`${structuredDataRevision}:${data.revision}`}/>}
         {(!!data.operations.length || !!fakeQueue.items.length || !!fakeQueue.error) && <div className="networkSection"><h3>История операций{fakeQueue.count > 0 ? ` · Фейковые страницы в работе: ${fakeQueue.count}` : ""}</h3>
           {fakeQueue.error && <p role="alert">Не удалось обновить статус: {fakeQueue.error}</p>}
           <ul className="networkOperations">{networkOperationHistory(data.operations, fakeQueue.items).map(entry => {
