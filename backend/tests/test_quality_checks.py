@@ -139,7 +139,8 @@ Ein weiterer Absatz."""
     blocks = build_blocks_from_ai_text(text, "Test H1", shortcode=None, include_toc=True, include_faq=False)
     headings = [block["data"]["text"] for block in blocks if block["type"] == "header"]
 
-    assert headings == ["Test H1", "Echter Abschnitt"]
+    from app.services import clean_text
+    assert [clean_text(heading) for heading in headings] == ["Test H1", "Echter Abschnitt"]
 
 
 def test_markdown_bold_is_converted_to_html_in_generated_and_legacy_blocks() -> None:

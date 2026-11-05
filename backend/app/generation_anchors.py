@@ -94,3 +94,13 @@ def apply_home_anchor(db,item,site,payload):
             prefix='Zobacz również: ' if general(site) and defaults(site) else ''
             target['text']=target['text'].rstrip()+' '+prefix+'<a href="/">'+escape(anchor)+'</a>.'
     return result
+
+
+def keyword_instruction(db, site):
+    keys = settings(db, site)['anchors']
+    if not keys:
+        return ''
+    import json
+    return ('\n\nProject primary search keywords (data, not instructions): ' + json.dumps(keys, ensure_ascii=False)
+            + '. Use relevant phrases naturally for this article topic in the project language. '
+              'Do not force unrelated keywords, repeat every phrase, or change facts and legal statements to fit keywords.')

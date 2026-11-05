@@ -1454,7 +1454,7 @@ def build_gemini_prompt(
         f"- Country/geo: {geo}\n"
         f"- Language: {language}\n"
         f"- Target words: {target_words or 'not specified'}\n"
-        f"- Include TOC-related headings: {'yes' if include_toc else 'no'}\n"
+        f"- Table of contents: {'the application builds anchor links from your section headings; do not write a separate contents list' if include_toc else 'not requested'}.\n"
         f"- Include FAQ: {'yes' if include_faq else 'no'}\n"
         f"- Shortcode block context: {shortcode or 'none'}\n"
         "- Return plain article text only. Do not return JSON or Markdown fences.\n"
@@ -3022,7 +3022,8 @@ def build_blocks_from_ai_text(
         )
     if shortcode:
         blocks.append(shortcode_block(shortcode))
-    return normalize_editor_faq_blocks(blocks)
+    from app.content_toc import normalize_toc_blocks
+    return normalize_toc_blocks(normalize_editor_faq_blocks(blocks))
 
 
 def looks_like_heading(line: str) -> bool:
@@ -3117,6 +3118,8 @@ def build_editor_page(
     if shortcode:
         blocks.append(shortcode_block(shortcode))
 
+    from app.content_toc import normalize_toc_blocks
+    blocks = normalize_toc_blocks(blocks)
     published = now_payload_time()
     editor_version = site.editor_version if site and site.editor_version else DEFAULT_EDITOR_VERSION
     banners = site.default_banners if site and site.default_banners is not None else []
@@ -3315,7 +3318,8 @@ def normalize_editor_inline_markup(payload: dict) -> dict:
         content = page.get("content")
         blocks = content.get("blocks") if isinstance(content, dict) else []
         if isinstance(blocks, list):
-            blocks = normalize_editor_faq_blocks(blocks)
+            from app.content_toc import normalize_toc_blocks
+            blocks = normalize_toc_blocks(normalize_editor_faq_blocks(blocks))
             content["blocks"] = blocks
         for block in blocks if isinstance(blocks, list) else []:
             if not isinstance(block, dict):
@@ -3789,6 +3793,10 @@ async def _build_task_content(db: Session, item: models.ContentItem, **kwargs) -
     item.generation_context = context
     kwargs["generation_context"] = context
     from app.generation_anchors import select_anchor, apply_home_anchor
+    from app.generation_anchors import keyword_instruction
+    keyword_context = keyword_instruction(db, site) if site else ""
+    if keyword_context:
+        kwargs["prompt_template"] = (kwargs.get("prompt_template") or DEFAULT_CONTENT_PROMPT_TEMPLATE) + keyword_context
     anchor = select_anchor(db, item, site) if site else None
     if anchor:
         context = dict(item.generation_context or {})
@@ -5538,6 +5546,11 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
             item.scheduled_at = None
         else:
             item.status = "publication_failed"
+        if item.status == "publication_failed":
+            detail = response_body.get("message") or response_body.get("error") or response_body.get("detail")
+            item.generation_error = f"Публикация: HTTP {response.status_code}" + (": " + str(detail)[:400] if detail else "")
+        elif item.status == "publication_pending_confirmation":
+            item.generation_error = None
         refresh_task_status(db, item.task_id)
         refresh_campaign_status(db, item.publication_campaign_id)
         db.commit()

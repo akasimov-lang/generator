@@ -803,7 +803,7 @@ def _reconcile_completed_publication_tasks(db: Session, *, limit: int) -> int:
     """Repair an aggregate task status after concurrent confirmation updates."""
     tasks = db.scalars(
         select(models.GenerationTask)
-        .where(models.GenerationTask.status == "publishing")
+        .where(models.GenerationTask.status.in_(["publishing", "publication_failed"]))
         .order_by(models.GenerationTask.updated_at.asc())
         .limit(max(1, limit))
     ).all()

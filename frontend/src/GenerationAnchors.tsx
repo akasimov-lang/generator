@@ -32,9 +32,9 @@ export function GenerationAnchors({ siteId, api }: { siteId: string; api: Api })
     finally { flight.current = false; setSaving(false); }
   }
   return <section className="panel" aria-label="Анкоры для генерации">
-    <div className="panelHeader"><h3><Link2 size={16} /> Анкоры на главную</h3><button type="button" className="button secondary compact" disabled={loading || saving || !dirty} onClick={() => void save()}><Save size={14} />{saving ? "Сохраняем…" : "Сохранить анкоры"}</button></div>
-    <label className="field">Анкоры<textarea aria-label="Анкоры на главную" rows={3} value={text} disabled={loading || saving} placeholder="По одному на строку или через запятую" onChange={event => setText(event.target.value)} onBlur={() => void save()} /></label>
-    <small className="muted">Один случайный анкор на статью, без равномерного распределения. Ссылка на / вставляется только в обычный абзац. Изменения сохраняются при клике вне поля.</small>
+    <div className="panelHeader"><h3><Link2 size={16} /> Ключи — Анкоры</h3><button type="button" className="button secondary compact" disabled={loading || saving || !dirty} onClick={() => void save()}><Save size={14} />{saving ? "Сохраняем…" : "Сохранить ключи"}</button></div>
+    <label className="field">Основные ключи проекта<textarea aria-label="Ключи — Анкоры" rows={3} value={text} disabled={loading || saving} placeholder="По одному на строку или через запятую" onChange={event => setText(event.target.value)} onBlur={() => void save()} /></label>
+    <small className="muted">Основные ключи проекта используются при генерации. Один ключ выбирается анкором ссылки на главную в обычном абзаце. Изменения сохраняются при клике вне поля.</small>
     {error && <p role="alert" className="formError">{error}</p>}
   </section>;
 }

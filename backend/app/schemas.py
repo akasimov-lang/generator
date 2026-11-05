@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from app.core.config import get_settings
 
@@ -469,6 +469,22 @@ class GenerationTaskRegenerateAll(BaseModel):
 
 class GenerationTaskResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+
+    error_summary: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def current_item_state(cls, value):
+        from app import models
+        from app.task_status import derive_status, task_error_summary
+        if isinstance(value, models.GenerationTask):
+            items = list(value.items)
+            result = {name: getattr(value, name) for name in cls.model_fields if hasattr(value, name)}
+            if items:
+                result['status'] = derive_status({item.status for item in items}, value.auto_publish)
+            result['error_summary'] = task_error_summary(items)
+            return result
+        return value
 
     id: str
     title: str

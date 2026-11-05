@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import delete, func, select
-from sqlalchemy.orm import Session, load_only
+from sqlalchemy.orm import Session, load_only, selectinload
 from sqlalchemy.exc import IntegrityError
 from app.task_status import refresh_task_status
 
@@ -1723,6 +1723,7 @@ def list_site_tasks(site_id: str, _: AuthUser, db: Session = Depends(get_db)) ->
     _get_site_or_404(db, site_id)
     return db.scalars(
         select(models.GenerationTask)
+        .options(selectinload(models.GenerationTask.items))
         .where(models.GenerationTask.site_id == site_id, models.GenerationTask.archived_at.is_(None))
         .order_by(models.GenerationTask.created_at.desc())
     ).all()
@@ -1950,6 +1951,7 @@ def list_site_campaigns(site_id: str, _: AuthUser, db: Session = Depends(get_db)
 def list_tasks(_: AuthUser, db: Session = Depends(get_db)) -> Any:
     return db.scalars(
         select(models.GenerationTask)
+        .options(selectinload(models.GenerationTask.items))
         .where(models.GenerationTask.archived_at.is_(None))
         .order_by(models.GenerationTask.created_at.desc())
     ).all()
@@ -1959,6 +1961,7 @@ def list_tasks(_: AuthUser, db: Session = Depends(get_db)) -> Any:
 def list_archived_tasks(_: AuthUser, db: Session = Depends(get_db)) -> Any:
     return db.scalars(
         select(models.GenerationTask)
+        .options(selectinload(models.GenerationTask.items))
         .where(models.GenerationTask.archived_at.is_not(None))
         .order_by(models.GenerationTask.archived_at.desc())
     ).all()

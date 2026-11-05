@@ -10553,3 +10553,6 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .networkFakeButton:disabled { cursor: default; opacity: .45; }
 .networkFakeButton.selected:disabled { opacity: 1; }
 .networkFakeButton:focus-visible { outline: 2px solid #3769d7; outline-offset: 2px; }
+
+.taskStatusSummary { width: 145px; max-width: 145px; }
+.taskErrorSummary { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; white-space: normal; font-size: 10px; line-height: 13px; color: var(--danger, #b44343); margin-top: 4px; }

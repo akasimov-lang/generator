@@ -9,29 +9,46 @@ def refresh_task_status(db, task_id):
     if not task:
         return
     statuses = set(db.scalars(select(models.ContentItem.status).where(models.ContentItem.task_id == task_id)))
+    task.status = derive_status(statuses, task.auto_publish)
+    return task.status
+
+
+def derive_status(statuses, auto_publish=False):
     active = statuses - {'deleted'}
     if not active:
-        task.status = 'empty'
+        return 'empty'
     elif active & {'generation_queued', 'generating'}:
-        task.status = 'generating'
+        return 'generating'
     elif active & {'publishing', 'publication_pending_confirmation'}:
-        task.status = 'publishing'
+        return 'publishing'
     elif active == {'published'}:
-        task.status = 'published'
+        return 'published'
     elif 'generation_failed' in active:
-        task.status = 'generation_failed'
+        return 'generation_failed'
     elif 'publication_failed' in active:
-        task.status = 'publication_failed'
+        return 'publication_failed'
     elif 'system_stopped' in active:
-        task.status = 'system_stopped'
+        return 'system_stopped'
     elif active & {'scheduled', 'retry_scheduled', 'publication_paused'}:
-        task.status = 'scheduled'
-    elif task.auto_publish and 'approved' in active:
-        task.status = 'publishing'
+        return 'scheduled'
+    elif auto_publish and 'approved' in active:
+        return 'publishing'
     elif active <= {'approved', 'published'}:
-        task.status = 'approved'
+        return 'approved'
     elif active == {'draft'}:
-        task.status = 'created'
+        return 'created'
     else:
-        task.status = 'generated'
-    return task.status
+        return 'generated'
+
+
+def task_error_summary(items):
+    failures = [item for item in items if item.status in {'generation_failed', 'publication_failed', 'system_stopped'}]
+    messages = []
+    for item in failures:
+        message = item.generation_error or item.competitor_research_error
+        if not message:
+            code = item.last_publication_status_code
+            message = f'Публикация: HTTP {code}' if code and code >= 400 else 'Причина не сохранена. Откройте историю текста.'
+        text = ' '.join(str(message).split())
+        messages.append(f'{item.slug}: {text}')
+    return ' · '.join(dict.fromkeys(messages))[:1500] or None

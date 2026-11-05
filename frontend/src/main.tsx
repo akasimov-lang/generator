@@ -124,6 +124,7 @@ type Task = {
   topics_count: number;
   target_words: number | null;
   status: string;
+  error_summary?: string | null;
   include_toc: boolean;
   include_faq: boolean;
   generate_title: boolean;
@@ -7304,7 +7305,7 @@ function AdminTasksAccordion({
                     </span>
                   </td>
                   <td data-label="Тем">{task.topics_count}</td>
-                  <td data-label="Статус"><StatusBadge status={task.status} /></td>
+                  <td data-label="Статус"><div className="taskStatusSummary"><StatusBadge status={task.status} />{task.error_summary && <small className="taskErrorSummary" title={task.error_summary}>{task.error_summary}</small>}</div></td>
                   <td data-label="Действия">
                     <span className="taskRowActions">
                       <button
