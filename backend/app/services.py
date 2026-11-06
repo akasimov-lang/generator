@@ -25,6 +25,7 @@ from app.brand_home_links import apply_brand_home_links, project_link_brand
 from app.brand_content_buttons import apply_brand_content_buttons, button_brand, generation_instruction as button_generation_instruction, ensure_label as ensure_button_label
 from app.publication_retry import post_publication, set_publication_attempt
 from app.editorial_skill import prepend_editorial_skill
+from app.page_generation_structure import DEFAULT_PROMPT, page_brief, is_intro_heading
 from app.factual_research import COMPETITOR_QUERY_LIMIT
 from app.technical_pages import is_technical, generate_checked, validate_publication as validate_technical_publication, sync_menu as sync_technical_menu
 from app.core.config import get_settings
@@ -156,127 +157,7 @@ def append_casino_rating_requirement(prompt_template: str, enabled: bool) -> str
     return f"{prompt_template.rstrip()}\n\n{CASINO_RATING_PROMPT_INSTRUCTION}\n"
 
 
-DEFAULT_CONTENT_PROMPT_TEMPLATE = """Рабочий промпт для конкретной задачи.
-
-Базовые требования качества, юридической осторожности и формата ответа применяются отдельно через "Базовый промпт".
-Здесь описывай только нишу, интент, структуру и специальные требования к странице.
-
-Роль:
-Ты — senior SEO-редактор и content strategist для gambling/betting тем.
-
-Задача:
-Сгенерировать готовую SEO-страницу для сайта {{SITE_NAME}}.
-
-Переменные:
-- Тема страницы: {{TOPIC}}
-- Slug страницы: {{SLUG}}
-- Гео/страна: {{GEO}}
-- Язык страницы: {{LANGUAGE}}
-- Желаемый объем: около {{TARGET_WORDS}} слов
-- Текущий год: {{CURRENT_YEAR}}
-- Shortcode context: {{SHORTCODE}}
-- Поисковые запросы по теме: {{SEARCH_QUERIES}}
-- URL конкурентов из выдачи: {{COMPETITOR_URLS}}
-- Краткий анализ конкурентов: {{COMPETITOR_SUMMARY}}
-- Content gaps: {{CONTENT_GAPS}}
-- Частые заголовки конкурентов: {{COMMON_HEADINGS}}
-- Темы, подтвержденные анализом нескольких конкурентов: {{MISSING_BLOCKS_TO_COVER}}
-
-Контекст ниши:
-Онлайн-казино, ставки, casino providers, легальные Anbieter, лицензии, Spielerschutz, Zahlungen, Auszahlungen, KYC, Datenschutz, Limits, sichere Online Casinos.
-
-Главная цель:
-Создать полезную, структурированную, юридически аккуратную страницу, которая полно отвечает на поисковый интент пользователя и пригодна для редакторской проверки перед публикацией.
-
-Если передан анализ конкурентов:
-- Используй его только как исследовательский контекст.
-- Не копируй конкурентов и не делай близкий перефраз.
-- Не повторяй структуру конкурентов один в один.
-- Делай оригинальную структуру, закрывай интент полнее и аккуратно отмечай факты, которые нужно проверить.
-- Не утверждай в публичном тексте, что ты изучил Google или конкретных конкурентов.
-
-Внутренняя SEO-логика, НЕ выводить в текст:
-1. Главный интент.
-2. 8-12 подинтентов.
-3. Главный ключ.
-4. Вторичные ключи.
-5. FAQ-запросы.
-6. Legal/Safety/Payment кластеры.
-7. Гипотетические content gaps.
-8. Риски фактов, которые нужно проверить редактору.
-
-Правила локализации и анализа:
-- Структуру и набор смысловых блоков определяй динамически по теме, выбранному гео, языку и фактически собранным материалам конкурентов.
-- Не добавляй обязательный блок только потому, что он обычно встречается в нише или был нужен для другой страны.
-- Не добавляй раздел о проверке лицензии, если эта тема не подтверждена анализом нескольких конкурентов для текущего гео.
-
-Если тема рейтинговая:
-- Если нет проверенного списка брендов, делай таблицу критериев выбора.
-- Для мест под реальные бренды используй только placeholder:
-  [Anbieter 1 - muss geprüft werden]
-  [Anbieter 2 - muss geprüft werden]
-  [Anbieter 3 - muss geprüft werden]
-
-Шаблон ответа:
-Title:
-Meta Description:
-H1:
-
-H2: Intro
-1-2 коротких абзаца. Сразу отвечай на основной запрос, без длинного вступления.
-
-H2: Quick Answer
-3-5 предложений с практическим ответом.
-
-H2: Überblick / schneller Vergleich
-2-4 абзаца. Если уместно, добавь таблицу:
-| Kriterium | Worauf achten | Warum wichtig |
-|---|---|---|
-
-H2: Methodik: Wie wir Anbieter bewerten
-Объясни критерии оценки без фейковых баллов и без неподтвержденного рейтинга.
-
-H2: Lizenz und rechtlicher Rahmen
-Объясни лицензии, локальные ограничения, что должен проверить пользователь и что должен проверить редактор.
-
-H2: Sicherheit: Lizenz, Zahlungen, Datenschutz und KYC
-Раскрой безопасность без обещаний абсолютной защиты.
-
-H2: Zahlungen und Auszahlungen
-Объясни различие между Einzahlung и Auszahlung, KYC, возможные задержки и что проверить до депозита.
-
-H2: Spielerschutz und Limits
-Раскрой лимиты, самоисключение, признаки проблемной игры.
-
-H2: Für wen geeignet / nicht geeignet
-Дай честное разделение аудиторий, без рекламного давления.
-
-H2: Häufige Fehler vor der Registrierung
-Дай практический список ошибок.
-
-H2: FAQ
-Сгенерируй 8-10 вопросов. Каждый вопрос и ответ пиши отдельными строками:
-Q: ...
-A: ...
-
-H2: Responsible Gambling Hinweis
-Добавь аккуратный блок на языке {{LANGUAGE}}:
-- Glücksspiel ist mit Risiken verbunden.
-- Nur mit Geld spielen, dessen Verlust verkraftbar ist.
-- Limits nutzen.
-- Bei Kontrollverlust Hilfe suchen.
-- [Muss geprüft werden: lokale Hilfsangebote in {{GEO}}].
-
-Editor Check:
-- Suchintention: OK / Risiko
-- Fakten: OK / Muss geprüft werden
-- Legal-Risiko: OK / Risiko
-- Keyword-Stuffing: OK / Risiko
-- E-E-A-T: OK / Muss gestärkt werden
-- Thin Content: OK / Risiko
-- Struktur: OK / Risiko
-- Nächste Prüfung vor Veröffentlichung: ...
-"""
+DEFAULT_CONTENT_PROMPT_TEMPLATE = DEFAULT_PROMPT
 
 PROMPT_FORMAT_CONTRACT_MARKER = "SYSTEM FORMAT CONTRACT FOR PARSER"
 PROMPT_FORMAT_CONTRACT = f"""{PROMPT_FORMAT_CONTRACT_MARKER}
@@ -290,8 +171,9 @@ PROMPT_FORMAT_CONTRACT = f"""{PROMPT_FORMAT_CONTRACT_MARKER}
   Meta Description:
   H1:
 - Не повторяй Title, Meta Description и H1 в теле статьи.
-- Каждый публичный раздел начинай отдельной строкой формата H2: Название раздела.
-- Не используй отдельные строки Intro:, Quick Answer:, FAQ: или Responsible Gambling: без префикса H2.
+- Состав разделов свободный; этот контракт задаёт только формат, а не обязательные разделы.
+- Вступительные абзацы пиши после H1 без заголовка.
+- Выбранные содержательные разделы начинай отдельной строкой формата H2: Название раздела.
 - Не пиши короткие standalone-строки как подзаголовки. Если это заголовок, он обязан начинаться с H2:.
 - Таблицы можно давать в markdown-формате.
 - Списки делай через дефис.
@@ -1401,7 +1283,7 @@ def build_gemini_prompt(
     generate_title: bool = False,
     generation_context: dict | None = None,
 ) -> str:
-    template = prompt_template.strip() if prompt_template and prompt_template.strip() else DEFAULT_CONTENT_PROMPT_TEMPLATE
+    template = page_brief(prompt_template)
     slug = normalize_slug(topic)
     competitor_values = prompt_context_from_brief(competitor_brief)
     homepage_title = clean_text(site.homepage_title) if site and site.homepage_title else "not specified"
@@ -2281,15 +2163,8 @@ def ensure_base_prompt_template(db: Session) -> models.PromptTemplate:
 
 
 def compose_prompt_with_base(db: Session, prompt_template: str | None) -> str:
-    base_prompt = ensure_base_prompt_template(db)
-    specific_prompt = prompt_template.strip() if prompt_template and prompt_template.strip() else DEFAULT_CONTENT_PROMPT_TEMPLATE
-    if BASE_PROMPT_TEMPLATE_NAME in specific_prompt and PROMPT_FORMAT_CONTRACT_MARKER in specific_prompt:
-        return specific_prompt
-    return (
-        f"{base_prompt.content.strip()}\n\n"
-        "РАБОЧИЙ ПРОМПТ ДЛЯ КОНКРЕТНОЙ ЗАДАЧИ:\n"
-        f"{specific_prompt}"
-    )
+    """Compatibility entry point: page briefs no longer inherit the base template."""
+    return page_brief(prompt_template)
 
 
 async def validate_ai_provider_key(provider: models.AiProvider) -> models.AiProvider:
@@ -3049,12 +2924,15 @@ def build_blocks_from_ai_text(
         if explicit_heading or section_label:
             flush_paragraphs()
             heading = explicit_heading.group(2).strip() if explicit_heading else line.rstrip(":").strip()
-            if heading and heading.lower() != title.lower():
+            if heading and heading.lower() != title.lower() and not is_intro_heading(heading):
                 headings.append(heading)
                 blocks.append(header_block(heading, 2))
             index += 1
             continue
 
+        if is_intro_heading(line):
+            index += 1
+            continue
         pending_paragraphs.append(line)
         if len(" ".join(pending_paragraphs)) > 700:
             flush_paragraphs()
@@ -3062,7 +2940,10 @@ def build_blocks_from_ai_text(
     flush_paragraphs()
 
     if include_toc and len(headings) > 1:
-        blocks.insert(1, toc_block(headings[:8]))
+        toc_position = 1
+        while toc_position < len(blocks) and blocks[toc_position].get("type") == "paragraph":
+            toc_position += 1
+        blocks.insert(toc_position, toc_block(headings[:8]))
     has_inline_faq = bool(re.search(r"\bFAQ\b|Häufig gestellte Fragen|häufige Fragen", generated_text, flags=re.IGNORECASE))
     if include_faq and not any(block.get("type") == "faq" for block in blocks) and not has_inline_faq:
         blocks.append(
