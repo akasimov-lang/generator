@@ -135,3 +135,55 @@ def test_inner_page_uses_its_own_offer_without_merging_same_brand_conditions():
     assert len(groups)==2
     bonuses=[next(f['value'] for f in records[0] if f['key']=='bonus') for records in groups]
     assert bonuses==['100% + 20 FS','200% + 10 FS']
+
+
+def test_two_offers_of_same_brand_on_homepage_keep_their_original_terms():
+    first=CARD
+    second=CARD.replace('100% + 20 FS','200% + 10 FS')
+    source=project([{'id':'first','type':'code','data':{'code':first}},{'id':'second','type':'code','data':{'code':second}}])
+    plan=prepare(source,first+second,['A Casino'])
+    groups=[v for k,v in plan['casinos_after'].items() if k.startswith('pagepilot_standard_')]
+    assert [next(f['value'] for f in g[0] if f['key']=='bonus') for g in groups]==['100% + 20 FS','200% + 10 FS']
+
+
+def test_table_action_keeps_original_tracking_attributes():
+    link='<a href="/go/a" data-split="a" class="play">Play</a>'
+    block={'id':'table','type':'table','data':{'content':[['Casino','Bonus'],['A Casino','50 FS '+link]]}}
+    plan=prepare(project([block]),'',['A Casino'])
+    fields={f['key']:f.get('value') for f in plan['casinos_after']['pagepilot_standard_1'][0]}
+    assert fields['actions_html']==link
+
+
+def test_html_table_in_shortcode_is_standardized_with_terms_and_links_preserved():
+    table='<table><tr><th>Casino</th><th>Bonus</th></tr><tr><td>A Casino</td><td>50 FS <a href="/go/a" data-split="a">Play</a></td></tr></table>'
+    source=project([{'id':'sc','type':'shortcode','data':{'shortcode':'casinos'}}],[{'name':'casinos.hbs','data':'<h2>Keep</h2>'+table+'<p>Keep note</p>'}])
+    plan=prepare(source,table,['A Casino'])
+    assert plan['templates'][0][1]['data']=='<h2>Keep</h2>{{> casinos-standard-1}}<p>Keep note</p>'
+    fields={f['key']:f.get('value') for f in plan['casinos_after']['pagepilot_standard_1'][0]}
+    assert fields['bonus']=='50 FS'
+    assert 'data-split="a"' in fields['actions_html']
+
+
+def test_payment_images_remain_in_standard_card_conditions():
+    markup=CARD.replace('<div class="bonus-value">','<img alt="Visa" src="/visa.svg"><div class="bonus-value">')
+    plan=prepare(project([{'id':'html','type':'code','data':{'code':markup}}]),markup,['A Casino'])
+    fields={f['key']:f.get('value') for f in plan['casinos_after']['pagepilot_standard_1'][0]}
+    assert fields['icons_html']=='<img alt="Visa" src="/visa.svg">'
+
+
+def test_inner_table_with_different_brands_is_migrated_without_changing_home():
+    source=project([{'id':'home','type':'code','data':{'code':CARD}}])
+    source['data']['pages'].append({'id':'2','slug':'/live/','content':{'blocks':[{'id':'table','type':'table','data':{'content':[['Casino','Bonus'],['Other Casino','100 FS']]}}]}})
+    plan=prepare(source,CARD,['A Casino'])
+    assert plan['brands_after']==['A Casino']
+    groups=[v for k,v in plan['casinos_after'].items() if k.startswith('pagepilot_standard_')]
+    assert any(any(f.get('value')=='Other Casino' for f in g[0] if f.get('key')=='brand') for g in groups)
+
+
+def test_responsive_wrappers_keep_a_standard_showcase_in_each_original_container():
+    markup='<div class="desktop">'+CARD+'</div><div class="mobile">'+CARD+'</div>'
+    source=project([{'id':'html','type':'code','data':{'code':markup}}])
+    plan=prepare(source,markup,['A Casino'])
+    blocks=plan['pages'][0][1]['content']['blocks']
+    assert [b['type'] for b in blocks]==['code','shortcode','code','shortcode','code']
+    assert blocks[2]['data']['code']=='</div><div class="mobile">'

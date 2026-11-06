@@ -20,3 +20,9 @@ test('inventory lists every project compactly and distinguishes missing pages fr
  assert.match(html,/Не обнаружена/);assert.match(html,/Не подтверждено/);assert.match(html,/excluded.test/);
  assert.doesNotMatch(html,/Words|Подготовка проекта|Новый переклей/);
 });
+test('standardization report separates baseline from confirmed counts and page errors',()=>{
+ const report=normalizeMaintenanceReport({task_type:'showcase_standardization',entries:[{site_id:'x',project:'x.test',status:'partial',inventory:{home:{public:{presence:'present',count:3,brands:['A','B','C']}},internal_total:0},migration:{status:'partial',before_count:3,after_count:3,added:0,removed:0,public_checks:[{slug:'/',verified:true,http:200,url:'https://x.test/'},{slug:'/review/',verified:false,http:503,url:'https://x.test/review/'}]}}]});
+ const html=renderToStaticMarkup(React.createElement(MaintenanceReportBody,{report}));
+ assert.match(html,/Витрина до замены/);assert.match(html,/Было: 3 → Стало: 3/);assert.match(html,/Добавлено: 0 · Удалено: 0/);
+ assert.match(html,/Проверка публикации · 1\/2/);assert.match(html,/HTTP 503/);assert.match(html,/Не подтверждено/);
+});

@@ -38,7 +38,7 @@ def rendered_brands(markup):
         heading=node.first({'casino-brand','brand-name'},{'h3'})
         text=node.text()
         rated=bool(re.search(r'\b\d(?:[.,]\d)?\s*/\s*(?:5|10)\b',text))
-        offer=bool(re.search(r'\bOffer:|Min\. Deposit:',text,re.I))
+        offer=bool(re.search(r'\bOffer:|Min\. Deposit:',text,re.I)) or any(re.search(r'(?:bonus|promo)[-_](?:value|amount|text)',cls,re.I) and re.search(r'\d',child.text()) for child in node.walk() for cls in child.classes)
         if image and (heading or node.first({'card_logo'}) or re.search('pp-dk-card|rofus-offer',' '.join(node.classes))):
             names.append(heading.text() if heading and valid_logo(heading.text()) else image.attrs['alt'])
         elif heading and (rated or offer):

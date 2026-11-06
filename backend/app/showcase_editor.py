@@ -24,7 +24,7 @@ LABELS = {'brand': 'Бренд', 'name': 'Бренд', 'bonus': 'Бонус', 'm
           'wager': 'Вейджер', 'rating': 'Рейтинг', 'description': 'Описание',
           'text': 'Текст', 'title': 'Заголовок', 'tags': 'Метки', 'conditions': 'Условия',
           'buttonPlay': 'Кнопка'}
-HIDDEN = {'actions_html', 'number', 'split', 'id', 'logo', 'image', 'url', 'href', 'link', 'slug'}
+HIDDEN = {'icons_html', 'actions_html', 'number', 'split', 'id', 'logo', 'image', 'url', 'href', 'link', 'slug'}
 
 
 def digest(value):

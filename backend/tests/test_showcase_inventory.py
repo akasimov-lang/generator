@@ -64,3 +64,38 @@ def test_inventory_audit_creates_one_project_history_record_and_no_site_mutation
     assert history[0]['showcase_delta']['before']==history[0]['showcase_delta']['after']==3
     assert history[0]['showcase_delta']['added']==history[0]['showcase_delta']['removed']==0
     assert site.showcase_payload==before and not state['requests']
+
+
+def test_text_only_promo_cards_count_as_showcase_brands():
+    assert rendered_brands('<div class="casino-card"><h3 class="casino-title">Kingsbet</h3><div class="promo-value">555 FREE SPINŮ</div><button>Otevřít casino</button></div>')==['Kingsbet']
+
+
+def test_running_showcase_work_keeps_unknown_result_until_publication_is_confirmed(setup):
+    from uuid import uuid4
+    from app import maintenance_reports
+    from app.showcase_history import events
+    _,db,site,_=setup
+    row={'site_id':site.id,'status':'running','migration':{'status':'running','started_at':'2026-11-06T00:00:00Z','before_count':3}}
+    job=maintenance_reports.upsert(db,uuid4(),'Migration','anton',[site.id],[row])
+    first=events(db,site.id)
+    assert len(first)==1 and first[0]['status']=='running' and not first[0]['confirmed']
+    assert first[0]['showcase_delta']['after'] is None and first[0]['showcase_delta']['added'] is None
+    row.update(status='completed',showcase_change={'before':3,'after':3,'added':0,'removed':0})
+    maintenance_reports.upsert(db,job.id,'Migration','anton',[site.id],[row],status='completed')
+    final=events(db,site.id)
+    assert len(final)==1 and final[0]['confirmed'] and final[0]['showcase_delta']['after']==3
+
+
+def test_confirmed_migration_with_audit_baseline_records_work_not_read_only_audit(setup):
+    from uuid import uuid4
+    from app import maintenance_reports
+    from app.showcase_history import events
+    _,db,site,_=setup
+    row={'site_id':site.id,'status':'completed','inventory':{'home':{'public':{'presence':'present','brands':['A']}}},
+         'migration':{'status':'confirmed','started_at':'2026-11-06T00:00:00Z'},
+         'showcase_change':{'before':1,'after':2,'added':1,'removed':0,'description':'Стандартная витрина опубликована.'}}
+    maintenance_reports.upsert(db,uuid4(),'Migration','anton',[site.id],[row],status='completed')
+    history=events(db,site.id)
+    assert len(history)==1 and history[0]['showcase_delta']['after']==2
+    assert 'Изменения сайта не выполнялись' not in history[0]['message']
+    assert 'Стандартная витрина опубликована' in history[0]['message']
