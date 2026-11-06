@@ -1,5 +1,6 @@
 from xml.etree import ElementTree
 import httpx
+from test_project_network import env
 from app.pelican_missing_favicons import icon, is_image, public_state
 
 
@@ -40,3 +41,42 @@ def test_a_configured_file_is_not_mistaken_for_a_publicly_linked_icon():
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
         result=public_state(client,'https://site.test','<link rel="icon" href="/brand.svg">')
     assert result['state']=='present' and not result['linked']
+
+
+def test_ledger_keys_fit_the_database_limit_and_are_unique_per_project():
+    from uuid import uuid4
+    from app import models
+    from app.pelican_missing_favicons import ledger_key
+    first, second = str(uuid4()), str(uuid4())
+    assert len(ledger_key(first)) <= models.AutoReglueConfig.__table__.c.key.type.length
+    assert ledger_key(first) == ledger_key(first)
+    assert ledger_key(first) != ledger_key(second)
+
+
+def test_native_upload_updates_only_favicon_and_is_not_repeated(env, monkeypatch):
+    from copy import deepcopy
+    from contextlib import nullcontext
+    from app import pelican_missing_favicons as favicons
+    db, site, _ = env
+    project = {'settings': {'canon': 'site.test'}, 'head': {'favicon': '', 'enableCanonical': True, 'canonicalDefaultMarkup': 'keep'}}
+    before = deepcopy(project); calls = []; uploaded = {}
+    path = '/uploads/brand/favicon/pelican.svg'
+    class Remote:
+        def project(self): return deepcopy(project)
+        def request(self, method, endpoint, payload):
+            calls.append(endpoint)
+            if endpoint == '/projects/image':
+                uploaded[path] = payload['buffer']; return 201, {'error': 'none', 'imagePath': path}
+            assert endpoint == '/projects/update-head' and set(payload) == {'folder','favicon'}
+            project['head']['favicon'] = payload['favicon']; return 200, {}
+    def handler(request):
+        if request.url.path == '/': return httpx.Response(200, text=project['head']['favicon'])
+        if request.url.path in uploaded: return httpx.Response(200, text=uploaded[path], headers={'content-type':'image/svg+xml'})
+        return httpx.Response(404)
+    client = httpx.Client
+    monkeypatch.setattr(favicons, 'Remote', lambda *args: nullcontext(Remote()))
+    monkeypatch.setattr(favicons.httpx, 'Client', lambda **kwargs: client(transport=httpx.MockTransport(handler)))
+    assert favicons.run_site(db, site.id, 0, apply=True)['status'] == 'completed'
+    assert favicons.run_site(db, site.id, 0, apply=True)['status'] == 'completed'
+    assert calls == ['/projects/image', '/projects/update-head']
+    assert {k:v for k,v in project['head'].items() if k!='favicon'} == {k:v for k,v in before['head'].items() if k!='favicon'}

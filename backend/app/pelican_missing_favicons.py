@@ -3,10 +3,12 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit
+from uuid import UUID, uuid5
 from xml.etree import ElementTree
 import argparse
 import json
 import httpx
+from sqlalchemy.exc import SQLAlchemyError
 
 from app import models
 from app.project_network import Remote, network_lock
@@ -14,6 +16,10 @@ from app.maintenance_reports import upsert
 
 REPORT = 'e3bf181f-b4a4-5bbd-9641-1cb4b550f0bf'
 NAME = 'Pelican · Favicon на проектах без значка · 06.11.2026'
+
+
+def ledger_key(site_id):
+    return 'pelican-favicon:' + str(uuid5(UUID(REPORT), site_id))
 
 
 class Icons(HTMLParser):
@@ -64,11 +70,11 @@ def public_state(client, origin, markup=''):
 
 def run_site(db, site_id, index, *, apply=False):
     site = db.get(models.Site, site_id)
-    ledger_key = 'pelican-favicon:' + REPORT + ':' + site_id
+    key = ledger_key(site_id)
     with network_lock(db, site_id), Remote(db, site) as remote, httpx.Client(timeout=20, follow_redirects=True) as client:
         project = remote.project(); origin = 'https://' + project['settings']['canon']
         before = deepcopy(project.get('head') or {})
-        existing = db.get(models.AutoReglueConfig, ledger_key)
+        existing = db.get(models.AutoReglueConfig, key)
         state = deepcopy(existing.value) if existing else {'site_id': site_id, 'before': before, 'created_at': datetime.now(timezone.utc).isoformat()}
         observed = public_state(client, origin, before.get('favicon'))
         if observed['state'] == 'unavailable':
@@ -80,7 +86,7 @@ def run_site(db, site_id, index, *, apply=False):
         if not apply:
             return {'status': 'pending', 'before': observed, 'planned': {'action': 'Загрузить favicon Pelican', 'variant': index + 1}}
         if not existing:
-            existing = models.AutoReglueConfig(key=ledger_key); db.add(existing)
+            existing = models.AutoReglueConfig(key=key); db.add(existing)
         if not state.get('path'):
             if state.get('status') == 'uploading':
                 raise ValueError('Загрузка файла не подтверждена. Повторная отправка остановлена.')
@@ -126,7 +132,9 @@ def main():
         for index, site_id in enumerate(ids):
             try: result = run_site(db, site_id, index, apply=args.apply)
             except Exception as error:
-                db.rollback(); result = {'status': 'partial', 'comment': str(error)[:300]}
+                db.rollback()
+                message = 'Не удалось сохранить операцию загрузки favicon. Требуется повторная проверка.' if isinstance(error, SQLAlchemyError) else str(error)[:300]
+                result = {'status': 'partial', 'comment': message}
             entries.append({'site_id': site_id, **result})
             upsert(db, REPORT, NAME, 'anton', ids, [entries[-1]])
             print(json.dumps(entries[-1], ensure_ascii=False), flush=True)
