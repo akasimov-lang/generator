@@ -12,12 +12,12 @@ from app.fake_main import normalize_fake_path
 
 KIND = 'fake_main_queue'
 LIMIT = 10
-TERMINAL = ('completed', 'failed')
+TERMINAL = ('completed', 'failed', 'cancelled')
 
 
 class Request(BaseModel):
     request_id: UUID
-    action: Literal['delete', 'create']
+    action: Literal['delete', 'create', 'select']
     path: str = Field(min_length=1, max_length=250)
 
 
@@ -40,10 +40,12 @@ def item(job):
         'created_at': job.created_at, 'finished_at': job.finished_at}
 
 
-def snapshot(db, site):
+def snapshot(db, site, *, include=None):
     pending = active(db, site.id)
     recent = list(db.scalars(query(site.id).where(models.BackgroundJob.status.in_(TERMINAL))
         .order_by(models.BackgroundJob.created_at.desc(), models.BackgroundJob.id.desc()).limit(20)))
+    if include and all(job.id != include.id for job in [*pending, *recent]):
+        recent.insert(0, include)
     state = site.network_state or {}
     return {'items': [item(job) for job in [*pending, *recent]], 'limit': LIMIT,
         'active_count': len(pending),
@@ -78,6 +80,35 @@ def enqueue(db, site, payload, actor):
     return snapshot(db, site)
 
 
+def cancel(db, site, payload, actor):
+    """Keep a tombstone so a late enqueue response cannot resurrect the request."""
+    with network.network_lock(db, site.id):
+        db.execute(select(models.Site.id).where(models.Site.id == site.id).with_for_update()).scalar_one()
+        path = normalize_fake_path(payload.path)
+        job = db.get(models.BackgroundJob, str(payload.request_id))
+        if job and (job.kind != KIND or any(job.payload.get(k) != v for k, v in
+                {'site_id': site.id, 'action': payload.action, 'path': path}.items())):
+            raise network.NetworkConflict('Задача относится к другому запросу.')
+        if job and job.status in TERMINAL:
+            return snapshot(db, site, include=job)
+        if job is None:
+            job = models.BackgroundJob(id=str(payload.request_id), kind=KIND, status='queued',
+                payload={'site_id': site.id, 'project': site.name, 'action': payload.action,
+                         'path': path, 'actor': actor, 'sequence': 0})
+            db.add(job)
+        receipt = db.get(models.NetworkOperation, str(payload.request_id))
+        if receipt and receipt.status == 'confirmed':
+            finish(db, job, 'completed', 'Изменение уже выполнено и подтверждено.')
+        else:
+            at = datetime.now(timezone.utc).isoformat()
+            job.payload = {**job.payload, 'cancelled_by': actor, 'cancelled_at': at}
+            if receipt:
+                receipt.request_payload = {**receipt.request_payload, 'queue_cancelled_at': at}
+            finish(db, job, 'cancelled', 'Отправка удалена.' if not receipt else
+                   'Запрос уже отправлен в Webdev. Ожидание удалено; история запроса сохранена.')
+        return snapshot(db, site, include=job)
+
+
 def waiting(db, job, message):
     job.result = {'phase': 'waiting', 'message': message}
     job.dispatched_at = None
@@ -110,7 +141,8 @@ def execute_step(db, job_id):
             if not site or site.name != job.payload['project']:
                 return finish(db, job, 'failed', 'Проект удалён или переименован. Создайте новую задачу.')
             job.started_at = job.started_at or datetime.now(timezone.utc)
-            job.result = {'phase': 'processing', 'message': 'Удаляем страницу…' if job.payload['action']=='delete' else 'Создаём и назначаем страницу…'}
+            job.result = {'phase': 'processing', 'message': {'delete': 'Удаляем страницу…',
+                'select': 'Назначаем страницу и обновляем разметку…', 'create': 'Создаём и назначаем страницу…'}[job.payload['action']]}
             db.commit()
             # Also resumes a saved head update, once, after create-and-activate.
             state = network.read_network(db, site)
@@ -122,13 +154,14 @@ def execute_step(db, job_id):
                 if job.payload['action'] == 'delete' and path not in state.get('fake_main_paths', []):
                     return finish(db, job, 'completed', 'Страница отсутствует в Webdev; удаление подтверждено.')
                 payload = network.NetworkChange(request_id=UUID(job.id), revision=state['revision'],
-                    action='select_fake_main' if job.payload['action']=='delete' else 'create_fake_main',
+                    action='create_fake_main' if job.payload['action']=='create' else 'select_fake_main',
                     fake_main_path=path, delete_fake_main=job.payload['action']=='delete',
                     activate_fake_main=job.payload['action']=='create')
                 network.change_network(db, site, payload, job.payload['actor'])
                 receipt = db.get(models.NetworkOperation, job.id)
             if receipt and receipt.status == 'confirmed':
-                return finish(db, job, 'completed', 'Удалено.' if job.payload['action']=='delete' else 'Создано и назначено.')
+                return finish(db, job, 'completed', {'delete': 'Удалено.', 'create': 'Создано и назначено.',
+                    'select': 'Назначено. Canonical и альтернейты обновлены.'}[job.payload['action']])
             if receipt and receipt.status == 'failed':
                 return finish(db, job, 'failed', receipt.message or 'Webdev отклонил изменение.')
             return waiting(db, job, (receipt.message if receipt else None) or 'Ждём подтверждения Webdev; повторная запись не отправляется.')

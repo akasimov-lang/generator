@@ -277,10 +277,11 @@ def start(db, job_id, user):
             for plan in group.get('plans', []):
                 target = db.get(models.Site, plan['site_id'])
                 source = db.get(models.Site, plan.get('source_site_id', plan['site_id']))
+                from app.pilot_donors import authorized
                 for site in (target, source):
                     if site:
                         db.refresh(site)
-                    if not site or not matches(site, filters) or not scope.includes(scope_brand(site), site.cache_geo):
+                    if not site or not matches(site, filters, donor_only=authorized(db, plan, site.id)) or not scope.includes(scope_brand(site), site.cache_geo):
                         raise NetworkConflict('Бренд или GEO проекта изменились. Обновите план.')
                 if source.id != target.id:
                     require_pair(source, target)
@@ -525,7 +526,7 @@ def refresh_row(db, job_id, site_id, request_id, user):
             info = dict(db.info)
             try:
                 constrain(db, group['filter'], set(job.payload['allowed']) if job.payload['allowed'] is not None else None, [site])
-                db.info.update(auto_pilot_preview=True, prefer_own_domains=True, pilot_allow_stock_drops=job.payload.get('allow_stock_drops',True), pilot_mixed=job.payload.get('planning_mode') == 'mixed',
+                db.info.update(pilot_job_id=job.id, auto_pilot_preview=True, prefer_own_domains=True, pilot_allow_stock_drops=job.payload.get('allow_stock_drops',True), pilot_mixed=job.payload.get('planning_mode') == 'mixed',
                     canonical_allocation_plans=all_plans, reglue_preview_domains={p['new_main'] for p in all_plans})
                 db.info.pop('mass_participant_ids', None)
                 if job.payload['execution_mode'] == 'cross_network':

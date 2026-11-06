@@ -36,12 +36,12 @@ class MassActionFilter(BaseModel):
         return value
 
 
-def matches(site, filters):
+def matches(site, filters, *, donor_only=False):
     general = site.site_type == 'general' or (site.site_type is None and brand_key(site.brand) in {'', brand_key('Общие ключи')})
     kind = 'general' if general else 'monobrand'
     brand_matches = brand_key('Общие ключи' if general else site.brand) == brand_key(filters.brand)
     return bool(site.is_active and not site.hidden_from_projects and site.project_status == 'mass_actions'
-                and getattr(site, 'reglue_participation', True) is not False
+                and (donor_only or getattr(site, 'reglue_participation', True) is not False)
                 and geo_key(site.cache_geo) == filters.geo
                 and (brand_matches or filters.include_general and general)
                 and (filters.site_type is None or filters.site_type == kind))
@@ -61,6 +61,8 @@ def constrain(db, filters, allowed=None, targets=()):
 
 
 def stamp_plan(db, plan, state, site, filters=None):
+    from app.pilot_donors import stamp
+    plan = stamp(db, plan)
     if plan.get('combination_id') and not db.info.get('canonical_replay_plan'):
         from app.reglue_combinations import History, identity
         if plan['combination_id'] != identity(plan):
@@ -85,10 +87,12 @@ def require_run_scope(db, run):
         return
     filters = MassActionFilter.model_validate(run.plan['mass_filter'])
     for site_id in {run.site_id, run.plan.get('source_site_id', run.site_id)}:
+        from app.pilot_donors import authorized
+        donor_only = authorized(db, run.plan, site_id)
         site = db.get(models.Site, site_id)
         if site:
             db.refresh(site)
-        if site and run.plan.get('execution_mode') != 'transfer_only' and getattr(site, 'reglue_participation', True) is False:
+        if site and not donor_only and run.plan.get('execution_mode') != 'transfer_only' and getattr(site, 'reglue_participation', True) is False:
             raise ValueError('Участвует в переклее: Нет. Запуск остановлен.')
-        if not site or not matches(site, filters):
+        if not site or not matches(site, filters, donor_only=donor_only):
             raise ValueError('Проект больше не соответствует бренду, GEO или типу сохранённого фильтра. Запуск остановлен.')

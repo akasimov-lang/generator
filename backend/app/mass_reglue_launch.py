@@ -66,9 +66,13 @@ def initial_job(db, request_id, site_ids, actor, allowed=None, *, preview_only=F
     sites = {s.id: s for s in db.scalars(select(models.Site).where(models.Site.id.in_(ids)))}
     if set(sites) != set(ids): raise ValueError('Некоторые проекты больше недоступны. Обновите список.')
     groups, items = {}, {}
+    from app.pilot_donors import grants
+    donor_only = grants(db, str(request_id))
     for id in ids:
         site = sites[id]
         reason = skip_reason(db, site)
+        if id in donor_only:
+            reason = 'Сетка используется только как донор. Текущий Main сохраняется.'
         try:
             general = site.site_type == 'general' or brand_key(site.brand) in {'', brand_key('Общие ключи')}
             filters = MassActionFilter(brand='Общие ключи' if general else site.brand, geo=geo_key(site.cache_geo))
@@ -154,6 +158,7 @@ def execute_step(db, job_id, send, *, parallel_texts=False):
                 apply_pending(db, job)
             if not job or job.status != 'queued': return {'status': 'skipped'}
             preview_only = job.kind == PREVIEW_KIND
+            db.info['pilot_job_id'] = job.id
             db.info['parallel_pilot_texts'] = parallel_texts
             if not preview_only and job.payload.get('streaming_start'):
                 from app.pilot_streaming import execute
@@ -332,6 +337,7 @@ def execute_step(db, job_id, send, *, parallel_texts=False):
         return {'status':'failed'}
 
     finally:
+        db.info.pop('pilot_job_id', None)
         db.info.pop('parallel_pilot_texts', None)
         db.info.pop('manual_pilot_job_id', None)
         db.info.pop('auto_pilot_preview', None)

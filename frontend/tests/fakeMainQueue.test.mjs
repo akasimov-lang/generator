@@ -94,3 +94,36 @@ test('creation queue preserves a path without a trailing slash',async()=>{
  assert.equal(calls[0].path,'/index.php');
  assert.equal(queue.items[0].path,'/index.php');
 });
+
+test('uncertain submission can be cancelled without repeating creation',async()=>{
+ const calls=[];
+ const queue=new FakeMainQueue('site',async(path,options)=>{
+  calls.push(path);const body=JSON.parse(options.body);
+  if(!path.endsWith('/cancel'))throw Error('timeout');
+  return snapshot([{...queued(body.request_id,body.path,'create'),status:'cancelled',message:'Отправка удалена.'}]);
+ });
+ queue.enqueue('create','/new/');await settle();const id=queue.items[0].id;
+ await queue.cancel(id);queue.retry(id);
+ assert.equal(queue.count,0);assert.equal(queue.items[0].status,'cancelled');assert.equal(calls.length,2);
+});
+
+test('late enqueue response cannot resurrect a confirmed cancellation',async()=>{
+ let reply;
+ const queue=new FakeMainQueue('site',async(path,options)=>{
+  const body=JSON.parse(options.body),item=queued(body.request_id,body.path,'create');
+  if(path.endsWith('/cancel'))return snapshot([{...item,status:'cancelled'}]);
+  return new Promise(resolve=>{reply=()=>resolve(snapshot([item]));});
+ });
+ queue.enqueue('create','/late/');const id=queue.items[0].id;
+ await queue.cancel(id);reply();await settle();
+ assert.equal(queue.items[0].status,'cancelled');assert.equal(queue.count,0);
+});
+
+test('existing fake page selection uses durable queue',async()=>{
+ let action;
+ const queue=new FakeMainQueue('site',async(path,options)=>{
+  const body=JSON.parse(options.body);action=body.action;
+  return snapshot([queued(body.request_id,body.path,body.action)]);
+ });
+ queue.enqueue('select','/existing/');await settle();assert.equal(action,'select');
+});

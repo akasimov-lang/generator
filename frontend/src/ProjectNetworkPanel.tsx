@@ -586,7 +586,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
             const current = path === data.fake_main_current;
             return <li key={path}>
               <a href={`https://${data.canon}${path}`} title={path} target="_blank" rel="noreferrer">{current ? <strong>{path}</strong> : path}</a>
-              <button type="button" className={`networkFakeButton select${current ? " selected" : ""}`} aria-label={`Назначить ${path}`} aria-pressed={current} title={current ? "Текущая страница" : "Назначить текущей"} disabled={disabled || current || fakeQueue.busyPath(path)} onClick={() => void mutate("select_fake_main", undefined, draft, { fake_main_path: path })}><Check size={18} aria-hidden="true" /></button>
+              <button type="button" className={`networkFakeButton select${current ? " selected" : ""}`} aria-label={`Назначить ${path}`} aria-pressed={current} title={current ? "Текущая страница" : "Назначить текущей"} disabled={disabled || current || fakeQueue.busyPath(path)} onClick={() => fakeQueue.enqueue("select", path)}><Check size={18} aria-hidden="true" /></button>
               <button type="button" className="networkFakeButton delete" aria-label={`Удалить ${path}`} title={current ? "Перед удалением назначьте другую страницу" : "Удалить страницу"} disabled={current || fakeQueue.busyPath(path) || fakeQueue.count >= 10} onClick={() => fakeQueue.enqueue("delete", path)}><X size={18} aria-hidden="true" /></button>
               {fakeQueue.items.filter(item => item.path === path && fakeQueueActive(item)).map(item => <small key={item.id} role="status">{item.message}</small>)}
             </li>;
@@ -604,11 +604,12 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
             if (entry.kind === "queue") {
               const item = entry.item;
               return <li key={item.id}>
-                <strong>{item.action === "delete" ? "Удаление фейковой страницы" : "Создание и назначение фейковой страницы"}: {item.path}</strong> — <span role="status">{fakeQueueStatus[item.status] || item.status}</span>
+                <strong>{item.action === "delete" ? "Удаление фейковой страницы" : item.action === "select" ? "Назначение фейковой страницы" : "Создание и назначение фейковой страницы"}: {item.path}</strong> — <span role="status">{fakeQueueStatus[item.status] || item.status}</span>
                 {item.created_at && <small>{new Date(item.created_at).toLocaleString("ru-RU", {timeZone:"Europe/Moscow"})} · МСК</small>}
                 {fakeQueueActive(item) && <progress aria-label={`Выполнение: ${item.path}`} />}
                 <p>{item.message}</p>
                 {item.status === "unconfirmed" && <button type="button" className="button secondary compact" onClick={() => fakeQueue.retry(item.id)}>Проверить отправку</button>}
+                {fakeQueueActive(item) && <button type="button" className="button danger compact" disabled={item.status === "cancelling"} onClick={() => void fakeQueue.cancel(item.id)}>Удалить отправку</button>}
               </li>;
             }
             const operation = entry.item;

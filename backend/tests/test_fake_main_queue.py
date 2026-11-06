@@ -149,3 +149,54 @@ def test_missing_fake_page_list_is_not_treated_as_confirmed_deletion(env):
     remote.data['settings']['alternate']['fakeMain']=None
     assert queue.execute_step(db,ident)['status']=='waiting'
     assert not remote.calls and db.get(models.BackgroundJob,ident).status=='queued'
+
+
+def test_cancel_unconfirmed_enqueue_prevents_late_delivery(env):
+    db,site,remote=env;prepare(env,1)
+    request=queue.Request(request_id=uuid4(),action='create',path='/late/')
+    result=queue.cancel(db,site,request,'anton')
+    assert result['active_count']==0 and result['items'][0]['status']=='cancelled'
+    queue.enqueue(db,site,request,'anton')
+    assert queue.execute_step(db,str(request.request_id))['status']=='skipped'
+    assert not remote.calls
+
+
+def test_cancel_waiting_request_preserves_receipt_until_remote_outcome_is_known(env):
+    db,site,remote=env;paths=prepare(env,2)
+    first=add(db,site,paths[0]);second=add(db,site,paths[1]);remote.delayed=True
+    assert queue.execute_step(db,first)['status']=='waiting'
+    receipt=db.get(models.NetworkOperation,first)
+    queue.cancel(db,site,queue.Request(request_id=first,action='delete',path=paths[0]),'anton')
+    assert receipt.status=='pending' or receipt.status=='unknown'
+    assert receipt.request_payload['queue_cancelled_at']
+    assert queue.execute_step(db,first)['status']=='skipped'
+    remote.delayed=False
+    assert queue.execute_step(db,second)['status']=='waiting'
+    remote.data['settings']['alternate']=deepcopy(remote.calls[0][2]['alternate'])
+    assert queue.execute_step(db,second)['status']=='completed'
+    assert len(remote.calls)==2
+
+
+def test_select_existing_path_updates_canonical_and_alternates_with_slash_variants(env):
+    db,site,remote=env;paths=prepare(env,1)
+    remote.data['settings']['alternate']['currentFakeMain']='/cz'
+    remote.data['head'].update(
+        alternateMarkup='<link rel="alternate" hreflang="cs" href="https://main.test/cz/" />',
+        canonicalDefaultMarkup='<link rel="canonical" href="https://{{settings.canon}}/cz" />',
+        canonicalFakeMainMarkup='<link rel="canonical" href="https://{{settings.canon}}/cz/" />')
+    network.read_network(db,site)
+    ident=add(db,site,paths[0],'select')
+    assert queue.execute_step(db,ident)['status']=='completed'
+    assert remote.data['settings']['alternate']['currentFakeMain']==paths[0]
+    assert all(paths[0] in remote.data['head'][k] for k in ('alternateMarkup','canonicalDefaultMarkup','canonicalFakeMainMarkup'))
+    assert '{{settings.canon}}' in remote.data['head']['canonicalFakeMainMarkup']
+    assert len(remote.calls)==2
+
+
+def test_cancel_cannot_target_another_projects_request(env):
+    db,site,remote=env;paths=prepare(env,1);ident=add(db,site,paths[0])
+    other=models.Site(name='other.test',base_url='https://other.test',publication_endpoint='/')
+    db.add(other);db.commit()
+    with pytest.raises(network.NetworkConflict,match='другому запросу'):
+        queue.cancel(db,other,queue.Request(request_id=ident,action='delete',path=paths[0]),'anton')
+    assert db.get(models.BackgroundJob,ident).status=='queued' and not remote.calls

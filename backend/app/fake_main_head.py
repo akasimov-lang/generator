@@ -20,6 +20,8 @@ def continue_pending(db, site, remote, state, project):
         models.NetworkOperation.status.in_(['pending', 'unknown']))).all()
     for parent in parents:
         payload = parent.request_payload
+        if payload.get('queue_cancelled_at'):
+            continue
         desired = payload.get('head_sync')
         is_reglue = parent.action == 'reglue'
         ready = (state.get('canon') == payload['reserve'] if is_reglue else

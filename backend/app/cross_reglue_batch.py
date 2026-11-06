@@ -59,6 +59,8 @@ def build(db, targets, username, *, persist=True):
         raise ValueError('Выберите перекрёстный режим с сохранением схемы, чистым или базовым альтернейтом по языку и GEO.')
     groups = {(cross.brand_key(s.brand), cross.geo_key(s.cache_geo)) for s in targets}
     allowed = db.info.get('cross_allowed_site_ids')
+    from app.pilot_donors import grants
+    donor_grants = grants(db, db.info.get('pilot_job_id'))
     filters = db.info.get('mass_action_filter') or (cfg.selection_filter.model_dump() if cfg.selection_filter else None)
     if filters:
         allowed = constrain(db, filters, allowed, targets)
@@ -67,14 +69,20 @@ def build(db, targets, username, *, persist=True):
         allowed = participants if allowed is None else allowed.intersection(participants)
     query = select(models.Site).where(models.Site.is_active.is_(True), models.Site.project_status == 'mass_actions')
     if allowed is not None:
-        query = query.where(models.Site.id.in_(allowed))
+        query = query.where(models.Site.id.in_(allowed | set(donor_grants)))
     states, sites, skipped, reasons = {}, {}, [], {}
     for site in db.scalars(query):
         if (cross.brand_key(site.brand), cross.geo_key(site.cache_geo)) not in groups:
             continue
         try:
             from app.mass_reglue_launch import manual_pilot_allowed
-            auto.require_eligible(site, cfg, auto.config(db, site.id), preview_only=bool(db.info.get('auto_pilot_preview')),manual=manual_pilot_allowed(db,site.id))
+            donor_only = site.id in donor_grants and site.id not in {target.id for target in targets}
+            if donor_only:
+                from app.mass_action_scope import MassActionFilter, matches
+                if not filters or not matches(site, MassActionFilter.model_validate(filters), donor_only=True):
+                    raise ValueError('Донор не соответствует бренду, GEO или типу этого плана.')
+            else:
+                auto.require_eligible(site, cfg, auto.config(db, site.id), preview_only=bool(db.info.get('auto_pilot_preview')),manual=manual_pilot_allowed(db,site.id))
             brand, geo = cross.brand_key(site.brand), cross.geo_key(site.cache_geo)
             if not brand or len(geo) != 2 or not geo.isalpha():
                 raise ValueError('Для переноса должны быть заданы бренд и GEO проекта.')

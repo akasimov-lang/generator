@@ -663,6 +663,11 @@ def enqueue_fake_main(site_id: str, payload: fake_main_queue.Request, user: Auth
     return _network_call(fake_main_queue.enqueue, db, _get_site_or_404(db, site_id), payload, _request_username(user) or "user")
 
 
+@router.post("/sites/{site_id}/network/fake-main-queue/cancel")
+def cancel_fake_main(site_id: str, payload: fake_main_queue.Request, user: AuthUser, db: Session = Depends(get_db)):
+    return _network_call(fake_main_queue.cancel, db, _get_site_or_404(db, site_id), payload, _request_username(user) or "user")
+
+
 @router.get("/sites/{site_id}/network/operations")
 def get_network_operations(site_id: str, _: AuthUser, db: Session = Depends(get_db)):
     return project_network.operation_history(db, _get_site_or_404(db, site_id))

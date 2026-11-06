@@ -1,8 +1,8 @@
-export type FakeAction = "delete" | "create";
+export type FakeAction = "delete" | "create" | "select";
 export type FakeQueueItem = { id: string; action: FakeAction; path: string; status: string; message: string; operation_ids: string[]; created_at?: string; finished_at?: string | null };
 export type FakeQueueSnapshot<T> = { items: FakeQueueItem[]; limit: number; active_count: number; network: T | null };
 type Api = <T>(path: string, options?: RequestInit) => Promise<T>;
-export const fakeQueueActive = (item: FakeQueueItem) => !["completed", "failed"].includes(item.status);
+export const fakeQueueActive = (item: FakeQueueItem) => !["completed", "failed", "cancelled"].includes(item.status);
 export const normalizedFakePath = (path: string) => "/" + path.trim().replace(/^\/+|\/+$/g, "") + (path.trim().endsWith("/") ? "/" : "");
 
 /** Local submissions are immediate; only the short enqueue requests are serialized. */
@@ -16,6 +16,7 @@ export class FakeMainQueue<T> {
   private epoch = 0;
   private networkBusy = false;
   private outbox: string[] = [];
+  private cancelled = new Map<string, FakeQueueItem>();
   private siteId: string;
   private api: Api;
   constructor(siteId: string, api: Api) { this.siteId = siteId; this.api = api; }
@@ -28,6 +29,7 @@ export class FakeMainQueue<T> {
     if (busy !== this.networkBusy) { this.epoch++; this.networkBusy = busy; this.server = { ...this.server, network: null }; }
   }
   private accept(snapshot: FakeQueueSnapshot<T>) {
+    snapshot = { ...snapshot, items: snapshot.items.map(item => this.cancelled.get(item.id) || item) };
     this.server = this.networkBusy ? { ...snapshot, network: null } : snapshot;
     for (const item of snapshot.items) this.pending.delete(item.id);
     this.emit();
@@ -56,6 +58,25 @@ export class FakeMainQueue<T> {
     this.pending.set(id, { ...item, status: "submitting", message: "Проверяем постановку в очередь…" });
     this.outbox.push(id); this.epoch++; this.emit(); void this.send();
   }
+  async cancel(id: string) {
+    const item = this.items.find(item => item.id === id);
+    if (!item || !fakeQueueActive(item) || item.status === "cancelling") return;
+    this.outbox = this.outbox.filter(value => value !== id);
+    this.pending.set(id, { ...item, status: "cancelling", message: "Удаляем отправку…" });
+    this.epoch++; this.error = ""; this.emit();
+    try {
+      const snapshot = await this.api<FakeQueueSnapshot<T>>(`/sites/${this.siteId}/network/fake-main-queue/cancel`, {
+        method: "POST", body: JSON.stringify({ request_id: id, action: item.action, path: item.path }),
+      });
+      const result = snapshot.items.find(item => item.id === id);
+      if (result && !fakeQueueActive(result)) this.cancelled.set(id, result);
+      this.accept(snapshot);
+    } catch (error) {
+      this.pending.set(id, item);
+      this.error = error instanceof Error ? error.message : "Не удалось удалить отправку";
+      this.emit();
+    }
+  }
   private async send() {
     if (this.sending) return;
     this.sending = true;
@@ -70,6 +91,7 @@ export class FakeMainQueue<T> {
           });
           this.pending.delete(id); this.accept(epoch === this.epoch ? snapshot : { ...snapshot, network: null });
         } catch (error) {
+          if (this.cancelled.has(id)) continue;
           const status = (error as { statusCode?: number })?.statusCode;
           const rejected = !!status && status >= 400 && status < 500;
           this.pending.set(id, { ...item, status: rejected ? "failed" : "unconfirmed", message:

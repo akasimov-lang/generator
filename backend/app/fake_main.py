@@ -170,14 +170,14 @@ def retarget_fake_head(state, old_path, new_path):
                 return tag
             if url.netloc and (url.username or url.password or (url.hostname or '').lower() not in hosts):
                 return tag
-            if url.path != old_path or (not url.netloc and not value.startswith('/')):
+            if url.path.rstrip('/') != old_path.rstrip('/') or (not url.netloc and not value.startswith('/')):
                 return tag
         except ValueError:
             return tag
         # Keep query strings, fragments, quoting, attribute order and spacing byte-for-byte.
         # The path is the exact suffix of the URL before its query/fragment.
         end = min([len(value), *[value.index(char) for char in '?#' if char in value]])
-        updated = value[:end - len(old_path)] + new_path + value[end:]
+        updated = value[:end - len(url.path)] + new_path + value[end:]
         return tag[:href.start(3)] + updated + tag[href.end(3):]
 
     changes = {}

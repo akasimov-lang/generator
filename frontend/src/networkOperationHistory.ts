@@ -1,7 +1,7 @@
 import type { FakeQueueItem } from "./fakeMainQueue";
 
 type Operation = { action?: string; id: string; status: string; created_at: string };
-export const activeStatuses = new Set(["pending", "unknown", "queued", "running", "waiting", "processing", "submitting", "unconfirmed", "index_queued", "index_submitting", "index_unknown"]);
+export const activeStatuses = new Set(["pending", "unknown", "queued", "running", "waiting", "processing", "submitting", "unconfirmed", "cancelling", "index_queued", "index_submitting", "index_unknown"]);
 export function networkOperationHistory<T extends Operation>(operations: T[], queue: FakeQueueItem[]) {
   const receipts = new Set(queue.flatMap(item => item.operation_ids));
   const rows = [
@@ -15,4 +15,5 @@ export function networkOperationHistory<T extends Operation>(operations: T[], qu
 export const fakeQueueStatus: Record<string, string> = {
   submitting: "Отправляем заявку", unconfirmed: "Отправка не подтверждена", queued: "В очереди",
   processing: "Выполняется", waiting: "Ожидаем подтверждения Webdev", completed: "Подтверждено", failed: "Ошибка",
+  cancelling: "Удаляем отправку", cancelled: "Отправка удалена",
 };
