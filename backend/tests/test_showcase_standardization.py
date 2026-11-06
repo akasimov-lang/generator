@@ -187,3 +187,10 @@ def test_responsive_wrappers_keep_a_standard_showcase_in_each_original_container
     blocks=plan['pages'][0][1]['content']['blocks']
     assert [b['type'] for b in blocks]==['code','shortcode','code','shortcode','code']
     assert blocks[2]['data']['code']=='</div><div class="mobile">'
+
+
+def test_table_cards_without_logo_guard_lookup_by_optional_field():
+    from app.showcase_standardization import template
+    markup=template('table_group','Details')
+    assert '{{#if (findValueInObjectByKey this "logo" "id" false)}}<img src="{{findLogo this ../casinos.basic "src"}}"' in markup
+    assert '{{#if (findLogo' not in markup
