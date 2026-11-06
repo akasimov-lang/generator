@@ -83,13 +83,15 @@ def publication_events(db,site_id,start,end):
     """First confirmed create per path, never retries, updates, or draft generation."""
     from app.page_word_count import page_word_count
     pairs=db.execute(select(models.PublicationLog,models.ContentItem).join(models.ContentItem,models.ContentItem.id==models.PublicationLog.content_item_id).where(models.ContentItem.site_id==site_id).order_by(models.PublicationLog.created_at,models.PublicationLog.id)).all()
-    first={};known=set()
+    first={};known={}
     for log,item in pairs:
         if not log.response_status or not 200<=log.response_status<300 or log.error_message:continue
         page=(log.request_payload or {}).get('page') or {};path=normalized_path(page.get('slug') or item.published_url or item.slug)
         endpoint=urlsplit(log.endpoint_url).path.rstrip('/')
-        if endpoint.endswith('/update'):known.add(path);continue
-        if not endpoint.endswith('/create') or path in known or path in first:continue
+        if endpoint.endswith('/update'):known.setdefault(path,log.created_at);continue
+        # Equal timestamps do not prove an update predates the first create;
+        # UUID ordering must not randomly remove a newly published page.
+        if not endpoint.endswith('/create') or (path in known and known[path]<log.created_at) or path in first:continue
         if not item.published_at and not item.deletion_confirmed_at:continue
         first[path]={'id':log.id,'kind':'page_added','label':'Добавлена страница','at':iso(log.created_at),'confirmed_at':iso(item.published_at),'path':path,'words':page_word_count(page),'source':'confirmed_create_publication'}
     return [v for v in first.values() if within(v['at'],start,end)]
@@ -135,7 +137,7 @@ def row(db,site,state,start,end,observed_at,source):
     events+=publication_events(db,site.id,start,end)
     events+=work.menu_events(db,site.name,start,end)
     report_urls={e.get('report_url') for e in events if e['kind']=='showcase'}
-    events+=[e for e in maintenance_events(db,site.id,start,end) if e['kind']!='showcase' or e.get('report_url') not in report_urls]
+    events+=[e for e in maintenance_events(db,site.id,start,end) if e['kind']!='showcase' or not e.get('report_url') or e['report_url'] not in report_urls]
     events.sort(key=lambda e:(e['at'],e['id']),reverse=True)
     fibery=site.fibery_name or '';number=re.search(r'#\s*(\d+)',fibery)
     return {'site_id':site.id,'project':site.name,'brand':site.brand,'geo':site.cache_geo,'fibery_name':fibery,'fibery_url':'https://hzhz.fibery.io/favorites/Alfasearch_Config/SEO_Projects/'+number.group(1) if number else None,**current,'reglue_date':latest('reglue',current['main']),'fake_date':latest('fake_path',current['fake_path']),'observed_at':iso(observed_at),'state_source':source,'status':'completed','events':events,'pages_added':sum(e['kind']=='page_added' for e in events),'fake_pages_created':sum(e['kind']=='fake_path' and e.get('created',False) for e in events),'text_changes':sum(e['kind']=='text' and e['text_changed'] for e in events),**work.work_flags(events)}

@@ -1,0 +1,22 @@
+<button class="cc-menu-toggle" type="button" aria-controls="cc-main-menu" aria-expanded="false" aria-label="Otevřít menu"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+<nav id="cc-main-menu" class="cc-main-menu" aria-label="Hlavní navigace">
+  <ul>{{#each headerMenu}}
+    <li><a href="{{this.slug}}">{{this.title}}</a>
+      {{#if this.children}}<ul>{{#each this.children}}<li><a href="{{this.slug}}">{{this.title}}</a></li>{{/each}}</ul>{{/if}}
+    </li>{{/each}}</ul>
+</nav>
+{{#unless amp}}
+<script>
+(()=>{const header=document.querySelector('header.cc-header'),button=header?.querySelector('.cc-menu-toggle'),nav=header?.querySelector('.cc-main-menu');if(!button||!nav)return;
+header.classList.add('cc-nav-ready');
+const close=()=>{button.setAttribute('aria-expanded','false');button.setAttribute('aria-label','Otevřít menu');nav.classList.remove('cc-open');};
+button.addEventListener('click',event=>{event.preventDefault();event.stopImmediatePropagation();const open=button.getAttribute('aria-expanded')!=='true';button.setAttribute('aria-expanded',String(open));button.setAttribute('aria-label',open?'Zavřít menu':'Otevřít menu');nav.classList.toggle('cc-open',open);},true);
+nav.querySelectorAll('a').forEach(link=>{if(link.pathname.replace(/\/$/,'')===location.pathname.replace(/\/$/,''))link.setAttribute('aria-current','page');});
+nav.addEventListener('click',event=>{if(event.target.closest('a'))close();});
+document.addEventListener('click',event=>{if(!header.contains(event.target))close();});
+header.addEventListener('focusout',()=>{setTimeout(()=>{if(!header.contains(document.activeElement))close();},0);});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&button.getAttribute('aria-expanded')==='true'){close();button.focus();}});
+window.matchMedia('(min-width: 761px)').addEventListener('change',close);
+})();
+</script>
+{{/unless}}

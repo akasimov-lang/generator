@@ -44,9 +44,9 @@ def test_new_pages_count_unique_creates_not_updates_pending_or_retries(env):
     def item(slug,published=True):
         row=models.ContentItem(id=str(uuid4()),task_id=task.id,site_id=site.id,topic='t',slug=slug,generated_json=page('one two'),idempotency_key=str(uuid4()),status='published' if published else 'publication_pending_confirmation',published_at=AT if published else None)
         db.add(row);db.flush();return row
-    def log(i,path,at=AT):
-        db.add(models.PublicationLog(content_item_id=i.id,endpoint_url='https://webdev.test/projects/'+path,request_payload={'page':page('one two')|{'slug':i.slug}},response_status=201,created_at=at))
-    new=item('/new/');log(new,'create');log(new,'create');log(new,'update')
+    def log(i,path,at=AT,id=None):
+        db.add(models.PublicationLog(id=id or str(uuid4()),content_item_id=i.id,endpoint_url='https://webdev.test/projects/'+path,request_payload={'page':page('one two')|{'slug':i.slug}},response_status=201,created_at=at))
+    new=item('/new/');log(new,'create');log(new,'create');log(new,'update',id='00000000-0000-0000-0000-000000000001')
     updated=item('/existing/');log(updated,'update',START-timedelta(days=1));log(updated,'create')
     pending=item('/pending/',False);log(pending,'create')
     deleted=item('/removed/');deleted.published_at=None;deleted.deletion_confirmed_at=AT;log(deleted,'create')
@@ -134,6 +134,14 @@ def test_uploaded_logo_does_not_count_as_template_repair():
     assert flags['showcase_work'] and not flags['layout_work']
     ledger.value={'status':'prepared','plan':{'templates':['planned']}}
     assert ledger_events(ledger,START,END)==[]
+
+
+def test_chat_repair_receipt_has_description_without_link_to_nonexistent_report():
+    from app.report_work_evidence import ledger_events
+    ledger=SimpleNamespace(key='site-menu-repair:chat-project',value={'receipts':[
+        {'field':'header','status':'confirmed','at':AT.isoformat(),'message':'Добавлено меню.'}]})
+    event=ledger_events(ledger,START,END)[0]
+    assert event['message']=='Добавлено меню.' and 'report_url' not in event
 
 
 def test_menu_report_ignores_failed_other_project_and_identical_resends(env):

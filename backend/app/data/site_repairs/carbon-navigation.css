@@ -1,0 +1,31 @@
+/* PagePilot: CarbonCraftworks header navigation */
+header.cc-header{display:grid;grid-template-columns:auto 1fr auto;gap:18px 24px;padding:18px 0 12px}
+.cc-header>.cc-brand{grid-column:1;grid-row:1;display:block}
+.cc-header>.header-actions{grid-column:3;grid-row:1;width:auto;gap:14px}
+.cc-header .locale{font-size:14px;padding:9px 12px;gap:8px}
+.cc-header .locale img{width:22px;height:22px}
+.cc-header .locale-chevron{display:none}
+.cc-header .cta.compact{font-size:15px;padding:10px 20px;min-height:42px}
+.cc-main-menu{grid-column:1/-1;grid-row:2;border-top:1px solid var(--line);padding-top:10px;min-width:0}
+.cc-main-menu ul{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 10px;list-style:none;margin:0;padding:0}
+.cc-main-menu li{margin:0;padding:0;list-style:none}
+.cc-main-menu li::before{display:none}
+.cc-main-menu a{display:block;padding:8px 10px;border-radius:8px;color:var(--text);font-size:14px;font-weight:700;line-height:1.4;text-decoration:none;transition:background .16s,color .16s}
+.cc-main-menu a:hover,.cc-main-menu a[aria-current=page]{background:#1eea8c16;color:var(--accent)}
+.cc-main-menu a:focus-visible,.cc-menu-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.cc-main-menu li>ul{display:flex;flex-direction:column;align-items:stretch;margin-left:12px}
+.cc-menu-toggle{display:none}
+@media(max-width:760px){
+ header.cc-header{grid-template-columns:auto 1fr auto;gap:10px;width:calc(100% - 32px);padding:12px 0}
+ .cc-header .logo{width:132px;height:34px}
+ .cc-header>.header-actions{grid-column:2;gap:8px;justify-content:flex-end}
+ .cc-header .locale{font-size:0;padding:0;background:transparent;gap:0}
+ .cc-header .locale img{width:20px;height:20px}
+ .cc-header .cta.compact{font-size:13px;min-height:40px;padding:8px 12px}
+ .cc-nav-ready>.cc-menu-toggle{display:flex;align-items:center;justify-content:center;grid-column:3;grid-row:1;width:40px;height:40px;padding:0;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--text);cursor:pointer}
+ .cc-nav-ready>.cc-main-menu{display:none}
+ .cc-nav-ready>.cc-main-menu.cc-open{display:block}
+ .cc-main-menu ul{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+ .cc-main-menu a{font-size:13px;padding:11px 8px;background:var(--surface)}
+}
+@media(max-width:360px){.cc-header .logo{width:104px}.cc-header .cta.compact{font-size:12px;padding:8px}.cc-header>.header-actions{gap:6px}}

@@ -1,14 +1,12 @@
 {
-  "updated_at": "2026-11-06T21:58:00.294440+00:00",
-  "last_confirmed_production": "e371b9902f0b2e3dd09d9d760d840a7950d8802c",
+  "updated_at": "2026-11-06T22:05:38.281956+00:00",
+  "last_confirmed_production": "5545eb52eb688d7fa451079ac571086ca8cb9144",
   "in_this_release": [
-    "Weekly reports: confirmed showcase template edits, native template repair receipts and menu publications; distinct project counts and dated descriptions",
-    "Separate counters: all layout, showcase layout, other templates, menu",
-    "Exclude verification errors of projects with no weekly work from displayed totals"
+    "Carboncraftworks.com: connect six existing Czech page links to header; desktop navigation and mobile burger; preserve pages/menu data/account tracking",
+    "Receipt details for direct chat template work; do not link to nonexistent maintenance reports"
   ],
   "next_authorized_work": [
-    "Refresh six existing weekly reports after deployment; preserve originals and history, no new reports",
-    "Continue recovery report3049: inspect Lemon preview8pending/no plans, start remaining prepared alternatives after native fresh checks, resolve stale donor snapshots",
+    "Continue direct chat review, without separate recovery report: inspect Lemon preview8pending/no plans, start remaining prepared alternatives after native fresh checks, resolve stale donor snapshots",
     "Verify BetOnRed four started targets; never reuse one domain across networks",
     "Resolve unfinished nanoclear/thexrock/SavaSpin with existing publication receipts; no Main switch to NXDOMAIN",
     "Finish unique showcase and official logos for www.dominiqueduroseau.com, report3032; original saved, not applied",
@@ -30,8 +28,7 @@
     "weekly_fontan": "08cede83-a3bf-57b5-8632-6f9596bf35a2",
     "weekly_lemon": "a9d072ce-0226-5bfa-ba92-8f690f3074e3",
     "weekly_betonred": "23212c57-e08a-58ba-98ea-5906609476fb",
-    "weekly_general": "50fd11c8-784a-5db6-93bd-1c35f24281c3",
-    "recovery3049": "d3cb1f4b-e308-5a22-9e83-b79603db239c"
+    "weekly_general": "50fd11c8-784a-5db6-93bd-1c35f24281c3"
   },
   "constraints": [
     "Opening or refreshing a plan must never launch reglues",
@@ -61,12 +58,14 @@
     "e371b99 deployed and healthy: recently reglued donor network allowed, target weekly restriction kept; bulk replan preserves ready headings",
     "Weekly reports3043–3048 deployed bb1fd58, separate section after Instructions",
     "Katalog Automatów81394097-5612-4b00-bcd2-f54e83f6352c recovered: published1838words,100%,no error at21:52UTC",
-    "Mendoza and Wartenweiler custom showcases applied and public checks passed; Dominiqueduroseau remains pending"
+    "Mendoza and Wartenweiler custom showcases applied and public checks passed; Dominiqueduroseau remains pending",
+    "5545eb5 deployed and healthy; six weekly reports refreshed01:01MSK: General37layout, Pelican2template repairs; menu actions included"
   ],
   "ready_for_release": [
-    "Weekly report work classification;15targeted tests passed, TypeScript and Vite build passed"
+    "Carbon header repair and report receipt refinements:19targeted tests passed"
   ],
   "cancelled": [
-    "Vitalina project/favorites audit: user explicitly cancelled"
+    "Vitalina project/favorites audit: user explicitly cancelled",
+    "Recovery report3049 deleted at explicit user request; perform checks directly in chat, do not recreate it"
   ]
 }

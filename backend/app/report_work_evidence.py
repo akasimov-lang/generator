@@ -63,10 +63,16 @@ def ledger_events(ledger, start, end):
         else:
             continue
         event = {'id': ledger.key + ':' + str(index), 'kind': kind, 'categories': categories,
-                 'label': label, 'at': utc(at).isoformat(), 'message': message,
+                 'label': label, 'at': utc(at).isoformat(), 'message': receipt.get('message') or message,
                  'source': 'confirmed_native_receipts'}
         if ledger.key.startswith(('site-template-repair:', 'site-menu-repair:')):
-            event['report_url'] = '/auto-reglue/pilot/report?maintenance=' + ledger.key.split(':', 1)[1]
+            from uuid import UUID
+            try:
+                report_id = str(UUID(ledger.key.split(':', 1)[1]))
+            except ValueError:
+                report_id = None
+            if report_id:
+                event['report_url'] = '/auto-reglue/pilot/report?maintenance=' + report_id
         events.append(event)
     return events
 
