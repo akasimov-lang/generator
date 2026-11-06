@@ -1,0 +1,20 @@
+.ww-showcase{display:grid;gap:14px;margin:32px 0 38px;width:100%;counter-reset:ww-card;font-family:inherit}
+.ww-showcase,.ww-showcase *{box-sizing:border-box}
+.ww-showcase .ww-card{position:relative;display:grid;grid-template-columns:1.1fr 1.2fr 1.4fr;gap:24px;align-items:center;margin:0;padding:24px;background:#fffdf8;color:#292628;border:1px solid #d3cec3;border-left:4px solid #bf4c42;border-radius:4px 18px 18px 4px;box-shadow:0 5px 14px #2d2a2c09;counter-increment:ww-card;text-align:left;min-width:0}
+.ww-showcase .ww-identity{display:flex;gap:18px;align-items:center;min-width:0}
+.ww-showcase .ww-number::before{content:counter(ww-card,decimal-leading-zero)}
+.ww-showcase .ww-number{flex:none;font-size:46px;font-weight:800;line-height:1;color:#fffdf8;-webkit-text-stroke:1px #bd786e;letter-spacing:-2px}
+.ww-showcase .ww-eyebrow{display:block;font-size:10px;font-weight:700;line-height:1.5;text-transform:uppercase;letter-spacing:.13em;color:#786b62;margin:0 0 8px}
+.ww-showcase .ww-brand{display:block;font-size:23px;line-height:1.15;font-weight:800;color:#2d2a2c;overflow-wrap:anywhere;letter-spacing:-.025em}
+.ww-showcase .ww-rating{display:block;color:#71554e;font-size:12px;margin-top:8px}
+.ww-showcase .ww-bonus{align-self:stretch;display:flex;flex-direction:column;justify-content:center;background:#f9eae3;padding:20px;border-radius:12px;min-width:0}
+.ww-showcase .ww-bonus .ww-eyebrow{color:#98483d}
+.ww-showcase .bonus-value{display:block;font-size:20px;line-height:1.4;font-weight:750;color:#873a32;overflow-wrap:anywhere;text-align:left}
+.ww-showcase .ww-facts{min-width:0;padding:4px 0}
+.ww-showcase .ww-license{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid #e4ded4}
+.ww-showcase .ww-license span{font-size:11px;color:#786b62}.ww-showcase .ww-license strong{font-size:12px;color:#45403d;font-weight:600;line-height:1.4}
+.ww-showcase .ww-facts p{font-size:14px;line-height:1.65;color:#45403d;margin:0;padding:0;white-space:pre-wrap;text-align:left;overflow-wrap:anywhere}
+.ww-showcase .ww-actions{margin-top:12px}.ww-showcase .ww-actions a,.ww-showcase .ww-actions button{display:inline-flex;align-items:center;justify-content:center;background:#a9443a;color:#fff;border:0;padding:10px 16px;border-radius:30px;text-decoration:none;font-size:13px;font-weight:700}
+.ww-showcase .ww-icons{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.ww-showcase .ww-icons img{max-height:24px;width:auto}
+@media(max-width:900px){.ww-showcase .ww-card{grid-template-columns:1fr 1.3fr;gap:18px}.ww-showcase .ww-facts{grid-column:1/-1;border-top:1px solid #e4ded4;padding-top:16px}.ww-showcase .ww-license{border:0;margin:0 0 8px;padding:0}}
+@media(max-width:540px){.ww-showcase{margin:24px 0;gap:16px}.ww-showcase .ww-card{grid-template-columns:1fr;padding:20px;gap:18px}.ww-showcase .ww-identity{gap:16px}.ww-showcase .ww-number{font-size:40px}.ww-showcase .ww-brand{font-size:24px}.ww-showcase .ww-bonus{padding:18px}.ww-showcase .ww-facts{padding-top:14px}.ww-showcase .bonus-value{font-size:20px}}
