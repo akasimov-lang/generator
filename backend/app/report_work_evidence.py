@@ -104,23 +104,38 @@ def menu_events(db, project, start, end):
         items = payload.get('list')
         if not isinstance(items, list):
             continue
-        unchanged = menu in previous and previous[menu] == items
-        previous[menu] = items
-        if unchanged or not in_period(log.created_at, start, end):
-            continue
-        def names(nodes):
+        def content(nodes):
             result = []
             for item in nodes:
                 if not isinstance(item, dict):
                     continue
                 title = item.get('title') or item.get('name') or item.get('label')
                 if title:
-                    result.append(str(title))
-                result.extend(names(item.get('children') or []))
+                    result.append((str(title), str(item.get('slug') or item.get('href') or ''), content(item.get('children') or [])))
             return result
-        titles = names(items)
-        events.append({'id': log.id, 'kind': 'menu', 'label': 'Обновлены пункты меню · ' + menu.title(),
-                       'at': utc(log.created_at).isoformat(), 'message': 'Опубликовано меню: ' + (', '.join(titles) if titles else 'пустой список'),
+
+        def names(nodes):
+            return [name for title, _, children in nodes for name in [title, *names(children)]]
+
+        current = content(items)
+        old = previous.get(menu)
+        previous[menu] = current
+        if current == old or not in_period(log.created_at, start, end):
+            continue
+        titles, old_titles = names(current), names(old or [])
+        # Empty synchronizations are not work. A confirmed removal of actual
+        # previous items remains a meaningful change, with the removed names.
+        if not titles and not old_titles:
+            continue
+        added = [name for name in titles if name not in old_titles]
+        removed = [name for name in old_titles if name not in titles]
+        changes = []
+        if added:changes.append('Добавлены пункты: ' + ', '.join(added))
+        if removed:changes.append('Удалены пункты: ' + ', '.join(removed))
+        if not changes:changes.append('Обновлены ссылки или порядок пунктов: ' + ', '.join(titles))
+        if old is None:changes = ['Пункты меню: ' + ', '.join(titles)]
+        events.append({'id': log.id, 'kind': 'menu', 'label': 'Меню в подвале' if menu == 'footer' else 'Меню в шапке',
+                       'at': utc(log.created_at).isoformat(), 'message': '. '.join(changes),
                        'menu_type': menu, 'menu_items': len(titles), 'source': 'successful_menu_publication'})
     return events
 

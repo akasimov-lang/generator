@@ -1,9 +1,9 @@
 {
-  "updated_at": "2026-11-06T22:11:05.551532+00:00",
-  "last_confirmed_production": "02fddd85811bbe51e75d1df4fcfc1324717dfc5b",
+  "updated_at": "2026-11-06T22:17:14.453321+00:00",
+  "last_confirmed_production": "f94dff8e7da65ecca6fc2ef098597ae815f746c2",
   "in_this_release": [
-    "Summary counters are toggle filters in all six weekly reports; filters combine with search",
-    "Selected work category displays only matching concrete events, dates and descriptions directly in each project row"
+    "Ignore technical empty menu synchronizations and IDs-only resends in weekly work counts; show actual added/removed/reordered items",
+    "Merge layout and showcase layout into one Layout filter; remove redundant With work filter"
   ],
   "next_authorized_work": [
     "Continue direct chat review, without separate recovery report: inspect Lemon preview8pending/no plans, start remaining prepared alternatives after native fresh checks, resolve stale donor snapshots",
@@ -60,10 +60,11 @@
     "Katalog Automatów81394097-5612-4b00-bcd2-f54e83f6352c recovered: published1838words,100%,no error at21:52UTC",
     "Mendoza and Wartenweiler custom showcases applied and public checks passed; Dominiqueduroseau remains pending",
     "5545eb5 deployed and healthy; six weekly reports refreshed01:01MSK: General37layout, Pelican2template repairs; menu actions included",
-    "carboncraftworks.com native header updated: six existing Czech menu destinations; shared header verified on all7pages, mobile390/320px navigation/Escape/no overflow passed; no separate report created"
+    "carboncraftworks.com native header updated: six existing Czech menu destinations; shared header verified on all7pages, mobile390/320px navigation/Escape/no overflow passed; no separate report created",
+    "f94dff8 deployed and healthy: category filters and matching concrete work details visible in all six reports; carbon header work included in BetOnRed weekly report"
   ],
   "ready_for_release": [
-    "Weekly work filters and direct category-specific event details; TypeScript and Vite build passed"
+    "18targeted report tests passed; TypeScript and Vite build passed"
   ],
   "cancelled": [
     "Vitalina project/favorites audit: user explicitly cancelled",

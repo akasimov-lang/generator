@@ -160,7 +160,33 @@ def test_menu_report_ignores_failed_other_project_and_identical_resends(env):
     db.commit()
     events=menu_events(db,site.name,START,END)
     assert len(events)==1 and events[0]['menu_items']==2
-    assert events[0]['at']==AT.isoformat() and 'Old, New' in events[0]['message']
+    assert events[0]['at']==AT.isoformat() and events[0]['message']=='Добавлены пункты: New'
+
+
+def test_empty_menu_sync_and_only_new_ids_are_not_work(env):
+    from app.report_work_evidence import menu_events
+    db,site,_=env
+    logs=[]
+    def add(menu,items,minute):
+        logs.append(SimpleNamespace(id=str(uuid4()),created_at=AT+timedelta(minutes=minute),response_status=200,error_message=None,
+            request_payload={'action':'menu_sync','project_name':site.name,'type':menu,'list':items}))
+    add('footer',[],0)
+    add('header',[],1)
+    add('header',[{'id':1,'title':'Hry','slug':'/games/'}],2)
+    add('header',[{'id':999,'title':'Hry','slug':'/games/'}],3)
+    db.info['state_report_menu_logs']=logs
+    events=menu_events(db,site.name,START,END)
+    assert len(events)==1 and events[0]['message']=='Добавлены пункты: Hry'
+
+
+def test_removal_of_real_menu_items_has_specific_description(env):
+    from app.report_work_evidence import menu_events
+    db,site,_=env
+    def log(items,at):return SimpleNamespace(id=str(uuid4()),created_at=at,response_status=200,error_message=None,
+        request_payload={'action':'menu_sync','project_name':site.name,'type':'footer','list':items})
+    db.info['state_report_menu_logs']=[log([{'title':'Old contact','slug':'/contact/'}],START-timedelta(days=1)),log([],AT)]
+    events=menu_events(db,site.name,START,END)
+    assert len(events)==1 and events[0]['message']=='Удалены пункты: Old contact'
 
 
 def test_report_counts_projects_not_receipts_and_ignores_errors_outside_work_scope(env,monkeypatch):
