@@ -65,3 +65,11 @@ def test_management_notes_are_persisted_idempotently_separately_from_edits(setup
  assert receipt.page_key=='showcase:management' and receipt.status=='confirmed'
  assert receipt.after_page['management']==management
  assert remember(db,site,{'username':'tester'},{'complete':False}) is None
+
+
+def test_boolean_class_attribute_does_not_break_showcase_tree():
+    from app.showcase_management import Tree, html_rows
+    markup='<div class><article class="casino-card"><h3>Example Casino</h3><span class="bonus-value">100 EUR</span><img class src="/logo.png" alt="Example Casino"></article></div>'
+    tree=Tree(markup)
+    assert next(tree.root.walk()).classes==set()
+    assert html_rows(markup,'test')[0]['brand']=='Example Casino'

@@ -21,7 +21,7 @@ class Node:
         self.tag, self.attrs, self.children = tag, dict(attrs), []
         self.parent = None
     @property
-    def classes(self): return set(self.attrs.get('class','').split())
+    def classes(self): return set((self.attrs.get('class') or '').split())
     def walk(self):
         for child in self.children:
             if isinstance(child, Node):

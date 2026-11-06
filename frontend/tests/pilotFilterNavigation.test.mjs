@@ -30,3 +30,9 @@ test('added pages filter preserves return navigation and project type',()=>{
  assert.equal(pilotFilterReturnPath(path),path);
  assert.equal(new URL(projectFromPilotFilter('/project-network/example.com/',path),'https://local.test').searchParams.get('pilotReturn'),path);
 });
+
+test('maintenance report returns to the same plan without a domain filter',()=>{
+ const path='/auto-reglue/pilot/report?maintenance=bbdb21a4-e48a-470c-9943-1db229b28f8e';
+ assert.equal(pilotFilterReturnPath(path),path);
+ assert.equal(new URL(projectFromPilotFilter('/project-menu/example.com/',path),'https://local.test').searchParams.get('pilotReturn'),path);
+});

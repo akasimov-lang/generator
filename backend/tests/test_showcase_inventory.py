@@ -99,3 +99,16 @@ def test_confirmed_migration_with_audit_baseline_records_work_not_read_only_audi
     assert len(history)==1 and history[0]['showcase_delta']['after']==2
     assert 'Изменения сайта не выполнялись' not in history[0]['message']
     assert 'Стандартная витрина опубликована' in history[0]['message']
+
+
+def test_project_inventory_includes_nested_pages_and_deduplicates_slugs():
+    from app.showcase_inventory import project_pages_inventory
+    project = {'data': {'pages': [{'slug': '/'}, {'slug': '/guides/a/'}, {'slug': 'guides/a/'}, {'slug': '/terms/'}]}, 'layout': '', 'shortcodes': []}
+    assert [p['slug'] for p in project_pages_inventory(project)] == ['/', '/guides/a/', '/terms/']
+
+
+def test_missing_page_list_is_not_reported_as_zero_pages():
+    import pytest
+    from app.showcase_inventory import project_pages_inventory
+    with pytest.raises(ValueError, match='список страниц'):
+        project_pages_inventory({'data': {}})

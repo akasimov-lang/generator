@@ -3013,3 +3013,22 @@ def run_due_publication(_: AdminUser) -> dict:
 
     result = publish_due_items.delay()
     return {"task_id": result.id, "queued_at": datetime.now(timezone.utc)}
+
+
+from app import menu_generation_jobs
+
+@router.post("/sites/{site_id}/menu-generations", status_code=202)
+def create_menu_generation(site_id: str, payload: menu_generation_jobs.Request, user: AuthUser, db: Session = Depends(get_db)):
+    return menu_generation_jobs.create(db, _get_site_or_404(db, site_id), payload, user)
+
+@router.get("/sites/{site_id}/menu-generations")
+def list_menu_generations(site_id: str, user: AuthUser, db: Session = Depends(get_db)):
+    _get_site_or_404(db, site_id)
+    menu_generation_jobs.expire(db)
+    rows = db.scalars(select(models.BackgroundJob).where(models.BackgroundJob.kind == menu_generation_jobs.KIND).order_by(models.BackgroundJob.created_at.desc())).all()
+    return [menu_generation_jobs.view(db, row) for row in rows if row.payload.get('site_id') == site_id and row.status not in {'expired', 'cancelled'}][:100]
+
+@router.post("/sites/{site_id}/menu-generations/{job_id}/apply", status_code=202)
+def accept_menu_generation(site_id: str, job_id: str, payload: GeneratedMenuStructureApply, user: AuthUser, db: Session = Depends(get_db)):
+    _get_site_or_404(db, site_id)
+    return menu_generation_jobs.accept(db, site_id, job_id, payload)

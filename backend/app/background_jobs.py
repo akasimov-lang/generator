@@ -26,6 +26,8 @@ def enqueue_publication(db, item, actor):
 
 
 def dispatch_pending(db, send):
+    from app.menu_generation_jobs import expire
+    expire(db)
     now = datetime.now(timezone.utc)
     jobs = db.scalars(select(models.BackgroundJob).where(
         models.BackgroundJob.status == "queued",
@@ -38,7 +40,7 @@ def dispatch_pending(db, send):
             from app.generation_retry import due
             if not due(job): continue
         try:
-            send(job.id, {"generation_retry": "generation", "pilot_text": "pilot_texts", "maintenance_report": "automation", "auto_pilot_preview": "automation", "mass_reglue_list": "automation", "pilot_internal_pages": "generation", "template_knowledge": "maintenance", "publication": "publication", "page_autolink": "publication", "transfer_report_check": "automation", "site_template": "generation", "auto_lb": "generation", "project_page_ai": "generation", "article_image": "generation"}.get(job.kind, "cache_sync"))
+            send(job.id, {"menu_generation": "generation", "generation_retry": "generation", "pilot_text": "pilot_texts", "maintenance_report": "automation", "auto_pilot_preview": "automation", "mass_reglue_list": "automation", "pilot_internal_pages": "generation", "template_knowledge": "maintenance", "publication": "publication", "page_autolink": "publication", "transfer_report_check": "automation", "site_template": "generation", "auto_lb": "generation", "project_page_ai": "generation", "article_image": "generation"}.get(job.kind, "cache_sync"))
         except Exception:
             continue
         job.dispatched_at = now
@@ -49,6 +51,9 @@ def dispatch_pending(db, send):
 
 def run_job(db, job_id):
     candidate = db.get(models.BackgroundJob, job_id)
+    if candidate and candidate.kind == "menu_generation":
+        from app.menu_generation_jobs import execute
+        return execute(db, job_id)
     if candidate and candidate.kind == 'publication' and candidate.status == 'queued' and candidate.payload.get('pilot_internal_pages_job_id'):
         from app.pilot_internal_pages import publication_job_ready
         if not publication_job_ready(db, candidate):

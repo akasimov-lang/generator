@@ -76,3 +76,24 @@ def brand_delta(before, after):
     removed = [x for x in before if identity(x) not in new]
     return {'before': len(before), 'after': len(after), 'added': len(added), 'removed': len(removed),
             'added_brands': added, 'removed_brands': removed}
+
+
+def project_pages_inventory(project):
+    """Enumerate actual Webdev pages; an unreadable list is not an empty site."""
+    pages = (project.get('data') or {}).get('pages')
+    if not isinstance(pages, list):
+        raise ValueError('Webdev не вернул список страниц; количество не подтверждено.')
+    result, seen = [], set()
+    for page in pages:
+        if not isinstance(page, dict):
+            raise ValueError('Некорректная запись страницы Webdev.')
+        slug = '/' + str(page.get('slug') or '').lstrip('/')
+        if slug in seen:
+            continue
+        seen.add(slug)
+        try:
+            item = page_inventory(project, {**page, 'slug': slug})
+        except Exception as error:
+            item = {'slug': slug, 'presence': 'unknown', 'notes': [str(error)[:250]]}
+        result.append(item)
+    return result

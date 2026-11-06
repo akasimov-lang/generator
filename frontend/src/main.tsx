@@ -1419,7 +1419,7 @@ function App() {
   const accountActions = (
           <div className="topbarActions">
             {activeView === "workspace" && <a className="button secondary" href={pathForRoute("autoPilotReport")} title="Черновики и отчёты Auto Pilot" onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); setMobileMenuOpen(false); navigateTo("autoPilotReport"); } }}><Bot size={18} /> Автопилот</a>}
-            {(activeView === "autoReglue" || activeView === "massActionReport" || activeView === "sites") && <a className="button secondary" href={pathForRoute("autoPilotReport")} onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("autoPilotReport"); } }}><FileText size={18} /> Автопилот Отчет</a>}
+            {(activeView === "autoReglue" || activeView === "massActionReport" || activeView === "sites") && <a className="button secondary" href={pathForRoute("autoPilotReport")} onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("autoPilotReport"); } }}><FileText size={18} /> Планы и отчёты</a>}
             {activeView === "autoReglue" && <a className="button primary autoReglueGuideButton" href={pathForRoute("autoReglueGuide")} onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("autoReglueGuide"); } }}><BookOpen size={18} /> Инструкция по автопереклеям</a>}
             {currentUser ? (
               <div className="userPill">
@@ -1489,7 +1489,7 @@ function App() {
               <NavButton href={pathForRoute("workspace", "content")} icon={<Send />} label="Контент и публикации" active={activeView === "workspace" && (workspaceTab === "content" || workspaceTab === "publication")} onClick={openWorkspaceContent} />
               <NavButton href={pathForRoute("providers")} icon={<Bot />} label="API Providers" active={activeView === "providers"} onClick={() => navigateTo("providers")} />
               <NavButton href={pathForRoute("sites")} icon={<Globe2 />} label="Сайты" active={activeView === "sites"} onClick={() => navigateTo("sites")} />
-              <NavButton href={pathForRoute("autoPilotReport")} icon={<FileText />} label="Автопилот Отчет" active={["massActionReport", "autoPilotReport", "autoPilotLogs", "autoPilot"].includes(activeView)} onClick={() => navigateTo("autoPilotReport")} />
+              <NavButton href={pathForRoute("autoPilotReport")} icon={<FileText />} label="Планы и отчёты" active={["massActionReport", "autoPilotReport", "autoPilotLogs", "autoPilot"].includes(activeView)} onClick={() => navigateTo("autoPilotReport")} />
               <NavButton href={pathForRoute("favorites")} icon={<Star className="favoriteNavIcon" fill="currentColor" />} label="Избранное" active={activeView === "favorites"} onClick={() => navigateTo("favorites")} />
             </>
           ) : (
@@ -1499,7 +1499,7 @@ function App() {
               <NavButton href={pathForRoute("taskArchive")} icon={<Archive />} label="Архив" active={activeView === "taskArchive"} onClick={() => navigateTo("taskArchive")} />
               <NavButton href={pathForRoute("workspace", "content")} icon={<Send />} label="Контент и публикации" active={activeView === "workspace" && (workspaceTab === "content" || workspaceTab === "publication")} onClick={openWorkspaceContent} />
               <NavButton href={pathForRoute("sites")} icon={<Globe2 />} label="Сайты" active={activeView === "sites"} onClick={() => navigateTo("sites")} />
-              <NavButton href={pathForRoute("autoPilotReport")} icon={<FileText />} label="Автопилот Отчет" active={["massActionReport", "autoPilotReport", "autoPilotLogs", "autoPilot"].includes(activeView)} onClick={() => navigateTo("autoPilotReport")} />
+              <NavButton href={pathForRoute("autoPilotReport")} icon={<FileText />} label="Планы и отчёты" active={["massActionReport", "autoPilotReport", "autoPilotLogs", "autoPilot"].includes(activeView)} onClick={() => navigateTo("autoPilotReport")} />
               <NavButton href={pathForRoute("favorites")} icon={<Star className="favoriteNavIcon" fill="currentColor" />} label="Избранное" active={activeView === "favorites"} onClick={() => navigateTo("favorites")} />
             </>
           )}
@@ -2775,7 +2775,7 @@ function ProjectWorkspaceView({
 
       </DataPanel>
         <nav className="workspaceTabs" aria-label="Вкладки проекта">
-          {pilotFilterReturnPath(new URLSearchParams(window.location.search).get("pilotReturn")) ? <a className="tabButton tabButtonIconOnly" href={pilotFilterReturnPath(new URLSearchParams(window.location.search).get("pilotReturn"))!} title="Назад к фильтру отчёта" aria-label="Назад к фильтру отчёта"><ArrowLeft size={18} aria-hidden="true" /></a> : (
+          {pilotFilterReturnPath(new URLSearchParams(window.location.search).get("pilotReturn")) ? <a className="tabButton tabButtonIconOnly" href={pilotFilterReturnPath(new URLSearchParams(window.location.search).get("pilotReturn"))!} title="Назад к отчёту" aria-label="Назад к отчёту"><ArrowLeft size={18} aria-hidden="true" /></a> : (
           <TabButton
             href={pathForRoute("workspace", "overview", selectedSite?.name)}
             icon={<Search size={18} aria-hidden="true" />}
@@ -5179,6 +5179,25 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
   const [transliteratingMenuType, setTransliteratingMenuType] = React.useState<"header" | "footer" | null>(null);
   const [identityEditor, setIdentityEditor] = React.useState<{item:MenuPreviewItem;section?:Section;menuType:"header"|"footer"}|null>(null);
   const [menuGeneratorOpen, setMenuGeneratorOpen] = React.useState(false);
+  type MenuJob = {id:string;status:string;error?:string;created_at:string;preview?:GeneratedMenuStructurePreview;expires_at?:string;operation:"append"|"replace";create_pages:boolean;settings:{menu_type:"header"|"footer";levels:number;top_level_count:number;mode:GeneratedMenuMode;parent_paths:string[];nested_count:number;include_top_level:boolean};applied?:{page_task_error?:string};pages:{id:string;topic:string;slug:string;status:string}[]};
+  const [menuJobs,setMenuJobs] = React.useState<MenuJob[]>([]);
+  const [menuJobId,setMenuJobId] = React.useState<string|null>(null);
+  const [menuJobsError,setMenuJobsError] = React.useState("");
+  const selectedMenuJob = menuJobs.find(job=>job.id===menuJobId);
+  const menuJobLabel = (job:MenuJob) => ({queued:"В очереди",generating:"Генерация структуры",awaiting_review:"Готово к просмотру",applying:"Применение меню",completed:job.pages.some(page=>!["published","deleted"].includes(page.status))?"Меню применено · страницы в работе":"Завершено",failed:"Ошибка",expired:"Срок хранения истёк"} as Record<string,string>)[job.status] || job.status;
+  React.useEffect(()=>{
+    let active=true;
+    const load=async()=>{try{const rows=await api<MenuJob[]>(`/sites/${site.id}/menu-generations`);if(active){setMenuJobs(rows);setMenuJobsError("");}}catch(error){if(active)setMenuJobsError(error instanceof Error?error.message:"Не удалось обновить задания");}};
+    void load();const timer=window.setInterval(()=>void load(),5000);
+    return()=>{active=false;window.clearInterval(timer);};
+  },[site.id,api]);
+  function openMenuJob(job:MenuJob){
+    setMenuJobId(job.id);setGeneratedMenuOperation(job.operation);setGeneratedCreatePages(job.create_pages);
+    setGeneratedMenuType(job.settings.menu_type);setGeneratedMenuLevels(job.settings.levels);setGeneratedMenuMode(job.settings.mode);
+    setGeneratedMenuTopLevelCount(job.settings.include_top_level?job.settings.top_level_count:0);setGeneratedNestedCount(job.settings.nested_count);
+    setGeneratedMenuParents(job.settings.parent_paths);setGeneratedMenuPreview(job.preview||null);setFormError(job.error||job.applied?.page_task_error||"");setMenuGeneratorOpen(true);
+  }
+
   const [generatedMenuOperation, setGeneratedMenuOperation] = React.useState<"append" | "replace">("append");
   const [generatedMenuType, setGeneratedMenuType] = React.useState<"header" | "footer">("header");
   const [generatedMenuLevels, setGeneratedMenuLevels] = React.useState(2);
@@ -5598,9 +5617,9 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
     setEditingGeneratedPath(null);
     setFormError("");
     try {
-      const preview = await api<GeneratedMenuStructurePreview>(`/sites/${site.id}/menu-structure-preview`, {
+      const job = await api<MenuJob>(`/sites/${site.id}/menu-generations`, {
         method: "POST",
-        body: JSON.stringify({
+        body: JSON.stringify({request_id: crypto.randomUUID(), operation: generatedMenuOperation, create_pages: generatedCreatePages, settings: {
           menu_type: generatedMenuType,
           levels: mode === "casino_reviews" ? 2 : levels,
           top_level_count: Math.max(1, count),
@@ -5609,11 +5628,11 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
           children_per_parent: generatedNestedCount,
           include_top_level: count > 0,
           mode
-        })
+        }})
       });
-      setGeneratedMenuPreview(preview);
-      setMenuGenerationProgress(100);
-      await new Promise((resolve) => window.setTimeout(resolve, 350));
+      setMenuJobs(rows=>[job,...rows.filter(row=>row.id!==job.id)]);
+      setMenuJobId(job.id);setMenuGeneratorOpen(false);
+      setMenuNestingNotice("Задание принято. Текущие генерации и результаты — под списком меню.");
     } catch (error) {
       setMenuGenerationProgress(0);
       setFormError(error instanceof Error ? error.message : "Не удалось сгенерировать структуру меню");
@@ -5624,11 +5643,11 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
   }
 
   async function addGeneratedMenuToSite() {
-    if (!generatedMenuPreview) return;
+    if (!generatedMenuPreview || !menuJobId) return;
     setApplyingGeneratedMenu(true);
     setFormError("");
     try {
-      const result = await api<ProjectChangesSyncResult & { created_count: number; rolled_back: boolean; page_task_id?: string; page_task_error?: string }>(`/sites/${site.id}/generated-menu-structure/apply`, {
+      const job = await api<MenuJob>(`/sites/${site.id}/menu-generations/${menuJobId}/apply`, {
         method: "POST",
         body: JSON.stringify({
           operation: generatedMenuOperation,
@@ -5640,13 +5659,9 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
           items: generatedMenuPreview.items
         })
       });
-      if (!result.success) {
-        const failure = result.results.find(item => !item.success);
-        throw new Error(failure?.error || `Проект не принял структуру${failure?.status_code ? ` (HTTP ${failure.status_code})` : ""}; добавление отменено`);
-      }
-      setMenuGeneratorOpen(false);
-      setGeneratedMenuPreview(null);
-      setMenuNestingNotice(`На сайт добавлена сгенерированная структура: ${result.created_count} пунктов.` + (result.page_task_error ? ` Генерация страниц не запущена: ${result.page_task_error}` : result.page_task_id ? " Создание и публикация новых страниц запущены. Ход выполнения — в разделе «Генерация»." : ""));
+      setMenuJobs(rows=>rows.map(row=>row.id===job.id?job:row));
+      setMenuGeneratorOpen(false);setGeneratedMenuPreview(null);
+      setMenuNestingNotice("Применение меню поставлено в очередь. Состояние — в списке заданий ниже.");
       await onChanged();
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Не удалось добавить структуру на сайт");
@@ -5794,7 +5809,7 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
       <DataPanel title="Структура меню проекта" allowCollapse={false}>
         {menuNestingNotice ? <div className="notice menuNestingNotice" role="note"><AlertTriangle size={17} /><span>{menuNestingNotice}</span></div> : null}
         <div className="menuStructureGeneratorToolbar">
-          <button className="button primary" type="button" onClick={() => { setFormError(""); setGeneratedMenuPreview(null); setMenuGeneratorOpen(true); }}>
+          <button className="button primary" type="button" onClick={() => { setMenuJobId(null); setFormError(""); setGeneratedMenuPreview(null); setMenuGeneratorOpen(true); }}>
             <Sparkles size={17} /> Сгенерировать структуру для проекта
           </button>
           <span>Предпросмотр структуры перед добавлением на сайт</span>
@@ -5843,6 +5858,7 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
             ];
           })]}
         /> : null}
+        <section className="menuGenerationHistory"><h3>Текущие генерации и история</h3>{menuJobsError&&<p role="alert">{menuJobsError}</p>}{!menuJobs.length?<p>Заданий пока нет.</p>:<div className="menuGenerationHistoryScroll">{menuJobs.map(job=><article key={job.id}><div><strong>{menuJobLabel(job)}</strong><small>{formatDate(job.created_at)} · {job.settings.menu_type === "header"?"Header":"Footer"}{job.expires_at&&job.status==="awaiting_review"?` · Хранится до ${formatDate(job.expires_at)}`:""}</small>{job.error&&<small role="alert">{job.error}</small>}{job.applied?.page_task_error&&<small role="alert">{job.applied.page_task_error}</small>}</div><button className="button compact secondary" onClick={()=>openMenuJob(job)}>Открыть</button></article>)}</div>}</section>
         {pagePreview ? <ProjectPagePreviewModal preview={pagePreview} onClose={() => setPagePreview(null)} /> : null}
         {pagePreviewError ? <Modal title={`Просмотр страницы: ${pagePreviewError.title}`} subtitle={pagePreviewError.slug || "URL не указан"} onClose={() => setPagePreviewError(null)}><div className="emptyState">{pagePreviewError.message}</div></Modal> : null}
       </DataPanel>
@@ -5850,8 +5866,8 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
       {menuGeneratorOpen ? (
         <Modal
           title="Сгенерировать структуру меню"
-          subtitle="Сначала проверьте результат; сайт изменится только после нажатия «Добавить на сайт»"
-          onClose={() => { if (!generatingMenuPreview && !applyingGeneratedMenu) setMenuGeneratorOpen(false); }}
+          subtitle={generatedCreatePages?"Генерация, добавление меню и публикация новых страниц выполняются автоматически в фоне.":"Результат хранится 24 часа. Проверьте его и нажмите «Добавить на сайт»."}
+          onClose={() => setMenuGeneratorOpen(false)}
           wide
           className="generatedMenuStructureModal"
           headerActions={<div className="generatedMenuOperation"><SearchableSelect compact ariaLabel="Действие с меню" value={generatedMenuOperation} disabled={generatingMenuPreview || applyingGeneratedMenu} options={[{value:"replace",label:"Новое меню"},{value:"append",label:"Добавить новые пункты"}]} searchPlaceholder="Найти действие" onChange={value => {setGeneratedMenuOperation(value as "append" | "replace"); setGeneratedMenuParents([]); setGeneratedMenuTopLevelCount(count => Math.max(1,count)); setGeneratedMenuPreview(null); setFormError("");}} /></div>}
@@ -5874,7 +5890,7 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
             <small>Выбор пункта переключает целевое меню Header или Footer. Третий уровень — последний.</small>
             <small aria-live="polite">Выбрано разделов: {generatedMenuParents.length}. Новых верхних пунктов: {generatedMenuTopLevelCount}. Вложенных: {generatedMenuParents.length * generatedNestedCount} ({generatedMenuParents.length} × {generatedNestedCount}). Максимум 80 за один раз.</small>
           </section>}
-          <label className="generatedMenuCreatePages"><input type="checkbox" checked={generatedCreatePages} disabled={generatingMenuPreview || applyingGeneratedMenu} onChange={event=>setGeneratedCreatePages(event.target.checked)}/><span>Создать страницы для новых пунктов<small>После добавления меню запустить генерацию и публикацию только новых страниц. Существующий контент сохраняется.</small></span></label>
+          <label className="generatedMenuCreatePages"><input type="checkbox" checked={generatedCreatePages} disabled={generatingMenuPreview || applyingGeneratedMenu} onChange={event=>setGeneratedCreatePages(event.target.checked)}/><span>Создать страницы для новых пунктов<small>Автоматически применить структуру, сгенерировать и опубликовать новые страницы без отдельного подтверждения.</small></span></label>
           <div className="menuStructureSummary">
             <p>{generatedMenuOperation === "replace" ? "Новое меню заменит пункты выбранного Header или Footer. Существующие страницы сайта сохранятся." : "Новые пункты будут добавлены в выбранное меню. Существующие пункты сохранятся."}</p>
             {generatedMenuMode === "casino_reviews"
@@ -5889,16 +5905,17 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
               <header><strong>Предпросмотр</strong><span>{generatedMenuPreview.language.toUpperCase()} · {generatedMenuPreview.geo.toUpperCase()} · {generatedMenuPreview.levels} ур. · верхних пунктов: {generatedMenuPreview.top_level_count} · всего: {generatedPreviewNodes.length}</span></header>
               <p className="generatedMenuPreviewLegend">{generatedMenuOperation === "replace" ? "Серым — текущее меню, которое будет заменено. Ярким — новое меню." : "Серым — существующие пункты. Ярким — новые."} Нажмите карандаш, чтобы изменить название, URL или вложенность.</p>
               {generatedMenuPreview.mode !== "casino_reviews" && renderGeneratedMenuPreview(existingPreviewItems, 0, "", true)}
-              {renderGeneratedMenuPreview(generatedMenuPreview.items)}
+              {renderGeneratedMenuPreview(generatedMenuPreview.items, 0, "", !!menuJobId && selectedMenuJob?.status !== "awaiting_review")}
               {generatedMenuPreview.mode === "casino_reviews" && renderGeneratedMenuPreview(existingPreviewItems, 0, "", true)}
               {generatedPreviewError && <p className="formError" role="status">{generatedPreviewError}</p>}
             </section>
           ) : <div className="siteMenuPreviewEmpty">Нажмите «Сгенерировать», чтобы увидеть будущую структуру.</div>}
           </div>
+          {selectedMenuJob&&<section><p role="status">{menuJobLabel(selectedMenuJob)}</p>{selectedMenuJob.pages.map(page=><div className="menuGenerationPage" key={page.id}><span>{page.topic}<small>{page.slug} · {page.status}</small></span>{page.status==="published"&&<button className="button compact danger" onClick={async()=>{const item=content.find(item=>item.id===page.id);if(item)await deleteNestedPage(item);else if(window.confirm("Удалить опубликованную страницу?")){try{await api(`/content/${page.id}/delete-published`,{method:"POST"});await onChanged();}catch(error){setFormError(String(error));}}}}>Удалить страницу</button>}</div>)}</section>}
           <div className="modalActions">
             <button className="button secondary" type="button" onClick={() => setMenuGeneratorOpen(false)} disabled={generatingMenuPreview || applyingGeneratedMenu}>Отменить</button>
             <button className="button secondary" type="button" onClick={() => void generateMenuStructurePreview()} disabled={generatingMenuPreview || applyingGeneratedMenu || (generatedMenuMode === "thematic" && (generatedMenuTopLevelCount + generatedMenuParents.length * generatedNestedCount === 0 || generatedMenuTopLevelCount + generatedMenuParents.length * generatedNestedCount > 80))}>{generatingMenuPreview ? <CircularOperationProgress value={menuGenerationProgress} /> : <Sparkles size={16} />} {generatingMenuPreview ? `Генерация ${Math.round(menuGenerationProgress)}%` : generatedMenuPreview ? "Сгенерировать заново" : "Сгенерировать"}</button>
-            <button className="button primary" type="button" onClick={() => void addGeneratedMenuToSite()} disabled={!generatedMenuPreview || Boolean(generatedPreviewError) || generatingMenuPreview || applyingGeneratedMenu}>{applyingGeneratedMenu ? <LoaderCircle className="spin" size={16} /> : <Send size={16} />} {applyingGeneratedMenu ? "Добавляем…" : "Добавить на сайт"}</button>
+            <button className="button primary" type="button" onClick={() => void addGeneratedMenuToSite()} disabled={!generatedMenuPreview || !menuJobId || selectedMenuJob?.status !== "awaiting_review" || Boolean(generatedPreviewError) || generatingMenuPreview || applyingGeneratedMenu}>{applyingGeneratedMenu ? <LoaderCircle className="spin" size={16} /> : <Send size={16} />} {applyingGeneratedMenu ? "Добавляем…" : "Добавить на сайт"}</button>
           </div>
         </Modal>
       ) : null}
@@ -9321,7 +9338,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
   return (
     <section className="viewStack sitesManagementView">
       {!embedded && !favoritesOnly ? <>
-        <a className="secondary massStatisticsLink" href="/mass-actions-report">Автопилот Отчет →</a>
+        <a className="secondary massStatisticsLink" href="/mass-actions-report">Планы и отчёты →</a>
         {showStatistics ? <div id="mass-action-statistics"><MassActionStatistics api={api} renderProjects={(ids, refresh) => <SitesView embedded api={api} sites={managedSites.filter(site => ids.includes(site.id))} snapshotUpdatedAt={snapshotUpdatedAt} onSitesChanged={updates => { applySiteUpdates(updates); refresh(); }} currentUsername={currentUsername} readOnly={readOnly} onChanged={onChanged} />} /><button className="secondary" type="button" onClick={() => { setShowStatistics(false); window.history.replaceState(null, "", window.location.pathname); }}>Скрыть статистику</button></div> : null}
       </> : null}
       {!embedded ? <DataPanel title={readOnly ? "Обзор сайтов" : "Панель управления сайтами"}>
@@ -11306,14 +11323,14 @@ function viewTitle(view: AppView, _workspaceTab: WorkspaceTab) {
     published: "Опубликовано",
     providers: "API Providers",
     sites: "Сайты",
-    massActionReport: "Автопилот Отчет",
+    massActionReport: "Планы и отчёты",
     favorites: "Избранное",
     guide: "Инструкции",
     autoReglue: "Массовые действия",
     reglueReserves: "База резервов под переклей",
     autoPilot: "Auto Pilot",
     autoPilotLogs: "Auto Pilot — выполнение",
-    autoPilotReport: "Автопилот Отчет",
+    autoPilotReport: "Планы и отчёты",
     autoReglueGuide: "Инструкция по автопереклеям",
     settings: "Настройки"
   };

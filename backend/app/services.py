@@ -2058,7 +2058,7 @@ async def generate_menu_structure_preview(
         preview_items, _ = transliterate_project_menu_tree(items)
         db.add(models.PublicationLog(
             endpoint_url=f"internal://sites/{site.id}/menu-structure-preview",
-            request_payload={"action":"menu_structure_preview", "project_name":site.name,
+            request_payload={"menu_generation_job_id":db.info.get("menu_generation_job_id"), "action":"menu_structure_preview", "project_name":site.name,
                 "geo":geo, "language":language, "menu_type":payload.menu_type,
                 "mode":payload.mode, "levels":levels, "top_level_count":count, "site_type":site.site_type},
             response_status=200, response_body={"items":preview_items},
@@ -2183,6 +2183,7 @@ Return only valid JSON without Markdown: {{"items":[{{"title":"...","children":[
         endpoint_url=f"internal://sites/{site.id}/menu-structure-preview",
         request_payload={
             "action": "menu_structure_preview",
+            "menu_generation_job_id": db.info.get("menu_generation_job_id"),
             "project_name": site.name,
             "geo": geo,
             "language": language,

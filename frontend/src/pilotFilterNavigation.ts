@@ -9,7 +9,8 @@ export function pilotFilterReturnPath(value: string | null): string | null {
   try {
     const url = new URL(value, "https://pagepilot.invalid");
     if (!["/auto-reglue/pilot", "/auto-reglue/pilot/logs", "/auto-reglue/pilot/report"].includes(url.pathname)) return null;
-    if (!url.searchParams.get("id") || !pilotDomainFilter(url.search)) return null;
+    const maintenance = url.pathname === "/auto-reglue/pilot/report" && url.searchParams.get("maintenance");
+    if (!maintenance && (!url.searchParams.get("id") || !pilotDomainFilter(url.search))) return null;
     return url.pathname + url.search + url.hash;
   } catch { return null; }
 }
