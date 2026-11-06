@@ -225,9 +225,14 @@ def execute_step(db, job_id, send, *, parallel_texts=False):
                                     plan = auto.preview(db, site, 'mass')
                                     group['plans'].append(plan)
                                     db.info['canonical_allocation_plans'].append(plan)
+                                except network.NetworkBusy:
+                                    raise
                                 except (ValueError, network.NetworkConflict, ProjectCacheError, httpx.HTTPError) as error:
                                     result['items'][site.id].update(status='skipped', reason=str(error)[:1500])
                         group['status'] = 'prepared'; save()
+                    except network.NetworkBusy:
+                        db.rollback();job.dispatched_at=None;save()
+                        return {'status':'queued'}
                     except (ValueError, network.NetworkConflict, ProjectCacheError, httpx.HTTPError) as error:
                         db.rollback()
                         for site in ready: result['items'][site.id].update(status='failed', reason=str(error)[:1500])
@@ -243,6 +248,8 @@ def execute_step(db, job_id, send, *, parallel_texts=False):
                     if group['status'] == 'done': continue
                     try:
                         plans = group.get('plans', [])
+                        from app.pilot_path_repair import repair
+                        repair(db,job,result,plans)
                         entries = [{'site_id': p['site_id'], 'preview_token': p['preview_token'],
                                     'request_id': str(uuid5(UUID(job.id), p['site_id']))} for p in plans]
                         constrain(db, group['filter'], set(job.payload['allowed']) if job.payload['allowed'] is not None else None)
@@ -261,6 +268,9 @@ def execute_step(db, job_id, send, *, parallel_texts=False):
                             run.plan = {**run.plan, 'list_launch_id': job.id}
                             result['items'][run.site_id].update(status=run.status, run_id=run.id)
                         group['status'] = 'waiting'; save()
+                    except network.NetworkBusy:
+                        db.rollback();job.dispatched_at=None;save()
+                        return {'status':'queued'}
                     except (ValueError, network.NetworkConflict, ProjectCacheError, httpx.HTTPError) as error:
                         db.rollback()
                         # Recover any runs committed before an interrupted within-network loop.

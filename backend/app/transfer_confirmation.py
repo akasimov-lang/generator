@@ -14,12 +14,13 @@ def record_check(db, run, attempt):
         return False
     limit = BATCH_LIMIT if run.plan.get('batch_id') else 30
     waiting = run.status == 'waiting'
-    again = waiting and attempt < limit
+    busy = waiting and bool(run.plan.get('waiting_for_network'))
+    again = waiting and (busy or attempt < limit)
     run.plan = {**run.plan, 'confirmation': {
         'started_at': old.get('started_at') or (now.isoformat() if waiting else None),
         'checked_at': now.isoformat(),
         'next_check_at': (now + timedelta(seconds=INTERVAL)).isoformat() if again else None,
-        'attempt': attempt, 'limit': limit, 'interval_seconds': INTERVAL,
+        'attempt': attempt, 'limit': limit, 'interval_seconds': INTERVAL, 'waiting_for_network': busy,
         'exhausted': waiting and not again,
     }}
     db.commit()

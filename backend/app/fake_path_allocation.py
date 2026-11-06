@@ -8,6 +8,10 @@ from app.fake_main import normalize_fake_path, next_fake_path
 from app.site_brands import BRANDS, normalized
 
 
+class FakePathConflict(ValueError):
+    """A path reservation can be replaced without changing the approved plan."""
+
+
 def group(site):
     brand = normalized(site.brand)
     for canonical, aliases in BRANDS.items():
@@ -72,4 +76,4 @@ def next_path(db, site, state, cfg, plans=()):
 
 def require_available(db, site, path, plans=()):
     if path and normalize_fake_path(path).casefold() in occupied(db, site, plans):
-        raise ValueError(f'Внутряк {path} уже используется или зарезервирован в другой сетке этого бренда и GEO. Подготовьте новый план.')
+        raise FakePathConflict(f'Внутряк {path} уже используется или зарезервирован в другой сетке этого бренда и GEO.')

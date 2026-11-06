@@ -452,10 +452,16 @@ def auto_reglue_job(run_id: str, confirmation_attempt: int = 0) -> None:
     with SessionLocal() as db:
         from app.transfer_confirmation import record_check, INTERVAL, BATCH_LIMIT
         before = db.get(models.AutoReglueRun, run_id)
-        if before and before.plan.get('batch_id') and confirmation_attempt > BATCH_LIMIT:
+        if before and before.plan.get('batch_id') and confirmation_attempt > BATCH_LIMIT and not before.plan.get('waiting_for_network'):
             record_check(db, before, confirmation_attempt)
             return
-        execute(db, run_id)
+        from app.project_network import NetworkBusy
+        try:
+            execute(db, run_id)
+        except NetworkBusy:
+            db.rollback()
+            auto_reglue_job.apply_async(args=[run_id, confirmation_attempt], countdown=INTERVAL)
+            return
         run = db.get(models.AutoReglueRun, run_id)
         if run and run.status == 'completed' and run.plan.get('list_launch_id') and not run.plan.get('availability_check_queued_at'):
             auto_reglue_availability_job.delay(run_id)
@@ -481,7 +487,8 @@ def auto_reglue_job(run_id: str, confirmation_attempt: int = 0) -> None:
         from app.reglue_recheck import schedule_after_finish
         schedule_after_finish(db, run, lambda rid, delay: auto_reglue_recheck_job.apply_async(args=[rid], kwargs={'automatic': True}, countdown=delay))
         if record_check(db, run, confirmation_attempt):
-            auto_reglue_job.apply_async(args=[run_id, confirmation_attempt + 1], countdown=INTERVAL)
+            next_attempt = confirmation_attempt if run.plan.get('waiting_for_network') else confirmation_attempt + 1
+            auto_reglue_job.apply_async(args=[run_id, next_attempt], countdown=INTERVAL)
 
 @celery_app.task(name="app.worker.schedule_auto_reglue")
 def schedule_auto_reglue_job():

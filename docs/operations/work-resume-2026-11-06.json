@@ -69,5 +69,15 @@
   "cancelled": [
     "Vitalina project/favorites audit: user explicitly cancelled",
     "Recovery report3049 deleted at explicit user request; perform checks directly in chat, do not recreate it"
-  ]
+  ],
+  "transient_plan_recovery_2026_11_07": {
+    "status": "ready_for_deploy",
+    "scope": "Busy network waits retry without consuming confirmation budget; unique fake path repair inside same plan/version; weekly Title/H1 before-after filter",
+    "verification": {
+      "focused": "45 passed",
+      "extended": "159 passed; 33 pre-existing auto_reglue naming failures reproduced unchanged on HEAD",
+      "frontend": "TypeScript and Vite passed"
+    },
+    "next": "Deploy through Git; recover only transient failed rows and exhausted waiting runs under existing plan locks; enrich six weekly reports from confirmed ProjectPageEdit receipts; verify current states. Never mark DNS/content-validation failures as completed."
+  }
 }

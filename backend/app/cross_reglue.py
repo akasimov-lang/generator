@@ -479,6 +479,8 @@ def execute(db, run):
                 raise ValueError('Домен отмечен БАН в GEO проекта.')
             source_state = network.read_network(db, source)
             target_state = network.read_network(db, target)
+            if run.plan.get('waiting_for_network'):
+                run.plan = {**run.plan, 'waiting_for_network': False}
             from app.subdomain_naming import validate_unstarted_plan
             validate_unstarted_plan(db, run, target_state, cross=True)
             if any(plan.get(key) for key in ('rewrite_title_h1', 'rewrite_paragraphs')):
@@ -649,6 +651,7 @@ def execute(db, run):
             run.status = 'completed'; run.phase = 'completed'; run.message = ('Домен из базы резервов добавлен и стал Main. ' if plan.get('reserve_pool_id') else 'Выбранный резерв стал Main. ' if plan.get('use_selected_reserve') else 'Поддомен создан и стал Main. ' if plan.get('create_subdomain') else 'Домен своей сетки стал Main. ' if plan.get('local_target') else 'Домен перенесён и стал Main. ') + 'Альтернейты подтверждены; история сохранена.'; refresh_run(db, run); db.commit()
     except (SourceBusy, network.NetworkConflict) as error:
         db.rollback(); db.refresh(run)
+        run.plan = {**run.plan, 'waiting_for_network': isinstance(error, (SourceBusy, network.NetworkBusy))}
         run.status = 'waiting'; run.message = str(error)[:2000]; refresh_run(db, run); db.commit()
     except Exception as error:
         db.rollback(); db.refresh(run)

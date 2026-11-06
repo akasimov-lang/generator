@@ -5,8 +5,9 @@ from datetime import datetime, timezone, timedelta
 from uuid import UUID, uuid5
 import httpx
 from app import models, auto_reglue as auto, mass_reglue_launch as launch
-from app.project_network import NetworkConflict
+from app.project_network import NetworkConflict, NetworkBusy
 from app.project_cache import ProjectCacheError
+from app.fake_path_allocation import FakePathConflict
 
 
 def components(plans):
@@ -73,6 +74,8 @@ def execute(db,job,send):
                     reason=('Генерация '+ ' и '.join(fields)+'. Публикация после готовности.' if fields else 'Ждём тексты связанного проекта для общего резервирования доменов.'))
             save();continue
         try:
+            from app.pilot_path_repair import repair
+            repair(db,job,result,pending)
             # Reserve every part of the connected component before dispatching any of it.
             batches=defaultdict(list)
             for p in pending:batches[groups[p['site_id']].get('batch_id') or p['site_id']].append(p)
@@ -97,6 +100,18 @@ def execute(db,job,send):
                     result['items'][run.site_id].update(run_id=run.id,status=run.status,reason=None,phase='prepared')
                     append_version(job,result,next(p for p in batch if p['site_id']==run.site_id),job.payload.get('generation_id',job.id))
                 save()
+        except (NetworkBusy, FakePathConflict) as error:
+            db.rollback()
+            for p in pending:
+                run=db.get(models.AutoReglueRun,planned_run_id(job,p))
+                if run:
+                    result['items'][p['site_id']].update(run_id=run.id,status=run.status,reason=run.message)
+                else:
+                    result['items'][p['site_id']].update(status='waiting',
+                        reason='Подбираем уникальный внутряк в текущем плане.' if isinstance(error,FakePathConflict) else str(error),
+                        phase='path_repair' if isinstance(error,FakePathConflict) else 'network_busy')
+            job.dispatched_at=None
+            save()
         except (ValueError,NetworkConflict,ProjectCacheError,httpx.HTTPError) as error:
             db.rollback()
             for p in pending:

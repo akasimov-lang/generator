@@ -143,3 +143,50 @@ def test_recipient_reglued_this_week_still_cannot_restart(launched):
     target.last_reglue_at=datetime.now(timezone.utc);db.commit()
     result=exclusions(db,[{'site_id':target.id,'source_site_id':donor.id}])
     assert 'уже переклеен' in result[target.id]
+
+
+def test_busy_reservation_waits_and_retries_same_approved_plan(launched,monkeypatch):
+    from app import cross_reglue_batch as batch
+    from app.project_network import NetworkBusy
+    db,sites,remotes,parent=launched;site=sites[0]
+    request=uuid4();replan.request(db,parent.id,site.id,request,USER)
+    replan.execute(db,str(request));replan.execute(db,str(request));replan.start(db,parent.id,site.id,request,USER)
+    before=deepcopy(parent.result['groups']);reserve=batch.reserve
+    def busy(*args,**kwargs):raise NetworkBusy('Ожидает освобождения сетки.')
+    monkeypatch.setattr(batch,'reserve',busy)
+    sent=[];launch.execute_step(db,parent.id,sent.append)
+    assert parent.result['items'][site.id]['status']=='waiting'
+    assert parent.status=='queued' and not sent
+    assert parent.result['groups'][0]['plans']==before[0]['plans']
+    monkeypatch.setattr(batch,'reserve',reserve)
+    launch.execute_step(db,parent.id,sent.append)
+    assert len(sent)==1 and parent.result['items'][site.id]['run_id']==sent[0]
+
+
+def test_contested_path_repairs_existing_variant_and_preserves_metadata(launched):
+    from app import pilot_path_repair as repair,pilot_text_jobs
+    from app.cross_reglue_batch import key
+    db,sites,remotes,parent=launched;site,peer=sites
+    request=uuid4();replan.request(db,parent.id,site.id,request,USER)
+    replan.execute(db,str(request));replan.execute(db,str(request));replan.start(db,parent.id,site.id,request,USER)
+    result=deepcopy(parent.result)
+    plan=next(p for g in result['groups'] for p in g.get('plans',[]) if p['site_id']==site.id)
+    old=plan['fake_main_path'];main=plan['new_main'];fingerprint=pilot_text_jobs.fingerprint(plan)
+    original=deepcopy(plan);history=deepcopy(result.get('row_versions',{}))
+    peer.network_state={**(peer.network_state or {}),'fake_main_current':old};db.commit()
+    assert repair.repair(db,parent,result,[plan])==[site.id]
+    assert plan['fake_main_path']!=old and plan['new_main']==main
+    assert plan.get('title_h1_preview')==original.get('title_h1_preview')
+    assert plan.get('canonical_mode')==original.get('canonical_mode')
+    assert pilot_text_jobs.fingerprint(plan)==fingerprint
+    assert plan['fake_main_path'] in plan['alternateMarkup']
+    assert result.get('row_versions',{}).keys()==history.keys()
+    for sid,h in history.items():assert len(result['row_versions'][sid]['versions'])==len(h['versions'])
+    group=next(g for g in result['groups'] if any(p['site_id']==site.id for p in g.get('plans',[])))
+    assert next(p for p in db.get(models.AutoReglueConfig,key(group['batch_id'])).value['plans'] if p['site_id']==site.id)['fake_main_path']==plan['fake_main_path']
+    assert db.get(models.BackgroundJob,str(request)).result['plan']['fake_main_path']==plan['fake_main_path']
+    assert repair.repair(db,parent,result,[plan])==[]
+    assert all(not r.calls for r in remotes.values())
+    sent=[];launch.execute_step(db,parent.id,sent.append)
+    assert len(sent)==1,parent.result['items'][site.id]
+    assert db.get(models.AutoReglueRun,sent[0]).plan['fake_main_path']==plan['fake_main_path']

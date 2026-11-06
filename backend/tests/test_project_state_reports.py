@@ -202,3 +202,26 @@ def test_report_counts_projects_not_receipts_and_ignores_errors_outside_work_sco
     result=reports.public_view(db,job,{'allowed_site_ids':None})
     assert result['layout_projects']==result['showcase_layout_projects']==result['template_projects']==result['menu_projects']==1
     assert result['errors']==0 and result['unverified']==[] and result['status']=='completed'
+
+
+def test_confirmed_title_h1_values_are_extracted_without_markup(env):
+    db,site,_=env
+    old=page('body');old['title']='Pelican Casino old'
+    old['content']['blocks'].append({'type':'header','data':{'level':1,'text':'Pelican <b>old</b> heading'}})
+    new=deepcopy(old);new['title']='Pelican Casino new'
+    new['content']['blocks'][-1]['data']['text']='Pelican <em>new</em> heading'
+    edit=models.ProjectPageEdit(id=str(uuid4()),site_id=site.id,page_key='/',requested_by='test',fingerprint='h1',before_page=old,after_page=new,status='confirmed',updated_at=AT)
+    pending=models.ProjectPageEdit(id=str(uuid4()),site_id=site.id,page_key='/other/',requested_by='test',fingerprint='pending',before_page=old,after_page=new,status='pending',updated_at=AT)
+    db.add_all([edit,pending]);db.commit()
+    row=reports.row(db,site,{},START,END,AT,'cache')
+    assert row['heading_changes']==1
+    assert row['events'][0]['heading_changes']==[
+        {'field':'title','before':'Pelican Casino old','after':'Pelican Casino new'},
+        {'field':'h1','before':'Pelican old heading','after':'Pelican new heading'}]
+    assert row['events'][0]['at']==AT.isoformat()
+
+
+def test_description_only_change_is_not_a_title_h1_rewrite():
+    before=page('body');after={**before,'description':'Updated description'}
+    edit=SimpleNamespace(id='desc',before_page=before,after_page=after,updated_at=AT)
+    assert reports.text_event(edit,'Pelican')['heading_changes']==[]

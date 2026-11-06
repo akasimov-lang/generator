@@ -569,6 +569,8 @@ def _execute(db, run_id):
             require_eligible(site, config(db), cfg,manual=manual_pilot_allowed(db,site.id,run))
             if plan.get('scheduled') and not effective_config(config(db), cfg).schedule_enabled: raise ValueError('Расписание выключено.')
             state = project_network.read_network(db, site)
+            if run.plan.get('waiting_for_network'):
+                run.plan = {**run.plan, 'waiting_for_network': False}
             from app.subdomain_naming import validate_unstarted_plan
             validate_unstarted_plan(db, run, state)
             if run.plan.get('content_return_phase', run.phase) == 'prepared':
@@ -695,6 +697,10 @@ def _execute(db, run_id):
                 'confirmed_at': datetime.now(timezone.utc).isoformat(),
             }}
             run.status = 'completed'; run.phase = 'completed'; run.message = 'Новый Main и альтернейты подтверждены.'; refresh_run(db, run); db.commit()
+        except project_network.NetworkBusy as error:
+            db.rollback(); db.refresh(run)
+            run.plan = {**run.plan, 'waiting_for_network': True}
+            run.status = 'waiting'; run.message = str(error); db.commit()
         except Exception as error:
             db.rollback(); run = db.get(models.AutoReglueRun, run_id)
             if run and run.status != 'cancelled':

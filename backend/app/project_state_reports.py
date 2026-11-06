@@ -67,6 +67,18 @@ def network_events(operations):
             events.append({'id':op.id,'kind':op.action,'at':at,'label':names[op.action],'source':'confirmed_operation'})
     return events
 
+def heading_changes(before, after):
+    """Read actual saved values, not an unconfirmed generation preview."""
+    from app.homepage_headings import extract
+    from app.page_word_count import VisibleText
+    def values(page):
+        parser=VisibleText();parser.feed(str(page.get('title') or ''))
+        h1=extract({'data':{'pages':[{**page,'slug':'/'}]}})['h1']
+        return {'title':' '.join(''.join(parser.parts).split()),'h1':h1}
+    old,new=values(before),values(after)
+    return [{'field':key,'before':old[key],'after':new[key]} for key in ('title','h1') if old[key]!=new[key]]
+
+
 def text_event(edit,brand):
     from app.page_word_count import page_visible_text,page_word_count
     from app.content_metrics import counts,comparison
@@ -78,7 +90,7 @@ def text_event(edit,brand):
     text_changed=old!=new
     if not text_changed and not metadata:return None
     a,b=paragraph_metrics(before),paragraph_metrics(after)
-    return {'id':edit.id,'kind':'text','label':'Изменение текста' if text_changed else 'Изменение метаданных','at':iso(edit.updated_at),'path':after.get('slug') or before.get('slug') or '/', 'text_changed':text_changed,'metadata':metadata,'words_before':page_word_count(before),'words_after':page_word_count(after),'before_counts':counts(before,brand),'after_counts':counts(after,brand),**comparison(before,after),'paragraphs_before':a['count'],'paragraphs_after':b['count'],'paragraphs_added':len(set(b['ids'])-set(a['ids'])) if a['ids'] is not None and b['ids'] is not None else None,'paragraphs_removed':len(set(a['ids'])-set(b['ids'])) if a['ids'] is not None and b['ids'] is not None else None,'source':'confirmed_page_edit'}
+    return {'id':edit.id,'kind':'text','label':'Изменение текста' if text_changed else 'Изменение метаданных','at':iso(edit.updated_at),'path':after.get('slug') or before.get('slug') or '/', 'text_changed':text_changed,'metadata':metadata,'heading_changes':heading_changes(before,after),'words_before':page_word_count(before),'words_after':page_word_count(after),'before_counts':counts(before,brand),'after_counts':counts(after,brand),**comparison(before,after),'paragraphs_before':a['count'],'paragraphs_after':b['count'],'paragraphs_added':len(set(b['ids'])-set(a['ids'])) if a['ids'] is not None and b['ids'] is not None else None,'paragraphs_removed':len(set(a['ids'])-set(b['ids'])) if a['ids'] is not None and b['ids'] is not None else None,'source':'confirmed_page_edit'}
 
 def publication_events(db,site_id,start,end):
     """First confirmed create per path, never retries, updates, or draft generation."""
@@ -141,7 +153,7 @@ def row(db,site,state,start,end,observed_at,source):
     events+=[e for e in maintenance_events(db,site.id,start,end) if e['kind']!='showcase' or not e.get('report_url') or e['report_url'] not in report_urls]
     events.sort(key=lambda e:(e['at'],e['id']),reverse=True)
     fibery=site.fibery_name or '';number=re.search(r'#\s*(\d+)',fibery)
-    return {'site_id':site.id,'project':site.name,'brand':site.brand,'geo':site.cache_geo,'fibery_name':fibery,'fibery_url':'https://hzhz.fibery.io/favorites/Alfasearch_Config/SEO_Projects/'+number.group(1) if number else None,**current,'reglue_date':latest('reglue',current['main']),'fake_date':latest('fake_path',current['fake_path']),'observed_at':iso(observed_at),'state_source':source,'status':'completed','events':events,'pages_added':sum(e['kind']=='page_added' for e in events),'fake_pages_created':sum(e['kind']=='fake_path' and e.get('created',False) for e in events),'text_changes':sum(e['kind']=='text' and e['text_changed'] for e in events),**work.work_flags(events)}
+    return {'site_id':site.id,'project':site.name,'brand':site.brand,'geo':site.cache_geo,'fibery_name':fibery,'fibery_url':'https://hzhz.fibery.io/favorites/Alfasearch_Config/SEO_Projects/'+number.group(1) if number else None,**current,'reglue_date':latest('reglue',current['main']),'fake_date':latest('fake_path',current['fake_path']),'observed_at':iso(observed_at),'state_source':source,'status':'completed','events':events,'pages_added':sum(e['kind']=='page_added' for e in events),'fake_pages_created':sum(e['kind']=='fake_path' and e.get('created',False) for e in events),'text_changes':sum(e['kind']=='text' and e['text_changed'] for e in events),'heading_changes':sum(bool(e.get('heading_changes')) for e in events),**work.work_flags(events)}
 
 def collect_one(db,job_id,site_id,*,live=True):
     job=db.get(models.BackgroundJob,job_id);site=db.get(models.Site,site_id)
@@ -180,6 +192,7 @@ def public_view(db,job,user,detail=True):
     from app.report_ids import get
     result={'id':job.id,'number':get(db,job),'name':job.payload['name'],'kind':job.payload['report_kind'],'brand':job.payload.get('brand'),'status':job.status,'created_at':job.created_at,'finished_at':job.finished_at,'period_start':job.payload['period_start'],'period_end':job.payload['period_end'],'scope':len(scope),'checked':sum('state_source' in r for r in all_rows),'total':len(rows),'projects_with_work':sum(bool(r.get('events')) for r in rows),'pages_added':sum(r.get('pages_added',0) for r in rows),'text_changes':sum(r.get('text_changes',0) for r in rows),'layout_projects':sum(r.get('layout_work',False) for r in rows),'showcase_projects':sum(r.get('showcase_work',False) for r in rows),'showcase_layout_projects':sum(r.get('showcase_layout_work',False) for r in rows),'template_projects':sum(r.get('template_work',False) for r in rows),'menu_projects':sum(r.get('menu_work',False) for r in rows),'errors':sum(r.get('status')=='partial' for r in rows)}
     result['common_geo']=common_geo
+    result['heading_changes']=sum(r.get('heading_changes',0) for r in rows)
     if detail:result.update(entries=rows,unverified=[{'site_id':r['site_id'],'project':r['project'],'error':r.get('state_error')} for r in rows if r.get('status')=='partial'])
     return result
 

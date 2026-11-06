@@ -26,6 +26,10 @@ class NetworkConflict(ValueError):
     pass
 
 
+class NetworkBusy(NetworkConflict):
+    """A held advisory lock is a retryable wait, not an invalid plan."""
+
+
 class DomainTypeUpdate(BaseModel):
     domain: str = Field(min_length=1, max_length=253)
     domain_type: Literal["drop", "newreg"]
@@ -85,7 +89,7 @@ def network_lock(db, site_id):
         db.info[slot] = connection
     try:
         if not connection.scalar(text("SELECT pg_try_advisory_lock(:key)"), {"key": key}):
-            raise NetworkConflict("С сеткой уже выполняется операция. Обновите данные через несколько секунд.")
+            raise NetworkBusy("Ожидает освобождения сетки. Продолжение выполняется автоматически.")
         try:
             yield
         finally:

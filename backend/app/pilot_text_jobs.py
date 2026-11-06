@@ -19,6 +19,8 @@ def generation(job):
 
 
 def fingerprint(plan):
+    if plan.get('text_fingerprint_before_path_repair'):
+        return plan['text_fingerprint_before_path_repair']
     return auto.digest({k:v for k,v in plan.items() if k not in {
         'preview_token', *(field + suffix for field in FIELDS for suffix in ('_preview','_error'))}})
 

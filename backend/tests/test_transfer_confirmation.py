@@ -81,3 +81,25 @@ def test_one_invalid_scheme_does_not_fail_other_projects_in_preview(pool):
     assert preview['skipped'][0]['site_id']==bad.id
     assert 'полный адрес' in preview['skipped'][0]['error']
     assert all(not r.calls for r in remotes.values())
+
+
+def test_waiting_for_network_does_not_exhaust_remote_confirmation_budget(pool):
+    db,*_=pool;run=prepare(pool)
+    run.plan={**run.plan,'batch_id':str(uuid4()),'waiting_for_network':True};run.status='waiting';db.commit()
+    assert confirmation.record_check(db,run,confirmation.BATCH_LIMIT)
+    assert not confirmation.view(run)['exhausted']
+    run.plan={**run.plan,'waiting_for_network':False};db.commit()
+    assert not confirmation.record_check(db,run,confirmation.BATCH_LIMIT)
+
+
+def test_worker_requeues_busy_run_with_same_confirmation_attempt(pool,monkeypatch):
+    from contextlib import nullcontext
+    from app import worker
+    from app.project_network import NetworkBusy
+    db,*_=pool;run=prepare(pool)
+    monkeypatch.setattr(worker,'SessionLocal',lambda:nullcontext(db))
+    def busy(*args):raise NetworkBusy('Занято')
+    monkeypatch.setattr(auto,'execute',busy)
+    sent=[];monkeypatch.setattr(worker.auto_reglue_job,'apply_async',lambda **kw:sent.append(kw))
+    worker.auto_reglue_job.run(run.id,3)
+    assert sent==[{'args':[run.id,3],'countdown':confirmation.INTERVAL}]
