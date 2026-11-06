@@ -108,6 +108,8 @@ def finalize(db, job, result):
     # Each iteration can only add a previously skipped target. Bound the loop by
     # the saved selection, and never revise a finalized/reviewed plan on a read.
     for _ in range(len(result['items']) + 1):
+        if job.payload.get('preserved_target_plans'):
+            break
         previous = plans
         desired = count_share(len(plans), shares['subdomains'])
         plans = allocate_subdomains(db, job, cfg, previous, desired, mixed)

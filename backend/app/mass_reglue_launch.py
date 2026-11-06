@@ -195,7 +195,12 @@ def execute_step(db, job_id, send, *, parallel_texts=False):
                         if job.payload['execution_mode'] == 'cross_network':
                             from app.cross_reglue_batch import build
                             db.info['reglue_preview_domains'] = {p['new_main'] for g in result['groups'] for p in g.get('plans', [])} if preview_only else set()
-                            try: preview = build(db, ready, job.payload['actor'])
+                            try:
+                                if job.payload.get('preserved_target_plans'):
+                                    from app.pilot_report_conversion import build_preserved
+                                    preview = build_preserved(db, job, ready)
+                                else:
+                                    preview = build(db, ready, job.payload['actor'])
                             finally: db.info.pop('reglue_preview_domains', None)
                             group.update(batch_id=preview['batch_id'], plans=preview['plans'])
                             for skip in preview['skipped']:

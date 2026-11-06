@@ -10574,3 +10574,7 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .networkButtonCaption .networkEditStatus { display: block; max-height: 46px; overflow: hidden; overflow-wrap: anywhere; font-size: 11px; line-height: 15px; }
 .networkRetryLink { padding: 0; border: 0; background: none; color: var(--accent, #405de6); font: inherit; text-decoration: underline; cursor: pointer; }
 @media (max-width: 700px) { .networkMainReserveRow { row-gap: 12px; } }
+
+.pilotContentShare { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; margin: 14px 0; }
+.pilotContentShare input { width: 76px; padding: 5px 8px; }
+.pilotContentShare small { color: var(--muted); font-size: 12px; }

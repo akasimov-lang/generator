@@ -556,9 +556,19 @@ def pilot_tasks(user: AuthUser, offset: int = Query(0,ge=0), limit: int = Query(
 
 
 @router.get('/maintenance-reports/{report_id}')
-def maintenance_report(report_id: UUID, user: AuthUser, db: Session = Depends(get_db)):
+def maintenance_report(report_id: UUID, user: AuthUser, db: Session = Depends(get_db), archive: bool = False):
     from app import maintenance_reports
     try:
+        job = db.get(models.BackgroundJob, str(report_id))
+        if job and job.payload.get('maintenance_archive_key'):
+            from app import auto_pilot, report_ids
+            auto_pilot.get(db, report_id, user)
+            if not archive:
+                return {'pilot_report_url':f'/auto-reglue/pilot?id={job.id}'}
+            from types import SimpleNamespace
+            saved = db.get(models.AutoReglueConfig, job.payload['maintenance_archive_key']).value
+            historic = SimpleNamespace(id=job.id, kind=maintenance_reports.KIND, payload=saved['payload'], result=saved['result'], status=saved['status'], created_at=job.created_at, started_at=job.created_at, finished_at=None, updated_at=saved['archived_at'])
+            return {**maintenance_reports.view(historic), 'report_id':report_ids.get(db,job), 'can_exclude':False}
         return maintenance_reports.view(maintenance_reports.get(db, report_id, user), db)
     except ValueError as error:
         raise HTTPException(404, 'Отчёт не найден.') from error

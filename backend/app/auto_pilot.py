@@ -260,6 +260,8 @@ def start(db, job_id, user):
             raise NetworkConflict('Не все абзацы подготовлены. Исправьте ошибки в строках до запуска.')
         if any(p['site_id'] not in job.payload['site_ids'] or p.get('source_site_id',p['site_id']) in job.payload.get('excluded_site_ids',[]) for p in plans):
             raise NetworkConflict('В плане остался исключённый проект. Обновите план.')
+        if job.payload.get('preserved_target_plans') and any(p['new_main'] != job.payload['preserved_target_plans'].get(p['site_id'],{}).get('new_main') for p in plans):
+            raise NetworkConflict('Целевой домен отличается от сохранённого выбора. Обновите план.')
         if not job.payload.get('allow_stock_drops',True) and any(p.get('reserve_pool_id') and p.get('domain_type')=='drop' for p in plans):
             raise NetworkConflict('Дропы из хранилища выключены. Пересчитайте план без них.')
         if not plans: raise ValueError('В плане нет проектов, готовых к переклею.')
@@ -461,6 +463,13 @@ def view(db,job):
         snapshot['paragraphs_progress']=paragraphs
         snapshot['progress']['percent']=min(99,70+round(30*sum(p['done'] for p in text_progress)/max(1,sum(p['total'] for p in text_progress)))) if text_progress else min(70,round(snapshot['progress']['percent']*.7))
     from app.report_membership import can_exclude
+    for row in snapshot['items']:
+        pinned = job.payload.get('preserved_target_plans', {}).get(row['site_id'])
+        if pinned and not row.get('new_main'):
+            row['new_main'] = pinned['new_main']
+            row['source_project'] = pinned.get('source_project')
+    snapshot['targets_preserved'] = bool(job.payload.get('preserved_target_plans'))
+    snapshot['maintenance_archive_url'] = f'/auto-reglue/pilot/report?maintenance={job.id}&archive=1' if job.payload.get('maintenance_archive_key') else None
     snapshot['allow_stock_drops'] = job.payload.get('allow_stock_drops', True)
     snapshot['can_exclude'] = can_exclude(job)
     snapshot['excluded_projects'] = [{k:v for k,v in e.items() if k not in {'entry','previous_result'}} for e in job.payload.get('excluded_projects',[])]
@@ -512,7 +521,11 @@ def refresh_row(db, job_id, site_id, request_id, user):
                 db.info.pop('mass_participant_ids', None)
                 if job.payload['execution_mode'] == 'cross_network':
                     from app.cross_reglue_batch import build
-                    preview = build(db, [site], user['username'])
+                    if job.payload.get('preserved_target_plans'):
+                        from app.pilot_report_conversion import build_preserved
+                        preview = build_preserved(db, job, [site])
+                    else:
+                        preview = build(db, [site], user['username'])
                     if not preview['plans']: raise ValueError(preview['skipped'][0]['error'])
                     current = preview['plans'][0]
                     # Keep the new receipt separate from the already reviewed group manifest.

@@ -121,7 +121,7 @@ export function MaintenanceReport({api,id}:{api:Api;id:string}) {
  const request=React.useRef(0);
  const load=React.useCallback(async()=>{
   const sequence=++request.current;setLoading(true);
-  try{const value=normalizeMaintenanceReport(await api<unknown>(`/auto-reglue/maintenance-reports/${encodeURIComponent(id)}`,{cache:"no-store"}));if(sequence===request.current){setReport(value);setError("");}}
+  try{const archive=new URLSearchParams(window.location.search).get("archive")==="1";const raw=await api<unknown>(`/auto-reglue/maintenance-reports/${encodeURIComponent(id)}${archive?"?archive=true":""}`,{cache:"no-store"});if(sequence!==request.current)return;if(object(raw).pilot_report_url===`/auto-reglue/pilot?id=${id}`){window.location.replace(`/auto-reglue/pilot?id=${id}`);return;}const value=normalizeMaintenanceReport(raw);setReport(value);setError("");}
   catch(e){if(sequence===request.current)setError(e instanceof Error?e.message:"Не удалось загрузить отчёт");}
   finally{if(sequence===request.current)setLoading(false);}
  },[api,id]);
