@@ -525,6 +525,7 @@ class PilotPreviewRequest(PilotSelection):
     request_id: UUID
     title_rewrite_mode: TitleRewriteMode = 'minimal'
     planning_mode: PlanningMode = 'percentages'
+    allow_stock_drops: bool = True
     percentages: PilotPercentages | None = None
     brand: str = Field(default="", max_length=200)
     geo: str = Field(default="", max_length=16)
@@ -536,7 +537,7 @@ def prepare_pilot(payload: PilotPreviewRequest, user: AuthUser, db: Session = De
     return auto_pilot.view(db, call(lambda: auto_pilot.create(db, payload.request_id, user, payload.brand, payload.geo,
         payload.percentages.model_dump() if payload.percentages else None,
         brands=payload.brands if 'brands' in payload.model_fields_set else None,
-        geos=payload.geos if 'geos' in payload.model_fields_set else None, title_rewrite_mode=payload.title_rewrite_mode, scope_mode=payload.scope_mode, planning_mode=payload.planning_mode)))
+        geos=payload.geos if 'geos' in payload.model_fields_set else None, title_rewrite_mode=payload.title_rewrite_mode, scope_mode=payload.scope_mode, planning_mode=payload.planning_mode, allow_stock_drops=payload.allow_stock_drops)))
 
 
 @router.get('/pilot')
@@ -618,7 +619,7 @@ def reprepare_pilot(job_id: UUID, payload: PilotPreviewRequest, user: AuthUser, 
         brands=payload.brands if 'brands' in payload.model_fields_set else None,
         geos=payload.geos if 'geos' in payload.model_fields_set else None, scope_mode=payload.scope_mode))
     job = call(lambda: pilot_replanning.request(db, job_id, payload.request_id, user, scope=scope,
-        percentages=payload.percentages.model_dump() if payload.percentages else None, title_rewrite_mode=payload.title_rewrite_mode, planning_mode=payload.planning_mode))
+        percentages=payload.percentages.model_dump() if payload.percentages else None, title_rewrite_mode=payload.title_rewrite_mode, planning_mode=payload.planning_mode, allow_stock_drops=payload.allow_stock_drops))
     return auto_pilot.view(db, job)
 
 

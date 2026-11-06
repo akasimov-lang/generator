@@ -5,7 +5,8 @@ def metadata(job, *, status=None, finished_at=None):
     status = status or job.status
     if planning:
         prepared = job.status == 'completed' if job.kind == 'auto_pilot_preview' else bool(job.payload.get('planning_finished_at') or job.payload.get('planning_updated_at'))
-        label = 'План готов' if prepared else 'Ошибка планирования' if status == 'failed' else 'Планирование'
+        blocked = any(r.get('planning_status') == 'blocked' for r in (getattr(job, 'result', None) or {}).get('entries', []))
+        label = 'План требует обновления' if blocked else 'План готов' if prepared else 'Ошибка планирования' if status == 'failed' else 'Планирование'
         return {'planning_only':True,'display_status':label,'finished_at':None,
                 'planning_finished_at':job.finished_at if job.kind == 'auto_pilot_preview' else job.payload.get('planning_finished_at')}
     if job.kind == 'maintenance_report':

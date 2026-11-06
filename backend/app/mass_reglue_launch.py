@@ -157,6 +157,7 @@ def execute_step(db, job_id, send, *, parallel_texts=False):
                 from app.pilot_streaming import execute
                 return execute(db,job,send)
             db.info['manual_pilot_job_id']=job.id if not preview_only and job.payload.get('manual_start') else None
+            db.info['pilot_allow_stock_drops'] = job.payload.get('allow_stock_drops',True)
             db.info['auto_pilot_preview'] = preview_only
             db.info['pilot_mixed'] = preview_only and job.payload.get('planning_mode') == 'mixed'
             db.info['prefer_own_domains'] = True
@@ -326,6 +327,7 @@ def execute_step(db, job_id, send, *, parallel_texts=False):
         db.info.pop('parallel_pilot_texts', None)
         db.info.pop('manual_pilot_job_id', None)
         db.info.pop('auto_pilot_preview', None)
+        db.info.pop('pilot_allow_stock_drops', None)
         db.info.pop('pilot_mixed', None)
         db.info.pop('prefer_own_domains', None)
         db.info.pop('canonical_allocation_plans', None)

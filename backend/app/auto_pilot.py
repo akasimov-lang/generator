@@ -173,7 +173,7 @@ def selected_scope_sites(sites, scope):
     return included
 
 
-def create(db, request_id, user, brand='', geo='', percentages=None, *, brands=None, geos=None, title_rewrite_mode='minimal', scope_mode='include', planning_mode='percentages'):
+def create(db, request_id, user, brand='', geo='', percentages=None, *, brands=None, geos=None, title_rewrite_mode='minimal', scope_mode='include', planning_mode='percentages', allow_stock_drops=True):
     allowed = user.get('allowed_site_ids')
     scope = selection(brand=brand, geo=geo, brands=brands, geos=geos, scope_mode=scope_mode)
     # Retrying the same HTTP request uses its original scope, even if projects changed.
@@ -186,7 +186,7 @@ def create(db, request_id, user, brand='', geo='', percentages=None, *, brands=N
         raise ValueError('Нет проектов для выбранного бренда и GEO.')
     with network_lock(db,'pilot-create:'+user['username']):
         job=launch.enqueue(db,request_id,ids,user['username'],None if allowed is None else set(allowed),preview_only=True)
-        job.payload = {**job.payload, 'planning_filter': scope.model_dump(), **settings}
+        job.payload = {**job.payload, 'planning_filter': scope.model_dump(), 'allow_stock_drops':bool(allow_stock_drops), **settings}
         if planning_mode == 'mixed': job.payload = {**job.payload, 'execution_mode':'cross_network'}
         job.payload = {**job.payload, 'draft_name': draft_name(job)}
         db.commit()
@@ -260,6 +260,8 @@ def start(db, job_id, user):
             raise NetworkConflict('Не все абзацы подготовлены. Исправьте ошибки в строках до запуска.')
         if any(p['site_id'] not in job.payload['site_ids'] or p.get('source_site_id',p['site_id']) in job.payload.get('excluded_site_ids',[]) for p in plans):
             raise NetworkConflict('В плане остался исключённый проект. Обновите план.')
+        if not job.payload.get('allow_stock_drops',True) and any(p.get('reserve_pool_id') and p.get('domain_type')=='drop' for p in plans):
+            raise NetworkConflict('Дропы из хранилища выключены. Пересчитайте план без них.')
         if not plans: raise ValueError('В плане нет проектов, готовых к переклею.')
         from app.pilot_schemes import validate_single_alternate
         for plan in plans:
@@ -459,6 +461,7 @@ def view(db,job):
         snapshot['paragraphs_progress']=paragraphs
         snapshot['progress']['percent']=min(99,70+round(30*sum(p['done'] for p in text_progress)/max(1,sum(p['total'] for p in text_progress)))) if text_progress else min(70,round(snapshot['progress']['percent']*.7))
     from app.report_membership import can_exclude
+    snapshot['allow_stock_drops'] = job.payload.get('allow_stock_drops', True)
     snapshot['can_exclude'] = can_exclude(job)
     snapshot['excluded_projects'] = [{k:v for k,v in e.items() if k not in {'entry','previous_result'}} for e in job.payload.get('excluded_projects',[])]
     from app.report_status import metadata as status_metadata
@@ -504,7 +507,7 @@ def refresh_row(db, job_id, site_id, request_id, user):
             info = dict(db.info)
             try:
                 constrain(db, group['filter'], set(job.payload['allowed']) if job.payload['allowed'] is not None else None, [site])
-                db.info.update(auto_pilot_preview=True, prefer_own_domains=True, pilot_mixed=job.payload.get('planning_mode') == 'mixed',
+                db.info.update(auto_pilot_preview=True, prefer_own_domains=True, pilot_allow_stock_drops=job.payload.get('allow_stock_drops',True), pilot_mixed=job.payload.get('planning_mode') == 'mixed',
                     canonical_allocation_plans=all_plans, reglue_preview_domains={p['new_main'] for p in all_plans})
                 db.info.pop('mass_participant_ids', None)
                 if job.payload['execution_mode'] == 'cross_network':

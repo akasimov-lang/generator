@@ -7,7 +7,7 @@ const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHARE_KEYS=["subdomains","without_alternates","redirects","title_h1","paragraphs"] as const;
 const PREFIX="pagepilot:pilot-drops:";
 type StorageLike=Pick<Storage,"getItem"|"setItem"|"removeItem">;
-export type PilotDraftForm={selection:PilotSelection;titleMode:TitleRewriteMode;planningMode?:"percentages"|"mixed";shares:Record<typeof SHARE_KEYS[number],string>&{internal_pages?:string}};
+export type PilotDraftForm={allowStockDrops?:boolean;selection:PilotSelection;titleMode:TitleRewriteMode;planningMode?:"percentages"|"mixed";shares:Record<typeof SHARE_KEYS[number],string>&{internal_pages?:string}};
 
 /** Only a planner or one exact saved draft can be a return destination. */
 export function pilotDraftPath(value:string):string|null {

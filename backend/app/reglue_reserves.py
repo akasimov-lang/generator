@@ -112,6 +112,8 @@ def require_unused(site, state, domain):
 
 
 def require_available(db, row, target, state, *, run=None, assigned=False):
+    if row is not None and row.domain_type == 'drop' and db.info.get('pilot_allow_stock_drops') is False:
+        raise ValueError('Дропы из хранилища выключены для этого плана.')
     from app.cross_reglue import brand_key, unique_membership
     if row is None or (run is None and row.status != 'available') or (run is not None and row.run_id != run.id):
         raise ValueError('Домен из базы резервов уже занят другим запуском. Подготовьте планы заново.')

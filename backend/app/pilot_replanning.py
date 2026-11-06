@@ -41,10 +41,10 @@ def apply_pending(db, job):
     return True
 
 
-def request(db, job_id, request_id, user, *, scope, percentages, title_rewrite_mode, planning_mode='percentages'):
+def request(db, job_id, request_id, user, *, scope, percentages, title_rewrite_mode, planning_mode='percentages', allow_stock_drops=True):
     from app.auto_pilot import get, scope_sites, selected_scope_sites
     from app.pilot_mixed import parameters as settings
-    parameters = {'planning_filter': scope.model_dump(),
+    parameters = {'planning_filter': scope.model_dump(), 'allow_stock_drops':bool(allow_stock_drops),
         **settings(db, percentages, title_rewrite_mode, planning_mode)}
     signature = auto.digest(parameters)
     receipt_key = 'pilot-replan-request:' + str(request_id)
