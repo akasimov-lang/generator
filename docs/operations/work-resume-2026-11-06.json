@@ -1,9 +1,8 @@
 {
-  "updated_at": "2026-11-06T22:17:14.453321+00:00",
-  "last_confirmed_production": "f94dff8e7da65ecca6fc2ef098597ae815f746c2",
+  "updated_at": "2026-11-06T22:26:00.630808+00:00",
+  "last_confirmed_production": "2c4d1c4bcf710f95f1fb3748060435faf4cc07a3",
   "in_this_release": [
-    "Ignore technical empty menu synchronizations and IDs-only resends in weekly work counts; show actual added/removed/reordered items",
-    "Merge layout and showcase layout into one Layout filter; remove redundant With work filter"
+    "Show country flag on weekly report cards and detail title only when all included accessible projects share normalized GEO; remove redundant With work card total"
   ],
   "next_authorized_work": [
     "Continue direct chat review, without separate recovery report: inspect Lemon preview8pending/no plans, start remaining prepared alternatives after native fresh checks, resolve stale donor snapshots",
@@ -61,7 +60,8 @@
     "Mendoza and Wartenweiler custom showcases applied and public checks passed; Dominiqueduroseau remains pending",
     "5545eb5 deployed and healthy; six weekly reports refreshed01:01MSK: General37layout, Pelican2template repairs; menu actions included",
     "carboncraftworks.com native header updated: six existing Czech menu destinations; shared header verified on all7pages, mobile390/320px navigation/Escape/no overflow passed; no separate report created",
-    "f94dff8 deployed and healthy: category filters and matching concrete work details visible in all six reports; carbon header work included in BetOnRed weekly report"
+    "f94dff8 deployed and healthy: category filters and matching concrete work details visible in all six reports; carbon header work included in BetOnRed weekly report",
+    "2c4d1c4 deployed and healthy; six existing report menu events rebuilt: meaningful changes only, General menu count8, drop/inner23; merged Layout and removed With work filter."
   ],
   "ready_for_release": [
     "18targeted report tests passed; TypeScript and Vite build passed"

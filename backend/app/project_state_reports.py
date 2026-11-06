@@ -13,6 +13,7 @@ from app.security import AuthUser
 from app.reglue_history import utc
 from app.network_state import domain_name, project_network_state
 from app.domain_classification import registrable_root
+from app.pilot_scope import country_key
 from app import report_work_evidence as work
 
 TASK='project_state_report'
@@ -173,8 +174,12 @@ def public_view(db,job,user,detail=True):
     if not scope:raise HTTPException(404,'Отчёт не найден.')
     all_rows=[r for r in (job.result or {}).get('entries',[]) if r['site_id'] in scope]
     rows=[r for r in all_rows if r.get('included',False)]
+    countries={country_key(r.get('geo')) for r in rows}
+    common_geo=next(iter(countries)) if len(countries)==1 else None
+    if not common_geo or not re.fullmatch('[A-Z]{2}',common_geo):common_geo=None
     from app.report_ids import get
     result={'id':job.id,'number':get(db,job),'name':job.payload['name'],'kind':job.payload['report_kind'],'brand':job.payload.get('brand'),'status':job.status,'created_at':job.created_at,'finished_at':job.finished_at,'period_start':job.payload['period_start'],'period_end':job.payload['period_end'],'scope':len(scope),'checked':sum('state_source' in r for r in all_rows),'total':len(rows),'projects_with_work':sum(bool(r.get('events')) for r in rows),'pages_added':sum(r.get('pages_added',0) for r in rows),'text_changes':sum(r.get('text_changes',0) for r in rows),'layout_projects':sum(r.get('layout_work',False) for r in rows),'showcase_projects':sum(r.get('showcase_work',False) for r in rows),'showcase_layout_projects':sum(r.get('showcase_layout_work',False) for r in rows),'template_projects':sum(r.get('template_work',False) for r in rows),'menu_projects':sum(r.get('menu_work',False) for r in rows),'errors':sum(r.get('status')=='partial' for r in rows)}
+    result['common_geo']=common_geo
     if detail:result.update(entries=rows,unverified=[{'site_id':r['site_id'],'project':r['project'],'error':r.get('state_error')} for r in rows if r.get('status')=='partial'])
     return result
 
