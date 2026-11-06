@@ -41,10 +41,16 @@ def view(db, row):
     result = row.result or {}
     task_id = (result.get('applied') or {}).get('page_task_id')
     pages = db.scalars(select(models.ContentItem).where(models.ContentItem.task_id == task_id)).all() if task_id else []
+    progress = {'total': len(pages), 'generated': sum(p.generated_at is not None for p in pages),
+                'published': sum(p.status == 'published' for p in pages),
+                'deleted': sum(p.status == 'deleted' for p in pages),
+                'errors': sum(p.status in {'generation_failed', 'publication_failed', 'failed'} for p in pages)}
     return {'id': row.id, 'status': row.status, 'error': row.error, 'created_at': row.created_at,
             'settings': row.payload['settings'], 'operation': row.payload['operation'],
             'create_pages': row.payload['create_pages'], **result,
-            'pages': [{'id': p.id, 'topic': p.topic, 'slug': p.slug, 'status': p.status} for p in pages]}
+            'progress': progress,
+            'pages': [{'id': p.id, 'topic': p.topic, 'slug': p.slug, 'status': p.status,
+                       'generation_progress': p.generation_progress, 'error': p.generation_error} for p in pages]}
 
 
 def get(db, site_id, job_id):

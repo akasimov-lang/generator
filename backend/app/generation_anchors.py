@@ -6,6 +6,20 @@ from app import models
 from app.auto_lb_keywords import POLISH
 from app.brand_home_links import apply_brand_home_links,link_brand_paragraph
 
+HOME_LABELS = {'en': 'Home', 'de': 'Startseite', 'pl': 'Strona główna', 'cs': 'Domů',
+    'sk': 'Domov', 'sl': 'Domov', 'da': 'Forside', 'sv': 'Startsida', 'no': 'Hjem',
+    'fi': 'Etusivu', 'et': 'Avaleht', 'lv': 'Sākumlapa', 'lt': 'Pradžia',
+    'fr': 'Accueil', 'it': 'Pagina iniziale', 'es': 'Inicio', 'pt': 'Página inicial',
+    'nl': 'Home', 'ro': 'Acasă', 'hu': 'Főoldal', 'tr': 'Ana sayfa',
+    'az': 'Ana səhifə', 'ru': 'Главная', 'uk': 'Головна', 'bg': 'Начало',
+    'el': 'Αρχική', 'ar': 'الرئيسية', 'ja': 'ホーム', 'ko': '홈', 'zh': '首页'}
+
+
+def home_label(site, item=None):
+    language = getattr(site, 'cache_language', None) or getattr(getattr(item, 'task', None), 'language', '')
+    code = str(language).lower().replace('_', '-').split('-')[0]
+    return HOME_LABELS.get(code) or site.name
+
 
 def general(site):
     return bool(site and (site.site_type=='general' or not site.site_type and (not site.brand or site.brand.strip().casefold()=='общие ключи')))
@@ -48,12 +62,18 @@ def save_settings(db,site,value):
 
 def select_anchor(db,item,site):
     context=item.generation_context or {}
-    if context.get('homepage_interlinking') is False:return None
+    # A root-relative link is mandatory for every newly generated internal page.
+    # Keep legacy request payloads compatible, but do not let their old opt-out
+    # remove the link during generation or the pre-publication check.
+    if context.get('homepage_interlinking') is not True:
+        context = {**context, 'homepage_interlinking': True}
+        item.generation_context = context
+        db.commit()
     saved=context.get('homepage_anchor')
     if isinstance(saved,str) and saved.strip() and context.get('homepage_anchor_site_id')==site.id:
         return saved
     pool=settings(db,site)['anchors']
-    if not pool:return None
+    if not pool:pool=[home_label(site,item)]
     # Independent sampling, with no round robin, balancing, quotas or reroll on retry.
     anchor=secrets.choice(pool)
     item.generation_context={**context,'homepage_anchor':anchor,'homepage_anchor_site_id':site.id}
@@ -68,7 +88,7 @@ def apply_home_anchor(db,item,site,payload):
             if block.get('type')=='header' and isinstance(block.get('data',{}).get('text'),str):
                 text=block['data']['text']
                 block['data']['text']=re.sub(r'</?a\b[^>]*>','',text,flags=re.I)
-    if not site or (item.generation_context or {}).get('homepage_interlinking') is False:return result
+    if not site:return result
     anchor=select_anchor(db,item,site)
     if getattr(item, 'section_content_mode', None) == 'menu_page' and (item.generation_context or {}).get('content_kind') != 'technical_page':
         from app.structure_home_link import place_home_link

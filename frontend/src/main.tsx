@@ -32,6 +32,7 @@ import { ProjectNetworkPanel } from "./ProjectNetworkPanel";
 import { NetworkIndexingButton, NetworkSitemapButton } from "./NetworkIndexingButton";
 import { ProjectInterlinking, ShowcaseBrands, type ProjectContentStatus } from "./ProjectInterlinking";
 import { GenerationAnchors } from "./GenerationAnchors";
+import { MenuGenerationTasks } from "./MenuGenerationTasks";
 import { ProjectNotificationCenter, ProjectLogs } from "./ProjectNotifications";
 import { projectApiResult, projectNotice } from "./projectNotificationEvents";
 import { AutoReglueGuide } from "./AutoReglueGuide";
@@ -5197,6 +5198,15 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
     setGeneratedMenuTopLevelCount(job.settings.include_top_level?job.settings.top_level_count:0);setGeneratedNestedCount(job.settings.nested_count);
     setGeneratedMenuParents(job.settings.parent_paths);setGeneratedMenuPreview(job.preview||null);setFormError(job.error||job.applied?.page_task_error||"");setMenuGeneratorOpen(true);
   }
+  const openedMenuJobLink = React.useRef<string|null>(null);
+  React.useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("menuJob");
+    const job = menuJobs.find(row => row.id === id);
+    if (job && openedMenuJobLink.current !== id) { openedMenuJobLink.current = id; openMenuJob(job); }
+  }, [menuJobs]);
+  React.useEffect(() => {
+    if (selectedMenuJob?.preview && !generatedMenuPreview && menuGeneratorOpen) setGeneratedMenuPreview(selectedMenuJob.preview);
+  });
 
   const [generatedMenuOperation, setGeneratedMenuOperation] = React.useState<"append" | "replace">("append");
   const [generatedMenuType, setGeneratedMenuType] = React.useState<"header" | "footer">("header");
@@ -5994,7 +6004,6 @@ function TasksView({
   const [menuStructureHeader, setMenuStructureHeader] = React.useState(true);
   const [menuStructureFooter, setMenuStructureFooter] = React.useState(false);
   const [menuStructureAutoPublish, setMenuStructureAutoPublish] = React.useState(false);
-  const [menuStructureInterlinking, setMenuStructureInterlinking] = React.useState(true);
   const [creatingMenuStructure, setCreatingMenuStructure] = React.useState(false);
   const [creatingTaskAction, setCreatingTaskAction] = React.useState<"draft" | "start" | "">("");
   const [generatingTopics, setGeneratingTopics] = React.useState(false);
@@ -6320,7 +6329,7 @@ function TasksView({
           menu_types: menuTypes,
           section_ids: [],
           auto_publish: menuStructureAutoPublish,
-          homepage_interlinking: menuStructureInterlinking,
+          homepage_interlinking: true,
           save_as_draft: false
         })
       });
@@ -6981,7 +6990,7 @@ function TasksView({
                 <label className="checkboxRow"><input type="checkbox" checked={includeFaq} onChange={(event) => setIncludeFaq(event.target.checked)} /> Создавать FAQ</label>
                 <label className="checkboxRow"><input type="checkbox" checked={generateTitle} onChange={(event) => setGenerateTitle(event.target.checked)} /> Генерировать Title</label>
                 <label className="checkboxRow"><input type="checkbox" checked={collectCompetitors} onChange={(event) => setCollectCompetitors(event.target.checked)} /> Собрать конкурентов</label>
-                <label className="checkboxRow"><input type="checkbox" checked={menuStructureInterlinking} onChange={(event) => setMenuStructureInterlinking(event.target.checked)} /> Перелинковка</label>
+                <span className="muted">Ссылка на главную / — в каждой новой странице</span>
                 <label className="checkboxRow"><input type="checkbox" checked={menuStructureAutoPublish} onChange={(event) => setMenuStructureAutoPublish(event.target.checked)} /> Принять и опубликовать</label>
               </div>
             </fieldset>
@@ -6992,7 +7001,8 @@ function TasksView({
         </Modal>
       ) : null}
       <DataPanel title="Все задачи" allowCollapse={false}>
-        <AdminTasksAccordion
+        {selectedSite && <MenuGenerationTasks api={api} siteId={selectedSite.id} projectName={selectedSite.name} showEmpty={!tasks.length} />}
+        {!!tasks.length && <AdminTasksAccordion
           tasks={tasks}
           sections={sections}
           promptTemplates={promptTemplates}
@@ -7022,7 +7032,7 @@ function TasksView({
           onRegenerateAll={regenerateAllTaskContent}
           onBulkDelete={bulkDeleteTaskContent}
           onShowPrompt={(task) => setPromptModalTask(task)}
-        />
+        />}
         {taskError ? <span className="formError">{taskError}</span> : null}
       </DataPanel>
       {queryModal ? (

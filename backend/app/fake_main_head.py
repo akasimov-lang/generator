@@ -1,4 +1,4 @@
-"""Finish a fake-path change with one durable, never-replayed head update."""
+"""Finish a fake-path or manual Main change with one durable head update."""
 from uuid import UUID, uuid5
 
 import httpx
@@ -8,7 +8,7 @@ from app import models
 
 
 def receipt_id(parent):
-    return str(uuid5(UUID(parent.id), 'fake-main-head'))
+    return str(uuid5(UUID(parent.id), 'reglue-head' if parent.action == 'reglue' else 'fake-main-head'))
 
 
 def continue_pending(db, site, remote, state, project):
@@ -16,17 +16,22 @@ def continue_pending(db, site, remote, state, project):
 
     parents = db.scalars(select(models.NetworkOperation).where(
         models.NetworkOperation.site_id == site.id,
-        models.NetworkOperation.action.in_(['create_fake_main', 'select_fake_main']),
+        models.NetworkOperation.action.in_(['create_fake_main', 'select_fake_main', 'reglue']),
         models.NetworkOperation.status.in_(['pending', 'unknown']))).all()
     for parent in parents:
         payload = parent.request_payload
         desired = payload.get('head_sync')
-        if not desired or not all(state.get('fake_main_settings', {}).get(k) == v for k, v in payload['alternate'].items()):
+        is_reglue = parent.action == 'reglue'
+        ready = (state.get('canon') == payload['reserve'] if is_reglue else
+                 all(state.get('fake_main_settings', {}).get(k) == v for k, v in payload['alternate'].items()))
+        subject = 'Main' if is_reglue else 'Внутряк'
+        confirmed = 'Main и альтернейты подтверждены.' if is_reglue else 'Фейковый внутряк, canonical и альтернейты подтверждены.'
+        if not desired or not ready:
             continue
         child = db.get(models.NetworkOperation, receipt_id(parent))
         if network.operation_matches(parent, state):
             parent.status = 'confirmed'
-            parent.message = 'Фейковый внутряк, canonical и альтернейты подтверждены.'
+            parent.message = confirmed
             db.commit()
             continue
         if child is None:
@@ -35,12 +40,12 @@ def continue_pending(db, site, remote, state, project):
             head = project.get('head')
             if not isinstance(head, dict) or any(k not in head for k in desired):
                 parent.status = 'unknown'
-                parent.message = 'Внутряк изменён. Не удалось прочитать разметку; обновите данные для завершения canonical и альтернейтов.'
+                parent.message = subject + ' изменён. Не удалось прочитать разметку; обновите данные для завершения canonical и альтернейтов.'
                 db.commit()
                 continue
             if any(head[k] not in (before[k], v) for k, v in desired.items()):
                 parent.status = 'failed'
-                parent.message = 'Внутряк изменён, но разметка Webdev изменилась отдельно. Автоматическая замена отменена; проверьте canonical и альтернейты.'
+                parent.message = subject + ' изменён, но разметка Webdev изменилась отдельно. Автоматическая замена отменена; проверьте canonical и альтернейты.'
                 db.commit()
                 continue
             child = models.NetworkOperation(id=receipt_id(parent), site_id=site.id,
@@ -48,12 +53,12 @@ def continue_pending(db, site, remote, state, project):
                 request_payload={'folder': payload['folder'],
                     'alternateMarkup': desired.get('alternateMarkup', state['alternateMarkup']),
                     'enableAlternates': state['enableAlternates'], **desired,
-                    'fake_main_parent_id': parent.id,
-                    'expected_fake_main': payload['alternate']['currentFakeMain'],
+                    **({'reglue_parent_id': parent.id, 'expected_canon': payload['reserve']} if is_reglue else
+                       {'fake_main_parent_id': parent.id, 'expected_fake_main': payload['alternate']['currentFakeMain']}),
                     'head_sync': desired,
                     'alternates_before': {'markup': state['alternateMarkup'], 'enabled': state['enableAlternates']},
                     'canonical_before': {k: state[k] for k in ('enableCanonical', 'canonicalDefaultMarkup', 'canonicalFakeMainMarkup')}},
-                message='Обновляем старый путь в canonical и альтернейтах.')
+                message='Обновляем прежние адреса в разметке.')
             db.add(child)
             db.commit()  # Record the only write attempt before I/O.
             try:
@@ -80,12 +85,12 @@ def continue_pending(db, site, remote, state, project):
         db.refresh(child)
         if network.operation_matches(parent, state):
             child.status = parent.status = 'confirmed'
-            child.message = parent.message = 'Фейковый внутряк, canonical и альтернейты подтверждены.'
+            child.message = parent.message = confirmed
         elif child.status == 'failed':
             parent.status = 'failed'
-            parent.message = 'Внутряк изменён, обновление canonical и альтернейтов не завершено. ' + (child.message or '')
+            parent.message = subject + ' изменён, обновление canonical и альтернейтов не завершено. ' + (child.message or '')
         else:
             parent.status = 'unknown'
-            parent.message = 'Внутряк изменён. Ждём подтверждения canonical и альтернейтов; повторная отправка не выполняется.'
+            parent.message = subject + ' изменён. Ждём подтверждения разметки и редиректов; повторная отправка не выполняется.'
         db.commit()
     return state, project

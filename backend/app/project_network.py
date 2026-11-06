@@ -188,6 +188,9 @@ def operation_matches(operation, state):
     if payload.get('fake_main_parent_id'):
         return (state.get('fake_main_current') == payload['expected_fake_main']
                 and all(state.get(key) == value for key, value in payload['head_sync'].items()))
+    if payload.get('reglue_parent_id'):
+        return (state.get('canon') == payload['expected_canon']
+                and all(state.get(key) == value for key, value in payload['head_sync'].items()))
     if operation.action in {"create_subdomains", "create_domains"}:
         return all(item["domain"] in state["domains"] for item in payload["domains"])
     if operation.action == "delete_domain":
@@ -195,7 +198,7 @@ def operation_matches(operation, state):
     if operation.action == "reserve":
         return state["reserve"] == payload["reserve"]
     if operation.action == "reglue":
-        if state["canon"] != payload["reserve"]:
+        if state["canon"] != payload["reserve"] or any(state.get(k) != v for k, v in payload.get('head_sync', {}).items()):
             return False
         if payload.get("redirect_sync"):
             from app.domain_redirects import for_reglue
@@ -656,8 +659,12 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
                     stored_request['redirect_target'] = domain + (redirect_fake_path if internal else '')
                     stored_request['redirect_old_main'] = bool(plan.get('redirect_old_main'))
             if auto_run_id is None:
+                from app.reglue_head import retarget_main_alternates
+                changes = retarget_main_alternates(state, domain)
+                if changes:
+                    stored_request.update(head_sync=changes, head_before={key: state[key] for key in changes})
                 stored_request.update(indexing_pending=True, _indexing={
-                    "canon": domain, "alternateMarkup": state["alternateMarkup"],
+                    "canon": domain, "alternateMarkup": changes.get('alternateMarkup', state["alternateMarkup"]),
                     "enableAlternates": state["enableAlternates"],
                 })
         elif payload.action == "alternates":
@@ -738,7 +745,7 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
             if payload.action == "reglue":
                 from app.reglue_redirects import continue_pending
                 state, project = continue_pending(db, site, remote, state, project)
-            if payload.action in {'create_fake_main', 'select_fake_main'}:
+            if payload.action in {'create_fake_main', 'select_fake_main', 'reglue'}:
                 from app.fake_main_head import continue_pending
                 state, project = continue_pending(db, site, remote, state, project)
         except (httpx.HTTPError, ValueError, ProjectCacheError):

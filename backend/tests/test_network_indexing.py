@@ -36,10 +36,10 @@ def test_waits_for_canonical_and_exact_alternates_then_recovers_without_browser(
     change(env, 'reglue', before['revision'], domain='reserve.test')
     assert not receipts(db)
     remote.data['settings']['canon'] = 'reserve.test'
-    remote.data['head']['alternateMarkup'] = ''
+    head = remote.data.pop('head')
     network.read_network(db, site)
     assert not receipts(db)
-    remote.data['head']['alternateMarkup'] = MARKUP
+    remote.data['head'] = {**head, 'alternateMarkup': MARKUP.replace('https://main.test/', 'https://reserve.test/')}
     submitted = []
     monkeypatch.setattr(indexing, 'submit_network_indexing', lambda db, op_id: submitted.append(op_id))
     indexing.process_network_indexing(db)
@@ -106,6 +106,7 @@ def test_partial_head_observation_does_not_confirm_indexing(env):
     partial = network.read_network(db, site)
     assert partial['head_verified'] is False and not receipts(db)
     remote.data['head'] = full_head
+    remote.delayed = False
     network.read_network(db, site)
     assert len(receipts(db)) == 1
 

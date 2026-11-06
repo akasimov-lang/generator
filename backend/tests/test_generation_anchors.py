@@ -2,6 +2,7 @@ from copy import deepcopy
 from app import generation_anchors as anchors,models
 from test_generation_modes import db,make_site
 from test_project_pages import setup
+import pytest
 
 
 def item(db,site):
@@ -73,3 +74,22 @@ def test_heading_links_are_removed_while_visible_heading_text_is_preserved(db):
  result=anchors.apply_home_anchor(db,row,site,payload)
  assert result['pages'][0]['content']['blocks'][0]['data']['text']=='About BetOnRed <strong>bonuses</strong>'
  assert '<a href="/">BetOnRed</a>' in result['pages'][0]['content']['blocks'][1]['data']['text']
+
+
+@pytest.mark.parametrize('mode,kind', [('article','article'), ('menu_page','article'), ('menu_page','technical_page')])
+def test_every_new_general_page_gets_relative_home_link_even_with_legacy_optout(db, mode, kind):
+ site=make_site(db);site.site_type='general';site.brand='Общие ключи';site.cache_geo='DE';site.cache_language='de';site.cache_canon='old.test'
+ row=item(db,site);row.section_content_mode=mode;row.generation_context={'homepage_interlinking':False,'content_kind':kind}
+ payload={'pages':[{'slug':'/article/','content':{'blocks':[{'type':'paragraph','data':{'text':'Informationen über diese Seite und ihre Inhalte.'}}]}}]}
+ result=anchors.apply_home_anchor(db,row,site,payload)
+ text=result['pages'][0]['content']['blocks'][0]['data']['text']
+ assert text.count('<a href="/">')==1 and 'Startseite' in text and 'old.test' not in text
+ assert row.generation_context['homepage_interlinking'] is True
+ site.cache_canon='new.test'
+ assert anchors.apply_home_anchor(db,row,site,result)==result
+
+
+def test_new_page_without_text_paragraph_cannot_pass_publication_link_check(db):
+ site=make_site(db);site.site_type='general';site.cache_language='de';site.cache_geo='DE';row=item(db,site)
+ with pytest.raises(ValueError,match='абзаца'):
+  anchors.apply_home_anchor(db,row,site,{'pages':[{'slug':'/article/','content':{'blocks':[]}}]})

@@ -1,0 +1,10 @@
+.menuGenerationTasks:empty { display: none; }
+.menuGenerationTask { border: 1px solid var(--border, #d4dfee); border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+.menuGenerationTaskHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.menuGenerationTask small { display: block; margin-top: 4px; color: var(--muted, #64748b); overflow-wrap: anywhere; }
+.menuGenerationTaskProgress { display: grid; grid-template-columns: auto minmax(100px, 1fr); gap: 7px 14px; margin: 12px 0; font-size: 13px; }
+.menuGenerationTaskProgress progress { width: 100%; align-self: center; accent-color: #258360; }
+.menuGenerationTaskPages { max-height: 340px; overflow-y: auto; }
+.menuGenerationTaskPages > div { display: grid; grid-template-columns: 1fr minmax(140px, 30%); gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border, #d4dfee); font-size: 13px; }
+.menuGenerationTask summary { cursor: pointer; font-size: 13px; }
+@media (max-width: 640px) { .menuGenerationTaskHeader { flex-direction: column; } .menuGenerationTaskProgress, .menuGenerationTaskPages > div { grid-template-columns: 1fr; } }

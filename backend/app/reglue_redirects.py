@@ -31,7 +31,9 @@ def continue_pending(db, site, remote, state, project):
             child = db.get(models.NetworkOperation, receipt_id(parent))
             if child and child.status in {'pending', 'unknown'}:
                 child.status = 'confirmed'; child.message = 'Конечные цели редиректов подтверждены.'
-            parent.status = 'confirmed'; parent.message = 'Main и конечные цели доменных редиректов подтверждены.'
+            parent.status = 'confirmed' if network.operation_matches(parent, state) else 'unknown'
+            parent.message = ('Main и конечные цели доменных редиректов подтверждены.' if parent.status == 'confirmed'
+                              else 'Main и редиректы обновлены. Ожидаем подтверждения альтернейтов.')
             parent.request_payload = {**parent.request_payload, 'redirects_after':state['domain_redirects']}
             db.commit(); continue
         child = db.get(models.NetworkOperation, receipt_id(parent))
@@ -67,7 +69,9 @@ def continue_pending(db, site, remote, state, project):
         actual = {**state, 'redirects_verified': isinstance(project.get('settings', {}).get('redirects'), list)}
         if network.operation_matches(child, actual):
             child.status = 'confirmed'; child.message = 'Конечные цели редиректов подтверждены.'
-            parent.status = 'confirmed'; parent.message = 'Main и конечные цели доменных редиректов подтверждены.'
+            parent.status = 'confirmed' if network.operation_matches(parent, state) else 'unknown'
+            parent.message = ('Main и конечные цели доменных редиректов подтверждены.' if parent.status == 'confirmed'
+                              else 'Main и редиректы обновлены. Ожидаем подтверждения альтернейтов.')
             parent.request_payload = {**parent.request_payload, 'redirects_after':state['domain_redirects']}
         elif child.status == 'failed':
             parent.status = 'failed'; parent.message = 'Main изменён, обновление целей редиректов не завершено. ' + (child.message or '')

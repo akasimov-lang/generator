@@ -57,3 +57,18 @@ def test_changed_menu_blocks_apply(setup,monkeypatch):
     site.default_menu={'header':[{'title':'User edit','path':'/new/'}],'footer':[]};db.commit()
     jobs.execute(db,row.id)
     assert row.status=='failed' and 'Меню изменилось' in row.error
+
+
+def test_menu_progress_distinguishes_stub_generated_published_and_failed_pages(setup):
+    _,db,site,_=setup
+    task=models.GenerationTask(title='Menu pages',geo='DE',language='de',topics_count=4)
+    db.add(task);db.flush()
+    for i,(status,generated) in enumerate([('draft',False),('generated',True),('published',True),('generation_failed',False)]):
+        db.add(models.ContentItem(task_id=task.id,site_id=site.id,topic=str(i),slug=f'/page-{i}/',
+            generated_json={'pages':[{'slug':f'/page-{i}/'}]},status=status,
+            generated_at=jobs.now() if generated else None,idempotency_key=str(uuid4())))
+    job=enqueue(db,site,True);row=db.get(models.BackgroundJob,job['id'])
+    row.status='completed';row.result={'applied':{'page_task_id':task.id}};db.commit()
+    result=jobs.view(db,row)
+    assert result['progress']=={'total':4,'generated':2,'published':1,'deleted':0,'errors':1}
+    assert len(result['pages'])==4

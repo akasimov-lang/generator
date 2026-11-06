@@ -92,7 +92,7 @@ def test_reserve_then_reglue_exact_contract(env):
     assert saved["operations"][0]["status"] == "confirmed"
     after = change(env, "reglue", saved["revision"], domain="next.test")
     assert not any(path.endswith("check-domain") for _, path, _ in remote.calls)
-    assert remote.calls[-1] == ("POST", "/projects/update-reglue", {"folder": "project.test", "reserve": "next.test", "trigger": "webdev:settings", "initiator": "ai_seo_419"})
+    assert ("POST", "/projects/update-reglue", {"folder": "project.test", "reserve": "next.test", "trigger": "webdev:settings", "initiator": "ai_seo_419"}) in remote.calls
     assert after["canon"] == "next.test"
     operation = next(op for op in after["operations"] if op["action"] == "reglue")
     assert operation["initiator"] == "anton"
@@ -102,7 +102,7 @@ def test_reserve_then_reglue_exact_contract(env):
     reread = network.read_network(db, site)
     assert next(op for op in reread["operations"] if op["action"] == "reglue")["source_domain"] == "main.test"
     assert "main.test" in after["main_history"]
-    assert after["alternateMarkup"] == MARKUP
+    assert after["alternateMarkup"] == MARKUP.replace('https://main.test/', 'https://next.test/')
 
 
 def test_alternates_preserve_settings_and_other_head_fields(env):
@@ -201,7 +201,9 @@ def test_timeout_persists_receipt_and_prevents_duplicate(env):
     with pytest.raises(network.NetworkConflict, match="не подтверждена"):
         change(env, "reglue", after["revision"], domain="reserve.test")
     remote.data["settings"]["canon"] = "reserve.test"
+    remote.fail = None  # Main write was applied; its follow-up head write can now complete.
     assert next(op for op in network.read_network(db, site)["operations"] if op["id"] == str(payload.request_id))["status"] == "confirmed"
+    assert sum(path.endswith('update-reglue') for _, path, _ in remote.calls) == 1
 
 
 def test_delayed_operation_confirmed_only_by_readback(env):
