@@ -106,6 +106,7 @@ def tasks(db, user, offset=0, limit=50, *, q=''):
     query=select(models.BackgroundJob).where(models.BackgroundJob.kind.in_([launch.PREVIEW_KIND, launch.KIND, maintenance_reports.KIND]),
         models.BackgroundJob.payload['actor'].as_string()==user['username']).order_by(models.BackgroundJob.created_at.desc(),models.BackgroundJob.id.desc())
     for job in db.scalars(query):
+        if job.payload.get('task_type') == 'project_state_report': continue
         try:
             if job.kind == maintenance_reports.KIND: maintenance_reports.get(db, job.id, user)
             else: get(db,job.id,user)

@@ -1,3 +1,4 @@
+import { ProjectStateReports } from "./ProjectStateReports";
 import { MenuPageIdentityEditor } from "./MenuPageIdentityEditor";
 import { projectType, projectTypeFilter, matchesProjectType, type ProjectTypeFilter } from "./projectTypeFilter";
 import { ArrowLeft } from "lucide-react";
@@ -606,7 +607,7 @@ type PublicationCampaignQueue = {
 
 type ThemeMode = "light" | "dark";
 type InputStyle = "balanced" | "classic" | "soft" | "inset" | "underline" | "emerald" | "graphite" | "rounded" | "contrast" | "glass";
-type AppView = "reglueJournal" | "autoPilotReport" | "autoPilot" | "autoPilotLogs" | "reglueReserves" | "pagePreview" | "contentPreview" | "pageEditor" | "templateGenerator" | "autoReglueGuide" | "autoReglue" | "published" | "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "massActionReport" | "favorites" | "guide" | "settings";
+type AppView = "weeklyReports" | "reglueJournal" | "autoPilotReport" | "autoPilot" | "autoPilotLogs" | "reglueReserves" | "pagePreview" | "contentPreview" | "pageEditor" | "templateGenerator" | "autoReglueGuide" | "autoReglue" | "published" | "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "massActionReport" | "favorites" | "guide" | "settings";
 type WorkspaceTab = "overview" | "topics" | "content" | "publication" | "menu" | "network" | "redirects" | "autoReglue" | "autoLb" | "logs";
 
 type WorkspaceAccordionContextValue = {
@@ -713,6 +714,7 @@ const MAIN_VIEW_PATHS: Record<Exclude<AppView, "workspace">, string> = {
   autoPilot: "/auto-reglue/pilot",
   autoPilotLogs: "/auto-reglue/pilot/logs",
   autoPilotReport: "/auto-reglue/pilot/report",
+  weeklyReports: "/weekly-reports",
   autoReglueGuide: "/auto-reglue/guide",
   dashboard: "/dashboard",
   reglueJournal: "/reglue-journal",
@@ -1422,6 +1424,7 @@ function App() {
           <NavButton href={pathForRoute("settings")} icon={<Settings />} label="Настройки" active={activeView === "settings"} onClick={() => navigateTo("settings")} />
           {isAdmin ? <NavButton href={pathForRoute("published")} icon={<CheckCircle2 />} label="Опубликовано" active={activeView === "published"} onClick={() => navigateTo("published")} /> : null}
           <NavButton href={pathForRoute("guide")} icon={<BookOpen />} label="Инструкции" active={activeView === "guide" || activeView === "autoReglueGuide"} onClick={() => navigateTo("guide")} />
+          <NavButton href={pathForRoute("weeklyReports")} icon={<FileText />} label="Недельные отчёты" active={activeView === "weeklyReports"} onClick={() => navigateTo("weeklyReports")} />
         </nav>
         {compactNavigation && <div id="mobile-account-actions" className="mobileAccountActions" hidden={!mobileMenuOpen}>{accountActions}</div>}
       </aside>
@@ -1488,6 +1491,7 @@ function App() {
         {activeView === "reglueReserves" && <ReglueReservesPage api={api} />}
         {activeView === "autoPilot" && <AutoPilotPage api={api} renderProjects={(ids, label) => catalogError ? <p role="alert">{catalogError}</p> : !catalogLoaded ? <p role="status">Загружаем проекты…</p> : <SitesView key={label} embedded showProjectTypeFilters api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} projectScopeLabel={label} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/>}/>}
         {activeView === "autoPilotLogs" && <AutoPilotPage api={api} logs renderProjects={(ids, label) => catalogError ? <p role="alert">{catalogError}</p> : !catalogLoaded ? <p role="status">Загружаем проекты…</p> : <SitesView key={label} embedded showProjectTypeFilters api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} projectScopeLabel={label} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/>}/>}
+        {activeView === "weeklyReports" && <ProjectStateReports api={api}/>}
         {(activeView === "autoPilotReport" || activeView === "massActionReport") && <AutoPilotPage api={api} reports renderProjects={(ids, label) => catalogError ? <p role="alert">{catalogError}</p> : !catalogLoaded ? <p role="status">Загружаем проекты…</p> : <SitesView key={label} embedded showProjectTypeFilters api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} projectScopeLabel={label} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/>}/>}
         {activeView === "autoReglueGuide" && <><a className="button secondary" href="/guide" onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("guide"); } }}>Все инструкции</a><AutoReglueGuide backLabel="Вернуться к автопереклею" onBack={() => navigateTo("autoReglue")} /></>}
         {activeView === "settings" && <SettingsView api={api} currentUser={currentUser} designVersion={designVersion} onDesignVersionChange={setDesignVersion} inputStyle={inputStyle} onInputStyleChange={setInputStyle} onChanged={loadAll} />}
@@ -11255,6 +11259,7 @@ function viewTitle(view: AppView, _workspaceTab: WorkspaceTab) {
     autoPilot: "Auto Pilot",
     autoPilotLogs: "Auto Pilot — выполнение",
     autoPilotReport: "Планы и отчёты",
+    weeklyReports: "Недельные отчёты",
     autoReglueGuide: "Инструкция по автопереклеям",
     settings: "Настройки"
   };

@@ -16,6 +16,7 @@ from app.reglue_journal import router as reglue_journal_router
 from app.dashboard_activity import router as dashboard_activity_router
 from app.core.config import get_settings
 from app.db import init_db
+from app.project_state_reports import router as project_reports_router
 
 
 settings = get_settings()
@@ -51,3 +52,5 @@ app.include_router(project_notifications_router, prefix="/api")
 app.include_router(project_structured_data_router, prefix="/api")
 app.include_router(reglue_journal_router, prefix="/api")
 app.include_router(dashboard_activity_router, prefix="/api")
+
+app.include_router(project_reports_router, prefix="/api")
