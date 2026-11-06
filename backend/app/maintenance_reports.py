@@ -57,7 +57,7 @@ def upsert(db, report_id, name, actor, site_ids, entries=(), status='running'):
 def visible(job, user):
     allowed = user.get('allowed_site_ids')
     return bool(job and job.kind == KIND and job.payload.get('actor') == user['username'] and
-                (allowed is None or set(job.payload.get('site_ids', [])).issubset(allowed)))
+                (allowed is None or set(job.payload.get('original_site_ids',job.payload.get('site_ids', []))).issubset(allowed)))
 
 
 def get(db, report_id, user):
@@ -81,9 +81,17 @@ def summary(job, report_id=None, *, entries=None):
     steps_done, steps_total = sum(p['done'] for p in progress), sum(p['total'] for p in progress)
     percent = round(100 * steps_done / steps_total) if steps_total else 0
     if active: percent = min(percent, 99)
-    return {'id': job.id, 'report_id': report_id, 'name': job.payload['name'], 'mode': 'maintenance', 'status': job.status,
+    if job.payload.get('planning_only'):
+        steps_done = sum(bool(row.get('plan') or row.get('proposed_plan')) for row in entries)
+        steps_total = len(entries)
+        percent = round(100 * steps_done / steps_total) if steps_total else 100
+    from app.report_status import metadata
+    from app.report_membership import can_exclude
+    return {**metadata(job, finished_at=job.finished_at), 'can_exclude':can_exclude(job),
+            'excluded_projects':[{k:v for k,v in e.items() if k not in {'entry','previous_result'}} for e in job.payload.get('excluded_projects',[])],
+            'id': job.id, 'report_id': report_id, 'name': job.payload['name'], 'mode': 'maintenance', 'status': job.status,
             'created_at': job.created_at, 'launched_at': job.started_at or job.created_at,
-            'finished_at': None if active else job.finished_at, 'total': len(entries),
+            'finished_at': metadata(job, finished_at=None if active else job.finished_at)['finished_at'], 'total': len(entries),
             'counts': dict(Counter(row['status'] for row in entries)),
             'report_url': f'/auto-reglue/pilot/report?maintenance={job.id}',
             'repeat': repeat, 'parent_report_id': job.payload.get('parent_report_id'),

@@ -57,7 +57,7 @@ def get(db, job_id, user, *, include_deleted=False):
     if not job or job.kind not in (launch.PREVIEW_KIND,launch.KIND) or job.payload.get('actor') != user['username'] or (not include_deleted and deleted(db, job_id)):
         raise ValueError('План Auto Pilot не найден.')
     allowed = user.get('allowed_site_ids')
-    ids = set(job.payload['site_ids']) | {p.get('source_site_id',p['site_id']) for g in job.result['groups'] for p in g.get('plans',[])}
+    ids = set(job.payload.get('original_site_ids', job.payload['site_ids'])) | {p.get('source_site_id',p['site_id']) for g in job.result['groups'] for p in g.get('plans',[])}
     if allowed is not None and not ids.issubset(allowed): raise ValueError('Часть проектов плана больше недоступна.')
     return job
 
@@ -128,9 +128,11 @@ def tasks(db, user, offset=0, limit=50, *, q=''):
         from app.pilot_internal_pages import report_metadata
         metadata = report_metadata(db, job)
         visible_status = metadata['status']
+        from app.report_status import metadata as status_metadata
+        lifecycle = status_metadata(job, status=visible_status, finished_at=metadata['finished_at'])
         items.append({'id':job.id,'report_id':numbers[job.id],'name':draft_name(job),'mode':'preview' if job.kind==launch.PREVIEW_KIND else 'execution','status':visible_status,'created_at':job.created_at,
             'launched_at':job.payload.get('launched_at') or job.started_at or job.created_at,
-            'finished_at':metadata['finished_at'],'total':len(snapshot['items']),'counts':snapshot['counts']})
+            'finished_at':metadata['finished_at'],'total':len(snapshot['items']),'counts':snapshot['counts'],**lifecycle})
     return {'items':items,'total':len(visible),'has_more':offset+limit<len(visible)}
 
 
@@ -256,6 +258,8 @@ def start(db, job_id, user):
             raise NetworkConflict('Не все изменения Title/H1 и заголовков подготовлены для выбранного режима. Исправьте ошибки или обновите план до запуска.')
         if not streaming and any(not paragraphs_ready(db, p) for p in plans):
             raise NetworkConflict('Не все абзацы подготовлены. Исправьте ошибки в строках до запуска.')
+        if any(p['site_id'] not in job.payload['site_ids'] or p.get('source_site_id',p['site_id']) in job.payload.get('excluded_site_ids',[]) for p in plans):
+            raise NetworkConflict('В плане остался исключённый проект. Обновите план.')
         if not plans: raise ValueError('В плане нет проектов, готовых к переклею.')
         from app.pilot_schemes import validate_single_alternate
         for plan in plans:
@@ -454,6 +458,11 @@ def view(db,job):
         snapshot['title_h1_progress']=headings
         snapshot['paragraphs_progress']=paragraphs
         snapshot['progress']['percent']=min(99,70+round(30*sum(p['done'] for p in text_progress)/max(1,sum(p['total'] for p in text_progress)))) if text_progress else min(70,round(snapshot['progress']['percent']*.7))
+    from app.report_membership import can_exclude
+    snapshot['can_exclude'] = can_exclude(job)
+    snapshot['excluded_projects'] = [{k:v for k,v in e.items() if k not in {'entry','previous_result'}} for e in job.payload.get('excluded_projects',[])]
+    from app.report_status import metadata as status_metadata
+    snapshot.update(status_metadata(job, status=snapshot['status'], finished_at=snapshot.get('finished_at')))
     return snapshot
 
 

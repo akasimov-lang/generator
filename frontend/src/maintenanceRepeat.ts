@@ -5,8 +5,8 @@ type Result = Record<string,unknown> & {id:string;entries:unknown[]};
 
 export const maintenanceReportLink=(id:string)=>`/auto-reglue/pilot/report?maintenance=${encodeURIComponent(id)}`;
 export const maintenanceReportActive=(status?:string)=>["queued","running","waiting"].includes(status||"");
-export const maintenanceEntriesActive=(report?:{status:string;entries:{status:string}[]}|null)=>!!report&&(maintenanceReportActive(report.status)||report.entries.some(entry=>["pending","queued","running","waiting"].includes(entry.status)));
-export const maintenanceCanRepeat=(report?:{status:string;entries:{status:string}[]}|null)=>!!report?.entries.length&&["completed","partial","failed"].includes(report.status)&&report.entries.every(entry=>["completed","partial","failed","skipped"].includes(entry.status));
+export const maintenanceEntriesActive=(report?:{status:string;planning_only?:boolean;entries:{status:string}[]}|null)=>!!report&&!report.planning_only&&(maintenanceReportActive(report.status)||report.entries.some(entry=>["pending","queued","running","waiting"].includes(entry.status)));
+export const maintenanceCanRepeat=(report?:{status:string;planning_only?:boolean;entries:{status:string}[]}|null)=>!!report?.entries.length&&!report.planning_only&&["completed","partial","failed"].includes(report.status)&&report.entries.every(entry=>["completed","partial","failed","skipped"].includes(entry.status));
 
 /** One explicit click creates one durable request; uncertain responses reuse its UUID and settings. */
 export function createMaintenanceRepeat(parentId:string,api:Api,store?:Store,makeId=()=>crypto.randomUUID()) {

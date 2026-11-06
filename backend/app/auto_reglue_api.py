@@ -637,3 +637,10 @@ def automatic_history(site_id: str, user: AuthUser, db: Session = Depends(get_db
     site = site_or_404(db, site_id, user)
     from app.automatic_history import timeline
     return {"items": timeline(db, site.id)}
+
+
+@router.post('/reports/{report_id}/projects/{site_id}/exclude')
+def exclude_report_project(report_id: UUID, site_id: str, user: AuthUser, db: Session = Depends(get_db)):
+    from app import report_membership, maintenance_reports, auto_pilot
+    job = call(report_membership.exclude, db, report_id, site_id, user)
+    return maintenance_reports.view(job, db) if job.kind == maintenance_reports.KIND else auto_pilot.view(db, job)

@@ -26,3 +26,10 @@ test('standardization report separates baseline from confirmed counts and page e
  assert.match(html,/Витрина до замены/);assert.match(html,/Было: 3 → Стало: 3/);assert.match(html,/Добавлено: 0 · Удалено: 0/);
  assert.match(html,/Проверка публикации · 1\/2/);assert.match(html,/HTTP 503/);assert.match(html,/Не подтверждено/);
 });
+test('planning report shows prepared status, exclusion and no execution progress',()=>{
+ const report=normalizeMaintenanceReport({name:'Plan',status:'partial',planning_only:true,display_status:'План готов',can_exclude:true,entries:[{site_id:'x',project:'example.com',status:'waiting',progress:{done:1,total:6,percent:17,label:'Waiting'}}]});
+ const html=renderToStaticMarkup(React.createElement(MaintenanceReportBody,{report,onExclude:()=>{}}));
+ assert.match(html,/План готов/);
+ assert.match(html,/Исключить из отчёта/);
+ assert.doesNotMatch(html,/maintenanceEntryProgress|maintenanceTimes/);
+});
