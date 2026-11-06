@@ -381,6 +381,15 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
     document.addEventListener("click",outside);
     return()=>document.removeEventListener("click",outside);
   },[canSaveMarkup,draft,canonicalDraft,site.id]);
+  function saveFakeMain(rawPath: string) {
+    if (!rawPath.trim() || dataRef.current?.fake_main_paths?.includes(normalizedFakePath(rawPath))) return;
+    if (fakeQueue.enqueue("create", rawPath)) setFakeMainInput(current => current === rawPath ? "" : current);
+  }
+  function saveFakeMainOnEnter(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    if (!event.repeat) saveFakeMain(event.currentTarget.value);
+  }
   function saveMarkupOnEnter(event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
     event.preventDefault();
@@ -569,17 +578,20 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
               onClick={() => void mutate("select_fake_main", undefined, draft, { enable_dynamic_routes: !data.fake_main_enabled })}><span aria-hidden="true" /></button>
             {markupStatus("dynamic")}
           </div>
-          {!!data.fake_main_paths?.length ? <ul className="networkFakePages">{data.fake_main_paths.map(path => {
+          <div className="networkFakeForms"><div>
+            <label className="networkFakePath">Путь фейковой главной<input aria-label="Путь фейковой главной" aria-describedby="fake-main-save-hint" value={fakeMainInput} onChange={e => setFakeMainInput(e.target.value)} onKeyDown={saveFakeMainOnEnter} onBlur={event => saveFakeMain(event.currentTarget.value)} placeholder="/events, /events/ или /index.php" /></label>
+            <small id="fake-main-save-hint" className="muted">Клик вне поля или Enter — создать и назначить.</small>
+          </div></div>
+          {!!data.fake_main_paths?.length ? <div className="networkFakeColumns">{Array.from({length: Math.ceil(data.fake_main_paths.length / 3)}, (_, column) => <ul className="networkFakePages" key={column}>{data.fake_main_paths!.slice(column * 3, column * 3 + 3).map(path => {
             const current = path === data.fake_main_current;
             return <li key={path}>
-              <a href={`https://${data.canon}${path}`} target="_blank" rel="noreferrer">{current ? <strong>{path}</strong> : path}</a>
+              <a href={`https://${data.canon}${path}`} title={path} target="_blank" rel="noreferrer">{current ? <strong>{path}</strong> : path}</a>
               <button type="button" className={`networkFakeButton select${current ? " selected" : ""}`} aria-label={`Назначить ${path}`} aria-pressed={current} title={current ? "Текущая страница" : "Назначить текущей"} disabled={disabled || current || fakeQueue.busyPath(path)} onClick={() => void mutate("select_fake_main", undefined, draft, { fake_main_path: path })}><Check size={18} aria-hidden="true" /></button>
               <button type="button" className="networkFakeButton delete" aria-label={`Удалить ${path}`} title={current ? "Перед удалением назначьте другую страницу" : "Удалить страницу"} disabled={current || fakeQueue.busyPath(path) || fakeQueue.count >= 10} onClick={() => fakeQueue.enqueue("delete", path)}><X size={18} aria-hidden="true" /></button>
               {fakeQueue.items.filter(item => item.path === path && fakeQueueActive(item)).map(item => <small key={item.id} role="status">{item.message}</small>)}
             </li>;
-          })}</ul> : <p className="muted">В кеше нет фейковых внутренних страниц.</p>}
-          <div className="networkFakeForms"><div>          <label className="networkFakePath">Путь фейковой главной<input aria-label="Путь фейковой главной" value={fakeMainInput} onChange={e => setFakeMainInput(e.target.value)} placeholder="/events, /events/ или /index.php" /></label>
-          <div className="networkActions"><button type="button" className="button compact secondary" disabled={!fakeMainInput.trim() || fakeQueue.count >= 10 || fakeQueue.busyPath(fakeMainInput) || !!data.fake_main_paths?.includes(normalizedFakePath(fakeMainInput))} onClick={() => { if (fakeQueue.enqueue("create", fakeMainInput)) setFakeMainInput(""); }}>Создать и назначить</button></div></div></div>
+          })}</ul>)}</div> : <p className="muted">В кеше нет фейковых внутренних страниц.</p>}
+
         </div>}
         {mode === "network" && networkView === "main" && <ProjectStructuredData key={site.id} siteId={site.id} api={api} refreshKey={refreshToken} backgroundRefreshKey={`${structuredDataRevision}:${data.revision}`}/>}
         <ShowcaseHistory siteId={site.id} api={api} refreshKey={refreshToken}/>

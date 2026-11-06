@@ -10544,8 +10544,13 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .massLaunchDialog td,.massLaunchDialog th { padding:10px; border-bottom:1px solid var(--border); }
 .siteDomainsTable .massParticipation .searchableSelectControl { min-height: 26px; padding: 3px 7px; }
 
-.networkFakePages { list-style: none; padding: 0; }
-.networkFakePages li { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.networkFakeColumns { display: grid; grid-auto-flow: column; grid-auto-columns: clamp(260px, 28vw, 380px); justify-content: start; overflow-x: auto; margin-top: 16px; padding-bottom: 4px; }
+.networkFakePages { list-style: none; padding: 0 20px; margin: 0; border-left: 1px solid var(--border); }
+.networkFakePages:first-child { padding-left: 0; border-left: 0; }
+.networkFakePages li { display: grid; grid-template-columns: minmax(0, 1fr) 32px 32px; align-items: center; gap: 8px; min-height: 40px; margin: 0; }
+.networkFakePages li > a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.networkFakePages li > small { grid-column: 1 / -1; font-size: 11px; }
+.networkFakePages .networkFakeButton { width: 32px; height: 32px; padding: 0; }
 .networkFakeButton { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 1px solid currentColor; border-radius: 6px; background: transparent; cursor: pointer; }
 .networkFakeButton.select { color: #788491; }
 .networkFakeButton.selected { color: #27803d; background: #e8f6eb; }
