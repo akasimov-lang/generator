@@ -3,6 +3,7 @@ export type GeneratedMenuStructureItem = {
   slug: string;
   content_kind: "menu_page" | "casino_review" | "technical_page";
   technical_page_key?: string;
+  parent_slug?: string;
   children?: GeneratedMenuStructureItem[];
 };
 export type PreviewNode = { item: GeneratedMenuStructureItem; path: string; parent: string; depth: number };

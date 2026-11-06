@@ -412,9 +412,14 @@ class GeneratedMenuItem(BaseModel):
     children: list["GeneratedMenuItem"] = Field(default_factory=list, max_length=20)
     content_kind: Literal["menu_page", "casino_review", "technical_page"] = "menu_page"
     technical_page_key: str | None = Field(default=None, max_length=40)
+    parent_slug: str | None = Field(default=None, max_length=240)
 
 
 class MenuStructurePreviewRequest(BaseModel):
+    children_per_parent: int | None = Field(default=None, ge=1, le=10)
+    parent_paths: list[str] = Field(default_factory=list, max_length=20)
+    nested_count: int = Field(default=5, ge=1, le=10)
+    include_top_level: bool = True
     menu_type: Literal["header", "footer"] = "header"
     levels: int = Field(default=2, ge=1, le=3)
     top_level_count: int = Field(default=5, ge=1, le=10)
@@ -436,9 +441,9 @@ class GeneratedMenuStructureApply(BaseModel):
     operation: Literal["append", "replace"] = "append"
     menu_type: Literal["header", "footer"] = "header"
     levels: int = Field(default=2, ge=1, le=3)
-    top_level_count: int = Field(default=5, ge=1, le=20)
+    top_level_count: int = Field(default=5, ge=1, le=80)
     mode: Literal["thematic", "casino_reviews", "technical_pages"] = "thematic"
-    items: list[GeneratedMenuItem] = Field(min_length=1, max_length=20)
+    items: list[GeneratedMenuItem] = Field(min_length=1, max_length=80)
 
 
 class TopicSuggestionsRequest(BaseModel):

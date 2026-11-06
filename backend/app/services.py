@@ -1974,12 +1974,54 @@ def _same_geo_menu_references(
     return references
 
 
+def _generated_menu_parents(items: list, depth: int = 1) -> list:
+    result = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        path = _normalized_project_slug(item.get("slug") or item.get("path") or item.get("url") or item.get("href"))
+        result.append((path, item, depth))
+        children = next((item[key] for key in ("children", "items", "submenu", "subMenu") if isinstance(item.get(key), list)), [])
+        result.extend(_generated_menu_parents(children, depth + 1))
+    return result
+
+
 async def generate_menu_structure_preview(
     db: Session,
     provider: models.AiProvider,
     site: models.Site,
     payload: MenuStructurePreviewRequest,
+    parent_context: str | None = None,
 ) -> dict:
+    if payload.parent_paths:
+        if payload.mode != "thematic":
+            raise ValueError("Вложенные пункты доступны для структуры по тематике проекта.")
+        if len(set(payload.parent_paths)) != len(payload.parent_paths):
+            raise ValueError("Родительские пункты не должны повторяться.")
+        if payload.nested_count * len(payload.parent_paths) + (payload.top_level_count if payload.include_top_level else 0) > 80:
+            raise ValueError("За один раз можно добавить не более 80 пунктов.")
+        current = site.default_menu.get(payload.menu_type, []) if isinstance(site.default_menu, dict) else []
+        parents = _generated_menu_parents(current)
+        selected = []
+        for path in payload.parent_paths:
+            matches = [entry for entry in parents if entry[0] == path]
+            if len(matches) != 1 or matches[0][2] >= 3:
+                raise ValueError("Родительский пункт изменился или достигнут предел трёх уровней. Обновите меню.")
+            selected.append(matches[0])
+        base = payload.model_copy(update={"parent_paths": [], "levels": 1})
+        result = await generate_menu_structure_preview(db, provider, site, base) if payload.include_top_level else None
+        items = list(result["items"]) if result else []
+        for path, parent, depth in selected:
+            child_payload = base.model_copy(update={"top_level_count": payload.nested_count})
+            children = await generate_menu_structure_preview(db, provider, site, child_payload, parent_context=parent.get("title") or parent.get("name") or path)
+            result = children
+            for item in children["items"]:
+                item["parent_slug"] = path
+                item["slug"] = path.rstrip("/") + "/" + item["slug"].strip("/") + "/"
+                items.append(item)
+        return {**result, "items": items, "levels": 1, "top_level_count": len(items)}
+    if payload.children_per_parent and payload.mode == "thematic" and sum(payload.top_level_count * payload.children_per_parent ** depth for depth in range(payload.levels)) > 80:
+        raise ValueError("Структура превышает 80 пунктов. Уменьшите количество пунктов или уровней.")
     if provider.provider_type != "gemini" or not provider.is_active:
         raise ValueError("Menu structure generation requires an active Gemini provider")
     if not provider.api_key:
@@ -2028,6 +2070,10 @@ async def generate_menu_structure_preview(
     existing_menu = site.default_menu if isinstance(site.default_menu, dict) else {}
     geo_references = _same_geo_menu_references(db, site, geo, payload.menu_type, payload.mode)
     reference_title_keys = set().union(*(_menu_structure_title_keys(reference["items"]) for reference in geo_references)) if geo_references else set()
+    current_title_keys = {slugify(clean_text(item.get("title") or item.get("name") or item.get("label") or item.get("text")))
+        for _, item, _ in _generated_menu_parents(existing_menu.get(payload.menu_type, []))}
+    reference_title_keys |= current_title_keys
+
     reference_signatures = {
         _menu_structure_signature(reference["items"], payload.mode)
         for reference in geo_references
@@ -2046,7 +2092,7 @@ async def generate_menu_structure_preview(
 Each child title must be the exact name of a real casino brand relevant and available to players in GEO {geo}.
 Do not invent brands. Do not add grandchildren. The parent is a dropdown/category page; every child is a casino review page."""
         if payload.mode == "casino_reviews"
-        else f"Create a topical SEO menu with exactly {levels} levels and exactly {payload.top_level_count} top-level items. Use 2-5 children for every non-final node. Final-level nodes must have no children."
+        else f"Create a topical SEO menu with exactly {levels} levels and exactly {payload.top_level_count} top-level items. Use {str(payload.children_per_parent) + " children exactly" if payload.children_per_parent else "2-5 children"} for every non-final node. Final-level nodes must have no children."
     )
     prompt = f"""You are a senior information architect for an SEO website.
 Generate a new menu structure matching the project's actual topic, audience, GEO and content language.
@@ -2054,6 +2100,7 @@ Generate a new menu structure matching the project's actual topic, audience, GEO
 Project: {site.name}
 Domain: {site.cache_canon or site.base_url}
 Homepage topic: {site.homepage_title or 'not specified'}
+Parent menu section: {parent_context or "top-level navigation"}. New items must be directly relevant to this section.
 GEO: {geo}
 Content language: {language}
 Target menu: {payload.menu_type}
@@ -2106,6 +2153,13 @@ Return only valid JSON without Markdown: {{"items":[{{"title":"...","children":[
         except ValueError as error:
             uniqueness_error = str(error)
             continue
+        if payload.mode == "thematic" and payload.children_per_parent:
+            def correct_counts(nodes, depth=1):
+                return all((len(node.get("children", [])) == payload.children_per_parent and correct_counts(node["children"], depth + 1))
+                    if depth < levels else not node.get("children") for node in nodes)
+            if not correct_counts(candidate_items):
+                uniqueness_error = "Every non-final node must have exactly " + str(payload.children_per_parent) + " children"
+                continue
         candidate_signature = _menu_structure_signature(candidate_items, payload.mode)
         if candidate_signature in reference_signatures:
             uniqueness_error = "the complete hierarchy duplicates another project in this GEO"
@@ -5079,6 +5133,9 @@ async def apply_generated_menu_structure(
     if any(section.sync_status == "pending" for section in previous_sections):
         raise ValueError("Дождитесь сохранения изменений текущего меню перед его заменой.")
     previous_statuses = {section.id: section.sync_status for section in previous_sections}
+    nested_targets = {str(item.get("slug")): item.get("parent_slug") for item in raw_items if item.get("parent_slug")}
+    if nested_targets and (operation != "append" or levels != 1 or mode != "thematic"):
+        raise ValueError("Вложенные пункты добавляются к существующему меню по тематике проекта.")
     effective_levels = 2 if mode == "casino_reviews" else levels
     normalized_items = normalize_generated_menu_structure(
         raw_items,
@@ -5108,6 +5165,12 @@ async def apply_generated_menu_structure(
         _normalized_project_slug(item.get("slug"))
         for item in flattened_current_items
     }
+    if operation == "append":
+        existing_titles = {slugify(clean_text(item.get("title") or item.get("name") or item.get("label") or item.get("text")))
+            for _, item, _ in _generated_menu_parents(current_items)}
+        duplicate_titles = existing_titles & _menu_structure_title_keys(generated_items)
+        if duplicate_titles:
+            raise ValueError("Такие названия уже есть в меню: " + ", ".join(sorted(duplicate_titles)) + ". Измените или удалите дубли в предпросмотре.")
     generated_paths = {change["new_path"] for change in changes}
     collisions = sorted(existing_paths & generated_paths)
     if collisions and operation == "append":
@@ -5161,9 +5224,34 @@ async def apply_generated_menu_structure(
             prepared.append(prepared_item)
         return prepared
 
-    prepared_items = prepare(generated_items)
     updated_menu = copy.deepcopy(current_menu)
     existing_items_for_update = copy.deepcopy(current_items)
+    parents = _generated_menu_parents(existing_items_for_update)
+    target_nodes = {}
+    for path in set(nested_targets.values()):
+        matches = [entry for entry in parents if entry[0] == path]
+        if len(matches) != 1 or matches[0][2] >= 3:
+            raise ValueError("Выбранный родительский пункт изменился. Подготовьте предпросмотр заново.")
+        target_nodes[path] = matches[0][1]
+    prepared_items = []
+    for item in generated_items:
+        parent_path = nested_targets.get(item["slug"])
+        if not parent_path:
+            prepared_items.extend(prepare([item]))
+            continue
+        parent_item = target_nodes[parent_path]
+        parent_section = db.scalar(select(models.Section).where(models.Section.site_id == site.id,
+            models.Section.menu_type == menu_type, models.Section.path == parent_path,
+            models.Section.sync_status != "external_deleted"))
+        if parent_section is None:
+            parent_section = models.Section(site_id=site.id, menu_type=menu_type, name=parent_item.get("title") or parent_path,
+                path=parent_path, external_id=str(parent_item.get("id") or next_id), sync_status="synced")
+            db.add(parent_section); db.flush(); created_sections.append(parent_section)
+        child_key = next((key for key in ("children", "items", "submenu", "subMenu") if isinstance(parent_item.get(key), list)), "children")
+        siblings = parent_item.setdefault(child_key, [])
+        new_children = prepare([item], parent_section)
+        new_children[0]["order"] = len(siblings)
+        siblings.extend(new_children)
     combined_items = prepared_items if operation == "replace" else (
         [*prepared_items, *existing_items_for_update]
         if mode == "casino_reviews"
@@ -5189,7 +5277,7 @@ async def apply_generated_menu_structure(
             "review_paths": review_paths,
             "menu_before": current_items,
         },
-        response_body={"generated_items": prepared_items, "created_count": len(created_sections)},
+        response_body={"generated_items": prepared_items, "created_count": len(_flatten_project_menu_items(generated_items))},
     )
     db.add(audit_log)
     db.commit()
@@ -5219,7 +5307,7 @@ async def apply_generated_menu_structure(
         return {"created_count": 0, "rolled_back": True, **result}
     audit_log.response_status = 200
     db.commit()
-    return {"created_count": len(created_sections), "rolled_back": False, **result}
+    return {"created_count": len(_flatten_project_menu_items(generated_items)), "rolled_back": False, **result}
 
 
 _ENGLISH_WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
