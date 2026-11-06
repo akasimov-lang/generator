@@ -28,7 +28,9 @@ def template(groups):
     for group, dark in groups:
         if not re.fullmatch(r'pagepilot_standard_[1-7]', group):
             raise ValueError('Unexpected group')
-        cards.append('{{#each casinos.' + group + '}}' + card.replace('__LOGO_CLASS__', 'md-logo-dark' if dark else '') + '{{/each}}')
+        rendered=card.replace('__LOGO_CLASS__', 'md-logo-dark' if dark else '')
+        if group=='pagepilot_standard_6':rendered=rendered.replace('{{else}}','<strong class="md-brand-name">CBet</strong>{{else}}',1)
+        cards.append('{{#each casinos.' + group + '}}' + rendered + '{{/each}}')
     return '<style>\n' + css + '\n</style><section class="md-showcase" aria-label="Casinos y bonos">' + '\n'.join(cards) + '</section>'
 
 
