@@ -640,6 +640,19 @@ def get_site_network(site_id: str, _: AuthUser, db: Session = Depends(get_db), r
     return _network_call(project_network.read_network, db, site)
 
 
+from app import network_edit_queue
+
+
+@router.get("/sites/{site_id}/network/edit-queue")
+def get_network_edit_queue(site_id: str, _: AuthUser, db: Session = Depends(get_db)):
+    return network_edit_queue.snapshot(db, _get_site_or_404(db, site_id))
+
+
+@router.post("/sites/{site_id}/network/edit-queue", status_code=202)
+def enqueue_network_edit(site_id: str, payload: network_edit_queue.Request, user: AuthUser, db: Session = Depends(get_db)):
+    return _network_call(network_edit_queue.enqueue, db, _get_site_or_404(db, site_id), payload, _request_username(user) or "user")
+
+
 @router.get("/sites/{site_id}/network/fake-main-queue")
 def get_fake_main_queue(site_id: str, _: AuthUser, db: Session = Depends(get_db)):
     return fake_main_queue.snapshot(db, _get_site_or_404(db, site_id))

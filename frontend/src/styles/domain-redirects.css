@@ -2,3 +2,8 @@
 .domainRedirectInlineField > span { display:inline-flex; align-items:center; gap:6px; visibility:hidden; }
 .domainRedirectsTable .domainRedirectInlineField input { position:absolute; inset:0; width:100%; min-width:0; height:28px; min-height:28px; margin:0; padding:3px 6px; box-sizing:border-box; font:inherit; border-radius:6px; }
 .domainRedirectInlineActions { display:inline-flex; align-items:center; gap:6px; margin:0; padding:0; }
+
+.networkEditStatus { display: flex; align-items: flex-start; gap: 5px; max-width: 320px; font-size: 11px; line-height: 1.4; color: #64748b; }
+.networkEditStatus svg { flex: 0 0 auto; margin-top: 2px; }
+.networkEditStatus.error { color: #b42318; }
+.networkEditPending { opacity: .65; }

@@ -1,10 +1,12 @@
+import { useNetworkEditQueue } from "./useNetworkEditQueue";
+import { NetworkEditStatus } from "./NetworkEditStatus";
+import { type NetworkEditAction } from "./networkEditQueue";
 import { ShowcaseHistory } from "./AutomaticActions";
 import React from "react";
 import { activeStatuses, networkOperationHistory, fakeQueueStatus } from "./networkOperationHistory";
 import { useFakeMainQueue } from "./useFakeMainQueue";
 import { fakeQueueActive, normalizedFakePath } from "./fakeMainQueue";
 import { TemplateCombobox } from "./TemplateCombobox";
-import { validateReserveSave } from "./networkReserve";
 import { readNetworkWithRetry } from "./networkReadRetry";
 import { LastReglueSummary, type LastReglue, type RecentNetworkChange } from "./LastReglueSummary";
 import { matchesProjectSearch, normalizeDomainQuery } from "./projectSearch";
@@ -106,7 +108,26 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
   const historySaving = React.useRef(new Set<string>());
   const [historyStatus, setHistoryStatus] = React.useState<Record<string, {saving:boolean; checked?:boolean; message:string; error?:boolean}>>({});
   const fakeQueue = useFakeMainQueue<Network>(site.id, api, !!busy);
-  const queueOperationIds = new Set(fakeQueue.items.flatMap(item => item.operation_ids));
+  const editQueue = useNetworkEditQueue<Network>(site.id, api, !!busy);
+  const queueOperationIds = new Set([...fakeQueue.items.flatMap(item => item.operation_ids), ...editQueue.items.map(item => item.id)]);
+  const appliedEditNetwork = React.useRef<Network | null>(null);
+  React.useEffect(() => {
+    const next = editQueue.server.network;
+    if (!next || next === appliedEditNetwork.current || busyRef.current) return;
+    appliedEditNetwork.current = next;
+    if (next.revision !== dataRef.current?.revision || JSON.stringify(next.operations) !== JSON.stringify(dataRef.current?.operations)) {
+      accept(next); onChanged();
+    }
+  }, [editQueue.server.network, busy]);
+  function enqueueEdit(action: NetworkEditAction, settings: Record<string, unknown> = {}) {
+    if (!data) return false;
+    let expected: Record<string, unknown>;
+    if (action === "reserve" || action === "reglue") expected = {canon: data.canon, reserve: data.reserve};
+    else if (action === "domain_redirects_main") expected = {canon: data.canon, rows: data.domain_redirects || []};
+    else if (action === "domain_redirect") expected = {rows: (data.domain_redirects || []).filter(row => row.url === (settings.redirect_original_source || settings.redirect_source))};
+    else expected = {rows: (data.page_redirects || []).filter(group => group.domain === (settings.page_redirect_original_domain || settings.page_redirect_domain)).flatMap(group => group.redirects.filter(row => row.url === (settings.page_redirect_original_source || settings.page_redirect_source)))};
+    return editQueue.enqueue({action, revision: data.revision, ...settings, expected: (settings.expected as Record<string, unknown>) || expected});
+  }
   const uncertain = data?.operations.some((op) => ["pending", "unknown"].includes(op.status) && !queueOperationIds.has(op.id)) || false;
   const appliedQueueNetwork = React.useRef<Network | null>(null);
   React.useEffect(() => {
@@ -242,22 +263,6 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
       if(problem)return false;
     }
     busyRef.current = true; setBusy(action); setError(""); setMessage("");
-    if (action === "reserve") {
-      const previous = dataRef.current || data;
-      const selected = targetDomain || reserve;
-      try {
-        const fresh = await api<Network>(`/sites/${site.id}/network?refresh=true`, { cache: "no-store" });
-        if (!mounted.current) { busyRef.current = false; return false; }
-        accept(fresh);
-        validateReserveSave(previous, fresh, selected);
-        revision = fresh.revision;
-        targetDomain = selected;
-      } catch (err) {
-        busyRef.current = false;
-        if (mounted.current) { setBusy(""); setError(errorText(err)); }
-        return false;
-      }
-    }
     const payload = { action, ...settings, ...(action === "create_fake_main" ? { activate_fake_main: true } : {}), fake_main_path: action === "select_fake_main" ? settings?.fake_main_path ?? "" : action === "create_fake_main" ? fakeMainInput : "", ...(action === "alternates" && canonicalDirty && canonicalDraft ? { canonical_default_markup: canonicalDraft.standard, canonical_fake_main_markup: canonicalDraft.fake } : {}), revision: revision || dataRef.current?.revision || data.revision, domain: action === "delete_domain" ? targetDomain || "" : targetDomain || reserve, alternate_markup: markupDraft.markup, enable_alternates: markupDraft.enabled, ...(action === "delete_domain" ? { domains: targetDomain ? [targetDomain] : removeDomains } : {}), ...((action === "create_subdomains" || action === "create_domains") ? { domains: subdomains } : {}) };
     if (action === "delete_domain") setSubmittingDeletion(payload.domains || []);
     const receiptKey = `network-request:${username}:${site.id}`;
@@ -383,7 +388,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
   }
   async function startReglue() {
     if(dirty && !await mutate("alternates"))return;
-    await mutate("reglue");
+    enqueueEdit("reglue", {domain: reserve});
   }
   function useSavedMarkup() {
     if (!data) return;
@@ -415,8 +420,9 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
   const protectedDomains = [data?.canon, data?.reserve, site.name, data?.amp, ...(data?.amp_domains || [])].filter(Boolean).map(value => value!.replace(/^www\./, ""));
   const removeErrors = removeDomains.flatMap(domain => !data?.domains.includes(domain) ? [domain + ": домен отсутствует в сетке."] : protectedDomains.includes(domain.replace(/^www\./, "")) ? [domain + ": домен проекта, Main, AMP или резерв защищён от удаления."] : data.alternates.some(link => link.domain.replace(/^www\./, "") === domain.replace(/^www\./, "")) ? [domain + ": используется в альтернейтах."] : []);
   const reserveValid = Boolean(data && reserve && reserve !== data.canon && data.domains.includes(reserve) && !ampDomains.has(reserve));
-  const reglueBlockedReason = busy ? "Дождитесь завершения текущего запроса."
-    : uncertain ? "Дождитесь подтверждения предыдущей операции."
+  const reglueBlockedReason = editQueue.busy("reglue") ? "Переклей отправлен на сервер."
+    : editQueue.busy("reserve") ? "Ожидаем сохранения резерва."
+    : busy && dirty ? "Ожидаем сохранения разметки."
     : conflict ? "Разметка изменилась в Webdev. Подробности — в уведомлениях проекта."
     : !reserveValid ? "Выберите резервный домен из текущей сетки."
     : reserve !== data?.reserve ? "Сначала сохраните выбранный резерв." : "";
@@ -435,12 +441,19 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
       {data && <>
         {data.stock_warning&&<p role="alert" className="notice">⚠ {data.stock_warning}</p>}
 
+        {editQueue.error && <p role="alert" className="notice">{editQueue.error}</p>}
         <div className="networkTopControls">
         {mode === "network" && networkView === "amp" ? <p>Текущий AMP: <strong>{data.amp || "не задан"}</strong> · Предыдущий AMP: <strong>{data.prev_amp || "не задан"}</strong></p> : <div className="networkMainReserveRow">
           <div className="networkCurrentDomains"><span>Текущий Main: <strong>{data.canon || "не задан"}</strong></span><span>Текущий резерв: <strong>{data.reserve && data.reserve !== data.canon ? data.reserve : "не выбран"}</strong></span><span>Фейковый внутряк: <strong>{data.fake_main_current || "не выбран"}</strong></span></div>
-          <fieldset disabled={disabled} className="networkReserveField networkReserveInline"><TemplateCombobox label="Резервный домен" value={reserve} placeholder="Выберите резерв" onChange={value => { setReserve(value); }} options={[{ value: "", label: "Выберите резерв" }, ...data.domains.filter(domain => !ampDomains.has(domain) && domain !== data.canon).map(domain => ({ value: domain, label: domain }))]} /></fieldset>
-          <button type="button" className="button secondary compact" disabled={disabled || !reserveValid || reserve === data.reserve} onClick={() => void mutate("reserve")}>{busy === "reserve" ? "Сохраняем…" : "Сохранить резерв"}</button>
-          <button type="button" className="button primary compact networkReglueButton" disabled={!!reglueBlockedReason} title={reglueBlockedReason || (dirty?"Сохранить разметку и запустить переклей на резерв":"Ручной переклей на резервный домен")} onClick={() => void startReglue()}>{busy === "reglue" ? "Запускаем…" : "Переклей"}</button>
+          <fieldset className="networkReserveField networkReserveInline" disabled={editQueue.busy("reserve")}><TemplateCombobox label="Резервный домен" value={reserve} placeholder="Выберите резерв" onChange={value => { if (!editQueue.busy("reserve")) setReserve(value); }} options={[{ value: "", label: "Выберите резерв" }, ...data.domains.filter(domain => !ampDomains.has(domain) && domain !== data.canon).map(domain => ({ value: domain, label: domain }))]} /></fieldset>
+          <div className="networkReserveSave">
+            {!editQueue.busy("reserve") && <button type="button" className="button secondary compact" disabled={!reserveValid || reserve === data.reserve} onClick={() => enqueueEdit("reserve", {domain: reserve})}>Сохранить резерв</button>}
+            <NetworkEditStatus item={editQueue.latest("reserve")} retry={id => editQueue.retry(id)} />
+          </div>
+          <div className="networkReserveSave"><button type="button" className="button primary compact networkReglueButton" disabled={!!reglueBlockedReason} title={reglueBlockedReason || (dirty?"Сохранить разметку и запустить переклей на резерв":"Ручной переклей на резервный домен")} onClick={() => void startReglue()}>{editQueue.busy("reglue") ? "Переклей в очереди…" : "Переклей"}</button>
+            <NetworkEditStatus item={editQueue.latest("reglue")} retry={id => editQueue.retry(id)} />
+            {!editQueue.busy("reglue") && reglueBlockedReason && <small className="networkEditStatus">{reglueBlockedReason}</small>}
+          </div>
         </div>}
         </div>
         {mode === "network" && <>
@@ -472,7 +485,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
               <span className="networkBrandNavigationCount" title="Доменов в сетке">{current ? data.domains.length : peer.domainCount}</span>
             </a></li>; })}</ul>
           </nav>}</div>
-          {networkView === "main" && <><DomainRedirects key={site.id} canon={data.canon} onRetargetMain={revision=>mutate("domain_redirects_main",undefined,draft,undefined,revision)} redirects={data.domain_redirects || []} revision={data.revision} available={!!data.has_domain_redirects} disabled={disabled} onSave={(edit, revision) => mutate("domain_redirect", undefined, draft, edit, revision)} /><PageRedirects key={`pages:${site.id}`} groups={data.page_redirects||[]} domains={data.domains} canon={data.canon} revision={data.revision} available={!!data.has_page_redirects} disabled={disabled} onSave={(edit,revision)=>mutate("page_redirect",undefined,draft,edit,revision)}/></>}
+          {networkView === "main" && <><DomainRedirects key={site.id} canon={data.canon} onRetargetMain={async () => enqueueEdit("domain_redirects_main")} queue={editQueue} redirects={data.domain_redirects || []} revision={data.revision} available={!!data.has_domain_redirects} disabled={disabled} onSave={async edit => enqueueEdit("domain_redirect", edit)} /><PageRedirects key={`pages:${site.id}`} groups={data.page_redirects||[]} domains={data.domains} canon={data.canon} revision={data.revision} available={!!data.has_page_redirects} disabled={disabled} queue={editQueue} onSave={async edit => enqueueEdit("page_redirect", edit)}/></>}
           {networkView === "main" && <div className="networkDomainManagement"><div className="networkSection networkSubdomains">
             <h3>Добавление в сетку</h3>
             <p>Укажите домены и поддомены через запятую, пробел или новую строку.</p>

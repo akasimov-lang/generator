@@ -62,6 +62,9 @@ def run_job(db, job_id):
     if candidate and candidate.kind == 'pilot_text':
         from app.pilot_text_jobs import execute
         return execute(db, job_id)
+    if candidate and candidate.kind == 'network_edit_queue':
+        from app.network_edit_queue import execute_step
+        return execute_step(db, job_id)
     if candidate and candidate.kind == 'fake_main_queue':
         from app.fake_main_queue import execute_step
         return execute_step(db, job_id)
