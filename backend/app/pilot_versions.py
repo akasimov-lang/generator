@@ -100,7 +100,7 @@ def validate_live(db, job, plan, user, plans):
     if source_id != target_id: require_pair(sites[source_id], sites[target_id])
     if any(any(banned_domains(db, site, [plan['new_main'], *([plan['parent_domain']] if plan.get('parent_domain') else [])]).values()) for site in sites.values()):
         raise NetworkConflict('Домен или родительский домен этой версии в БАН. Выберите другой вариант.')
-    require_unused(sites[target_id], states[target_id], plan['new_main'])
+    require_unused(sites[target_id], states[target_id], plan['new_main'], plan=plan)
     require_available(db, sites[target_id], plan.get('fake_main_path'), plans)
     if plan.get('reserve_pool_id'):
         from app.reglue_reserves import validate_plan

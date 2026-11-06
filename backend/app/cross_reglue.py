@@ -196,9 +196,9 @@ def make_plan(cfg, target, state, source, source_state, domain, *, mode='redistr
     return plan
 
 
-def require_selected_reserve(db, target, state, domain):
+def require_selected_reserve(db, target, state, domain, *, plan=None):
     from app.reglue_reserves import require_unused
-    require_unused(target, state, domain)
+    require_unused(target, state, domain, plan=plan)
     if selected_reserve(state) != domain or domain not in state['domains']:
         raise ValueError('Выбранный резерв изменился или отсутствует в сетке. Подготовьте новый план.')
     if domain in state.get('amp_domains', []) or (target.domain_types or {}).get(domain) == 'amp':
@@ -515,7 +515,7 @@ def execute(db, run):
             if plan.get('use_selected_reserve') or plan.get('local_target'):
                 if not db.get(models.NetworkOperation, receipt_id(run, 'reglue')):
                     if plan.get('use_selected_reserve'):
-                        require_selected_reserve(db, target, target_state, domain)
+                        require_selected_reserve(db, target, target_state, domain, plan=plan)
                     if not run.plan.get('started_at'):
                         if auto.digest(cfg.model_dump()) != plan['config_hash'] or not target_matches(db, run, target_state):
                             raise ValueError('Сетка изменилась после предпросмотра. Подготовьте план снова.')
@@ -606,7 +606,7 @@ def execute(db, run):
                 if receipt is None:
                     if action == 'reglue':
                         from app.reglue_reserves import require_unused
-                        require_unused(target, target_state, domain)
+                        require_unused(target, target_state, domain, plan=plan)
                     if action == 'reglue' and plan.get('main_target_kind'):
                         from app.mass_main_targets import require_target
                         require_target(db, target, target_state, plan, allow_created=True)

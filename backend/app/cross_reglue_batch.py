@@ -275,14 +275,14 @@ def reserve(db, batch_id, items, username, *, scheduled=None):
             if not cross.source_matches(db, run, source_state) or not cross.target_matches(db, run, target_state):
                 raise network.NetworkConflict('Сетки изменились после предпросмотра. Подготовьте группу заново.')
             from app.reglue_reserves import require_unused
-            require_unused(target, target_state, plan['new_main'])
+            require_unused(target, target_state, plan['new_main'], plan=plan)
             if plan.get('reserve_pool_id'):
                 from app.reglue_reserves import validate_plan
                 cross.require_import_for_plan(db, target, target_state, plan)
                 validate_plan(db, target, target_state, plan)
             elif plan.get('use_selected_reserve') or plan.get('local_target'):
                 if plan.get('use_selected_reserve'):
-                    cross.require_selected_reserve(db, target, target_state, plan['new_main'])
+                    cross.require_selected_reserve(db, target, target_state, plan['new_main'], plan=plan)
                 from app.mass_main_targets import require_target
                 require_target(db, target, target_state, plan)
             else:

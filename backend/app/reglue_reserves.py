@@ -105,9 +105,29 @@ def import_domains(db, text, kind, brand, username):
     return {'added': added, 'duplicates': duplicates, 'errors': errors}
 
 
-def require_unused(site, state, domain):
+def authorized_own_drop_reuse(site, state, domain, plan=None):
+    """Honor the recorded, domain-bound approval without relaxing stock allocation."""
+    plan = plan or {}
+    approval = plan.get('reuse_main_authorization') or {}
+    report_id = plan.get('maintenance_report_id')
+    return bool(
+        report_id and approval.get('report_id') == report_id
+        and plan.get('list_launch_id', report_id) == report_id
+        and approval.get('actor') and approval.get('authorized_at')
+        and approval.get('scope') == 'own_drop_only'
+        and approval.get('site_id') == site.id == plan.get('site_id') == plan.get('source_site_id')
+        and domain_key(approval.get('domain')) == domain_key(domain) == domain_key(plan.get('new_main'))
+        and plan.get('local_target') and plan.get('main_target_kind') == 'drop'
+        and not any(plan.get(k) for k in ('reserve_pool_id', 'create_subdomain', 'emergency_subdomain'))
+        and (site.domain_types or {}).get(domain) == 'drop'
+        and domain in state.get('domains', [])
+        and domain_key(domain) != domain_key(state.get('canon'))
+    )
+
+
+def require_unused(site, state, domain, *, plan=None):
     used = [*(site.main_domain_history or []), state.get('canon'), state.get('prev')]
-    if domain_key(domain) in {domain_key(d) for d in used if d}:
+    if domain_key(domain) in {domain_key(d) for d in used if d} and not authorized_own_drop_reuse(site, state, domain, plan):
         raise ValueError('Выбранный домен уже использовался как Main в этой сетке.')
 
 
