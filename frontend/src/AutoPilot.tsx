@@ -66,7 +66,7 @@ type Task={display_status?:string;planning_only?:boolean;report_id?:number;repor
 type Tasks={items:Task[];total:number;has_more:boolean};
 export function PilotReportIdentity({task}:{task:Pick<Task,"id"|"report_id"|"report_url"|"name"|"mode"> & Partial<Pick<Task,"planning_only"|"finished_at">>}) {
  const href=task.mode==="maintenance"?(task.report_url||`/auto-reglue/pilot/report?maintenance=${encodeURIComponent(task.id)}`):`/auto-reglue/pilot${task.mode==="execution"?"/logs":""}?id=${encodeURIComponent(task.id)}`;
- return <div className="pilotReportIdentity">{Number.isInteger(task.report_id)&&Number(task.report_id)>=3000&&<a className="pilotReportId" href={href}>{task.mode!=="preview"&&!task.planning_only&&task.finished_at?"Отчёт по плану":"План"} №{task.report_id}</a>}<strong className="pilotReportName"><a href={href} title={task.name}>{task.name}</a></strong></div>;
+ return <div className="pilotReportIdentity">{Number.isInteger(task.report_id)&&Number(task.report_id)>=3000&&<a className="pilotReportId" href={href}>{task.mode!=="preview"&&!task.planning_only?"Отчёт по плану":"План"} №{task.report_id}</a>}<strong className="pilotReportName"><a href={href} title={task.name}>{task.name}</a></strong></div>;
 }
 
 export function AutoPilotPage({api,logs=false,reports=false,renderProjects}:{api:Api;logs?:boolean;reports?:boolean;renderProjects?:ProjectRenderer}) {

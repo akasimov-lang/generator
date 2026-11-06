@@ -111,19 +111,22 @@ def markup_tables(markup):
 
 
 STYLE='''<style>
-.pp-standard{container-type:inline-size;display:grid;gap:16px;width:100%;grid-column:1/-1;flex:1 0 100%;margin:20px 0;font-family:inherit}
-.pp-standard.pp-standard .pp-standard-card{display:grid;grid-template-columns:minmax(130px,180px) minmax(0,1fr) minmax(130px,200px);gap:20px;align-items:center;width:100%;box-sizing:border-box;padding:22px;border:1px solid #8b94a666;border-radius:14px;background:var(--showcase-card-bg,#fff);color:var(--showcase-card-color,#1c2638)}
-.pp-standard .pp-standard-brand{min-width:0;text-align:center}.pp-standard .pp-standard-brand img{display:block;width:150px;max-width:100%;height:82px;object-fit:contain;margin:0 auto 10px}.pp-standard .casino-brand{display:block;overflow-wrap:anywhere;font-size:18px;line-height:1.3;font-weight:700}
-.pp-standard .bonus-value{font-size:20px;line-height:1.4;font-weight:700;overflow-wrap:anywhere}.pp-standard .casino-rating{display:block;margin-top:8px;font-weight:600}.pp-standard .pp-standard-actions{display:grid;gap:8px}.pp-standard .pp-standard-actions a,.pp-standard .pp-standard-actions button{display:block;padding:12px;border-radius:8px;background:var(--showcase-button-bg,#3557d6);color:#fff;text-decoration:none;text-align:center;font-weight:700;line-height:1.3}
-.pp-standard .pp-standard-terms{grid-column:1/-1;margin:0;font-size:13px}.pp-standard .pp-standard-terms p{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.5}.pp-standard .pp-standard-actions a>button{padding:0;background:transparent;border:0;color:inherit;width:100%}.pp-standard .pp-standard-icons{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.pp-standard .pp-standard-icons img{height:24px!important;max-height:24px!important;width:auto;object-fit:contain}.pp-standard summary{cursor:pointer}
-@container(max-width:640px){.pp-standard.pp-standard .pp-standard-card{grid-template-columns:1fr}}
-@media(max-width:640px){.pp-standard.pp-standard .pp-standard-card{grid-template-columns:1fr;gap:14px;padding:16px}.pp-standard .casino-brand{font-size:16px}.pp-standard .bonus-value{text-align:center;font-size:18px}.pp-standard .pp-standard-actions,.pp-standard .pp-standard-terms{grid-column:1}}
+.pp-standard{container-type:inline-size;display:grid;gap:16px;width:100%;grid-column:1/-1;flex:1 0 100%;margin:20px 0;font-family:inherit;color:inherit}
+.pp-standard.pp-standard .pp-standard-card{display:grid;grid-template-columns:minmax(130px,180px) minmax(0,1fr) minmax(180px,1fr);gap:24px;align-items:center;width:100%;box-sizing:border-box;padding:24px;border:1px solid var(--showcase-border,#34d39966);border-radius:16px;background:transparent;color:var(--showcase-card-color,inherit);box-shadow:inset 0 1px 0 #ffffff0d,0 6px 24px #0000000a}
+.pp-standard .pp-standard-brand{min-width:0;text-align:center}.pp-standard .pp-standard-brand img{display:block;width:150px;max-width:100%;height:82px;object-fit:contain;margin:0 auto 10px}.pp-standard .casino-brand{display:block;overflow-wrap:anywhere;font-size:18px;line-height:1.3;font-weight:700;color:inherit}
+.pp-standard .pp-standard-offer{display:grid;gap:16px;min-width:0}.pp-standard .bonus-value{font-size:20px;line-height:1.4;font-weight:700;overflow-wrap:anywhere;color:inherit}.pp-standard .casino-rating{display:block;margin-top:8px;font-weight:600;color:inherit}.pp-standard .pp-standard-actions{display:grid;gap:8px}.pp-standard .pp-standard-actions:empty{display:none}.pp-standard .pp-standard-actions a,.pp-standard .pp-standard-actions button{display:block;padding:12px;border-radius:8px;background:var(--showcase-button-bg,#167d60);color:#fff;text-decoration:none;text-align:center;font-weight:700;line-height:1.3}
+.pp-standard .pp-standard-terms{margin:0;min-width:0;font-size:13px;color:inherit;border-left:1px solid var(--showcase-border,#34d39944);padding-left:20px}.pp-standard .pp-standard-terms p{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.65;color:inherit;margin:0;padding:0}.pp-standard .pp-standard-actions a>button{padding:0;background:transparent;border:0;color:inherit;width:100%}.pp-standard .pp-standard-icons{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.pp-standard .pp-standard-icons img{height:24px!important;max-height:24px!important;width:auto;object-fit:contain}
+@container(max-width:760px){.pp-standard.pp-standard .pp-standard-card{grid-template-columns:1fr}.pp-standard .pp-standard-terms{border-left:0;border-top:1px solid var(--showcase-border,#34d39944);padding:16px 0 0}}
+@media(max-width:640px){.pp-standard.pp-standard .pp-standard-card{grid-template-columns:1fr;gap:16px;padding:18px}.pp-standard .casino-brand{font-size:16px}.pp-standard .bonus-value{text-align:center;font-size:18px}.pp-standard .pp-standard-terms{border-left:0;border-top:1px solid var(--showcase-border,#34d39944);padding:16px 0 0}}
 </style>'''
 
 
-def template(group,details_label):
+def template(group,details_label=None, *, dark=False):
+    # No translated heading is necessary: all original terms remain visible.
+    # Keep the former positional argument for saved plan compatibility.
     v=lambda key:'{{findValueInObjectByKey this "'+key+'" "value" false}}'
-    return STYLE+'<section class="pp-standard">{{#each casinos.'+group+'}}<article class="casino-card pp-standard-card"><div class="pp-standard-brand">{{#if (findValueInObjectByKey this "logo" "id" false)}}<img src="{{findLogo this ../casinos.basic "src"}}" alt="'+v('brand')+'" loading="lazy">{{/if}}<strong class="casino-brand">'+v('brand')+'</strong><span class="casino-rating">'+v('rating')+'</span></div><div class="bonus-value">'+v('bonus')+'</div><div class="pp-standard-actions">{{{findValueInObjectByKey this "actions_html" "value" false}}}</div><details class="pp-standard-terms"><summary>'+escape(details_label)+'</summary><p>'+v('conditions')+'</p><div class="pp-standard-icons">{{{findValueInObjectByKey this "icons_html" "value" false}}}</div></details></article>{{/each}}</section>'
+    theme=' style="--showcase-card-color:#fff;--showcase-border:#34d39966"' if dark else ''
+    return STYLE+'<section class="pp-standard"'+theme+'>{{#each casinos.'+group+'}}<article class="casino-card pp-standard-card"><div class="pp-standard-brand">{{#if (findValueInObjectByKey this "logo" "id" false)}}<img src="{{findLogo this ../casinos.basic "src"}}" alt="'+v('brand')+'" loading="lazy">{{/if}}<strong class="casino-brand">'+v('brand')+'</strong>{{#if (findValueInObjectByKey this "rating" "value" false)}}<span class="casino-rating">'+v('rating')+'</span>{{/if}}</div><div class="pp-standard-offer"><div class="bonus-value">'+v('bonus')+'</div><div class="pp-standard-actions">{{{findValueInObjectByKey this "actions_html" "value" false}}}</div></div><div class="pp-standard-terms"><p>'+v('conditions')+'</p><div class="pp-standard-icons">{{{findValueInObjectByKey this "icons_html" "value" false}}}</div></div></article>{{/each}}</section>'
 
 
 def prepare(project,public_html,expected_brands,details_label='Details',public_pages=None):
@@ -286,6 +289,8 @@ def publish(db,site,remote,plan,report_id,actor='anton'):
             if op.status=='confirmed' and confirmed(actual,after):receipts.append(op.id);return
             raise ValueError('Предыдущая отправка требует проверки; автоматический повтор запрещён.')
         if actual!=before:raise ValueError('Изменился источник витрины: '+key)
+        if before == after:
+            return
         op=models.ProjectPageEdit(id=request_id,site_id=site.id,page_key=digest(['showcase-standard',kind,key]),requested_by=actor,
               fingerprint=digest(after),before_page={'node':before},after_page={'node':after},status='pending')
         db.add(op);db.commit()
@@ -326,3 +331,26 @@ def publish(db,site,remote,plan,report_id,actor='anton'):
     home=next(p for p in actual['data']['pages'] if not str(p.get('slug') or '').strip('/'))
     if {identity(b) for b in page_inventory(actual,home)['brands']}!={identity(b) for b in plan['brands_before']}:raise ValueError('После записи не подтверждён исходный состав брендов.')
     return {'receipt_ids':receipts,'project':actual}
+
+
+def presentation_plan(project, *, dark=False):
+    """Restyle installed standard templates without altering offers or page content."""
+    data = project.get('data') or {}
+    home = next((p for p in data.get('pages', []) if not str(p.get('slug') or '').strip('/')), None)
+    if home is None:
+        raise ValueError('Главная страница не найдена.')
+    changes = []
+    for shortcode in project.get('shortcodes', []):
+        markup = shortcode.get('data') or ''
+        if not shortcode.get('name', '').startswith('casinos-standard-') or 'pp-standard-card' not in markup:
+            continue
+        groups = re.findall(r'{{#each casinos\.([A-Za-z0-9_]+)}}', markup)
+        if len(groups) != 1 or groups[0] not in (data.get('casinos') or {}):
+            raise ValueError('Не определена группа стандартной витрины.')
+        after = {**shortcode, 'data': template(groups[0], dark=dark)}
+        if after != shortcode:
+            changes.append([deepcopy(shortcode), after])
+    brands = page_inventory(project, home)['brands']
+    return {'before_revision': digest(project), 'casinos_before': deepcopy(data.get('casinos')),
+            'casinos_after': deepcopy(data.get('casinos')), 'templates': changes, 'new_templates': [],
+            'pages': [], 'brands_before': brands, 'brands_after': brands}

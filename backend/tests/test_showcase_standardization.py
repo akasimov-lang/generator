@@ -194,3 +194,30 @@ def test_table_cards_without_logo_guard_lookup_by_optional_field():
     markup=template('table_group','Details')
     assert '{{#if (findValueInObjectByKey this "logo" "id" false)}}<img src="{{findLogo this ../casinos.basic "src"}}"' in markup
     assert '{{#if (findLogo' not in markup
+
+
+def test_standard_showcase_always_shows_conditions_and_keeps_tracking_action():
+    from app.showcase_standardization import template
+    markup = template('offers', 'Details')
+    assert '<details' not in markup and '<summary' not in markup
+    assert '<div class="pp-standard-terms"><p>' in markup
+    assert '"conditions" "value"' in markup and '"actions_html" "value"' in markup
+    assert 'background:transparent' in markup and 'grid-template-columns:minmax(130px,180px)' in markup
+    assert 'Details' not in markup
+
+
+def test_dark_showcase_uses_white_text_without_overriding_other_sites():
+    from app.showcase_standardization import template
+    assert '--showcase-card-color:#fff' in template('offers', dark=True)
+    assert '--showcase-card-color:#fff' not in template('offers')
+
+
+def test_restyle_plan_preserves_every_offer_and_only_changes_standard_templates():
+    from app.showcase_standardization import presentation_plan, template
+    source = project([], [{'name':'casinos-standard-1.hbs','data':template('standard')+'<!-- old -->'}, {'name':'header.hbs','data':'keep'}])
+    before=deepcopy(source)
+    plan=presentation_plan(source,dark=True)
+    assert source==before
+    assert plan['casinos_before']==plan['casinos_after']==source['data']['casinos']
+    assert plan['pages']==[] and plan['new_templates']==[]
+    assert [item[0]['name'] for item in plan['templates']]==['casinos-standard-1.hbs']
