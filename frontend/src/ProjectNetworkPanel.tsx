@@ -1,3 +1,5 @@
+import { saveMarkupWithRetry } from "./networkMarkupSave";
+import { mergeMarkupDraft, mergeCanonicalDraft } from "./networkDrafts";
 import { useNetworkEditQueue } from "./useNetworkEditQueue";
 import { NetworkEditStatus } from "./NetworkEditStatus";
 import { type NetworkEditAction } from "./networkEditQueue";
@@ -158,15 +160,9 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
       pendingMarkupSave.current = null;
       setPendingMarkupSections([]);
     }
-    setCanonicalDraft(old => old && (old.standard !== old.originalStandard || old.fake !== old.originalFake) && (!sameMarkup(old.standard,next.canonicalDefaultMarkup??"") || !sameMarkup(old.fake,next.canonicalFakeMainMarkup??"")) ? old : {
-      standard: next.canonicalDefaultMarkup ?? "", fake: next.canonicalFakeMainMarkup ?? "",
-      originalStandard: next.canonicalDefaultMarkup ?? "", originalFake: next.canonicalFakeMainMarkup ?? "",
-    });
+    setCanonicalDraft(old => mergeCanonicalDraft(old, next.canonicalDefaultMarkup ?? "", next.canonicalFakeMainMarkup ?? ""));
     setReserve((old) => !replaceReserve && old !== previous?.reserve && old && next.domains.includes(old) && old !== next.canon ? old : (next.reserve === next.canon ? "" : next.reserve));
-    setDraft((old) => old && (old.markup !== old.originalMarkup || old.enabled !== old.originalEnabled) && (!sameMarkup(old.markup,next.alternateMarkup) || old.enabled !== next.enableAlternates) ? old : {
-      markup: next.alternateMarkup, enabled: next.enableAlternates,
-      originalMarkup: next.alternateMarkup, originalEnabled: next.enableAlternates,
-    });
+    setDraft(old => mergeMarkupDraft(old, next.alternateMarkup, next.enableAlternates));
   }
   async function load(force = true, replaceReserve = false) {
     if (busyRef.current) return;
@@ -212,7 +208,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
   }, [draft, draftKey]);
   React.useEffect(() => {
     projectNotice({siteId:site.id,key:"markup-draft",code:conflict?"MARKUP_CONFLICT":uncertain?"MARKUP_PENDING":"MARKUP_DRAFT",severity:conflict?"warning":"info",active:dirty,
-      message:conflict?"Разметка в Webdev изменилась отдельно. Сверьте черновик с сохранённым вариантом перед записью.":uncertain?"Сохранение отправлено. Проверяем результат Webdev без повторной записи.":"В форме есть правки разметки. Кликните вне полей для сохранения. Переклей также сохранит их перед запуском.",context:"Сетка → Каноникл и альтернейты"});
+      message:conflict?"Сохраним выбранные в PagePilot значения разметки поверх обновлённых данных Webdev.":uncertain?"Сохранение отправлено. Проверяем результат Webdev без повторной записи.":"В форме есть правки разметки. Кликните вне полей для сохранения. Переклей также сохранит их перед запуском.",context:"Сетка → Каноникл и альтернейты"});
   },[site.id,dirty,conflict,uncertain]);
   React.useEffect(() => {
     projectNotice({siteId:site.id,key:"network-form",code:"NETWORK_FORM",message:error||"Ошибка формы устранена.",severity:"error",active:!!error});
@@ -278,17 +274,31 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
     ] : action === "create_fake_main" || action === "select_fake_main" ? ["dynamic"] : [];
     if (sections.length) { pendingMarkupSave.current = { id: requestId, sections }; setPendingMarkupSections(sections); }
     try {
-      const next = await api<Network>(`/sites/${site.id}/network/operations`, { method: "POST", body: JSON.stringify({ ...payload, request_id: requestId }) });
+      const submit = async () => {
+        if (action === "alternates") {
+          if (!mounted.current || historySite.current !== site.id) throw new Error("Проект закрыт до отправки разметки.");
+          const fresh = await api<Network>(`/sites/${site.id}/network?refresh=true`, {cache: "no-store"});
+          if (!mounted.current || historySite.current !== site.id) throw new Error("Проект закрыт до отправки разметки.");
+          const merged = mergeMarkupDraft(markupDraft, fresh.alternateMarkup, fresh.enableAlternates);
+          const canonical = mergeCanonicalDraft(canonicalDraft, fresh.canonicalDefaultMarkup ?? "", fresh.canonicalFakeMainMarkup ?? "");
+          payload.revision = fresh.revision;
+          payload.alternate_markup = merged.markup;
+          payload.enable_alternates = merged.enabled;
+          if (payload.canonical_default_markup !== undefined) payload.canonical_default_markup = canonical.standard;
+          if (payload.canonical_fake_main_markup !== undefined) payload.canonical_fake_main_markup = canonical.fake;
+        }
+        return api<Network>(`/sites/${site.id}/network/operations`, { method: "POST", body: JSON.stringify({ ...payload, request_id: requestId }) });
+      };
+      const next = action === "alternates"
+        ? await saveMarkupWithRetry(submit, () => { if (mounted.current && historySite.current === site.id) setMessage("Сохраняем значения PagePilot. Ожидаем освобождения сетки…"); })
+        : await submit();
       if (!mounted.current) return false;
       const operation = next.operations.find((op) => op.id === requestId);
       accept(next, action === "reglue" || action === "reserve" && operation?.status === "confirmed");
       if ((action === "create_subdomains" || action === "create_domains") && operation && operation.status !== "failed") setSubdomainsInput("");
       if (action === "delete_domain" && operation && operation.status !== "failed") setRemoveDomainInput("");
       if (operation?.status === "confirmed") {
-        if (action === "alternates") {
-          setDraft({ markup: next.alternateMarkup, enabled: next.enableAlternates, originalMarkup: next.alternateMarkup, originalEnabled: next.enableAlternates });
-          setCanonicalDraft({standard:next.canonicalDefaultMarkup??"",fake:next.canonicalFakeMainMarkup??"",originalStandard:next.canonicalDefaultMarkup??"",originalFake:next.canonicalFakeMainMarkup??""});
-        }
+
         projectChanged(site.id);
         setMessage(`${actionLabels[action]}: подтверждено.`);
         sessionStorage.removeItem(receiptKey);
@@ -359,7 +369,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
   const visibleDomains = known.filter(domain => showNetworkHistory || currentDomains.has(domain)).filter((domain) => networkView === "amp" ? ampDomains.has(domain) : !ampDomains.has(domain)).filter(domain => matchesProjectSearch(domain, normalizeDomainQuery(domainQuery))).sort((left, right) => domainPosition(left) - domainPosition(right));
   const deletingDomains = new Set([...submittingDeletion, ...(data?.operations || []).filter(op => op.action === "delete_domain" && ["pending", "unknown"].includes(op.status)).flatMap(op => op.domains?.length ? op.domains : op.domain ? [op.domain] : [])]);
   const disabled = Boolean(busy) || uncertain;
-  const canSaveMarkup = !disabled && dirty && !conflict && !!data?.has_head;
+  const canSaveMarkup = !disabled && dirty && !!data?.has_head;
   React.useEffect(()=>{
     if(!canSaveMarkup)return;
     const outside=(event:MouseEvent)=>{
@@ -423,7 +433,6 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
   const reglueBlockedReason = editQueue.busy("reglue") ? "Переклей отправлен на сервер."
     : editQueue.busy("reserve") ? "Ожидаем сохранения резерва."
     : busy && dirty ? "Ожидаем сохранения разметки."
-    : conflict ? "Разметка изменилась в Webdev. Подробности — в уведомлениях проекта."
     : !reserveValid ? "Выберите резервный домен из текущей сетки."
     : reserve !== data?.reserve ? "Сначала сохраните выбранный резерв." : "";
   return <section className="dataPanel projectNetworkPanel">
@@ -508,7 +517,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
         {(mode !== "network" || networkView === "main") && <div className="networkSection networkCanonical" data-markup-editor>
           <div className="networkMarkupHeading"><h3>Каноникл</h3>
             <button type="button" role="switch" className="networkMarkupSwitch" aria-label="Каноникл" aria-checked={!!data.enableCanonical}
-              title={data.enableCanonical ? "Выключить каноникл" : "Включить каноникл"} disabled={disabled || conflict || !data.has_head || typeof data.enableCanonical !== "boolean"}
+              title={data.enableCanonical ? "Выключить каноникл" : "Включить каноникл"} disabled={disabled || !data.has_head || typeof data.enableCanonical !== "boolean"}
               onClick={() => void mutate("alternates", undefined, draft, { enable_canonical: !data.enableCanonical })}><span aria-hidden="true" /></button>
             {markupStatus("canonical")}
           </div>
@@ -523,14 +532,14 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
         {draft && (mode !== "network" || networkView === "main") && <div className="networkSection" data-markup-editor>
           <div className="networkMarkupHeading"><h3>Альтернейты</h3>
             <button type="button" role="switch" className="networkMarkupSwitch" aria-label="Альтернейты" aria-checked={draft.enabled}
-              title={draft.enabled ? "Выключить альтернейты" : "Включить альтернейты"} disabled={disabled || conflict || !data.has_head}
+              title={draft.enabled ? "Выключить альтернейты" : "Включить альтернейты"} disabled={disabled || !data.has_head}
               onClick={() => {
                 const next = { ...draft, enabled: !draft.enabled };
                 setDraft(next);
                 void mutate("alternates", undefined, next);
               }}><span aria-hidden="true" /></button>
             {markupStatus("alternates")}
-            <button type="button" className="button secondary compact" disabled={disabled || conflict || !data.has_head} onClick={() => {
+            <button type="button" className="button secondary compact" disabled={disabled || !data.has_head} onClick={() => {
               try {
                 if (!data.fake_main_enabled) throw new Error("Сначала включите и сохраните фейковую внутреннюю страницу.");
                 const markup = buildBaseAlternates(site.cache_language, site.cache_geo, data.fake_main_current, draft.markup);
