@@ -115,7 +115,7 @@ def test_request_id_cannot_be_reused_for_different_edit(env):
 
 def test_invalid_edit_fails_without_blocking_following_reserve(env):
     db, site, remote = env; prepare(env)
-    first = add(env, redirect_source='old.test', redirect_original_source='old.test', redirect_target='main.test/path')
+    first = add(env, redirect_source='old.test', redirect_original_source='old.test', redirect_target='main.test:invalid/path')
     second = add(env, 'reserve', domain='next.test')
     assert queue.execute_step(db, first)['status'] == 'failed'
     assert queue.execute_step(db, second)['status'] == 'completed'
@@ -141,3 +141,11 @@ def test_manual_reglue_runs_after_queued_redirect_without_blocking_ui(env):
     assert remote.data['settings']['canon'] == 'reserve.test'
     assert queue.execute_step(db, second)['status'] == 'skipped'
     assert len([c for c in remote.calls if c[1].endswith('update-reglue')]) == 1
+
+
+def test_pasted_url_with_path_is_confirmed_in_queue(env):
+    db, site, remote = env; prepare(env)
+    ident = add(env, redirect_source='old.test', redirect_original_source='old.test', redirect_target=' /https://MAIN.test/Dragonia-Casino/ ')
+    assert queue.execute_step(db, ident)['status'] == 'completed'
+    assert remote.data['settings']['redirects'][0]['value'] == 'main.test/Dragonia-Casino/'
+    assert len(remote.calls) == 1

@@ -7,3 +7,7 @@
 .networkEditStatus svg { flex: 0 0 auto; margin-top: 2px; }
 .networkEditStatus.error { color: #b42318; }
 .networkEditPending { opacity: .65; }
+
+/* Reserve actions and feedback independently of message length. */
+.domainRedirectActionSlot { position:relative; width:230px; height:64px; }
+.domainRedirectActionSlot > .networkEditStatus { position:absolute; top:32px; left:0; right:0; max-width:none; max-height:30px; overflow:auto; white-space:normal; overflow-wrap:anywhere; }

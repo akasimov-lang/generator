@@ -58,7 +58,7 @@ class NetworkChange(BaseModel):
     activate_fake_main: bool = False
     domains: list[str] = Field(default_factory=list, max_length=100)
     redirect_source: str = Field(default="", max_length=253)
-    redirect_target: str = Field(default="", max_length=253)
+    redirect_target: str = Field(default="", max_length=4096)
     redirect_original_source: str = Field(default="", max_length=253)
     page_redirect_domain: str = Field(default="", max_length=253)
     page_redirect_source: str = Field(default="", max_length=2048)

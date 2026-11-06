@@ -1,6 +1,7 @@
 """Edit one Webdev settings.redirects entry without replacing other settings."""
 import re
 from copy import deepcopy
+from urllib.parse import urlsplit
 from app.network_state import domain_name
 
 
@@ -53,6 +54,26 @@ def redirect_domain(value):
     return domain
 
 
+def redirect_address(value, *, source=False):
+    """Accept pasted HTTP URLs; preserve the destination path exactly."""
+    raw = value.strip().lstrip('/')
+    raw = re.sub(r'^https?://', '', raw, flags=re.IGNORECASE).lstrip('/')
+    if not raw or '\\' in raw or any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in raw):
+        raise ValueError('Укажите корректный адрес без пробелов.')
+    try:
+        url = urlsplit('https://' + raw)
+        if url.username is not None or url.password is not None or url.port is not None:
+            raise ValueError('Укажите адрес без логина, пароля и порта.')
+        host = redirect_domain(url.hostname or '')
+    except ValueError:
+        raise ValueError('Укажите корректный домен без логина, пароля и порта.') from None
+    if source:
+        if url.path not in ('', '/') or url.query or url.fragment:
+            raise ValueError('Откуда: укажите домен без пути, параметров и якоря.')
+        return host
+    return host + url.path + ('?' + url.query if url.query else '') + ('#' + url.fragment if url.fragment else '')
+
+
 def all_to_main(state):
     """Preserve sources/metadata, replace every destination, and remove self-redirects."""
     main = redirect_domain(state.get('canon') or '')
@@ -74,9 +95,9 @@ def update_redirects(project, source, target, original_source=''):
             not isinstance(row, dict) or not isinstance(row.get('url'), str)
             or not isinstance(row.get('value'), str) for row in current):
         raise ValueError('Webdev не вернул полный список доменных редиректов. Обновите данные проекта.')
-    source, target = redirect_domain(source), redirect_domain(target)
-    original = redirect_domain(original_source) if original_source else ''
-    if source == target:
+    source, target = redirect_address(source, source=True), redirect_address(target)
+    original = redirect_address(original_source, source=True) if original_source else ''
+    if source == domain_name(target):
         raise ValueError('Домен не может перенаправлять на самого себя.')
     redirects = deepcopy(current)
     original_rows = [i for i, row in enumerate(redirects) if row['url'].strip().lower().rstrip('.') == original] if original else []
@@ -90,7 +111,7 @@ def update_redirects(project, source, target, original_source=''):
         redirects[index] = row
     else:
         redirects.append(row)
-    edges = {r['url'].strip().lower().rstrip('.'): r['value'].strip().lower().rstrip('.') for r in redirects}
+    edges = {domain_name(r['url']): domain_name(r['value']) for r in redirects}
     seen, cursor = set(), source
     while cursor in edges:
         if cursor in seen:

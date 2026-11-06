@@ -72,8 +72,8 @@ def test_missing_redirect_list_never_overwrites_unknown_settings(env):
  ('old.test','new.test','','уже существует'),
  ('new.test','old.test','main.test','отсутствует'),
  ('main.test','old.test','','замкнутую'),
- ('new.test/path','main.test','','без протокола'),
- ('new.test','https://main.test','','без протокола'),
+ ('new.test/path','main.test','','без пути'),
+ ('new.test','ftp://main.test','','корректный домен'),
 ])
 def test_invalid_redirects_do_not_write(env,source,target,original,message):
  first=setup(env)
@@ -124,3 +124,21 @@ def test_bulk_redirect_unknown_receipt_is_never_replayed(env):
  network.change_network(db,site,request,'anton');remote.fail=None
  network.change_network(db,site,request,'anton')
  assert len(remote.calls)==1
+
+
+def test_pasted_http_destination_keeps_path_query_and_case(env):
+ first=setup(env)
+ result=change(env,'domain_redirect',first['revision'],redirect_source='///NEW.test/',redirect_target=' /HTTPS://MAIN.test/Dragonia-Casino/?ref=AbC#Play ')
+ assert result['domain_redirects'][-1]=={'url':'new.test','value':'main.test/Dragonia-Casino/?ref=AbC#Play'}
+ assert result['operations'][0]['status']=='confirmed'
+
+
+def test_redirect_path_does_not_hide_domain_cycle():
+ project={'settings':{'redirects':[{'url':'old.test','value':'new.test/welcome/'}]}}
+ with pytest.raises(ValueError,match='замкнутую'):
+  update_redirects(project,'new.test','https://old.test/offer/')
+
+
+def test_same_domain_with_path_is_not_a_valid_domain_redirect():
+ with pytest.raises(ValueError,match='самого себя'):
+  update_redirects({'settings':{'redirects':[]}},'new.test','new.test/offer/')

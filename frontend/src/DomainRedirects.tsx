@@ -1,3 +1,4 @@
+import { normalizeRedirectAddress } from "./redirectAddress";
 import { QueueSaveIndicator } from "./SaveIndicator";
 import { NetworkEditStatus } from "./NetworkEditStatus";
 import { editActive, type NetworkEditQueueView } from "./networkEditQueue";
@@ -43,7 +44,9 @@ export function DomainRedirects({redirects,revision,available,disabled,onSave,ca
     event.preventDefault();
     if(!edit||saving||blocked)return;
     setSaving(true);
-    try{if(await onSave(edit,editRevision.current))setEdit(null);}finally{setSaving(false);}
+    const normalized={...edit,redirect_source:normalizeRedirectAddress(edit.redirect_source),redirect_target:normalizeRedirectAddress(edit.redirect_target)};
+    setEdit(normalized);
+    try{if(await onSave(normalized,editRevision.current))setEdit(null);}finally{setSaving(false);}
   }
   const valid=redirects.filter(row=>row&&typeof row.url==="string"&&typeof row.value==="string");
   for (const item of queue?.items || []) {
@@ -60,14 +63,14 @@ export function DomainRedirects({redirects,revision,available,disabled,onSave,ca
       const queued=queue?.latest(`domain:${row.url}`);
       const pending=!!queued&&editActive(queued);
       const shownTarget=queued&&queued.status!=="completed" ? String(queued.request.redirect_target) : row.value;
-      return <tr key={`${row.url}:${index}`}><td>{link(row.url)}</td><td><ArrowRight size={14} aria-hidden="true"/></td><td>{active&&edit?<span className="domainRedirectInlineField"><span aria-hidden="true">{row.value}<ExternalLink size={13}/></span><input ref={targetInput} form={editFormId} aria-label="Редирект: куда" value={edit.redirect_target} maxLength={253} autoComplete="off" spellCheck={false} required disabled={saving} onChange={e=>setEdit({...edit,redirect_target:e.target.value})} onKeyDown={e=>{if(e.key==="Escape"&&!saving){e.preventDefault();setEdit(null);}}}/></span>:<span className={pending?"networkEditPending":""}>{link(shownTarget)}</span>}</td><td>{pending?<NetworkEditStatus item={queued} retry={id=>queue?.retry(id)}/>:active?<form id={editFormId} className="domainRedirectInlineActions" aria-label="Редактирование редиректа" onSubmit={event=>void save(event)}><button type="submit" className="button secondary compact" disabled={blocked||saving||!edit?.redirect_target.trim()}><Save size={13}/>{saving?"Сохраняем…":"Сохранить"}</button><button type="button" className="button secondary compact" disabled={saving} onClick={()=>setEdit(null)}><X size={13}/>Отменить</button></form>:<button type="button" className="button secondary compact" aria-label={`Редактировать редирект ${row.url}`} disabled={saving||!!edit} onClick={()=>startEdit({redirect_source:row.url,redirect_target:shownTarget,redirect_original_source:redirects.some(saved=>saved.url===row.url)?row.url:""})}><Pencil size={13}/>Изменить</button>}{!pending&&<NetworkEditStatus item={queued} retry={id=>queue?.retry(id)}/>}</td></tr>;
+      return <tr key={`${row.url}:${index}`}><td>{link(row.url)}</td><td><ArrowRight size={14} aria-hidden="true"/></td><td>{active&&edit?<span className="domainRedirectInlineField"><span aria-hidden="true">{row.value}<ExternalLink size={13}/></span><input ref={targetInput} form={editFormId} aria-label="Редирект: куда" value={edit.redirect_target} maxLength={4096} autoComplete="off" spellCheck={false} required disabled={saving} onChange={e=>setEdit({...edit,redirect_target:e.target.value})} onKeyDown={e=>{if(e.key==="Escape"&&!saving){e.preventDefault();setEdit(null);}}}/></span>:<span className={pending?"networkEditPending":""}>{link(shownTarget)}</span>}</td><td><div className="domainRedirectActionSlot">{pending?<NetworkEditStatus item={queued} retry={id=>queue?.retry(id)}/>:active?<form id={editFormId} className="domainRedirectInlineActions" aria-label="Редактирование редиректа" onSubmit={event=>void save(event)}><button type="submit" className="button secondary compact" disabled={blocked||saving||!edit?.redirect_target.trim()}><Save size={13}/>{saving?"Сохраняем…":"Сохранить"}</button><button type="button" className="button secondary compact" disabled={saving} onClick={()=>setEdit(null)}><X size={13}/>Отменить</button></form>:<button type="button" className="button secondary compact" aria-label={`Редактировать редирект ${row.url}`} disabled={saving||!!edit} onClick={()=>startEdit({redirect_source:row.url,redirect_target:shownTarget,redirect_original_source:redirects.some(saved=>saved.url===row.url)?row.url:""})}><Pencil size={13}/>Изменить</button>}{!pending&&<NetworkEditStatus item={queued} retry={id=>queue?.retry(id)}/>}</div></td></tr>;
     })}</tbody></table></div>:<p className="muted">Доменных редиректов нет.</p>}
     <div className="networkActions"><button type="button" className="button secondary compact" disabled={!available||saving||!!edit} onClick={()=>startEdit({redirect_source:"",redirect_target:"",redirect_original_source:""})}><Plus size={14}/>Добавить редирект</button></div>
     {edit&&!edit.redirect_original_source&&<form className="networkRedirectForm" aria-label="Новый редирект" onSubmit={event=>void save(event)}>
       <label>Откуда<input ref={sourceInput} aria-label="Редирект: откуда" value={edit.redirect_source} maxLength={253} autoComplete="off" spellCheck={false} disabled={saving} placeholder="old-domain.pl" required onChange={e=>setEdit({...edit,redirect_source:e.target.value})}/></label>
-      <label>Куда<input aria-label="Редирект: куда" value={edit.redirect_target} maxLength={253} autoComplete="off" spellCheck={false} disabled={saving} placeholder="main-domain.pl" required onChange={e=>setEdit({...edit,redirect_target:e.target.value})}/></label>
+      <label>Куда<input aria-label="Редирект: куда" value={edit.redirect_target} maxLength={4096} autoComplete="off" spellCheck={false} disabled={saving} placeholder="main-domain.pl" required onChange={e=>setEdit({...edit,redirect_target:e.target.value})}/></label>
       <div className="networkActions"><button type="submit" className="button compact" disabled={blocked||saving||!edit.redirect_source.trim()||!edit.redirect_target.trim()}>{saving?"Сохраняем…":"Сохранить редирект"}</button><button type="button" className="button secondary compact" disabled={saving} onClick={()=>setEdit(null)}>Отмена</button></div>
-      <small className="muted">Укажите домены без https:// и пути. Изменения сохраняются в Webdev.</small>
+      <small className="muted">В поле «Куда» можно указать домен с путём. Протокол и начальные слеши убираются автоматически.</small>
     </form>}
   </section>;
 }
