@@ -212,6 +212,11 @@ def test_two_alternatives_share_donor_without_failing_each_other(pool,monkeypatc
     sent=[];launch.execute_step(db,parent.id,sent.append)
     assert len(sent)==1,parent.result['items']
     assert all(parent.result['items'][s.id]['status']!='failed' for s in sites[:2])
+    remotes[sites[2].id].job_ready=False
+    auto.execute(db,sent[0]);assert db.get(models.AutoReglueRun,sent[0]).status=='waiting'
+    launch.execute_step(db,parent.id,sent.append)
+    assert all(parent.result['items'][s.id]['status']!='failed' for s in sites[:2])
+    remotes[sites[2].id].job_ready=True
     auto.execute(db,sent[0]);assert db.get(models.AutoReglueRun,sent[0]).status=='completed'
     launch.execute_step(db,parent.id,sent.append)
     assert len(set(sent))==2,parent.result['items']

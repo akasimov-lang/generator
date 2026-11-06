@@ -287,7 +287,7 @@ def extractions_ready(db, run):
     return True
 
 
-class SourceBusy(ValueError):
+class SourceBusy(network.NetworkBusy):
     pass
 
 
