@@ -65,7 +65,7 @@ def request(db, job_id, request_id, user, *, scope, percentages, title_rewrite_m
             raise ValueError('Нет проектов для выбранного бренда и GEO.')
         allowed = user.get('allowed_site_ids')
         fresh = launch.initial_job(db, job.id, ids, user['username'], None if allowed is None else set(allowed), preview_only=True)
-        payload = {**fresh.payload, **parameters, **{key:deepcopy(job.payload[key]) for key in ('excluded_site_ids','excluded_projects','original_site_ids','fixed_site_ids','template_report_id','template_report_number','source_maintenance_report_id') if key in job.payload}}
+        payload = {**fresh.payload, **parameters, **{key:deepcopy(job.payload[key]) for key in ('excluded_site_ids','excluded_projects','original_site_ids','fixed_site_ids','template_report_id','template_report_number','source_maintenance_report_id','split_brand','scope_revisions') if key in job.payload}}
         if planning_mode == 'mixed': payload['execution_mode'] = 'cross_network'
         command = {'state': 'pending', 'request_id': str(request_id), 'payload': payload, 'previous_completed': job.status == 'completed',
             'result': fresh.result, 'status': fresh.status, 'requested_at': datetime.now(timezone.utc).isoformat()}

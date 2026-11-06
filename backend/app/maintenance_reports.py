@@ -28,7 +28,11 @@ def upsert(db, report_id, name, actor, site_ids, entries=(), status='running'):
             site = db.get(models.Site, site_id)
             if not site:
                 raise ValueError('Проект отчёта не найден.')
+            from app.report_evidence import observations
+            observed = observations(db, [site_id]).get(site_id)
             rows[site_id] = {'site_id': site_id, 'project': site.name, 'status': 'pending'}
+            if observed:
+                rows[site_id].update(before=deepcopy(observed['values']), before_observation=observed)
     changed_ids = set()
     for entry in entries:
         site_id = str(entry.get('site_id', ''))
@@ -222,6 +226,9 @@ def view(job, db=None):
                 'started_at': timestamp(edit.created_at), 'finished_at': timestamp(edit.updated_at),
                 'before': page_values(edit.before_page), 'after': page_values(edit.after_page),
             } for edit in own]]
+    if db is not None:
+        from app.report_evidence import enrich as enrich_report_evidence
+        entries = enrich_report_evidence(db, entries)
     for row in entries:
         if factual:
             row.pop('progress', None)

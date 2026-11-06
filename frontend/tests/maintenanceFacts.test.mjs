@@ -33,3 +33,11 @@ test('planning report shows prepared status, exclusion and no execution progress
  assert.match(html,/Исключить из отчёта/);
  assert.doesNotMatch(html,/maintenanceEntryProgress|maintenanceTimes/);
 });
+test('plan hides internal execution checklist and shows dated current observation separately',()=>{
+ const report=normalizeMaintenanceReport({name:'Plan',planning_only:true,entries:[{site_id:'x',project:'example.com',status:'waiting',message:'План подготовлен. Переклей не запускался.',pending_reason:'Ожидает отдельного запуска.',notes:['Этап 1: Проверить резерв'],before:{main:'old.test'},current_observation:{values:{main:'current.test'},source:'cache',observed_at:'2026-11-06T10:00:00Z'}}]});
+ const html=renderToStaticMarkup(React.createElement(MaintenanceReportBody,{report}));
+ assert.doesNotMatch(html,/Этап 1:|Ожидает отдельного запуска|План подготовлен\. Переклей/);
+ assert.match(html,/Текущее состояние · кеш/);
+ assert.match(html,/old.test/);
+ assert.match(html,/current.test/);
+});

@@ -908,6 +908,8 @@ def _apply_direct_project_snapshot(
         site.base_url = f"https://{canon}"
         site.publication_endpoint = f"https://{canon}/api/content"
     observe_network(site, project, db=db)
+    from app.report_evidence import capture
+    capture(db, site, project, source='webdev')
     site.cache_canon = canon or site.cache_canon
     site.cache_language = str(settings.get("lang") or "").strip() or site.cache_language
     site.cache_geo = str(settings.get("geo") or "").strip() or site.cache_geo
@@ -1388,6 +1390,8 @@ def sync_project_data_update(
         site.cache_synced_at = synced_at
         if server_id:
             site.cache_server_ip = server_id
+        from app.report_evidence import capture
+        capture(db, site, project, source='webdev', at=synced_at)
         _confirm_published_content(db, site, project, synced_at)
         _confirm_synchronized_sections(db, site, menu)
     db.commit()
@@ -1503,6 +1507,8 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
         _reset_newly_transferred_domain_memory(site, domains, previous_domain_owners)
         _record_network_snapshot(site, canon, domains, now)
         observe_network(site, project, db=db)
+        from app.report_evidence import capture
+        capture(db, site, project)
         site.cache_canon = canon
         site.cache_language = language
         site.cache_geo = geo
