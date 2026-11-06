@@ -129,7 +129,8 @@ def test_pending_verification_and_archived_project(setup):
 def test_rejects_overwrites_of_noneditable_fields_and_duplicate_ids(setup):
     client,db,site,state=setup
     path,payload=draft(client,site)
-    assert client.put(path,json={**payload,'slug':'/moved/'}).status_code==422
+    assert client.put(path,json={**payload,'slug':'/moved/'}).status_code==409  # Homepage URL remains protected.
+    assert client.put(path,json={**payload,'id':'other'}).status_code==422
     state['project']['data']['pages'].append(copy.deepcopy(state['project']['data']['pages'][1]))
     assert client.put(path,json=payload).status_code==409
     assert not state['requests']
@@ -302,3 +303,31 @@ def test_append_buttons_create_reviewed_drafts_without_publication(setup, monkey
     assert result['input_content'] == content
     assert provider.total_tokens_used == 20
     assert not state['requests']
+
+
+def test_page_url_edit_preserves_identity_and_confirms_new_slug(setup):
+    client,db,site,state=setup
+    original=copy.deepcopy(state['project']['data']['pages'][0])
+    key=pages.page_key(original)
+    payload={'request_id':str(uuid4()),'revision':pages.digest(original),'title':original['title'],'description':original['description'],'content':original['content'],'slug':'/new-bonus/'}
+    response=client.put(f'/sites/{site.id}/pages/{key}',json=payload)
+    assert response.status_code==200,response.text
+    assert response.json()['status']=='confirmed'
+    assert response.json()['page']['slug']=='/new-bonus/'
+    actual=state['project']['data']['pages'][0]
+    assert actual['id']==original['id'] and actual['content']==original['content'] and actual['head']==original['head']
+    assert len(state['requests'])==1
+    retry=client.put(f'/sites/{site.id}/pages/{key}',json=payload)
+    assert retry.json()['status']=='confirmed' and len(state['requests'])==1
+    assert db.scalar(select(models.NetworkOperation).where(models.NetworkOperation.action=='sitemap')) is not None
+
+
+def test_page_url_edit_rejects_duplicate_and_home_before_write(setup):
+    client,db,site,state=setup
+    original=state['project']['data']['pages'][0];key=pages.page_key(original)
+    state['project']['data']['pages'].append({**original,'id':'99','slug':'/taken/'})
+    payload={'request_id':str(uuid4()),'revision':pages.digest(original),'title':original['title'],'description':original['description'],'content':original['content'],'slug':'/taken/'}
+    assert client.put(f'/sites/{site.id}/pages/{key}',json=payload).status_code==409
+    payload.update(request_id=str(uuid4()),slug='/')
+    assert client.put(f'/sites/{site.id}/pages/{key}',json=payload).status_code==409
+    assert state['requests']==[]

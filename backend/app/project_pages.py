@@ -30,6 +30,18 @@ class PageEdit(BaseModel):
     title: str = Field(max_length=2000)
     description: str = Field(max_length=10000)
     content: dict
+    slug: str | None = Field(default=None, max_length=240)
+
+    @field_validator("slug")
+    @classmethod
+    def page_path(cls, value):
+        if value is None: return value
+        from urllib.parse import urlsplit, unquote
+        value = value.strip()
+        parsed = urlsplit(value)
+        if not value.startswith("/") or value.startswith("//") or parsed.scheme or parsed.netloc or parsed.query or parsed.fragment or "\\" in value or any(x in {".", ".."} for x in unquote(value).split("/")):
+            raise ValueError("Укажите относительный URL страницы без протокола и параметров.")
+        return value
 
     @field_validator("content")
     @classmethod
@@ -226,13 +238,31 @@ def operation_result(operation, page=None):
 
 
 def confirm(db, operation, remote, site):
-    current = find_page(remote.project(), operation.page_key)
+    project = remote.project()
+    if operation.before_page.get("slug") != operation.after_page.get("slug"):
+        matches = [page for page in pages(project) if str(page.get("id")) == str(operation.after_page.get("id"))]
+        if len(matches) != 1:
+            raise HTTPException(409, "Не удалось однозначно подтвердить страницу после изменения URL.")
+        current = matches[0]
+    else:
+        current = find_page(project, operation.page_key)
     if (editable(current) == editable(operation.after_page)
+            and current.get("slug") == operation.after_page.get("slug")
             and current.get("updatedTime") == operation.after_page.get("updatedTime")
             and current.get("publishedTime") == operation.after_page.get("publishedTime")):
         operation.status, operation.error = "confirmed", None
         from app.project_page_autolink import saved_page
         saved_page(db, site, current)
+        old_slug = operation.before_page.get("slug")
+        if old_slug != current.get("slug"):
+            from app import network_sitemap
+            network_sitemap.queue(db, site, operation.id, operation.requested_by, manual=True)
+            for item in db.scalars(select(models.ContentItem).where(models.ContentItem.site_id == site.id, models.ContentItem.slug == old_slug)):
+                item.slug = current["slug"]
+                if item.published_url:
+                    from urllib.parse import urlsplit, urlunsplit
+                    url = urlsplit(item.published_url)
+                    item.published_url = urlunsplit((url.scheme,url.netloc,current["slug"],"",""))
         if is_home(current):
             site.homepage_title = current.get("title") or ""
     else:
@@ -269,7 +299,13 @@ def save_page(site_id: str, key: str, payload: PageEdit, user: AuthUser, db: Ses
             current = find_page(project, key)
             if digest(current) != payload.revision:
                 raise HTTPException(409, "Страница изменилась в Webdev. Скопируйте свои изменения и загрузите актуальную версию.")
-            if editable(current) == {"title": payload.title, "description": payload.description, "content": payload.content}:
+            next_slug = payload.slug if payload.slug is not None else current.get("slug")
+            if next_slug != current.get("slug"):
+                if is_home(current) or next_slug in {"", "/"}:
+                    raise HTTPException(409, "Адрес главной страницы нельзя менять здесь.")
+                if any(str(page.get("slug") or "/").rstrip("/") == next_slug.rstrip("/") and str(page.get("id")) != str(current["id"]) for page in pages(project)):
+                    raise HTTPException(409, "Страница с таким URL уже существует.")
+            if next_slug == current.get("slug") and editable(current) == {"title": payload.title, "description": payload.description, "content": payload.content}:
                 # A retry or an unchanged form is not a content update. Keep both
                 # remote dates and record the request without another Webdev write.
                 operation = models.ProjectPageEdit(id=str(payload.request_id), site_id=site_id, page_key=key,
@@ -289,7 +325,7 @@ def save_page(site_id: str, key: str, payload: PageEdit, user: AuthUser, db: Ses
             latest = find_page(remote.project(), key)
             if digest(latest) != payload.revision:
                 raise HTTPException(409, "Страница изменилась во время создания бекапа. Загрузите актуальную версию.")
-            updated = {**deepcopy(current), "title": payload.title, "description": payload.description,
+            updated = {**deepcopy(current), "slug": next_slug, "title": payload.title, "description": payload.description,
                        "content": payload.content, "updatedTime": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")}
             operation = models.ProjectPageEdit(id=str(payload.request_id), site_id=site_id, page_key=key,
                 requested_by=user["username"], fingerprint=fingerprint, before_page=current, after_page=updated,
