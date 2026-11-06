@@ -91,13 +91,14 @@ def build(db, cfg, targets, sites, states, free, *, cross):
     requested = quotas(len(targets), cfg)
     remaining = dict(requested)
     plans, reasons, done = [], {}, set()
-    used_domains, directions, exchanges = set(), set(), set()
+    used_domains, directions, exchanges = {domain_key(d) for d in db.info.get('reglue_preview_domains', ())}, set(), set()
     outgoing = Counter()
     grouped = sorted(targets, key=lambda s: (-len(states[s.id]['domains']), s.name, s.id))
     blocked = {s.id for s in targets if cross.blocked_reserve(db, s, states[s.id])}
     def reserved(site):return cross.selected_reserve(states[site.id]) and site.id not in blocked
 
     def add(target, source, domain, slot, *, local=False, parent=None, create=False, fallback=False, mode='redistribute'):
+        if domain_key(domain) in used_domains:raise ValueError('Домен уже назначен другому проекту в этом плане.')
         state, source_state = states[target.id], states[source.id]
         plan = (cross.reserve_plan(cfg, target, state, db=db, plans=plans) if local and cross.selected_reserve(state) == domain
                 else cross.make_plan(cfg, target, state, source, source_state, domain, mode=mode, db=db, plans=plans))
@@ -152,18 +153,16 @@ def build(db, cfg, targets, sites, states, free, *, cross):
     def donor_for(target, kind, *, fallback):
         options=[]
         for source in sites.values():
-            if source.id == target.id or (target.id, source.id) in directions or outgoing[source.id] >= 10:
+            if source.id == target.id or (target.id, source.id) in directions :
                 continue
             try:cross.require_pair(source,target)
             except ValueError:continue
             allowed_kinds = {'newreg','drop'} if cfg.main_target_mode == 'mixed' else {cfg.main_target_mode}
             target_has_free = any(d not in used_domains and target_kind(target,states[target.id],d) in allowed_kinds for d in free.get(target.id,[]))
             if fallback or not target_has_free:
-                if target.id not in blocked and len(states[source.id]['domains']) - outgoing[source.id] <= len(states[target.id]['domains']):continue
-                mode='banned_reserve_fallback' if target.id in blocked else 'redistribute'
+                mode='banned_reserve_fallback' if target.id in blocked else 'brand_geo_capacity'
             else:
-                if source.id in exchanges:continue
-                mode='peer_exchange'
+                mode='brand_geo_capacity'
             from app.reglue_reserves import require_unused
             domain = None
             for d in free.get(source.id, []):
@@ -187,7 +186,7 @@ def build(db, cfg, targets, sites, states, free, *, cross):
                 plans.append(pool.make_plan(db, cfg, target, states[target.id], entry, plans, slot))
                 done.add(target.id); used_domains.add(entry.domain); remaining[slot] -= 1
 
-    # Interleave the two root types; keep all exclusions and the shared 10-out limit.
+    # Interleave the two root types; keep exclusions and unique domain allocation.
     while remaining['newreg'] or remaining['drop']:
         progressed=False
         for slot in ('newreg','drop'):

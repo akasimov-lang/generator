@@ -73,7 +73,7 @@ def prepare(db, child, parent):
         except Exception:continue
     neighbours=[p for g in parent.result['groups'] for p in g.get('plans',[]) if p['site_id']!=target.id]
     used={domain_key(p['new_main']) for p in neighbours}
-    for other in db.scalars(select(models.BackgroundJob).where(models.BackgroundJob.kind==KIND,models.BackgroundJob.status=='completed')):
+    for other in db.scalars(select(models.BackgroundJob).where(models.BackgroundJob.kind==KIND,models.BackgroundJob.status.in_(['queued','completed']))):
         if other.id!=child.id and (other.result or {}).get('plan') and not other.payload.get('started_at'):
             used.add(domain_key(other.result['plan']['new_main']))
     plan=candidate(db,auto.config(db),target,states,sites,used,neighbours)

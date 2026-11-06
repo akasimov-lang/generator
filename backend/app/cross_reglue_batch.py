@@ -41,11 +41,10 @@ def allocate(targets, donors, states, free):
         # A small network with no free roots receives without having to reciprocate.
         for target in sorted((s for s in recipients if not free.get(s.id)),
                              key=lambda s: (len(states[s.id]['domains']), s.name, s.id)):
-            candidates = [s for s in sources if used[s.id] < min(10, len(free[s.id]))
-                          and len(states[s.id]['domains']) - used[s.id] > len(states[target.id]['domains'])]
+            candidates = [s for s in sources if used[s.id] < len(free[s.id]) and s.id != target.id]
             if candidates:
                 candidates.sort(key=lambda s: (-(len(states[s.id]['domains']) - used[s.id]), s.name, s.id))
-                give(candidates[0], target, 'redistribute')
+                give(candidates[0], target, 'brand_geo_capacity')
     return assignments
 
 
@@ -105,7 +104,7 @@ def build(db, targets, username, *, persist=True):
             continue
         for domain in states[site_id]['domains']:
             if domain in db.info.get('reglue_preview_domains', set()): continue
-            if (site.domain_types or {}).get(domain) not in ({'newreg'} if cfg.main_target_mode == 'legacy' else {'newreg','drop'}):
+            if (site.domain_types or {}).get(domain) not in {'newreg','drop'}:
                 continue
             try:
                 cross.transferable(site, states[site_id], domain)
@@ -114,8 +113,6 @@ def build(db, targets, username, *, persist=True):
             except ValueError:
                 continue
             free[site_id].append(domain)
-            if cfg.main_target_mode == 'legacy' and not db.info.get('prefer_own_domains') and len(free[site_id]) == 10:
-                break
     distribution = None
     if db.info.get('prefer_own_domains') and (cfg.main_target_mode == 'legacy' or db.info.get('pilot_mixed')):
         from app.priority_main_targets import build as build_priority
@@ -149,7 +146,7 @@ def build(db, targets, username, *, persist=True):
             outgoing[source_id] = outgoing.get(source_id, 0) + 1
             directions.add((source_id, recipient.id))
         for target in [s for s in targets if s.id in sites and s.id not in pool_targets and cross.blocked_reserve(db, s, states[s.id])]:
-            candidates = [s for s in sites.values() if s.id != target.id and outgoing.get(s.id,0) < min(10,len(free[s.id]))
+            candidates = [s for s in sites.values() if s.id != target.id and outgoing.get(s.id,0) < len(free[s.id])
                           and (target.id,s.id) not in directions
                           and (cross.brand_key(s.brand),cross.geo_key(s.cache_geo)) == (cross.brand_key(target.brand),cross.geo_key(target.cache_geo))]
             candidates.sort(key=lambda s:(-len(states[s.id]['domains']),s.name,s.id))
@@ -179,14 +176,18 @@ def build(db, targets, username, *, persist=True):
                 reasons[target.id] = 'Доступные домены донора уже были Main в принимающей сетке.'
                 continue
             try:
-                plans.append(stamp_plan(db, cross.make_plan(cfg, target, states[target.id], sites[source_id], states[source_id], domain, mode=mode, db=db, plans=plans), states[target.id], target))
+                plan=cross.make_plan(cfg,target,states[target.id],sites[source_id],states[source_id],domain,mode=mode,db=db,plans=plans)
+                kind=sites[source_id].domain_types[domain]
+                plan.update(main_target_kind=kind,required_domain_type=kind,domain_type=kind,requires_newreg=False)
+                plan.pop('preview_token',None);plan['preview_token']=auto.digest(plan)
+                plans.append(stamp_plan(db,plan,states[target.id],target))
             except ValueError as error:
                 reasons[target.id] = 'Не удалось подготовить схему: ' + str(error)
     received = {plan['site_id'] for plan in plans}
     for site in targets:
         if site.id not in received:
             skipped.append({'site_id': site.id, 'project': site.name, 'error': reasons.get(site.id,
-                'Нет свободного домена в сетках того же бренда и GEO с учётом лимита 10 извлечений и одного добавления.')})
+                'Нет свободного домена в сетках того же бренда и GEO с учётом занятых адресов и одного назначения на проект.')})
             if db.info.get('auto_pilot_preview') and db.info.get('prefer_own_domains'):
                 from app.priority_main_targets import retry_snapshot
                 state = retry_snapshot(reasons.get(site.id), states.get(site.id))
@@ -222,9 +223,11 @@ def validate(plans):
             raise ValueError('Встречный перенос A → B и B → A в одном массовом запуске запрещён.')
         directions.add((source, target))
         outgoing[source] = outgoing.get(source, 0) + 1
-        if outgoing[source] > 10 or target in incoming or domain in domains:
-            raise ValueError('Лимит массового переноса: не более 10 доменов из сетки и одного домена в сетку.')
-        if plan.get('balance_mode') == 'peer_exchange':
+        if target in incoming or domain in domains:
+            raise ValueError('Один домен нельзя назначить нескольким сеткам; каждому проекту доступно одно назначение.')
+        if plan.get('balance_mode') == 'brand_geo_capacity':
+            pass
+        elif plan.get('balance_mode') == 'peer_exchange':
             if source in exchanges:
                 raise ValueError('Резервный обмен: не более одного домена из каждой крупной сетки.')
             exchanges.add(source)

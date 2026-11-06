@@ -395,6 +395,11 @@ def view(db,job):
         row['fibery_name'] = site.fibery_name if site else None
         if row['site_id'] in plans:
             row.update(describe(db, plans[row['site_id']]))
+        elif preparing and not row.get('completed_elsewhere'):
+            # Skipped rows can retain a prior version's display snapshot. It is
+            # not an allocation and must not look like a second assignment.
+            for field in ('new_main','old_main','source_project','scheme','alternate','alternate_before','canonical','alternates_enabled','new_fake_path','title_h1_preview','paragraphs_preview'):
+                row.pop(field,None)
         from app.pilot_internal_pages import snapshot as internal_pages_snapshot
         internal_plan = plans.get(row['site_id'], {}).get('internal_pages')
         internal_pages = internal_pages_snapshot(db, job.id, row['site_id'], internal_plan) if internal_plan and internal_plan.get('enabled') is True else None

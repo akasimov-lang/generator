@@ -93,8 +93,7 @@ def candidate(db, cfg, target, states, sites, used, plans=(), *, unused_first=Tr
     options=[]
     for source in sorted(sites.values(),key=lambda s:(s.id!=target.id,s.name)):
         if source.id!=target.id:
-            outgoing=[p for p in plans if p['source_site_id']==source.id and p['site_id']!=source.id]
-            if len(outgoing)>=10 or any(p['source_site_id']==target.id and p['site_id']==source.id for p in plans):continue
+            if any(p['source_site_id']==target.id and p['site_id']==source.id for p in plans):continue
             try: cross.require_pair(source,target)
             except ValueError: continue
         for domain in states[source.id]['domains']:
@@ -104,7 +103,7 @@ def candidate(db, cfg, target, states, sites, used, plans=(), *, unused_first=Tr
             used_before=domain_key(domain) in {domain_key(d) for d in [*(source.main_domain_history or []),states[source.id].get('prev'),states[source.id].get('canon')] if d}
             if not used_before:
                 if not unused_first: continue
-                if source.id!=target.id and kind!='newreg': continue
+                if source.id!=target.id and kind not in {'newreg','drop'}: continue
             rank=(3 if used_before else 2 if source.id!=target.id else 0 if kind.removeprefix('sub_')=='drop' else 1,
                   source.id!=target.id,kind.startswith('sub_'),domain)
             options.append((rank,source,domain,kind,used_before))
@@ -128,4 +127,4 @@ def candidate(db, cfg, target, states, sites, used, plans=(), *, unused_first=Tr
             return stamp_plan(db,plan,target_state,target)
         except ValueError as error:errors.append(str(error))
     detail='; '.join(dict.fromkeys(errors))[:1200]
-    raise ValueError('Нет подходящего домена без базы резервов: неиспользованный дроп/новорег своей сетки, новорег другой сетки того же бренда и GEO или бывший Main после 14 дней.'+(' '+detail if detail else ''))
+    raise ValueError('Нет подходящего домена без базы резервов: неиспользованный дроп/новорег своей сетки, дроп/новорег другой сетки того же бренда и GEO или бывший Main после 14 дней.'+(' '+detail if detail else ''))

@@ -172,5 +172,5 @@ def test_general_brand_geo_plan_uses_unused_peer_before_retired_main(setup):
     states={s.id:network.read_network(db,s) for s in (source,target)}
     plans,reasons=priority_main_targets.build(db,auto.config(db),[target],{s.id:s for s in (source,target)},states,{source.id:['next.test'],target.id:[]})
     assert not reasons and len(plans)==1
-    assert plans[0]['new_main']=='next.test' and plans[0]['pilot_brand_geo_job_id']==preview.id
+    assert plans[0]['new_main']=='next.test' and plans[0]['source_site_id']==source.id
     cross_reglue_batch.validate(plans)

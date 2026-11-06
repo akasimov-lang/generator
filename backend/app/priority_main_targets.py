@@ -106,12 +106,11 @@ def build(db, cfg, targets, sites, states, free):
             continue
         candidates = []
         for source in sites.values():
-            if source.id == target.id or outgoing[source.id] >= 10 or (target.id, source.id) in directions: continue
-            if not blocked and len(states[source.id]['domains']) - outgoing[source.id] <= len(state['domains']): continue
+            if source.id == target.id or (target.id, source.id) in directions: continue
             try: cross.require_pair(source, target)
             except ValueError: continue
             for domain in free.get(source.id, []):
-                if domain_key(domain) in used or target_kind(source, states[source.id], domain) != 'newreg': continue
+                if domain_key(domain) in used or target_kind(source, states[source.id], domain) not in {'newreg','drop'}: continue
                 try: stock.require_unused(target, state, domain)
                 except ValueError: continue
                 candidates.append((source, domain)); break
@@ -120,7 +119,9 @@ def build(db, cfg, targets, sites, states, free):
             source, domain = candidates[0]
             try:
                 plan = cross.make_plan(cfg, target, state, source, states[source.id], domain,
-                    mode='banned_reserve_fallback' if blocked else 'redistribute', db=db, plans=plans)
+                    mode='banned_reserve_fallback' if blocked else 'brand_geo_capacity', db=db, plans=plans)
+                kind=target_kind(source,states[source.id],domain)
+                plan.update(main_target_kind=kind,required_domain_type=kind,domain_type=kind,requires_newreg=False)
                 save(plan, target); outgoing[source.id] += 1; directions.add((source.id,target.id))
             except ValueError as error: reasons[target.id] = 'Не удалось подготовить схему: ' + str(error)
         else:

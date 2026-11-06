@@ -52,16 +52,16 @@ def test_selects_largest_donor_instead_of_first_name(pool):
     assert all(not r.calls for r in remotes.values())
 
 
-def test_ten_out_one_in_and_no_mutations_during_preview(pool):
+def test_all_available_domains_one_in_and_no_mutations_during_preview(pool):
     db, source, target, remotes, add = pool
     source.project_status = target.project_status = 'working'; db.commit()
     donor = add('large.test', 30, 20)
     recipients = [add(f'small-{i}.test') for i in range(15)]
     preview = batch.build(db, recipients, 'test')
-    assert len(preview['plans']) == 10 and len(preview['skipped']) == 5
-    assert Counter(p['source_site_id'] for p in preview['plans']) == {donor.id: 10}
-    assert len({p['site_id'] for p in preview['plans']}) == 10
-    assert len({p['new_main'] for p in preview['plans']}) == 10
+    assert len(preview['plans']) == 15 and not preview['skipped']
+    assert Counter(p['source_site_id'] for p in preview['plans']) == {donor.id: 15}
+    assert len({p['site_id'] for p in preview['plans']}) == 15
+    assert len({p['new_main'] for p in preview['plans']}) == 15
     directions = {(p['source_site_id'], p['site_id']) for p in preview['plans']}
     assert not any((b, a) in directions for a, b in directions)
     assert all(not r.calls for r in remotes.values())
@@ -76,7 +76,6 @@ def test_pinup_shape_gives_every_network_one_domain_and_large_networks_exchange(
     plans = preview['plans']
     assert not preview['skipped']
     assert len(plans) == 16
-    assert max(Counter(p['source_site_id'] for p in plans).values()) <= 10
     assert Counter(p['site_id'] for p in plans) == {site.id: 1 for site in large + small}
     assert all(p['source_site_id'] in {s.id for s in large} for p in plans)
     assert any(p['site_id'] == large[0].id and p['balance_mode'] == 'peer_exchange' for p in plans)
@@ -254,11 +253,12 @@ def test_manifest_rejects_direct_return_and_quota_tampering(pool):
     p = cross.make_plan(auto.config(db), target, target_state, source, state, 'next.test')
     with pytest.raises(ValueError, match='Встречный перенос'):
         batch.validate([p, {**p, 'site_id': source.id, 'source_site_id': target.id, 'new_main': 'return.test', 'balance_mode':'peer_exchange'}])
-    with pytest.raises(ValueError, match='Лимит'):
+    with pytest.raises(ValueError, match='одно назначение'):
         batch.validate([p, {**p, 'new_main':'another.test'}])
     too_many = [{**p, 'site_id':str(i), 'new_main':f'free-{i}.test'} for i in range(11)]
-    with pytest.raises(ValueError, match='Лимит'):
-        batch.validate(too_many)
+    batch.validate(too_many)
+    with pytest.raises(ValueError, match='Один домен'):
+        batch.validate([p,{**p,'site_id':'other-recipient'}])
 
 
 def test_batch_api_previews_once_and_dispatches_only_after_complete_reservation(pool, monkeypatch):

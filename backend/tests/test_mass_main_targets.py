@@ -76,13 +76,14 @@ def test_missing_drop_falls_back_to_newreg_from_larger_network(pool):
     runs=reserve(db,result);finish(db,runs)
 
 
-def test_fallback_does_not_use_smaller_or_foreign_network(pool):
+def test_fallback_uses_available_smaller_donor_but_excludes_foreign_networks(pool):
     db,source,target,remotes,add=pool
     remotes[target.id].data['settings']['domains']+=['filler.target.test']*4
     add('wrong-brand.test',20,10,brand='Other');add('wrong-geo.test',20,10,geo='PL')
     rules(db,'drop')
     result=batch.build(db,[target],'test')
-    assert not result['plans'] and len(result['skipped'])==1
+    assert len(result['plans'])==1 and not result['skipped']
+    assert result['plans'][0]['source_site_id']==source.id
     assert all(not r.calls for r in remotes.values())
 
 
