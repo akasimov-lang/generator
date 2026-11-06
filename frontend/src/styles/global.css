@@ -10593,3 +10593,5 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .generatedMenuPreviewRow.existing .generatedMenuPreviewText em { background: transparent; }
 .generatedMenuPreviewTree.existing.nested,
 .generatedMenuPreviewTree.existing.nested > li::before { border-color: var(--border); }
+
+.generatedMenuOperation { width: 220px; max-width: 45vw; }

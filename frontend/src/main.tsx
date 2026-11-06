@@ -5177,6 +5177,7 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
   const [retryingNestedPageId, setRetryingNestedPageId] = React.useState<string | null>(null);
   const [transliteratingMenuType, setTransliteratingMenuType] = React.useState<"header" | "footer" | null>(null);
   const [menuGeneratorOpen, setMenuGeneratorOpen] = React.useState(false);
+  const [generatedMenuOperation, setGeneratedMenuOperation] = React.useState<"append" | "replace">("append");
   const [generatedMenuType, setGeneratedMenuType] = React.useState<"header" | "footer">("header");
   const [generatedMenuLevels, setGeneratedMenuLevels] = React.useState(2);
   const [generatedMenuTopLevelCount, setGeneratedMenuTopLevelCount] = React.useState(5);
@@ -5620,6 +5621,7 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
       const result = await api<ProjectChangesSyncResult & { created_count: number; rolled_back: boolean }>(`/sites/${site.id}/generated-menu-structure/apply`, {
         method: "POST",
         body: JSON.stringify({
+          operation: generatedMenuOperation,
           menu_type: generatedMenuPreview.menu_type,
           levels: generatedMenuPreview.levels,
           top_level_count: generatedMenuPreview.top_level_count,
@@ -5652,7 +5654,7 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
     existingPreviewMenuType === "header" ? cachedHeader : cachedFooter, []
   ));
   const existingPreviewPaths = new Set(previewNodes(existingPreviewItems).map(node => normalizedTreePath(node.item.slug)));
-  const generatedPreviewError = !generatedMenuPreview ? "" : !generatedPreviewNodes.length ? "В предпросмотре нет пунктов. Сгенерируйте структуру заново." : generatedPreviewNodes.some(node => !node.item.title.trim() || !/^\/[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)*\/?$/.test(node.item.slug)) ? "Заполните названия и относительные URL пунктов, например /privacy-policy/." : new Set(generatedPreviewNodes.map(node => node.item.slug.replace(/\/$/, ""))).size !== generatedPreviewNodes.length ? "В предпросмотре повторяются URL. Измените URL или удалите лишние строки." : generatedPreviewNodes.some(node => existingPreviewPaths.has(normalizedTreePath(node.item.slug))) ? "Некоторые URL уже есть в этом меню. Измените их или удалите строки с отметкой «Уже в меню»." : "";
+  const generatedPreviewError = !generatedMenuPreview ? "" : !generatedPreviewNodes.length ? "В предпросмотре нет пунктов. Сгенерируйте структуру заново." : generatedPreviewNodes.some(node => !node.item.title.trim() || !/^\/[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)*\/?$/.test(node.item.slug)) ? "Заполните названия и относительные URL пунктов, например /privacy-policy/." : new Set(generatedPreviewNodes.map(node => node.item.slug.replace(/\/$/, ""))).size !== generatedPreviewNodes.length ? "В предпросмотре повторяются URL. Измените URL или удалите лишние строки." : generatedMenuOperation === "append" && generatedPreviewNodes.some(node => existingPreviewPaths.has(normalizedTreePath(node.item.slug))) ? "Некоторые URL уже есть в этом меню. Измените их или удалите строки с отметкой «Уже в меню»." : "";
   function updateGeneratedPreview(items: GeneratedMenuStructureItem[]) {
     setFormError("");
     setGeneratedMenuLevels(previewDepth(items));
@@ -5670,7 +5672,7 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
       return <li key={itemPath}>
         <div className={`generatedMenuPreviewRow level${depth + 1} ${existing ? "existing" : "proposed"}`}>
           <span className="generatedMenuPreviewBranch" aria-hidden="true">{depth === 0 ? <FolderKanban size={16} /> : <CornerDownRight size={16} />}</span>
-          <span className="generatedMenuPreviewText"><span><b>Уровень {depth + 1}</b><strong>{item.title || "Без названия"}</strong><em className="previewItemOrigin">{existing ? "Существующий" : "Новый"}</em>{item.content_kind === "casino_review" ? <em>Обзор казино</em> : item.content_kind === "technical_page" ? <em>Техническая страница</em> : null}{!existing && existingPreviewPaths.has(normalizedTreePath(item.slug)) && <em className="previewDuplicate">Уже в меню</em>}</span><code>{item.slug || "URL не задан"}</code></span>
+          <span className="generatedMenuPreviewText"><span><b>Уровень {depth + 1}</b><strong>{item.title || "Без названия"}</strong><em className="previewItemOrigin">{existing ? "Существующий" : "Новый"}</em>{item.content_kind === "casino_review" ? <em>Обзор казино</em> : item.content_kind === "technical_page" ? <em>Техническая страница</em> : null}{!existing && generatedMenuOperation === "append" && existingPreviewPaths.has(normalizedTreePath(item.slug)) && <em className="previewDuplicate">Уже в меню</em>}</span><code>{item.slug || "URL не задан"}</code></span>
           {!existing && <div className="generatedMenuPreviewActions"><button type="button" className="iconButton" aria-label={`Изменить пункт ${label}`} title="Изменить название, URL и вложенность" disabled={applyingGeneratedMenu} onClick={() => setEditingGeneratedPath(editing ? null : itemPath)}><Edit3 size={15}/></button><button type="button" className="iconButton danger" aria-label={`Удалить пункт ${label}`} title="Удалить строку и её подпункты из предпросмотра" disabled={applyingGeneratedMenu} onClick={() => { updateGeneratedPreview(editPreviewItem(generatedMenuPreview!.items, itemPath, null)); setEditingGeneratedPath(null); }}><Trash2 size={15}/></button></div>}
         </div>
         {editing && <div className="generatedMenuPreviewFields">
@@ -5829,6 +5831,7 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
           onClose={() => { if (!generatingMenuPreview && !applyingGeneratedMenu) setMenuGeneratorOpen(false); }}
           wide
           className="generatedMenuStructureModal"
+          headerActions={<div className="generatedMenuOperation"><SearchableSelect compact ariaLabel="Действие с меню" value={generatedMenuOperation} disabled={generatingMenuPreview || applyingGeneratedMenu} options={[{value:"replace",label:"Новое меню"},{value:"append",label:"Добавить новые пункты"}]} searchPlaceholder="Найти действие" onChange={value => {setGeneratedMenuOperation(value as "append" | "replace"); setFormError("");}} /></div>}
         >
           <div className="generatedMenuStructureBody">
           <div className="generatedMenuStructureControls">
@@ -5840,8 +5843,9 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
               : <label>Пунктов верхнего уровня<SearchableSelect ariaLabel="Количество пунктов структуры меню" value={String(generatedMenuMode === "technical_pages" ? technicalMenuCount : generatedMenuTopLevelCount)} disabled={generatingMenuPreview || applyingGeneratedMenu} onChange={(value) => { if (generatedMenuMode === "technical_pages") setTechnicalMenuCount(Number(value)); else setGeneratedMenuTopLevelCount(Number(value)); setGeneratedMenuPreview(null); }} options={(generatedMenuMode === "technical_pages" ? Array.from({length:technicalCatalogCount - generatedMenuLevels + 1}, (_, index) => index + 1) : [1, 2, 3, 4, 5, 6, 7, 8]).map(count => ({value:String(count),label:String(count)}))} searchPlaceholder="Найти количество пунктов" /></label>}
           </div>
           <div className="menuStructureSummary">
+            <p>{generatedMenuOperation === "replace" ? "Новое меню заменит пункты выбранного Header или Footer. Существующие страницы сайта сохранятся." : "Новые пункты будут добавлены в выбранное меню. Существующие пункты сохранятся."}</p>
             {generatedMenuMode === "casino_reviews"
-              ? `Система подберёт 10 реальных брендов для GEO проекта (${site.cache_geo || "не задано"}) и создаст общий выпадающий раздел. После нажатия «Добавить на сайт» весь блок будет добавлен первым пунктом меню. Существующая структура сохранится без удаления и пересоздания.`
+              ? `Система подберёт 10 реальных брендов для GEO проекта (${site.cache_geo || "не задано"}) и создаст общий выпадающий раздел. Блок обзоров будет первым в выбранном меню.`
               : generatedMenuMode === "technical_pages"
                 ? `Технические страницы для типа «${technicalCatalogCount === 10 ? "Общие ключи" : "Монобренд"}» на языке проекта (${site.cache_language || "не задан"}), GEO ${site.cache_geo || "не задано"}. Один уровень — выбранное число страниц; при 2–3 уровнях страницы каталога распределяются между корневыми пунктами. Названия, URL и вложенность можно изменить в предпросмотре.`
               : `Структура будет создана на языке проекта (${site.cache_language || "не задан"}) с учётом его тематики и GEO (${site.cache_geo || "не задано"}).`}
@@ -5850,7 +5854,7 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
           {generatedMenuPreview ? (
             <section className="generatedMenuPreview">
               <header><strong>Предпросмотр</strong><span>{generatedMenuPreview.language.toUpperCase()} · {generatedMenuPreview.geo.toUpperCase()} · {generatedMenuPreview.levels} ур. · верхних пунктов: {generatedMenuPreview.top_level_count} · всего: {generatedPreviewNodes.length}</span></header>
-              <p className="generatedMenuPreviewLegend">Серым — существующие пункты. Ярким — новые: нажмите карандаш, чтобы изменить название, URL или вложенность.</p>
+              <p className="generatedMenuPreviewLegend">{generatedMenuOperation === "replace" ? "Серым — текущее меню, которое будет заменено. Ярким — новое меню." : "Серым — существующие пункты. Ярким — новые."} Нажмите карандаш, чтобы изменить название, URL или вложенность.</p>
               {generatedMenuPreview.mode !== "casino_reviews" && renderGeneratedMenuPreview(existingPreviewItems, 0, "", true)}
               {renderGeneratedMenuPreview(generatedMenuPreview.items)}
               {generatedMenuPreview.mode === "casino_reviews" && renderGeneratedMenuPreview(existingPreviewItems, 0, "", true)}

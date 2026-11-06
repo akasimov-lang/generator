@@ -433,6 +433,7 @@ class MenuStructurePreviewResponse(BaseModel):
 
 
 class GeneratedMenuStructureApply(BaseModel):
+    operation: Literal["append", "replace"] = "append"
     menu_type: Literal["header", "footer"] = "header"
     levels: int = Field(default=2, ge=1, le=3)
     top_level_count: int = Field(default=5, ge=1, le=20)

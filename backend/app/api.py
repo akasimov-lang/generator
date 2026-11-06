@@ -1184,6 +1184,7 @@ async def apply_site_generated_menu_structure(
             payload.mode,
             [item.model_dump() for item in payload.items],
             initiator_username=_request_username(user),
+            operation=payload.operation,
         )
     except ValueError as error:
         db.rollback()

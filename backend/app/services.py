@@ -5066,9 +5066,19 @@ async def apply_generated_menu_structure(
     mode: str,
     raw_items: list[dict],
     initiator_username: str | None = None,
+    operation: str = "append",
 ) -> dict:
     if menu_type not in {"header", "footer"}:
         raise ValueError("Menu type must be header or footer")
+    if operation not in {"append", "replace"}:
+        raise ValueError("Unknown menu operation")
+    previous_sections = list(db.scalars(select(models.Section).where(
+        models.Section.site_id == site.id, models.Section.menu_type == menu_type,
+        models.Section.sync_status != "external_deleted",
+    )).all()) if operation == "replace" else []
+    if any(section.sync_status == "pending" for section in previous_sections):
+        raise ValueError("Дождитесь сохранения изменений текущего меню перед его заменой.")
+    previous_statuses = {section.id: section.sync_status for section in previous_sections}
     effective_levels = 2 if mode == "casino_reviews" else levels
     normalized_items = normalize_generated_menu_structure(
         raw_items,
@@ -5100,7 +5110,7 @@ async def apply_generated_menu_structure(
     }
     generated_paths = {change["new_path"] for change in changes}
     collisions = sorted(existing_paths & generated_paths)
-    if collisions:
+    if collisions and operation == "append":
         raise ValueError(f"Эти URL уже есть в меню: {', '.join(collisions[:5])}. Удалите их из предпросмотра или измените URL.")
 
     used_ids = {
@@ -5154,7 +5164,7 @@ async def apply_generated_menu_structure(
     prepared_items = prepare(generated_items)
     updated_menu = copy.deepcopy(current_menu)
     existing_items_for_update = copy.deepcopy(current_items)
-    combined_items = (
+    combined_items = prepared_items if operation == "replace" else (
         [*prepared_items, *existing_items_for_update]
         if mode == "casino_reviews"
         else [*existing_items_for_update, *prepared_items]
@@ -5164,10 +5174,13 @@ async def apply_generated_menu_structure(
             item["order"] = order
     updated_menu[menu_type] = combined_items
     site.default_menu = updated_menu
+    for section in previous_sections:
+        section.sync_status = "external_deleted"
     audit_log = models.PublicationLog(
         endpoint_url=f"internal://sites/{site.id}/menu/{menu_type}/generated-structure",
         request_payload={
             "action": "generated_menu_structure_apply",
+            "operation": operation,
             "project_name": site.name,
             "menu_type": menu_type,
             "mode": mode,
@@ -5183,6 +5196,8 @@ async def apply_generated_menu_structure(
 
     def rollback_local_changes(error_message: str, response_status: int) -> None:
         site.default_menu = current_menu
+        for section in previous_sections:
+            section.sync_status = previous_statuses[section.id]
         for section in reversed(created_sections):
             db.delete(section)
         audit_log.response_status = response_status
