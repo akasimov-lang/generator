@@ -68,5 +68,28 @@ def test_long_tasks_do_not_share_scheduler_or_publication_queue():
     assert routes["app.worker.run_content_item_pipeline"]["queue"] == "generation"
     assert routes["app.worker.publish_due_items"]["queue"] == "publication"
     assert routes["app.worker.auto_reglue"]["queue"] == "automation"
-    assert routes["app.worker.dispatch_background_jobs"]["queue"] == "maintenance"
+    assert routes["app.worker.dispatch_background_jobs"]["queue"] == "background_dispatch"
     assert routes["app.worker.reconcile_pending_publications"]["queue"] == "confirmation"
+
+
+def test_planning_and_small_generations_have_independent_queues(env):
+    db, site, _ = env
+    jobs = [models.BackgroundJob(kind=kind, payload=payload) for kind,payload in [
+        ('auto_pilot_preview', {}), ('menu_generation', {'site_id':site.id}),
+        ('pilot_text', {'field':'title_h1'}), ('pilot_text', {'field':'paragraphs'}),
+        ('mass_reglue_list', {})]]
+    db.add_all(jobs); db.commit()
+    sent=[]
+    dispatch_pending(db, lambda id, queue: sent.append((id,queue)))
+    assert dict(sent)==dict(zip([job.id for job in jobs],['planning','short_generation','short_generation','pilot_texts','automation']))
+    assert sent[0][0]==jobs[0].id
+
+
+def test_dispatch_does_not_repeat_a_delivery_still_waiting_in_broker(env):
+    db, site, _=env
+    old=models.BackgroundJob(kind='cache_sync',payload={},dispatched_at=datetime.now(timezone.utc)-timedelta(hours=2))
+    new=models.BackgroundJob(kind='auto_pilot_preview',payload={})
+    db.add_all([old,new]);db.commit()
+    sent=[]
+    dispatch_pending(db,lambda *args:sent.append(args),inflight_ids={old.id})
+    assert sent==[(new.id,'planning')]

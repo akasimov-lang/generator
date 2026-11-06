@@ -41,7 +41,7 @@ celery_app.conf.update(
         "app.worker.auto_reglue_recheck": {"queue": "automation"},
         "app.worker.dispatch_reglue_monitor": {"queue": "maintenance"},
         "app.worker.schedule_auto_reglue": {"queue": "automation"},
-        "app.worker.dispatch_background_jobs": {"queue": "maintenance"},
+        "app.worker.dispatch_background_jobs": {"queue": "background_dispatch"},
         "app.worker.check_site_menu_visibility": {"queue": "menu_checks"},
     },
 )
@@ -531,13 +531,23 @@ def network_indexing_job():
 @celery_app.task(name="app.worker.dispatch_background_jobs")
 def dispatch_background_jobs_job():
     from app.background_jobs import dispatch_pending
+    from app.queue_maintenance import broker, inflight_job_ids
+    with broker() as client:
+        inflight = inflight_job_ids(client)
     with SessionLocal() as db:
         return dispatch_pending(db, lambda job_id, queue: background_operation_job.apply_async(
-            args=[job_id], queue=queue, task_id=job_id))
+            args=[job_id], queue=queue, task_id=job_id), inflight_ids=inflight)
 
 
-@celery_app.task(name="app.worker.background_operation", acks_late=True, reject_on_worker_lost=True)
-def background_operation_job(job_id):
+@celery_app.task(bind=True, name="app.worker.background_operation", acks_late=True, reject_on_worker_lost=True)
+def background_operation_job(self, job_id):
     from app.background_jobs import run_job
+    from app.job_queues import queue_for
     with SessionLocal() as db:
+        job = db.get(models.BackgroundJob, job_id)
+        delivered = (self.request.delivery_info or {}).get('routing_key')
+        # Old broker deliveries must not run small jobs in the large-text pool.
+        if job and job.status == 'queued' and delivered and delivered != queue_for(db, job):
+            background_operation_job.apply_async(args=[job_id], queue=queue_for(db, job), task_id=job_id)
+            return {'status': 'rerouted'}
         return run_job(db, job_id)

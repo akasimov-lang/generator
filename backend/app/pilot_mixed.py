@@ -7,7 +7,7 @@ PlanningMode = Literal['percentages', 'mixed']
 MIXED_PERCENTAGES = dict(subdomains=50, without_alternates=50, redirects=50)
 
 
-def parameters(db, percentages=None, title_rewrite_mode='minimal', planning_mode='percentages'):
+def parameters(db, percentages=None, title_rewrite_mode='mixed', planning_mode='percentages'):
     from app import auto_reglue as auto
     from app.pilot_variations import PilotPercentages, title_mode
     if planning_mode not in ('percentages', 'mixed'):

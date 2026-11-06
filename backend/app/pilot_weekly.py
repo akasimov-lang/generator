@@ -20,11 +20,13 @@ def exclusions(db, plans):
     return reasons
 
 
-def exclude(db, result):
+def exclude(db, result, *, job=None):
+    from app.pilot_observed_reglues import retire
+    retired = retire(db, job, result) if job is not None else False
     plans = [p for g in result['groups'] for p in g.get('plans', [])
              if not result['items'][p['site_id']].get('run_id')]
     reasons = exclusions(db, plans)
-    if not reasons: return False
+    if not reasons: return retired
     from app.cross_reglue_batch import key
     for group in result['groups']:
         old = group.get('plans', [])

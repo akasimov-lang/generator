@@ -3017,6 +3017,15 @@ def run_due_publication(_: AdminUser) -> dict:
 
 from app import menu_generation_jobs
 
+@router.get("/menu-generations")
+def menu_generation_journal(user: AuthUser, db: Session = Depends(get_db)):
+    query = select(models.BackgroundJob).where(models.BackgroundJob.kind == menu_generation_jobs.KIND)
+    allowed = user.get('allowed_site_ids')
+    if allowed is not None:
+        query = query.where(models.BackgroundJob.payload['site_id'].as_string().in_(allowed))
+    rows = db.scalars(query.order_by(models.BackgroundJob.created_at.desc()).limit(100)).all()
+    return [menu_generation_jobs.view(db, row) for row in rows]
+
 @router.post("/sites/{site_id}/menu-generations", status_code=202)
 def create_menu_generation(site_id: str, payload: menu_generation_jobs.Request, user: AuthUser, db: Session = Depends(get_db)):
     return menu_generation_jobs.create(db, _get_site_or_404(db, site_id), payload, user)

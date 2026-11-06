@@ -8,3 +8,5 @@
 .menuGenerationTaskPages > div { display: grid; grid-template-columns: 1fr minmax(140px, 30%); gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border, #d4dfee); font-size: 13px; }
 .menuGenerationTask summary { cursor: pointer; font-size: 13px; }
 @media (max-width: 640px) { .menuGenerationTaskHeader { flex-direction: column; } .menuGenerationTaskProgress, .menuGenerationTaskPages > div { grid-template-columns: 1fr; } }
+.menuGenerationEvent{display:block;padding:4px 0;color:var(--muted);font-size:12px}
+.menuGenerationTasks{max-height:620px;overflow:auto;scrollbar-gutter:stable}

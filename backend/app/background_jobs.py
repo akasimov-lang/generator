@@ -1,7 +1,7 @@
 """Durable jobs: commit intent before dispatch, claim once before external I/O."""
 import asyncio
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, case
 from app import models
 from app.task_status import refresh_task_status
 
@@ -25,22 +25,31 @@ def enqueue_publication(db, item, actor):
     db.commit()
 
 
-def dispatch_pending(db, send):
-    from app.menu_generation_jobs import expire
+def dispatch_pending(db, send, inflight_ids=None):
+    from app.menu_generation_jobs import expire, recover_interrupted
+    from app.job_queues import queue_for
     expire(db)
+    recover_interrupted(db)
     now = datetime.now(timezone.utc)
     jobs = db.scalars(select(models.BackgroundJob).where(
         models.BackgroundJob.status == "queued",
+        models.BackgroundJob.id.not_in(inflight_ids or []),
         or_(models.BackgroundJob.dispatched_at.is_(None),
             models.BackgroundJob.dispatched_at < now - timedelta(minutes=1)),
-    ).order_by(models.BackgroundJob.created_at).limit(100).with_for_update(skip_locked=True)).all()
+    ).order_by(case((models.BackgroundJob.kind == 'auto_pilot_preview', 0), else_=1),
+               models.BackgroundJob.created_at).limit(100).with_for_update(skip_locked=True)).all()
     sent = 0
     for job in jobs:
         if job.kind == 'generation_retry':
             from app.generation_retry import due
+            from app.queue_maintenance import obsolete_retry
+            if obsolete_retry(db, job):
+                job.status = 'cancelled'; job.finished_at = now
+                job.result = {**(job.result or {}), 'reason': 'Повтор не требуется: текст уже обработан или назначена новая попытка.'}
+                continue
             if not due(job): continue
         try:
-            send(job.id, {"menu_generation": "generation", "generation_retry": "generation", "pilot_text": "pilot_texts", "maintenance_report": "automation", "auto_pilot_preview": "automation", "mass_reglue_list": "automation", "pilot_internal_pages": "generation", "template_knowledge": "maintenance", "publication": "publication", "page_autolink": "publication", "transfer_report_check": "automation", "site_template": "generation", "auto_lb": "generation", "project_page_ai": "generation", "article_image": "generation"}.get(job.kind, "cache_sync"))
+            send(job.id, queue_for(db, job))
         except Exception:
             continue
         job.dispatched_at = now

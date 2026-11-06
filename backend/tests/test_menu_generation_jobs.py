@@ -72,3 +72,31 @@ def test_menu_progress_distinguishes_stub_generated_published_and_failed_pages(s
     result=jobs.view(db,row)
     assert result['progress']=={'total':4,'generated':2,'published':1,'deleted':0,'errors':1}
     assert len(result['pages'])==4
+
+
+def test_interrupted_generation_retries_once_and_keeps_event_history(setup):
+    _,db,site,_=setup
+    job=enqueue(db,site);row=db.get(models.BackgroundJob,job['id'])
+    row.status='generating';row.started_at=jobs.now()-timedelta(minutes=6);row.result={**row.result,'attempts':1};db.commit()
+    jobs.recover_interrupted(db)
+    assert row.status=='queued' and row.dispatched_at is None
+    assert len(row.result['events'])==2
+    row.status='generating';row.result={**row.result,'attempts':2};db.commit()
+    jobs.recover_interrupted(db)
+    assert row.status=='failed' and 'повторно' in row.error
+
+
+def test_interrupted_apply_requires_verification_without_repeating_write(setup):
+    _,db,site,_=setup
+    job=enqueue(db,site);row=db.get(models.BackgroundJob,job['id'])
+    row.status='applying';row.started_at=jobs.now()-timedelta(minutes=6);db.commit()
+    jobs.recover_interrupted(db)
+    assert row.status=='failed' and 'проверка результата' in row.error
+
+
+def test_journal_filters_project_access_before_returning_jobs(setup):
+    _,db,site,_=setup
+    job=enqueue(db,site)
+    assert api.menu_generation_journal({'allowed_site_ids':[]},db)==[]
+    assert api.menu_generation_journal({'allowed_site_ids':[site.id]},db)[0]['id']==job['id']
+    assert api.menu_generation_journal({'allowed_site_ids':None},db)[0]['project_name']==site.name

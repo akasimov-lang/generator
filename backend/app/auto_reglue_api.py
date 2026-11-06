@@ -523,7 +523,7 @@ from app.pilot_mixed import PlanningMode
 
 class PilotPreviewRequest(PilotSelection):
     request_id: UUID
-    title_rewrite_mode: TitleRewriteMode = 'minimal'
+    title_rewrite_mode: TitleRewriteMode = 'mixed'
     planning_mode: PlanningMode = 'percentages'
     allow_stock_drops: bool = True
     percentages: PilotPercentages | None = None

@@ -160,7 +160,7 @@ def scope_options(db, user):
     counts = Counter((brands[brand_key(scope_brand(site))], country_key(site.cache_geo)) for site in sites)
     groups = [{'brand': brand, 'geo': geo, 'count': count} for (brand, geo), count in sorted(counts.items())]
     from app.pilot_variations import percentages
-    return {'scope_mode':'include', 'title_rewrite_mode':'minimal', 'percentages': percentages(db), 'brands': sorted(brands.values()), 'geos': sorted({country_key(site.cache_geo) for site in sites if country_key(site.cache_geo)}), 'groups': groups}
+    return {'scope_mode':'include', 'title_rewrite_mode':'mixed', 'percentages': percentages(db), 'brands': sorted(brands.values()), 'geos': sorted({country_key(site.cache_geo) for site in sites if country_key(site.cache_geo)}), 'groups': groups}
 
 
 def selected_scope_sites(sites, scope):
@@ -173,7 +173,7 @@ def selected_scope_sites(sites, scope):
     return included
 
 
-def create(db, request_id, user, brand='', geo='', percentages=None, *, brands=None, geos=None, title_rewrite_mode='minimal', scope_mode='include', planning_mode='percentages', allow_stock_drops=True):
+def create(db, request_id, user, brand='', geo='', percentages=None, *, brands=None, geos=None, title_rewrite_mode='mixed', scope_mode='include', planning_mode='percentages', allow_stock_drops=True):
     allowed = user.get('allowed_site_ids')
     scope = selection(brand=brand, geo=geo, brands=brands, geos=geos, scope_mode=scope_mode)
     # Retrying the same HTTP request uses its original scope, even if projects changed.
@@ -248,7 +248,7 @@ def start(db, job_id, user):
             except PilotScopeError as error: raise NetworkConflict(str(error) + ' Обновите план.') from error
         result=deepcopy(job.result)
         from app.pilot_weekly import exclude
-        if exclude(db, result):
+        if exclude(db, result, job=job):
             job.result = deepcopy(result); db.commit()
         plans=[p for g in result['groups'] for p in g.get('plans',[])]
         from app.reglue_title_h1 import preview_needs_shortening
@@ -373,6 +373,9 @@ def view(db,job):
                 alternates_saved.add(op.request_payload['auto_run_id'])
             events.append({'id':op.id,'site_id':op.site_id,'run_id':op.request_payload['auto_run_id'],'action':op.action,'status':op.status,'message':op.message,'at':op.updated_at})
     plans = {p['site_id']: p for g in job.result['groups'] for p in g.get('plans', [])}
+    for saved in job.result.get('items', {}).values():
+        if saved.get('completed_elsewhere_plan'):
+            plans.setdefault(saved['site_id'], saved['completed_elsewhere_plan'])
     from app.pilot_weekly import exclusions
     recent = exclusions(db, list(plans.values())) if preparing else {}
     sites = {site.id: site for site in db.scalars(select(models.Site).where(models.Site.id.in_([row['site_id'] for row in snapshot['items']])))}
@@ -384,6 +387,8 @@ def view(db,job):
             row.update(status='skipped', reason=recent[row['site_id']])
         row['brand'] = scope_brand(site) if site else plans.get(row['site_id'], {}).get('brand') or 'Общие ключи'
         row['geo'] = country_key(row.get('geo'))
+        row['current_main'] = (site.cache_canon or '') if site else ''
+        row['fibery_name'] = site.fibery_name if site else None
         if row['site_id'] in plans:
             row.update(describe(db, plans[row['site_id']]))
         from app.pilot_internal_pages import snapshot as internal_pages_snapshot
@@ -417,15 +422,19 @@ def view(db,job):
         if not preparing:
             from app.pilot_internal_pages import merge_row
             merge_row(row, row.get('internal_pages'))
+        if row.get('completed_elsewhere'):
+            from app.pilot_observed_reglues import apply
+            apply(row, row['completed_elsewhere'])
     snapshot['items'].sort(key=lambda row: (row['brand'].casefold(), row.get('geo', ''), row['project'].casefold(), row['site_id']))
     total=len(snapshot['items']);done=sum(r['status'] in launch.TERMINAL|{'skipped'} for r in snapshot['items'])
     snapshot['counts'] = {status:sum(row['status']==status for row in snapshot['items']) for status in snapshot['counts']}
-    plans = {site_id:p for site_id,p in plans.items() if site_id not in recent}
+    fulfilled = {r['site_id'] for r in snapshot['items'] if r.get('completed_elsewhere')}
+    plans = {site_id:p for site_id,p in plans.items() if site_id not in recent and site_id not in fulfilled}
     snapshot['variation_summary']=job.result.get('variation_summary')
-    if recent and snapshot['variation_summary']:
+    if (recent or fulfilled) and snapshot['variation_summary']:
         current = deepcopy(job.result)
         for group in current['groups']:
-            group['plans'] = [p for p in group.get('plans', []) if p['site_id'] not in recent]
+            group['plans'] = [p for p in group.get('plans', []) if p['site_id'] not in recent and p['site_id'] not in fulfilled]
         from app.pilot_variations import update_summary
         update_summary(current)
         snapshot['variation_summary'] = current['variation_summary']
@@ -437,7 +446,7 @@ def view(db,job):
     from app.pilot_text_jobs import independent_start
     snapshot['parallel_texts']=bool(job.result.get('parallel_texts'))
     snapshot['can_launch_while_generating']=bool(preparing and job.status=='queued' and independent_start(job))
-    snapshot['launch_enabled']=not snapshot['replanning_requested'] and not snapshot['plan_outdated'] and not snapshot['title_h1_outdated'] and (independent_start(job) or all(paragraphs_ready(db,p) and heading_mode_ready(db,p,snapshot['title_rewrite_mode']) for p in plans.values()))
+    snapshot['launch_enabled']=bool(plans) and not snapshot['replanning_requested'] and not snapshot['plan_outdated'] and not snapshot['title_h1_outdated'] and (independent_start(job) or all(paragraphs_ready(db,p) and heading_mode_ready(db,p,snapshot['title_rewrite_mode']) for p in plans.values()))
     domain_counts={'reserve_drops':0,'newregs':0,'drops':0,'other':0}
     for p in plans.values():
         kind=p.get('domain_type') or p.get('required_domain_type') or p.get('main_target_kind')

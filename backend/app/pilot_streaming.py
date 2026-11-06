@@ -39,7 +39,7 @@ def execute(db,job,send):
     job.started_at=job.started_at or datetime.now(timezone.utc)
     def save():
         job.result=deepcopy(result);db.commit()
-    exclude(db,result)
+    exclude(db,result,job=job)
     sync(db,job,result)
     groups={p['site_id']:g for g in result['groups'] for p in g.get('plans',[])}
     plans=[p for g in result['groups'] for p in g.get('plans',[])]
@@ -97,6 +97,7 @@ def execute(db,job,send):
                     **({'run_id':run.id} if run else {}))
             save()
     for row in result['items'].values():
+        if row.get('completed_elsewhere'):continue
         run=db.get(models.AutoReglueRun,row.get('run_id')) if row.get('run_id') else None
         if not run:continue
         row.update(status=run.status,reason=run.message)

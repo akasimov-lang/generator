@@ -63,9 +63,9 @@ services:
       DB_MAX_OVERFLOW: "1"
     cpus: 1.5
     cpu_shares: 256
-    mem_limit: 2g
+    mem_limit: 4g
     stop_grace_period: 120s
-    command: celery -A app.worker.celery_app worker --loglevel=info --hostname=generation@%h --queues=generation,celery --concurrency=2
+    command: celery -A app.worker.celery_app worker --loglevel=info --hostname=generation@%h --queues=generation,pilot_texts,celery --concurrency=${GENERATION_CONCURRENCY:-30}
 
   menu_check_worker:
     image: generator-backend
@@ -126,7 +126,7 @@ services:
     stop_grace_period: 120s
     command: celery -A app.worker.celery_app worker --loglevel=info --hostname=automation@%h --queues=automation --concurrency=10
 
-  pilot_text_worker:
+  short_generation_worker:
     image: generator-backend
     restart: unless-stopped
     env_file:
@@ -139,11 +139,49 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    cpus: 2.0
-    cpu_shares: 256
-    mem_limit: 4096m
+    cpus: 1.0
+    cpu_shares: 512
+    mem_limit: 1536m
     stop_grace_period: 120s
-    command: celery -A app.worker.celery_app worker --loglevel=info --hostname=pilot_texts@%h --queues=pilot_texts --concurrency=${PILOT_TEXT_CONCURRENCY:-30}
+    command: celery -A app.worker.celery_app worker --loglevel=info --hostname=short_generation@%h --queues=short_generation --concurrency=4
+
+  planning_worker:
+    image: generator-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DB_POOL_SIZE: "2"
+      DB_MAX_OVERFLOW: "0"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    cpus: 1.5
+    cpu_shares: 2048
+    mem_limit: 1536m
+    stop_grace_period: 120s
+    command: celery -A app.worker.celery_app worker --loglevel=info --hostname=planning@%h --queues=planning --concurrency=2
+
+  background_dispatch_worker:
+    image: generator-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DB_POOL_SIZE: "2"
+      DB_MAX_OVERFLOW: "0"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    cpus: 0.5
+    cpu_shares: 1024
+    mem_limit: 512m
+    stop_grace_period: 120s
+    command: celery -A app.worker.celery_app worker --loglevel=info --hostname=background_dispatch@%h --queues=background_dispatch --concurrency=1
 
   confirmation_worker:
     image: generator-backend

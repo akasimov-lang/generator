@@ -75,10 +75,10 @@
 .pilotParagraphs details>div{border-bottom:1px solid var(--border);padding:4px 0}
 
 .pilotShares{margin:12px 0;line-height:1.9}
-.pilotHeadingMode{display:inline-block;vertical-align:middle;width:330px;max-width:100%;margin:0 4px 0 10px;padding:0;border:0;line-height:1.2}
-.pilotHeadingMode .tg-combobox>label{display:block;margin:0 0 3px;font-size:10px;color:var(--muted)}
-.pilotHeadingMode .tg-combobox-control input{font-size:12px;min-height:32px;height:32px;width:100%;padding:5px 30px 5px 9px}
-.pilotHeadingMode .tg-combobox-list{font-size:12px;min-width:330px;max-width:min(440px,85vw)}
+.pilotHeadingMode{display:inline-block;vertical-align:middle;width:270px;max-width:100%;margin:0 4px 0 10px;padding:0;border:0;line-height:1.2}
+.pilotHeadingMode .tg-combobox>label{display:block;margin:0 0 3px;font-size:10px;font-weight:500;color:var(--muted)}
+.pilotHeadingMode .tg-combobox-control input{font-size:12px;min-height:28px;height:28px;width:100%;padding:5px 30px 5px 9px}
+.pilotHeadingMode .tg-combobox-list{font-size:12px;min-width:270px;max-width:min(440px,85vw)}
 .pilotHeadingModeSaved{font-size:12px;margin:0 8px;color:var(--muted)}
 .pilotHeadingPreview{padding:5px 0;border-bottom:1px solid var(--border)}
 .pilotHeadingPreview p{margin:4px 0;line-height:1.4}
@@ -99,3 +99,7 @@
 @media(max-width:700px){.pilotPlanningFilters{grid-template-columns:1fr}}
 
 .pilotDomainSummary button[aria-pressed="true"] {background:var(--brand-soft,var(--blue-soft));border-color:var(--brand,var(--blue));color:var(--brand-text,var(--blue));}
+.pilotTable tr.completedElsewhere>td{background:color-mix(in srgb,var(--success,#22845b) 11%,var(--surface,#fff))}
+.pilotTable tr.completedElsewhere>td:first-child{border-left:3px solid var(--success,#22845b)}
+.pilotObservedReglue{margin-top:8px;overflow-wrap:anywhere}
+.pilotObservedReglue strong{color:var(--success,#22845b)}

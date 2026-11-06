@@ -98,6 +98,8 @@ def view(db, job):
         run = db.get(models.AutoReglueRun, row.get('run_id')) if row.get('run_id') else None
         if run: row.update(status=run.status, reason=run.message)
         items.append(row)
+    from app.pilot_observed_reglues import project
+    project(db, job, items)
     return {'id': job.id, 'status': job.status, 'created_at': job.created_at, 'error': job.error,
             'items': items, 'counts': {status: sum(i['status'] == status for i in items)
             for status in {'pending', 'queued', 'running', 'generating', 'waiting', 'completed', 'skipped', 'failed', 'partial', 'cancelled'}}}
@@ -228,7 +230,7 @@ def execute_step(db, job_id, send, *, parallel_texts=False):
                     group['status'] = 'previewed'; save(); continue
                 if group['status'] == 'prepared':
                     from app.pilot_weekly import exclude
-                    if exclude(db, result): save()
+                    if exclude(db, result, job=job): save()
                     if group['status'] == 'done': continue
                     try:
                         plans = group.get('plans', [])
@@ -264,6 +266,7 @@ def execute_step(db, job_id, send, *, parallel_texts=False):
                 if group['status'] == 'waiting':
                     running = []
                     for id in ids:
+                        if result['items'][id].get('completed_elsewhere'): continue
                         rid = result['items'][id].get('run_id')
                         run = db.get(models.AutoReglueRun, rid) if rid else None
                         if not run: continue
@@ -285,7 +288,7 @@ def execute_step(db, job_id, send, *, parallel_texts=False):
             if all(g['status'] in {'done', 'previewed'} for g in result['groups']):
                 if preview_only:
                     from app.pilot_weekly import exclude
-                    exclude(db, result)
+                    exclude(db, result, job=job)
                     from app.pilot_variations import finalize
                     finalize(db, job, result)
                     if not result.get('variations_finalized'):

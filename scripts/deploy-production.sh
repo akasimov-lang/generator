@@ -17,7 +17,7 @@ compose build
 compose run --rm --no-deps backend python -c "from kombu.transport.redis import Channel; Channel.__new__(Channel)._get_client()"
 compose up -d postgres redis
 compose run --rm backend alembic upgrade head
-compose up -d
+compose up -d --remove-orphans
 compose exec -T nginx nginx -t
 compose exec -T nginx nginx -s reload
 attempt=1
@@ -26,7 +26,7 @@ while [ "$attempt" -le 30 ]; do
     && compose exec -T nginx wget -q -O /dev/null http://backend:8000/api/health \
     && compose exec -T nginx wget -q -O /dev/null http://frontend:80/ \
     && compose ps --status running --services | grep -qx celery_beat \
-    && compose exec -T backend python -c "from app.worker import celery_app; replies=celery_app.control.inspect(timeout=2).ping() or {}; expected={'generation','menu','publication','automation','pilot_texts','confirmation','cache_sync','maintenance'}; missing=expected-{name.split('@')[0] for name in replies}; print('Workers missing:', sorted(missing)) if missing else None; raise SystemExit(bool(missing))"; then
+    && compose exec -T backend python -c "from app.worker import celery_app; replies=celery_app.control.inspect(timeout=2).ping() or {}; expected={'generation','menu','publication','automation','short_generation','planning','background_dispatch','confirmation','cache_sync','maintenance'}; missing=expected-{name.split('@')[0] for name in replies}; print('Workers missing:', sorted(missing)) if missing else None; raise SystemExit(bool(missing))"; then
     printf '%s\n' "$revision" > "$repo/deployed-revision"
     echo "Production health checks passed: $revision"
     exit 0

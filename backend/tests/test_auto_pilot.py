@@ -180,12 +180,12 @@ def test_start_rechecks_participation_before_remote_writes(pool):
     assert all(not r.calls for r in remotes.values())
 
 
-def test_preview_job_uses_automation_worker_without_launching(pool,monkeypatch):
+def test_preview_job_uses_dedicated_planning_worker_without_launching(pool,monkeypatch):
     from app import background_jobs
     db,source,target,remotes,add=pool
     job=pilot.create(db,uuid4(),USER);sent=[]
     background_jobs.dispatch_pending(db,lambda *args:sent.append(args))
-    assert sent==[(job.id,'automation')]
+    assert sent==[(job.id,'planning')]
     monkeypatch.setattr('app.worker.auto_reglue_job.delay',lambda _:pytest.fail('Preview cannot launch'))
     background_jobs.run_job(db,job.id)
     assert pilot.view(db,job)['ready']==1
@@ -287,3 +287,15 @@ def test_execution_date_comes_from_confirmed_reglue_not_plan_creation(pool):
     row=next(r for r in pilot.view(db,job)['items'] if r.get('run_id')==run.id)
     assert row['performed_at']
     assert pilot.tasks(db,USER)['items'][0]['counts']['completed']==1
+
+
+def test_new_plans_default_to_mixed_headings_and_display_current_main_and_fibery(pool):
+    db,source,target,remotes,add=pool
+    job=preview(db)
+    assert job.payload['title_rewrite_mode']=='mixed'
+    assert pilot.scope_options(db,USER)['title_rewrite_mode']=='mixed'
+    site=next(db.get(models.Site,row['site_id']) for row in job.result['items'].values())
+    site.cache_canon='actual-main.test';site.fibery_name='#1826_beste online casino_DE';db.commit()
+    row=next(row for row in pilot.view(db,job)['items'] if row['site_id']==site.id)
+    assert row['current_main']=='actual-main.test' and row['fibery_name']==site.fibery_name
+    assert not list(db.scalars(select(models.AutoReglueRun)))

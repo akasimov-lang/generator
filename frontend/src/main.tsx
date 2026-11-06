@@ -1992,6 +1992,7 @@ function DashboardView({ api, dashboard, tasks, content, sites, onOpenTask, onCh
         <KpiCard icon={<AlertTriangle />} label="Ошибки" value={dashboard.stats.errors} danger />
       </div>
       <DashboardActivity api={api} />
+      <DataPanel title="Журнал генераций меню и страниц"><MenuGenerationTasks api={api} showEmpty={true} /></DataPanel>
       {reviewExpanded ? (
         <DataPanel title={`Тексты на согласование · ${awaitingItems.length}`}>
           <div className="bulkToolbar">

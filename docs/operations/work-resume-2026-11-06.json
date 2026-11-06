@@ -1,0 +1,46 @@
+{
+  "updated_at": "2026-11-06T17:10:00Z",
+  "last_confirmed_production": "10cb524781388845a542fc2243929a23b6d00464",
+  "in_this_release": [
+    "30 concurrent large-text jobs in a shared generation/pilot_texts pool",
+    "Dedicated short-generation, planning and dispatcher workers",
+    "Dashboard menu generation journal and interrupted preview recovery",
+    "Prevent duplicate durable-job dispatch while delivery is queued/unacked",
+    "Audited broker cleanup command: python -m app.queue_maintenance --apply",
+    "Confirmed outside-plan reglues projected into all plans without launching them",
+    "Mixed heading mode defaults; current Main and Fibery in plan rows"
+  ],
+  "next_authorized_work": [
+    "Separate network execution from pending text generation for already-launched plans; publish each reviewed field as ready, with receipts and before/after history",
+    "Expand internal-page planner to existing menus and general-keyword projects; preserve selected Main targets; plan3033 content50%, internal pages40%",
+    "Investigate Betonred unavailable targets and remove monthly transfer delay only within same brand/GEO while retaining ownership and ban protections",
+    "Verify Vitalina favorites: current5;42 archived by inventory cleanup2026-10-20; do not blindly restore unavailable projects",
+    "Mirror isolated-clone changes into original dirty worktree without overwriting unrelated work"
+  ],
+  "paused": [
+    "Mass showcase conversions and logo uploads: user now requests one site at a time; log actual changes as report comments",
+    "Broad historical-error audit beyond current generation queue",
+    "Network deletion button and drum-counter diagnostics"
+  ],
+  "reports": {
+    "3033": "7baefd4d-50c0-4ef0-a8e6-040d65a1a2ce",
+    "pelican": "eb11b394-99f4-555d-9ea9-5dc44d04cac4",
+    "3038": "bbdb21a4-e48a-470c-9943-1db229b28f8e",
+    "3032": "4ddc2b49-3265-4b13-832d-12b40474c382"
+  },
+  "constraints": [
+    "Opening or refreshing a plan must never launch reglues",
+    "No new plan execution without user launch",
+    "No browser on user Mac",
+    "Git-only production deployment after origin sync and production drift check",
+    "Preserve uncertain remote-write receipts; confirm before any retry",
+    "New pages link to root /; never pin current Main in homepage links",
+    "Literal old-host alternates retarget on reglue; preserve settings.canon placeholders"
+  ],
+  "known_baseline_test_failures": [
+    "test_auto_pilot confirmed_updates old expected fields",
+    "test_auto_pilot participation rejection moved to start",
+    "test_auto_pilot old preview cancellation expectation",
+    "test_mass_reglue_launch old task-history draft exclusion expectation"
+  ]
+}
