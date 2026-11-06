@@ -28,9 +28,11 @@ def apply_pending(db, job):
     old = deepcopy(job.result)
     if command.get('previous_completed'):
         ensure_current(job, old)
+    from app.pilot_saved_headings import CACHE, capture
+    saved_headings = capture(db, job, old)
     job.payload = deepcopy(command['payload'])
     job.payload['generation_id'] = command['request_id']
-    job.result = {**deepcopy(command['result']), 'row_versions': old.get('row_versions', {})}
+    job.result = {**deepcopy(command['result']), 'row_versions': old.get('row_versions', {}), CACHE: saved_headings}
     job.status = command['status']
     job.error = None
     job.started_at = job.finished_at = job.dispatched_at = None

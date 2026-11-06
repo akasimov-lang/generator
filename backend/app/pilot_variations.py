@@ -159,6 +159,9 @@ def finalize(db, job, result):
         by_id[p['site_id']] = p
     from app.pilot_schemes import assign
     assign(db, list(by_id.values()))
+    from app.pilot_saved_headings import restore
+    for p in by_id.values():
+        restore(db, result, p)
     from app.cross_reglue_batch import key, validate
     from app.auto_pilot import describe
     for g in result['groups']:
@@ -175,7 +178,7 @@ def finalize(db, job, result):
     counts = Counter(mode(p.get('canonicalFakeMainMarkup'),p.get('fake_main_path')) for p in plans)
     result['variation_summary'] = {'total':total,'subdomains':len(subplans),'emergency_subdomains':sum(bool(p.get('emergency_subdomain')) for p in plans),'subdomains_requested':desired,'subdomains_percent':shares['subdomains'], 'redirects_percent':shares['redirects'], 'without_alternates_percent':shares['without_alternates'],
         'redirects':len(redirects),'redirects_requested':redirect_count,'title_h1':len(rewrites),
-        'title_h1_requested':rewrite_count, 'title_h1_percent':shares['title_h1'], 'short_h1':len(short_h1_ids),'short_h1_percent':50,
+        'title_h1_requested':rewrite_count, 'title_h1_percent':shares['title_h1'], 'short_h1':sum(bool(p.get('rewrite_title_h1') and p.get('short_h1')) for p in plans),'short_h1_percent':50,
         'paragraphs':len(paragraphs), 'paragraphs_requested':paragraphs_count, 'paragraphs_percent':shares['paragraphs'],'canonical_self':counts['self'],'canonical_internal':counts['internal'],
         'internal_pages':internal_pages_count, 'internal_pages_requested':internal_pages_requested,
         'internal_pages_eligible':internal_pages_eligible, 'internal_pages_percent':shares['internal_pages'],

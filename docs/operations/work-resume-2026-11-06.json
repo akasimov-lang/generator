@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-11-06T18:10:00Z",
-  "last_confirmed_production": "9363453720553abbaf5f9b9d4b477f9044aeb1a9",
+  "updated_at": "2026-11-06T18:29:59.680177+00:00",
+  "last_confirmed_production": "3d7f0a3d2f248712d620d08fa51c890e81978a44",
   "in_this_release": [
     "30 concurrent large-text jobs in a shared generation/pilot_texts pool",
     "Dedicated short-generation, planning and dispatcher workers",
@@ -11,7 +11,6 @@
     "Mixed heading mode defaults; current Main and Fibery in plan rows"
   ],
   "next_authorized_work": [
-    "Batch1 deploy tested receipt recovery, 15s provisioning wait and independent text publication; recheck all stalled3033 runs and continue same receipts",
     "Batch2 alldaybabyla.com (project pelicancasino-reg.com): repair shared inner template/content buttons, desktop menu between logo/account actions, compact mobile burger",
     "Batch3 Pelican missing favicons only; plan e3bf181f-b4a4-5bbd-9641-1cb4b550f0bf already created for7active projects; preserve existing icons",
     "Batch4 same3033 report: durable Prepare alternative plan button; strict no stock, own never-Main drop > own never-Main newreg > samebrand/GEO donor newreg not Main within10days; user explicitly authorized prepare+execute selected blocked projects",
@@ -45,11 +44,18 @@
     "test_auto_pilot participation rejection moved to start",
     "test_auto_pilot old preview cancellation expectation",
     "test_mass_reglue_launch old task-history draft exclusion expectation",
-    "test_reglue_title_h1:5preexisting brandprefix/shortH1 fixtures verified on9363453; current newrealwriter publication testpasses"
+    "test_reglue_title_h1:5preexisting brandprefix/shortH1 fixtures verified on9363453; current newrealwriter publication testpasses",
+    "3d7f0a3:6existing failures in test_auto_pilot(4) and test_pilot_variations(2), confirmed in isolated baseline; details /tmp/pagepilot-heading-reuse-baseline.log."
   ],
   "done_since_previous": [
     "Dedicated planning30threads verified alongside text30; DBcapacity200; scoped2unusedBetOnRed donor domains prepared, donor Main unchanged and participationFalse",
     "Cancel stuck fake submission onserver/browser; existingfake path updates canonical/alternates preserving settings.canon",
-    "Betonplan fe47d49f-5335-58f6-b71e-57f963acc534:2ready8skipped(1donoronly7noeligible); not launched"
+    "Betonplan fe47d49f-5335-58f6-b71e-57f963acc534:2ready8skipped(1donoronly7noeligible); not launched",
+    "76ac1b1 deployed: 15-second settling after confirmed domain addition, reserve confirmation before reglue, bounded recovery of saved fake/head operations and independent ready-content publication.",
+    "Seven stuck runs in report3033 recovered and all confirmed completed by Webdev at18:26-18:27UTC:22betPortugal,Italy,Argentina,mojprojektogrodu,Canada,lameronthegulf,saferpatients.",
+    "3d7f0a3 deployed: editable mixed-mode planning percentages; changing network percentages switches to explicit shares; polling preserves local edits."
+  ],
+  "ready_for_release": [
+    "Reuse reviewed project metadata/headings on whole-plan restart; individual row refresh creates new scheme and headings.8new tests pass;35related pass;6legacy failures reproduced on3d7f0a3;frontend build passes."
   ]
 }
