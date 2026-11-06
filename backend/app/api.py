@@ -1174,8 +1174,13 @@ async def apply_site_generated_menu_structure(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     site = _get_site_or_404(db, site_id)
+    provider = None
+    if payload.create_pages:
+        provider = db.scalar(select(models.AiProvider).where(models.AiProvider.is_active.is_(True), models.AiProvider.provider_type == "gemini").order_by(models.AiProvider.created_at.desc()))
+        if not provider or not site.cache_geo or not site.cache_language:
+            raise HTTPException(status_code=400, detail="Для создания страниц нужны активный провайдер, GEO и язык проекта.")
     try:
-        return await apply_generated_menu_structure(
+        result = await apply_generated_menu_structure(
             db,
             site,
             payload.menu_type,
@@ -1186,6 +1191,22 @@ async def apply_site_generated_menu_structure(
             initiator_username=_request_username(user),
             operation=payload.operation,
         )
+        if result.get("success") and payload.create_pages:
+            try:
+                section_ids = result.get("created_section_ids") or []
+                if not section_ids:
+                    raise ValueError("Нет новых пунктов для генерации страниц.")
+                task = create_menu_structure_task(db, site, MenuStructureGenerationCreate(
+                    geo=site.cache_geo, language=site.cache_language, ai_provider_id=provider.id,
+                    menu_types=[payload.menu_type], section_ids=section_ids,
+                    collect_competitors=True, homepage_interlinking=True, auto_publish=True,
+                ), created_by_user_id=user["id"])
+                result["page_task_id"] = task.id
+                start_task_pipeline(task.id, user, db)
+            except Exception as error:
+                db.rollback()
+                result["page_task_error"] = str(getattr(error, "detail", error))[:500]
+        return result
     except ValueError as error:
         db.rollback()
         raise HTTPException(status_code=409, detail=str(error)) from error

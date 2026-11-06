@@ -5307,7 +5307,8 @@ async def apply_generated_menu_structure(
         return {"created_count": 0, "rolled_back": True, **result}
     audit_log.response_status = 200
     db.commit()
-    return {"created_count": len(_flatten_project_menu_items(generated_items)), "rolled_back": False, **result}
+    new_paths = {_normalized_project_slug(item.get("slug")) for item in _flatten_project_menu_items(generated_items)}
+    return {"created_count": len(new_paths), "created_section_ids": [section.id for section in created_sections if section.path in new_paths], "rolled_back": False, **result}
 
 
 _ENGLISH_WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")

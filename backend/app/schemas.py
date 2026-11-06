@@ -438,6 +438,7 @@ class MenuStructurePreviewResponse(BaseModel):
 
 
 class GeneratedMenuStructureApply(BaseModel):
+    create_pages: bool = False
     operation: Literal["append", "replace"] = "append"
     menu_type: Literal["header", "footer"] = "header"
     levels: int = Field(default=2, ge=1, le=3)

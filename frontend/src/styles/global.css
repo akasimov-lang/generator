@@ -10604,3 +10604,10 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .generatedMenuParentList input { width:16px; height:16px; flex-shrink:0; }
 .generatedMenuParentList span { min-width:0; overflow-wrap:anywhere; }
 .generatedMenuParentList small { display:block; }
+
+.generatedMenuCreatePages { display:flex; align-items:flex-start; gap:8px; margin:12px 0; font-size:14px; }
+.generatedMenuCreatePages input { width:16px; height:16px; flex-shrink:0; }
+.generatedMenuCreatePages small { display:block; color:var(--muted); font-size:12px; margin-top:4px; }
+
+.generatedMenuStructureControls > label { grid-template-rows: 1fr auto; align-content:end; }
+.generatedMenuStructureControls > label > span small { font-size:inherit; font-weight:inherit; color:inherit; }

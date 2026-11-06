@@ -5181,6 +5181,7 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
   const [generatedMenuType, setGeneratedMenuType] = React.useState<"header" | "footer">("header");
   const [generatedMenuLevels, setGeneratedMenuLevels] = React.useState(2);
   const [generatedMenuParents, setGeneratedMenuParents] = React.useState<string[]>([]);
+  const [generatedCreatePages, setGeneratedCreatePages] = React.useState(false);
   const [generatedNestedCount, setGeneratedNestedCount] = React.useState(5);
   const [generatedMenuTopLevelCount, setGeneratedMenuTopLevelCount] = React.useState(5);
   const [generatedMenuMode, setGeneratedMenuMode] = React.useState<GeneratedMenuMode>("thematic");
@@ -5624,10 +5625,11 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
     setApplyingGeneratedMenu(true);
     setFormError("");
     try {
-      const result = await api<ProjectChangesSyncResult & { created_count: number; rolled_back: boolean }>(`/sites/${site.id}/generated-menu-structure/apply`, {
+      const result = await api<ProjectChangesSyncResult & { created_count: number; rolled_back: boolean; page_task_id?: string; page_task_error?: string }>(`/sites/${site.id}/generated-menu-structure/apply`, {
         method: "POST",
         body: JSON.stringify({
           operation: generatedMenuOperation,
+          create_pages: generatedCreatePages,
           menu_type: generatedMenuPreview.menu_type,
           levels: generatedMenuPreview.levels,
           top_level_count: generatedMenuPreview.top_level_count,
@@ -5641,7 +5643,7 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
       }
       setMenuGeneratorOpen(false);
       setGeneratedMenuPreview(null);
-      setMenuNestingNotice(`На сайт добавлена сгенерированная структура: ${result.created_count} пунктов.`);
+      setMenuNestingNotice(`На сайт добавлена сгенерированная структура: ${result.created_count} пунктов.` + (result.page_task_error ? ` Генерация страниц не запущена: ${result.page_task_error}` : result.page_task_id ? " Создание и публикация новых страниц запущены. Ход выполнения — в разделе «Генерация»." : ""));
       await onChanged();
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Не удалось добавить структуру на сайт");
@@ -5847,7 +5849,7 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
             {generatedMenuMode === "casino_reviews"
               ? <label>Пунктов верхнего уровня<input value="1 — общий раздел" disabled /></label>
               : <label>{generatedMenuOperation === "append" ? "Новых пунктов верхнего уровня" : "Пунктов верхнего уровня"}<SearchableSelect ariaLabel="Количество пунктов структуры меню" value={String(generatedMenuMode === "technical_pages" ? technicalMenuCount : generatedMenuTopLevelCount)} disabled={generatingMenuPreview || applyingGeneratedMenu} onChange={(value) => { if (generatedMenuMode === "technical_pages") setTechnicalMenuCount(Number(value)); else setGeneratedMenuTopLevelCount(Number(value)); setGeneratedMenuPreview(null); }} options={(generatedMenuMode === "technical_pages" ? Array.from({length:technicalCatalogCount - generatedMenuLevels + 1}, (_, index) => index + 1) : [...(generatedMenuOperation === "append" && generatedMenuMode === "thematic" ? [0] : []),1, 2, 3, 4, 5, 6, 7, 8, 9, 10]).map(count => ({value:String(count),label:String(count)}))} searchPlaceholder="Найти количество пунктов" /></label>}
-            {generatedMenuMode === "thematic" && <label>Количество вложенных страниц<SearchableSelect compact ariaLabel="Количество вложенных страниц" value={String(generatedNestedCount)} disabled={generatingMenuPreview || applyingGeneratedMenu} options={Array.from({length:10},(_,i)=>({value:String(i+1),label:String(i+1)}))} onChange={value=>{setGeneratedNestedCount(Number(value));setGeneratedMenuPreview(null);}} /><small>В каждом родительском пункте</small></label>}
+            {generatedMenuMode === "thematic" && <label><span>Количество вложенных страниц <small>в каждом родительском пункте</small></span><SearchableSelect ariaLabel="Количество вложенных страниц" value={String(generatedNestedCount)} disabled={generatingMenuPreview || applyingGeneratedMenu} options={Array.from({length:10},(_,i)=>({value:String(i+1),label:String(i+1)}))} onChange={value=>{setGeneratedNestedCount(Number(value));setGeneratedMenuPreview(null);}} /></label>}
           </div>
           {generatedMenuOperation === "append" && generatedMenuMode === "thematic" && <section className="generatedMenuParentPicker">
             <strong>Добавить вложенные пункты в выбранные разделы</strong>
@@ -5857,6 +5859,7 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
             {!existingPreviewItems.length && <small>В выбранном меню пока нет разделов для вложенных пунктов.</small>}
             <small>Новых верхних пунктов: {generatedMenuTopLevelCount}. Вложенных: {generatedMenuParents.length * generatedNestedCount} ({generatedMenuParents.length} × {generatedNestedCount}). Максимум 80 за один раз.</small>
           </section>}
+          <label className="generatedMenuCreatePages"><input type="checkbox" checked={generatedCreatePages} disabled={generatingMenuPreview || applyingGeneratedMenu} onChange={event=>setGeneratedCreatePages(event.target.checked)}/><span>Создать страницы для новых пунктов<small>После добавления меню запустить генерацию и публикацию только новых страниц. Существующий контент сохраняется.</small></span></label>
           <div className="menuStructureSummary">
             <p>{generatedMenuOperation === "replace" ? "Новое меню заменит пункты выбранного Header или Footer. Существующие страницы сайта сохранятся." : "Новые пункты будут добавлены в выбранное меню. Существующие пункты сохранятся."}</p>
             {generatedMenuMode === "casino_reviews"

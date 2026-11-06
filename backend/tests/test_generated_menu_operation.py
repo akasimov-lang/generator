@@ -135,3 +135,38 @@ def test_oversized_nested_menu_rejected_before_provider_request(db):
     provider=models.AiProvider(name='Gemini',provider_type='gemini',endpoint_url='https://ai.test',api_key='test',is_active=True)
     with pytest.raises(ValueError,match='80'):
         asyncio.run(services.generate_menu_structure_preview(db,provider,site,MenuStructurePreviewRequest(levels=3,top_level_count=5,children_per_parent=10)))
+
+
+def test_apply_option_queues_only_new_sections_after_menu_confirmation(db,monkeypatch):
+    from app import api
+    from types import SimpleNamespace
+    site,old=setup_menu(db);site.cache_geo='DK';site.cache_language='da-DK'
+    provider=models.AiProvider(name='Gemini',provider_type='gemini',endpoint_url='https://ai.test',api_key='test',is_active=True)
+    db.add(provider);db.commit();calls=[]
+    async def apply(*args,**kwargs):
+        calls.append('confirmed_menu')
+        return {'success':True,'created_count':1,'created_section_ids':['new-section'],'results':[]}
+    def create(db,site,payload,**kwargs):
+        assert payload.section_ids==['new-section']
+        assert payload.auto_publish and payload.collect_competitors
+        calls.append('create_pages')
+        return SimpleNamespace(id='page-task')
+    monkeypatch.setattr(api,'apply_generated_menu_structure',apply)
+    monkeypatch.setattr(api,'create_menu_structure_task',create)
+    monkeypatch.setattr(api,'start_task_pipeline',lambda *args:calls.append('queued'))
+    result=asyncio.run(api.apply_site_generated_menu_structure(site.id,GeneratedMenuStructureApply(create_pages=True,levels=1,top_level_count=1,items=[{'title':'New','slug':'/new/'}]),{'id':'user','username':'anton'},db))
+    assert result['page_task_id']=='page-task'
+    assert calls==['confirmed_menu','create_pages','queued']
+
+
+def test_page_queue_error_does_not_report_menu_as_failed_or_repeat_it(db,monkeypatch):
+    from app import api
+    site,old=setup_menu(db);site.cache_geo='DK';site.cache_language='da-DK'
+    provider=models.AiProvider(name='Gemini',provider_type='gemini',endpoint_url='https://ai.test',api_key='test',is_active=True)
+    db.add(provider);db.commit()
+    async def apply(*args,**kwargs):return {'success':True,'created_count':1,'created_section_ids':['new'],'results':[]}
+    def create(*args,**kwargs):raise ValueError('No provider capacity')
+    monkeypatch.setattr(api,'apply_generated_menu_structure',apply)
+    monkeypatch.setattr(api,'create_menu_structure_task',create)
+    result=asyncio.run(api.apply_site_generated_menu_structure(site.id,GeneratedMenuStructureApply(create_pages=True,levels=1,top_level_count=1,items=[{'title':'New','slug':'/new/'}]),{'id':'user','username':'anton'},db))
+    assert result['success'] and result['page_task_error']=='No provider capacity'
