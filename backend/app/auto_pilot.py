@@ -233,6 +233,23 @@ def heading_mode_ready(db, plan, expected_mode='minimal'):
                 and (draft.result_metadata or {}).get('meaning_reviewed'))
 
 
+def pending_participants(db, job):
+    """Historical scope is retained for reporting; only pending work blocks a launch."""
+    plans={p['site_id']:p for g in job.result.get('groups',[]) for p in g.get('plans',[])}
+    pending=set()
+    for sid,row in job.result.get('items',{}).items():
+        if row.get('completed_elsewhere'):continue
+        run=db.get(models.AutoReglueRun,row['run_id']) if row.get('run_id') else None
+        if run:
+            if run.status not in auto.ACTIVE:continue
+            plan=run.plan
+        else:
+            if row.get('status') in launch.TERMINAL|{'skipped'}:continue
+            plan=plans.get(sid,{})
+        pending.update({sid,plan.get('source_site_id',sid)})
+    return pending
+
+
 def start(db, job_id, user):
     with network_lock(db,'mass-reglue-list-start'), network_lock(db,'mass-reglue-list:'+str(job_id)):
         job=get(db,job_id,user)
@@ -292,8 +309,9 @@ def start(db, job_id, user):
 
         domains=[p['new_main'].lower().removeprefix('www.') for p in plans]
         if len(set(domains))!=len(domains): raise NetworkConflict('Домен повторяется в плане. Обновите предпросмотр.')
+        participants={sid for plan in plans for sid in (plan['site_id'],plan.get('source_site_id',plan['site_id']))}
         for other in db.scalars(select(models.BackgroundJob).where(models.BackgroundJob.kind==launch.KIND,models.BackgroundJob.status=='queued')):
-            if set(job.payload['site_ids']).intersection(other.payload['site_ids']): raise NetworkConflict('Часть проектов уже включена в другой массовый запуск.')
+            if participants.intersection(pending_participants(db,other)): raise NetworkConflict('Часть сеток ещё занята незавершённым переклеем из другого плана.')
         for group in result['groups']:
             if group['status']=='previewed': group['status']='prepared'
         for row in result['items'].values():
