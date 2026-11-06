@@ -1,3 +1,4 @@
+import { SaveIndicator, QueueSaveIndicator } from "./SaveIndicator";
 import { saveMarkupWithRetry } from "./networkMarkupSave";
 import { mergeMarkupDraft, mergeCanonicalDraft } from "./networkDrafts";
 import { useNetworkEditQueue } from "./useNetworkEditQueue";
@@ -423,8 +424,11 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
     const path = normalizedFakePath(fakeMainInput);
     const edited = section === "canonical" ? canonicalDirty : section === "alternates" ? alternatesDirty
       : !!fakeMainInput.trim() && !data.fake_main_paths?.includes(path);
-    const status = edited || pendingMarkupSections.includes(section) ? "Upload" : savedMarkup[section] === current ? "All Good" : "Actual";
-    return <span role="status" className={`networkMarkupStatus ${status === "Upload" ? "pending" : "current"}`} aria-label={`Статус ${section === "canonical" ? "каноникла" : section === "alternates" ? "альтернейтов" : "динамических страниц"}`}>{status}</span>;
+    const fake = section === "dynamic" ? [...fakeQueue.items].sort((a,b) => (b.created_at || "").localeCompare(a.created_at || ""))[0] : undefined;
+    const saving = pendingMarkupSections.includes(section) || section === "dynamic" && fakeQueue.count > 0;
+    const saved = !edited && savedMarkup[section] === current || fake?.status === "completed";
+    return <SaveIndicator state={saving ? "saving" : fake?.status === "failed" ? "error" : saved ? "saved" : "idle"}
+      version={fake?.id || savedMarkup[section] || ""} label={section === "canonical" ? "Каноникл" : section === "alternates" ? "Альтернейты" : "Динамические страницы"} />;
   }
   const removeDomains = [...new Set(removeDomainInput.toLowerCase().split(/[\s,;]+/).map(value => value.trim().replace(/\.$/, "")).filter(Boolean))];
   const protectedDomains = [data?.canon, data?.reserve, site.name, data?.amp, ...(data?.amp_domains || [])].filter(Boolean).map(value => value!.replace(/^www\./, ""));
@@ -456,12 +460,14 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
           <div className="networkCurrentDomains"><span>Текущий Main: <strong>{data.canon || "не задан"}</strong></span><span>Текущий резерв: <strong>{data.reserve && data.reserve !== data.canon ? data.reserve : "не выбран"}</strong></span><span>Фейковый внутряк: <strong>{data.fake_main_current || "не выбран"}</strong></span></div>
           <fieldset className="networkReserveField networkReserveInline" disabled={editQueue.busy("reserve")}><TemplateCombobox label="Резервный домен" value={reserve} placeholder="Выберите резерв" onChange={value => { if (!editQueue.busy("reserve")) setReserve(value); }} options={[{ value: "", label: "Выберите резерв" }, ...data.domains.filter(domain => !ampDomains.has(domain) && domain !== data.canon).map(domain => ({ value: domain, label: domain }))]} /></fieldset>
           <div className="networkReserveSave">
-            {!editQueue.busy("reserve") && <button type="button" className="button secondary compact" disabled={!reserveValid || reserve === data.reserve} onClick={() => enqueueEdit("reserve", {domain: reserve})}>Сохранить резерв</button>}
-            <NetworkEditStatus item={editQueue.latest("reserve")} retry={id => editQueue.retry(id)} />
+            <button type="button" className="button secondary compact" disabled={editQueue.busy("reserve") || !reserveValid || reserve === data.reserve} onClick={() => enqueueEdit("reserve", {domain: reserve})}>Сохранить резерв</button>
+            <QueueSaveIndicator items={editQueue.items.filter(item => item.request.action === "reserve")} label="Резерв" />
+            <div className="networkButtonCaption"><NetworkEditStatus item={editQueue.latest("reserve")} retry={id => editQueue.retry(id)} /></div>
           </div>
-          <div className="networkReserveSave"><button type="button" className="button primary compact networkReglueButton" disabled={!!reglueBlockedReason} title={reglueBlockedReason || (dirty?"Сохранить разметку и запустить переклей на резерв":"Ручной переклей на резервный домен")} onClick={() => void startReglue()}>{editQueue.busy("reglue") ? "Переклей в очереди…" : "Переклей"}</button>
-            <NetworkEditStatus item={editQueue.latest("reglue")} retry={id => editQueue.retry(id)} />
-            {!editQueue.busy("reglue") && reglueBlockedReason && <small className="networkEditStatus">{reglueBlockedReason}</small>}
+          <div className="networkReserveSave networkReglueSave"><button type="button" className="button primary compact networkReglueButton" disabled={!!reglueBlockedReason} title={reglueBlockedReason || (dirty?"Сохранить разметку и запустить переклей на резерв":"Ручной переклей на резервный домен")} onClick={() => void startReglue()}>Переклей</button>
+            <QueueSaveIndicator items={editQueue.items.filter(item => item.request.action === "reglue")} label="Переклей" />
+            <div className="networkButtonCaption"><NetworkEditStatus item={editQueue.latest("reglue")} retry={id => editQueue.retry(id)} />
+            {!editQueue.latest("reglue") && reglueBlockedReason && <small className="networkEditStatus" title={reglueBlockedReason}>{reglueBlockedReason}</small>}</div>
           </div>
         </div>}
         </div>

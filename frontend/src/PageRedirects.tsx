@@ -1,3 +1,4 @@
+import { QueueSaveIndicator } from "./SaveIndicator";
 import { NetworkEditStatus } from "./NetworkEditStatus";
 import { editActive, type NetworkEditQueueView } from "./networkEditQueue";
 import React from "react";
@@ -28,7 +29,7 @@ export function PageRedirects({groups,domains,canon,revision,available,disabled,
   React.useEffect(()=>{if(edit&&!edit.page_redirect_delete)sourceInput.current?.focus();},[edit?.page_redirect_original_source,edit===null]);
   async function save(event:React.FormEvent){event.preventDefault();if(!edit||saving||blocked)return;setSaving(true);try{if(await onSave(edit,editRevision.current))setEdit(null);}finally{setSaving(false);}}
   return <section className="networkSection networkRedirects networkPageRedirects" aria-label="Постраничные редиректы">
-    <div className="networkRedirectsHeading"><h3 className="networkRedirectTitle">Постраничные редиректы<span className="networkRedirectCount" aria-label={`Постраничных редиректов: ${rows.length}`}>{rows.length}</span></h3></div>
+    <div className="networkRedirectsHeading"><h3 className="networkRedirectTitle">Постраничные редиректы<span className="networkRedirectCount" aria-label={`Постраничных редиректов: ${rows.length}`}>{rows.length}</span><QueueSaveIndicator items={(queue?.items || []).filter(item=>item.request.action === "page_redirect")} label="Постраничные редиректы" /></h3></div>
     {!available?<p className="muted">Редиректы ещё не получены из Webdev. Нажмите «Обновить данные».</p>:rows.length?<div className="networkTableWrap"><table className="domainRedirectsTable" aria-label="Перенаправления отдельных страниц"><thead><tr><th>Домен</th><th>Откуда</th><th>Куда</th><th>Действия</th></tr></thead><tbody>{rows.map((row,i)=>{
       const queued=queue?.latest(`page:${row.domain}:${row.url}`);
       const pending=!!queued&&editActive(queued);

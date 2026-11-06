@@ -10559,5 +10559,13 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 
 .projectRefreshButton .projectRefreshError { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; white-space:normal; max-width:190px; font-size:10px; line-height:1.2; color:var(--danger,#b3423d); }
 
-.networkReserveSave { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; max-width: 270px; }
-.networkReserveSave > .button { margin: 0; }
+/* Controls keep their geometry while captions appear and disappear. */
+.networkMainReserveRow { align-items: flex-start; min-height: 86px; }
+.networkReserveSave { position: relative; display: flex; align-items: flex-start; gap: 6px; height: 86px; flex: 0 0 190px; max-width: 100%; }
+.networkReserveSave.networkReglueSave { flex-basis: 132px; }
+.networkReserveSave > .saveIndicator { margin-top: 8px; }
+.networkReserveSave > .button { margin: 0; flex: 1 1 auto; height: 34px; min-height: 34px; white-space: nowrap; }
+.networkButtonCaption { position: absolute; top: 40px; left: 0; width: 100%; min-height: 32px; }
+.networkButtonCaption .networkEditStatus { display: block; max-height: 46px; overflow: hidden; overflow-wrap: anywhere; font-size: 11px; line-height: 15px; }
+.networkRetryLink { padding: 0; border: 0; background: none; color: var(--accent, #405de6); font: inherit; text-decoration: underline; cursor: pointer; }
+@media (max-width: 700px) { .networkMainReserveRow { row-gap: 12px; } }
