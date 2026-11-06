@@ -1,4 +1,5 @@
-"""Prefork workers must not retain idle DB connections between long AI tasks."""
+"""Bound idle connections without replacing a pool shared by worker threads."""
+import os
 from celery.signals import task_postrun, worker_process_init
 
 
@@ -11,6 +12,10 @@ def reset_inherited_pool(**_):
 
 @task_postrun.connect
 def release_idle_pool(**_):
+    # Planning threads share one bounded engine pool. Replacing it after each
+    # task would detach connections still checked out by the other 29 tasks.
+    if os.environ.get('WORKER_SHARED_DB_POOL') == '1':
+        return
     from app.db import engine
     if engine.dialect.name == 'postgresql':
         # Task sessions and advisory-lock contexts have exited. dispose closes
