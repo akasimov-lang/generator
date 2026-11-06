@@ -8,17 +8,15 @@ from app.reglue_history import weekly_reason
 
 def exclusions(db, plans):
     reasons = {}
-    ids = {id for p in plans for id in (p['site_id'], p.get('source_site_id', p['site_id']))}
+    # The weekly limit protects a recipient from changing its Main twice. A
+    # donor keeps its Main and may supply any number of eligible spare domains.
+    ids = {p['site_id'] for p in plans}
     sites = {row.id: SimpleNamespace(id=row.id, name=row.name, last_reglue_at=row.last_reglue_at)
              for row in db.execute(select(models.Site.id, models.Site.name, models.Site.last_reglue_at).where(models.Site.id.in_(ids)))} if ids else {}
     for plan in plans:
-        for site_id in dict.fromkeys((plan['site_id'], plan.get('source_site_id', plan['site_id']))):
-            if site_id!=plan['site_id'] and (plan.get('pilot_reuse_job_id') or plan.get('pilot_alternative_id') or plan.get('pilot_brand_geo_job_id')):
-                continue
-            site = sites.get(site_id)
-            if site and (reason := weekly_reason(site)):
-                reasons[plan['site_id']] = reason if site_id == plan['site_id'] else f'Сетка-донор {site.name}: {reason}'
-                break
+        site = sites.get(plan['site_id'])
+        if site and (reason := weekly_reason(site)):
+            reasons[plan['site_id']] = reason
     return reasons
 
 

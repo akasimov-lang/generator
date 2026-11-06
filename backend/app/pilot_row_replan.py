@@ -27,7 +27,7 @@ def eligible(db, parent, site_id):
     return row
 
 
-def request(db, parent_id, site_id, request_id, user):
+def request(db, parent_id, site_id, request_id, user, *, regenerate_metadata=True):
     from app.auto_pilot import get
     with network_lock(db,'mass-reglue-list:'+str(parent_id)):
         parent=get(db,parent_id,user);site_id=str(site_id);request_id=str(request_id)
@@ -42,7 +42,8 @@ def request(db, parent_id, site_id, request_id, user):
         if child and child.status=='queued':return parent
         child=models.BackgroundJob(id=request_id,kind=KIND,status='queued',payload={
             'parent_id':parent.id,'site_id':site_id,'actor':user['username'],'allowed':user.get('allowed_site_ids'),
-            'policy':{'stock':False,'former_main_days':14}},result={})
+            'policy':{'stock':False,'former_main_days':14},
+            'regenerate_metadata':bool(regenerate_metadata)},result={})
         db.add(child)
         result=deepcopy(parent.result)
         result['items'][site_id]['alternative']={'id':request_id,'status':'queued'}
@@ -84,6 +85,10 @@ def prepare(db, child, parent):
     plan['rewrite_title_h1']=True
     plan['title_rewrite_mode']=parent.payload.get('title_rewrite_mode','minimal')
     if plan['title_rewrite_mode']=='mixed':plan['title_rewrite_mode']=old.get('title_rewrite_mode','minimal')
+    if not child.payload.get('regenerate_metadata',True):
+        from app.pilot_saved_headings import CACHE, capture, restore
+        plan['rewrite_title_h1']=old.get('rewrite_title_h1',False)
+        restore(db,{CACHE:capture(db,parent,parent.result)},plan)
     from app.pilot_schemes import assign
     assign(db,[plan],fixed=neighbours,exclude={target.id:old.get('scheme_variant')})
     # A personal row refresh explicitly requests new metadata; paragraphs remain
@@ -117,7 +122,7 @@ def execute(db, job_id):
                 # Metadata uses the short-generation queue, without holding the report lock.
                 plan=deepcopy(child.result['plan'])
                 from app.reglue_title_h1 import prepare_for_plan
-                prepare_for_plan(db,plan,child.id,force=True)
+                prepare_for_plan(db,plan,child.id,force=child.payload.get('regenerate_metadata',True))
                 if plan.get('title_h1_error'):raise ValueError(plan['title_h1_error'])
                 plan.pop('preview_token',None);plan['preview_token']=auto.digest(plan)
                 with network_lock(db,'mass-reglue-list:'+child.payload['parent_id']):

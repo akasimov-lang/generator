@@ -104,3 +104,42 @@ def test_alternative_dispatch_ignores_historical_skipped_donor_row(launched):
     assert run.site_id==target.id and run.status=='queued'
     assert parent.result['items'][source.id]==donor_before
     assert remotes[source.id].data['settings']['canon']==source.cache_canon
+
+
+def test_bulk_replan_keeps_reviewed_headings_without_forcing_generation(launched,monkeypatch):
+    db,sites,remotes,parent=launched
+    site=sites[0];result=deepcopy(parent.result)
+    old=next(p for g in result['groups'] for p in g.get('plans',[]) if p['site_id']==site.id)
+    old.update(rewrite_title_h1=True,title_h1_preview={'draft_id':'saved-heading','title_after':'Kept title','h1_after':'Kept H1'})
+    parent.result=result;db.commit()
+    # The restore guard is separately covered by test_pilot_saved_headings.
+    def restore(db,result,plan):
+        saved=result['saved_project_headings'][site.id]
+        plan['title_h1_preview']=deepcopy(saved['title_h1_preview'])
+    monkeypatch.setattr('app.pilot_saved_headings.restore',restore)
+    calls=[]
+    def metadata(db,plan,request_id,**options):
+        calls.append(options)
+        assert plan['title_h1_preview']==old['title_h1_preview']
+    monkeypatch.setattr('app.reglue_title_h1.prepare_for_plan',metadata)
+    request=uuid4();replan.request(db,parent.id,site.id,request,USER,regenerate_metadata=False)
+    replan.execute(db,str(request));replan.execute(db,str(request))
+    child=db.get(models.BackgroundJob,str(request))
+    assert child.status=='completed',child.error
+    assert calls==[{'force':False}]
+    assert all(not r.calls for r in remotes.values())
+
+
+def test_donor_reglued_this_week_can_supply_multiple_recipients(launched):
+    from app.pilot_weekly import exclusions
+    db,sites,_,_=launched;target,donor=sites
+    donor.last_reglue_at=datetime.now(timezone.utc);target.last_reglue_at=None;db.commit()
+    assert exclusions(db,[{'site_id':target.id,'source_site_id':donor.id,'new_main':'free.test'}])=={}
+
+
+def test_recipient_reglued_this_week_still_cannot_restart(launched):
+    from app.pilot_weekly import exclusions
+    db,sites,_,_=launched;target,donor=sites
+    target.last_reglue_at=datetime.now(timezone.utc);db.commit()
+    result=exclusions(db,[{'site_id':target.id,'source_site_id':donor.id}])
+    assert 'уже переклеен' in result[target.id]
