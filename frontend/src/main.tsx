@@ -5180,6 +5180,7 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
   const [generatedMenuOperation, setGeneratedMenuOperation] = React.useState<"append" | "replace">("append");
   const [generatedMenuType, setGeneratedMenuType] = React.useState<"header" | "footer">("header");
   const [generatedMenuLevels, setGeneratedMenuLevels] = React.useState(2);
+  const [expandedMenuParents, setExpandedMenuParents] = React.useState<Set<string>>(() => new Set());
   const [generatedMenuParents, setGeneratedMenuParents] = React.useState<string[]>([]);
   const [generatedCreatePages, setGeneratedCreatePages] = React.useState(false);
   const [generatedNestedCount, setGeneratedNestedCount] = React.useState(5);
@@ -5663,6 +5664,17 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
   ));
   const existingPreviewPaths = new Set(previewNodes(existingPreviewItems).map(node => normalizedTreePath(node.item.slug)));
   const generatedPreviewError = !generatedMenuPreview ? "" : !generatedPreviewNodes.length ? "В предпросмотре нет пунктов. Сгенерируйте структуру заново." : generatedPreviewNodes.some(node => !node.item.title.trim() || !/^\/[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)*\/?$/.test(node.item.slug)) ? "Заполните названия и относительные URL пунктов, например /privacy-policy/." : new Set(generatedPreviewNodes.map(node => node.item.slug.replace(/\/$/, ""))).size !== generatedPreviewNodes.length ? "В предпросмотре повторяются URL. Измените URL или удалите лишние строки." : generatedMenuOperation === "append" && generatedPreviewNodes.some(node => existingPreviewPaths.has(normalizedTreePath(node.item.slug))) ? "Некоторые URL уже есть в этом меню. Измените их или удалите строки с отметкой «Уже в меню»." : "";
+  function renderMenuParentChoices(nodes: MenuTreeNode[], target: "header" | "footer", depth = 1): React.ReactNode {
+    return <ul className="generatedMenuChoiceTree">{nodes.map(node => {
+      const path = normalizedTreePath(node.item.path);
+      const key = `${target}:${node.key}`;
+      const expanded = expandedMenuParents.has(key);
+      return <li key={key}><div className="generatedMenuChoiceRow">
+        {node.children.length > 0 ? <button type="button" className="generatedMenuTreeToggle" aria-label={`${expanded ? "Свернуть" : "Раскрыть"} ${node.item.title}`} aria-expanded={expanded} onClick={()=>setExpandedMenuParents(current=>{const next=new Set(current);if(next.has(key))next.delete(key);else next.add(key);return next;})}>{expanded ? "▾" : "▸"}</button> : <span className="generatedMenuTreeToggle" />}
+        <label title={`${node.item.title} · ${node.item.path}`}><input type="checkbox" checked={target === generatedMenuType && generatedMenuParents.includes(path)} disabled={generatingMenuPreview || applyingGeneratedMenu || !node.item.path || depth >= 3} onChange={event=>{setGeneratedMenuType(target);setGeneratedMenuParents(current=>event.target.checked?[...(target===generatedMenuType?current:[]),path]:current.filter(value=>value!==path));setGeneratedMenuLevels(1);setGeneratedMenuPreview(null);}}/><span>{node.item.title}</span></label>
+      </div>{expanded && renderMenuParentChoices(node.children,target,depth+1)}</li>;
+    })}</ul>;
+  }
   function updateGeneratedPreview(items: GeneratedMenuStructureItem[]) {
     setFormError("");
     setGeneratedMenuLevels(previewDepth(items));
@@ -5855,9 +5867,9 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
             <strong>Добавить вложенные пункты в выбранные разделы</strong>
             <small>Выберите разделы первого или второго уровня. В каждый выбранный раздел будет добавлено указанное число новых пунктов.</small>
 
-            <div className="generatedMenuParentList">{previewNodes(existingPreviewItems).filter(node=>node.depth < 3).map(node=><label key={node.path} style={{paddingLeft: (node.depth-1)*20}}><input type="checkbox" checked={generatedMenuParents.includes(normalizedTreePath(node.item.slug))} disabled={generatingMenuPreview || applyingGeneratedMenu || !node.item.slug} onChange={event=>{const path=normalizedTreePath(node.item.slug);setGeneratedMenuParents(current=>event.target.checked?[...current,path]:current.filter(value=>value!==path));setGeneratedMenuLevels(1);setGeneratedMenuPreview(null);}}/><span>{node.item.title}<small>{node.item.slug} · уровень {node.depth}</small></span></label>)}</div>
-            {!existingPreviewItems.length && <small>В выбранном меню пока нет разделов для вложенных пунктов.</small>}
-            <small>Новых верхних пунктов: {generatedMenuTopLevelCount}. Вложенных: {generatedMenuParents.length * generatedNestedCount} ({generatedMenuParents.length} × {generatedNestedCount}). Максимум 80 за один раз.</small>
+            <div className="generatedMenuColumns">{(["header","footer"] as const).map(target=><section key={target}><strong>{target === "header" ? "Header" : "Footer"} <span className="generatedMenuSelectionCount">Выбрано: {target === generatedMenuType ? generatedMenuParents.length : 0}</span></strong><div className="generatedMenuColumnTree">{renderMenuParentChoices(buildMenuTree(target === "header" ? cachedHeader : cachedFooter, []),target)}{!(target === "header" ? cachedHeader : cachedFooter).length && <small>Пунктов пока нет</small>}</div></section>)}</div>
+            <small>Выбор пункта переключает целевое меню Header или Footer. Третий уровень — последний.</small>
+            <small aria-live="polite">Выбрано разделов: {generatedMenuParents.length}. Новых верхних пунктов: {generatedMenuTopLevelCount}. Вложенных: {generatedMenuParents.length * generatedNestedCount} ({generatedMenuParents.length} × {generatedNestedCount}). Максимум 80 за один раз.</small>
           </section>}
           <label className="generatedMenuCreatePages"><input type="checkbox" checked={generatedCreatePages} disabled={generatingMenuPreview || applyingGeneratedMenu} onChange={event=>setGeneratedCreatePages(event.target.checked)}/><span>Создать страницы для новых пунктов<small>После добавления меню запустить генерацию и публикацию только новых страниц. Существующий контент сохраняется.</small></span></label>
           <div className="menuStructureSummary">

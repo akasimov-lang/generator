@@ -10611,3 +10611,18 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 
 .generatedMenuStructureControls > label { grid-template-rows: 1fr auto; align-content:end; }
 .generatedMenuStructureControls > label > span small { font-size:inherit; font-weight:inherit; color:inherit; }
+
+.generatedMenuColumns { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; }
+.generatedMenuColumns > section { min-width:0; }
+.generatedMenuColumns > section + section { border-left:1px solid var(--border); padding-left:18px; }
+.generatedMenuColumnTree { max-height:280px; overflow:auto; margin-top:6px; }
+.generatedMenuChoiceTree { list-style:none; margin:0; padding:0; }
+.generatedMenuChoiceTree .generatedMenuChoiceTree { padding-left:20px; border-left:1px solid var(--border); margin-left:8px; }
+.generatedMenuChoiceRow { display:flex; align-items:center; gap:4px; min-height:28px; }
+.generatedMenuChoiceRow label { display:flex; align-items:center; gap:7px; min-width:0; cursor:pointer; font-size:13px; font-weight:400; }
+.generatedMenuChoiceRow label span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.generatedMenuChoiceRow input { width:14px; height:14px; margin:0; flex-shrink:0; }
+.generatedMenuTreeToggle { display:inline-flex; justify-content:center; align-items:center; width:20px; height:24px; flex-shrink:0; padding:0; border:0; background:transparent; color:var(--muted); cursor:pointer; }
+@media(max-width:600px) { .generatedMenuColumns { grid-template-columns:1fr; } .generatedMenuColumns > section + section { border-left:0; border-top:1px solid var(--border); padding:10px 0 0; } }
+
+.generatedMenuSelectionCount { margin-left:8px; font-size:12px; font-weight:500; color:var(--muted); }
