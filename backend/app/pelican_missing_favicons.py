@@ -6,8 +6,11 @@ from urllib.parse import urljoin, urlsplit
 from uuid import UUID, uuid5
 from xml.etree import ElementTree
 import argparse
+import base64
+from io import BytesIO
 import json
 import httpx
+from PIL import Image, ImageDraw
 from sqlalchemy.exc import SQLAlchemyError
 
 from app import models
@@ -46,6 +49,29 @@ def icon(index):
     colors = ['#f1b900','#ffcb24','#eeb20a','#ffc900','#f4bf18','#ffcf3b','#edb100']
     radius = [12,20,8,32,16,4,24][index % 7]
     return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><title>Pelican Casino</title><rect x="1" y="1" width="62" height="62" rx="{radius}" fill="{colors[index % 7]}"/><path fill="#121820" fill-rule="evenodd" d="M10 47V17h11q10 0 10 10T21 37h-4v10z M17 24v6h4q3 0 3-3t-3-3z"/><path fill="#121820" d="M54 20v8c-3-3-9-5-11 1v8c2 6 8 4 11 1v8c-6 4-18 1-18-9v-9c0-10 12-13 18-8z"/></svg>'
+
+
+def png_icon(index):
+    """Render our code-native PC mark as PNG, accepted by the native image API."""
+    root = ElementTree.fromstring(icon(index))
+    rect = next(e for e in root if e.tag.endswith('rect'))
+    scale = 8
+    canvas = Image.new('RGBA', (64 * scale, 64 * scale))
+    draw = ImageDraw.Draw(canvas)
+    def box(coords): return tuple(v * scale for v in coords)
+    yellow, ink = rect.attrib['fill'], '#121820'
+    draw.rounded_rectangle(box((1,1,63,63)), radius=int(rect.attrib['rx']) * scale, fill=yellow)
+    draw.rectangle(box((10,17,17,47)), fill=ink)
+    draw.rounded_rectangle(box((10,17,31,37)), radius=10 * scale, fill=ink)
+    draw.rectangle(box((10,17,20,37)), fill=ink)
+    draw.rounded_rectangle(box((17,24,24,30)), radius=3 * scale, fill=yellow)
+    draw.rectangle(box((17,24,21,30)), fill=yellow)
+    draw.rounded_rectangle(box((36,17,56,47)), radius=10 * scale, fill=ink)
+    draw.rounded_rectangle(box((43,24,50,40)), radius=4 * scale, fill=yellow)
+    draw.rectangle(box((47,27,56,37)), fill=yellow)
+    output = BytesIO()
+    canvas.resize((128,128), Image.Resampling.LANCZOS).save(output, format='PNG')
+    return output.getvalue()
 
 
 def public_state(client, origin, markup=''):
@@ -91,8 +117,15 @@ def run_site(db, site_id, index, *, apply=False):
             if state.get('status') == 'uploading':
                 raise ValueError('Загрузка файла не подтверждена. Повторная отправка остановлена.')
             state['status'] = 'uploading'; existing.value = deepcopy(state); db.commit()
-            code, response = remote.request('POST', '/projects/image', {'folder': site.name,
-                'name': f'pelican-favicon-{site_id}.svg', 'customPath': 'brand/favicon', 'buffer': icon(index)})
+            try:
+                code, response = remote.request('POST', '/projects/image', {'folder': site.name,
+                    'name': f'pelican-favicon-{site_id}.png', 'customPath': 'brand/favicon',
+                    'buffer': base64.b64encode(png_icon(index)).decode()})
+            except httpx.HTTPStatusError as error:
+                if error.response.status_code == 400:
+                    state.update(status='rejected', upload_http=400)
+                    existing.value = deepcopy(state); db.commit()
+                raise
             path = response.get('imagePath') or response.get('webpPath') if isinstance(response, dict) else None
             if not isinstance(response, dict) or response.get('error') != 'none' or not path or not path.startswith('/uploads/') or '..' in path or urlsplit(path).netloc:
                 raise ValueError('Не подтверждён путь загруженного favicon.')
