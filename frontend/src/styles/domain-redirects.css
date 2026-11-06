@@ -9,5 +9,11 @@
 .networkEditPending { opacity: .65; }
 
 /* Reserve actions and feedback independently of message length. */
-.domainRedirectActionSlot { position:relative; width:230px; height:64px; }
-.domainRedirectActionSlot > .networkEditStatus { position:absolute; top:32px; left:0; right:0; max-width:none; max-height:30px; overflow:auto; white-space:normal; overflow-wrap:anywhere; }
+.domainRedirectActionSlot { position:relative; width:230px; height:44px; }
+.domainRedirectActionSlot > .networkEditStatus { position:absolute; top:28px; left:0; right:0; max-width:none; max-height:16px; overflow:auto; white-space:normal; overflow-wrap:anywhere; }
+
+.networkRedirects .domainRedirectsTable td { padding-top:4px; padding-bottom:4px; }
+.domainRedirectActionSlot > .domainRedirectInlineActions { height:28px; }
+.domainRedirectDelete { color:var(--danger, #b42318); }
+.networkRedirects .networkRedirectForm { position:relative; padding-bottom:20px; }
+.domainRedirectFormError { position:absolute; bottom:0; left:0; right:0; height:16px; overflow:auto; white-space:nowrap; font-size:11px; color:#b42318; }

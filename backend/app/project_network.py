@@ -60,6 +60,7 @@ class NetworkChange(BaseModel):
     redirect_source: str = Field(default="", max_length=253)
     redirect_target: str = Field(default="", max_length=4096)
     redirect_original_source: str = Field(default="", max_length=253)
+    redirect_delete: bool = Field(default=False, strict=True)
     page_redirect_domain: str = Field(default="", max_length=253)
     page_redirect_source: str = Field(default="", max_length=2048)
     page_redirect_target: str = Field(default="", max_length=4096)
@@ -538,7 +539,7 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
         elif payload.action == "domain_redirect":
             from app.domain_redirects import update_redirects
             path = "/projects/update-value"
-            request["redirects"] = update_redirects(project, payload.redirect_source, payload.redirect_target, payload.redirect_original_source)
+            request["redirects"] = update_redirects(project, payload.redirect_source, payload.redirect_target, payload.redirect_original_source, delete=payload.redirect_delete)
         elif payload.action == 'page_redirect':
             from app.page_redirects import update
             from app.domain_redirects import redirect_domain

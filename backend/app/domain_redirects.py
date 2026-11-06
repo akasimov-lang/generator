@@ -88,23 +88,29 @@ def all_to_main(state):
     return result
 
 
-def update_redirects(project, source, target, original_source=''):
+def update_redirects(project, source, target, original_source='', *, delete=False):
     settings = project.get('settings') or {}
     current = settings.get('redirects')
     if not isinstance(current, list) or any(
             not isinstance(row, dict) or not isinstance(row.get('url'), str)
             or not isinstance(row.get('value'), str) for row in current):
         raise ValueError('Webdev не вернул полный список доменных редиректов. Обновите данные проекта.')
-    source, target = redirect_address(source, source=True), redirect_address(target)
+    source = redirect_address(source, source=True)
+    target = '' if delete else redirect_address(target)
+    if delete and not original_source:
+        raise ValueError('Не указан редирект для удаления.')
     original = redirect_address(original_source, source=True) if original_source else ''
     if source == domain_name(target):
         raise ValueError('Домен не может перенаправлять на самого себя.')
     redirects = deepcopy(current)
-    original_rows = [i for i, row in enumerate(redirects) if row['url'].strip().lower().rstrip('.') == original] if original else []
+    original_rows = [i for i, row in enumerate(redirects) if domain_name(row['url']) == original] if original else []
     if original and len(original_rows) != 1:
         raise ValueError('Редирект для редактирования изменился или отсутствует. Обновите данные.')
     index = original_rows[0] if original_rows else len(redirects)
-    if any(i != index and row['url'].strip().lower().rstrip('.') == source for i, row in enumerate(redirects)):
+    if delete:
+        redirects.pop(index)
+        return redirects
+    if any(i != index and domain_name(row['url']) == source for i, row in enumerate(redirects)):
         raise ValueError('Редирект с этого домена уже существует. Отредактируйте существующую строку.')
     row = {**(redirects[index] if index < len(redirects) else {}), 'url': source, 'value': target}
     if index < len(redirects):

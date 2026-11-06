@@ -81,3 +81,13 @@ def test_return_to_old_value_is_a_separate_observed_change(env):
     observe_network(site,remote.project(),db=db)
     assert len(site.network_state[KEY])==2
     assert site.network_state[KEY][1]['new_path']=='/cz/'
+
+
+def test_project_history_returns_twenty_recent_changes(env):
+    db,site,_=env
+    site.network_state={KEY:[{'id':str(i),'kind':'fake_path','source':'cache','at':f'2026-11-06T09:{i:02d}:00+00:00',
+        'old_path':f'/before-{i}/','new_path':f'/after-{i}/','old_main':'main.test','new_main':'main.test'} for i in range(25)]}
+    db.commit()
+    rows=recent_for_site(db,site)
+    assert len(rows)==20
+    assert [row['id'] for row in rows]==[str(i) for i in range(24,4,-1)]

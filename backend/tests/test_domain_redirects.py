@@ -142,3 +142,28 @@ def test_redirect_path_does_not_hide_domain_cycle():
 def test_same_domain_with_path_is_not_a_valid_domain_redirect():
  with pytest.raises(ValueError,match='самого себя'):
   update_redirects({'settings':{'redirects':[]}},'new.test','new.test/offer/')
+
+
+def test_delete_one_redirect_preserves_other_rows_and_settings(env):
+ db,site,remote=env
+ first=setup(env)
+ original=copy.deepcopy(remote.data)
+ result=change(env,'domain_redirect',first['revision'],redirect_source='old.test',redirect_original_source='old.test',redirect_delete=True)
+ assert result['domain_redirects']==ROWS[1:]
+ assert result['operations'][0]['status']=='confirmed'
+ assert result['operations'][0]['redirects_before']==ROWS
+ assert result['operations'][0]['redirects_after']==ROWS[1:]
+ assert {k:v for k,v in remote.data['settings'].items() if k!='redirects'}=={k:v for k,v in original['settings'].items() if k!='redirects'}
+
+
+def test_delete_requires_existing_unambiguous_source():
+ with pytest.raises(ValueError,match='Не указан'):
+  update_redirects({'settings':{'redirects':ROWS}},'old.test','',delete=True)
+ with pytest.raises(ValueError,match='отсутствует'):
+  update_redirects({'settings':{'redirects':ROWS}},'missing.test','','missing.test',delete=True)
+
+
+def test_edit_normalizes_existing_pasted_source_without_duplicating_it():
+ result=update_redirects({'settings':{'redirects':[{'url':'https://OLD.test/','value':'main.test','custom':'keep'}]}},
+                         'https://OLD.test/','https://new.test/Offer/','https://OLD.test/')
+ assert result==[{'url':'old.test','value':'new.test/Offer/','custom':'keep'}]

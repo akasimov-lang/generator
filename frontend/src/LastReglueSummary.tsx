@@ -11,7 +11,7 @@ export function LastReglueSummary({ last, observedAt, recent }: { last?: LastReg
   if (recent?.length) {
     const observed = observedAt && Number.isFinite(Date.parse(observedAt)) && (!last || Date.parse(observedAt) > Date.parse(last.at)) && !recent.some(item=>item.kind === "reglue" && Math.abs(Date.parse(item.at)-Date.parse(observedAt)) < 300000)
       ? [{id: "observed-main", kind: "observed" as const, source: undefined, comparison: undefined, at: observedAt, old_main: null, new_main: null, old_path: null, new_path: null}] : [];
-    const changes = [...recent, ...observed].filter(item => Number.isFinite(Date.parse(item.at))).sort((a,b) => Date.parse(b.at)-Date.parse(a.at)).slice(0,7);
+    const changes = [...recent, ...observed].filter(item => Number.isFinite(Date.parse(item.at))).sort((a,b) => Date.parse(b.at)-Date.parse(a.at)).slice(0,20);
     const path = (value: string | null) => value === null ? "нет данных" : value || "не задан";
     return <div className="lastReglueSummary lastReglueHistory" aria-label="Последние изменения проекта" tabIndex={0}>
       {changes.map(item => <article key={item.id}>

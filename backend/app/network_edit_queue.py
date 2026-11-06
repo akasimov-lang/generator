@@ -35,8 +35,9 @@ def fingerprint(state, request):
     if request.action == 'domain_redirects_main':
         return {'canon': state.get('canon', ''), 'rows': state.get('domain_redirects', [])}
     if request.action == 'domain_redirect':
-        source = request.redirect_original_source or request.redirect_source
-        return {'rows': [r for r in state.get('domain_redirects', []) if r['url'] == source]}
+        from app.network_state import domain_name
+        source = domain_name(request.redirect_original_source or request.redirect_source)
+        return {'rows': [r for r in state.get('domain_redirects', []) if domain_name(r['url']) == source]}
     domain = request.page_redirect_original_domain or request.page_redirect_domain
     source = request.page_redirect_original_source or request.page_redirect_source
     return {'rows': [r for g in state.get('page_redirects', []) if g['domain'] == domain
@@ -63,7 +64,7 @@ def enqueue(db, site, request, actor):
     serialized = request.model_dump(mode='json')
     existing = db.get(models.BackgroundJob, str(request.request_id))
     if existing:
-        if existing.kind != KIND or existing.payload['site_id'] != site.id or existing.payload['request'] != serialized:
+        if existing.kind != KIND or existing.payload['site_id'] != site.id or Request.model_validate(existing.payload['request']).model_dump(mode='json') != serialized:
             raise network.NetworkConflict('Идентификатор запроса уже используется другой задачей.')
         db.commit()
         return snapshot(db, site)

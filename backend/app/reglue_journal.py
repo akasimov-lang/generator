@@ -142,7 +142,7 @@ def latest_for_site(db, site):
     return {key: entry[key] for key in ("at", "old_main", "new_main", "old_path", "new_path")}
 
 
-def recent_for_site(db, site, limit=7):
+def recent_for_site(db, site, limit=20):
     """Confirmed Main and active fake-path changes by any actor, newest first."""
     operations = db.scalars(select(models.NetworkOperation).where(
         models.NetworkOperation.site_id == site.id,

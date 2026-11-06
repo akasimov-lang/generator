@@ -25,12 +25,12 @@ def test_fake_replacement_after_reglue_is_separate_and_uses_receipt_time(env):
     assert items[0]['at']=='2026-11-05T09:12:00+00:00'
 
 
-def test_recent_changes_limit_seven_and_exclude_unconfirmed_and_unchanged(env):
+def test_recent_changes_limit_twenty_and_exclude_unconfirmed_and_unchanged(env):
     db,site,_=env
     at=datetime(2026,11,5,tzinfo=timezone.utc)
-    for i in range(9):receipt(db,site,'select_fake_main',f'/old-{i}',f'/new-{i}',at+timedelta(minutes=i))
+    for i in range(25):receipt(db,site,'select_fake_main',f'/old-{i}',f'/new-{i}',at+timedelta(minutes=i))
     receipt(db,site,'select_fake_main','/same','/same',at+timedelta(days=1))
     receipt(db,site,'create_fake_main','/old','/pending',at+timedelta(days=2),status='unknown')
     items=recent_for_site(db,site)
-    assert len(items)==7
-    assert [x['new_path'] for x in items]==[f'/new-{i}' for i in range(8,1,-1)]
+    assert len(items)==20
+    assert [x['new_path'] for x in items]==[f'/new-{i}' for i in range(24,4,-1)]

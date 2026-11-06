@@ -439,23 +439,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
     : busy && dirty ? "Ожидаем сохранения разметки."
     : !reserveValid ? "Выберите резервный домен из текущей сетки."
     : reserve !== data?.reserve ? "Сначала сохраните выбранный резерв." : "";
-  return <section className="dataPanel projectNetworkPanel">
-    <div className="panelHeader"><div className="networkPanelHeading"><h2>{mode === "network" ? "Сетка проекта" : "Переклей"}</h2>        {data && mode === "network" && <div className="networkViewSwitch" role="group" aria-label="Вид сетки">
-          <button type="button" aria-pressed={networkView === "main"} onClick={() => setNetworkView("main")}>Основная сетка</button>
-          <button type="button" aria-pressed={networkView === "amp"} onClick={() => setNetworkView("amp")}>Ампы</button>
-        </div>}</div>
-      <div className="networkRefreshStatus"><button type="button" className="button secondary compact" disabled={Boolean(busy)} onClick={() => void load(true, true)}>{busy === "refresh" ? "Обновляем…" : "Обновить данные"}</button>{message && message !== "Ручной переклей: подтверждено." && <small role="status">{message}</small>}
-        <LastReglueSummary last={data?.last_reglue} recent={data?.recent_network_changes} observedAt={data?.last_reglue_at} />
-      </div>
-    </div>
-    <div className="dataPanelBody">
-      {error && <p role="alert" className="error">{error}</p>}
-      {!data && <p>{busy ? "Загружаем сетку проекта…" : "Данные сетки недоступны. Повторите загрузку."}</p>}
-      {data && <>
-        {data.stock_warning&&<p role="alert" className="notice">⚠ {data.stock_warning}</p>}
-
-        {editQueue.error && <p role="alert" className="notice">{editQueue.error}</p>}
-        <div className="networkTopControls">
+  const topControls = data && (<div className="networkTopControls">
         {mode === "network" && networkView === "amp" ? <p>Текущий AMP: <strong>{data.amp || "не задан"}</strong> · Предыдущий AMP: <strong>{data.prev_amp || "не задан"}</strong></p> : <div className="networkMainReserveRow">
           <div className="networkCurrentDomains"><span>Текущий Main: <strong>{data.canon || "не задан"}</strong></span><span>Текущий резерв: <strong>{data.reserve && data.reserve !== data.canon ? data.reserve : "не выбран"}</strong></span><span>Фейковый внутряк: <strong>{data.fake_main_current || "не выбран"}</strong></span></div>
           <fieldset className="networkReserveField networkReserveInline" disabled={editQueue.busy("reserve")}><TemplateCombobox label="Резервный домен" value={reserve} placeholder="Выберите резерв" onChange={value => { if (!editQueue.busy("reserve")) setReserve(value); }} options={[{ value: "", label: "Выберите резерв" }, ...data.domains.filter(domain => !ampDomains.has(domain) && domain !== data.canon).map(domain => ({ value: domain, label: domain }))]} /></fieldset>
@@ -470,10 +454,28 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
             {!editQueue.latest("reglue") && reglueBlockedReason && <small className="networkEditStatus" title={reglueBlockedReason}>{reglueBlockedReason}</small>}</div>
           </div>
         </div>}
-        </div>
+        </div>);
+  return <section className="dataPanel projectNetworkPanel">
+    <div className="panelHeader"><div className="networkPanelHeading"><h2>{mode === "network" ? "Сетка проекта" : "Переклей"}</h2>        {data && mode === "network" && <div className="networkViewSwitch" role="group" aria-label="Вид сетки">
+          <button type="button" aria-pressed={networkView === "main"} onClick={() => setNetworkView("main")}>Основная сетка</button>
+          <button type="button" aria-pressed={networkView === "amp"} onClick={() => setNetworkView("amp")}>Ампы</button>
+        </div>}</div>
+      <div className="networkRefreshStatus"><button type="button" className="button secondary compact" disabled={Boolean(busy)} onClick={() => void load(true, true)}>{busy === "refresh" ? "Обновляем…" : "Обновить данные"}</button>{message && message !== "Ручной переклей: подтверждено." && <small role="status">{message}</small>}
+        {mode !== "network" && <LastReglueSummary last={data?.last_reglue} recent={data?.recent_network_changes} observedAt={data?.last_reglue_at} />}
+      </div>
+    </div>
+    <div className="dataPanelBody">
+      {error && <p role="alert" className="error">{error}</p>}
+      {!data && <p>{busy ? "Загружаем сетку проекта…" : "Данные сетки недоступны. Повторите загрузку."}</p>}
+      {data && <>
+        {data.stock_warning&&<p role="alert" className="notice">⚠ {data.stock_warning}</p>}
+
+        {editQueue.error && <p role="alert" className="notice">{editQueue.error}</p>}
+        {mode !== "network" && topControls}
         {mode === "network" && <>
           {showDomainList && <div className="networkDomainList"><label>Домены — по одному в строке<textarea ref={domainListRef} readOnly aria-label="Домены для копирования" value={visibleDomains.join("\n")} rows={Math.min(12, Math.max(3, visibleDomains.length))} /></label><small>Ctrl+C / ⌘C — скопировать. Можно выделить только нужные строки.</small><button type="button" className="secondary compact" onClick={() => setShowDomainList(false)}>Скрыть список</button></div>}
-          <div className={networks.length ? "networkWithNavigation" : undefined}><div className="networkMembership">
+          <div className="networkWithNavigation networkWorkspace"><div className="networkMembership">
+          {topControls}
           <div className="networkTableWrap" tabIndex={0} role="region" aria-label="Домены сетки"><label className="networkHistoryToggle"><input type="checkbox" checked={showNetworkHistory} onChange={event => setShowNetworkHistory(event.target.checked)} />Показать историю</label><table className="networkTable"><thead><tr><th scope="col"><div className="networkDomainSearch"><Search size={14} aria-hidden="true" /><input aria-label="Поиск по доменам сетки" placeholder="Домены" value={domainQuery} onChange={event => setDomainQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); commitDomainFilter(domainQuery); } if (event.key === "Escape") setDomainQuery(savedFilter); }} />{(savedFilter || domainQuery) && <button type="button" aria-label="Сбросить фильтр доменов" title="Сбросить фильтр" onClick={() => commitDomainFilter("")}><X size={15} /></button>}<button type="button" className="networkSelectDomains" aria-expanded={showDomainList} onClick={() => setShowDomainList(value => !value)}>Выделить</button></div></th><th scope="col">Тип домена</th><th scope="col">Поддомен</th><th scope="col">Статус</th><th scope="col">Был Main</th><th scope="col">Был в альтернейтах</th><th scope="col">x-default</th><th scope="col">БАН</th><th scope="col">Действия</th><th scope="col">Дата добавления</th><th scope="col">Дата исключения</th></tr></thead>
             <tbody>{visibleDomains.map((domain) => <tr key={domain} className={currentDomains.has(domain) ? undefined : "networkHistoricalDomain"}><td data-label="Домен">{domain === data.canon || domain === data.reserve || domain === site.name ? <strong>{domain}</strong> : domain}</td><td data-label="Тип домена">{ampDomains.has(domain) ? <span className="networkAmpType">AMP</span> : data.domain_classification?.[domain]?.is_subdomain ? <span title="Тип задаётся у родительского домена">{data.domain_classification[domain].parent_type === "drop" ? "Дроп (родитель)" : data.domain_classification[domain].parent_type === "newreg" ? "Новорег (родитель)" : "Не указан у родителя"}</span> : <select className="networkDomainType" aria-label={`Тип домена ${domain}`} value={data.domain_types?.[domain] || ""} disabled={Boolean(busy)} onChange={(event) => void saveDomainType(domain, event.target.value)}><option value="" disabled>Не указан</option><option value="drop">Дроп</option><option value="newreg">Новорег</option></select>}</td><td data-label="Поддомен">
                 <span className="networkSubdomain"><input type="checkbox" className="networkHistoryCheck" disabled checked={!!data.domain_classification?.[domain]?.is_subdomain} aria-label={domain + ": поддомен"} />
@@ -493,14 +495,15 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
             </tr>)}</tbody>
           </table></div>
           {!visibleDomains.length && <p>{domainQuery.trim() ? "Домены не найдены." : networkView === "amp" ? "В кеше проекта AMP-домены не указаны." : "В основной сетке нет доменов."}</p>}
-          </div>{!!networks.length && <nav className="networkBrandNavigation" aria-label="Навигация по сеткам бренда">
+          {networkView === "main" && <><DomainRedirects key={site.id} canon={data.canon} onRetargetMain={async () => enqueueEdit("domain_redirects_main")} queue={editQueue} redirects={data.domain_redirects || []} revision={data.revision} available={!!data.has_domain_redirects} disabled={disabled} onSave={async edit => enqueueEdit("domain_redirect", edit)} /><PageRedirects key={`pages:${site.id}`} groups={data.page_redirects||[]} domains={data.domains} canon={data.canon} revision={data.revision} available={!!data.has_page_redirects} disabled={disabled} queue={editQueue} onSave={async edit => enqueueEdit("page_redirect", edit)}/></>}
+          </div><aside className="networkSidebar"><LastReglueSummary last={data?.last_reglue} recent={data?.recent_network_changes} observedAt={data?.last_reglue_at} />{mode === "network" && !!networks.length && <nav className="networkBrandNavigation" aria-label="Навигация по сеткам бренда">
             <div className="networkBrandNavigationHeading"><strong>Сетки бренда</strong><small>{brand} · {networks.length}</small></div>
             <ul>{networks.map(peer => { const current = peer.id === site.id; return <li key={peer.id}><a href={`/project-network/${encodeURIComponent(peer.name)}/`} aria-current={current ? "page" : undefined} aria-label={`Открыть сетку ${peer.name}`} onClick={event => { if (!onSelectNetwork || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onSelectNetwork(peer.name); }}>
               <span className="networkBrandNavigationText"><span className="networkBrandNavigationName" title={peer.name}>{peer.name}</span><small><span>{peer.geoLabel}</span><span title={current ? data.canon : peer.main}>{current ? data.canon : peer.main || "Main не задан"}</span></small></span>
               <span className="networkBrandNavigationCount" title="Доменов в сетке">{current ? data.domains.length : peer.domainCount}</span>
             </a></li>; })}</ul>
-          </nav>}</div>
-          {networkView === "main" && <><DomainRedirects key={site.id} canon={data.canon} onRetargetMain={async () => enqueueEdit("domain_redirects_main")} queue={editQueue} redirects={data.domain_redirects || []} revision={data.revision} available={!!data.has_domain_redirects} disabled={disabled} onSave={async edit => enqueueEdit("domain_redirect", edit)} /><PageRedirects key={`pages:${site.id}`} groups={data.page_redirects||[]} domains={data.domains} canon={data.canon} revision={data.revision} available={!!data.has_page_redirects} disabled={disabled} queue={editQueue} onSave={async edit => enqueueEdit("page_redirect", edit)}/></>}
+          </nav>}</aside></div>
+
           {networkView === "main" && <div className="networkDomainManagement"><div className="networkSection networkSubdomains">
             <h3>Добавление в сетку</h3>
             <p>Укажите домены и поддомены через запятую, пробел или новую строку.</p>

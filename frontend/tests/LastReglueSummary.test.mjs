@@ -22,14 +22,14 @@ test('newer externally observed change never displays an outdated local scheme a
  assert.equal(render({observedAt:'invalid'}),'');
 });
 
-test('recent fake-path replacements show before and after with Moscow time and a seven-entry limit',()=>{
- const recent=Array.from({length:9},(_,i)=>({id:String(i),kind:'fake_path',at:`2026-11-05T09:0${i}:00Z`,old_main:'main.test',new_main:'main.test',old_path:'/old/',new_path:'/new-'+i}));
+test('recent fake-path replacements show before and after with Moscow time and a twenty-entry limit',()=>{
+ const recent=Array.from({length:25},(_,i)=>({id:String(i),kind:'fake_path',at:`2026-11-05T09:${String(i).padStart(2,"0")}:00Z`,old_main:'main.test',new_main:'main.test',old_path:'/old/',new_path:'/new-'+i}));
  const html=render({last,recent});
- assert.equal((html.match(/<article/g)||[]).length,7);
- assert.match(html,/Замена внутряка: 05.11.2026, 12:08:00 МСК/);
- assert.match(html,/Внутряк: \/old\/ → \/new-8/);
- assert.doesNotMatch(html,/new-0|new-1|Последний переклей/);
- assert.ok(html.indexOf('new-8')<html.indexOf('new-7'));
+ assert.equal((html.match(/<article/g)||[]).length,20);
+ assert.match(html,/Замена внутряка: 05.11.2026, 12:24:00 МСК/);
+ assert.match(html,/Внутряк: \/old\/ → \/new-24/);
+ assert.doesNotMatch(html,/new-0(?:<|\s)|new-1(?:<|\s)|Последний переклей/);
+ assert.ok(html.indexOf('new-24')<html.indexOf('new-7'));
 });
 
 test('recent history preserves a newer externally observed Main change without inventing its addresses',()=>{

@@ -18,3 +18,23 @@
 .lastReglueHistory article > * { display: block; overflow-wrap: anywhere; }
 .lastReglueHistory time { color: var(--text); font-weight: 600; }
 @media (max-width: 700px) { .lastReglueSummary.lastReglueHistory { width: min(440px, 85vw); } }
+
+/* History and brand navigation share the right column without covering controls. */
+.networkWorkspace { grid-template-columns:minmax(0,1fr) minmax(260px,320px); gap:18px; }
+.networkSidebar { display:grid; align-content:start; gap:12px; min-width:0; }
+.networkSidebar .lastReglueSummary,
+.networkSidebar .lastReglueSummary.lastReglueHistory { position:static; width:100%; max-height:240px; margin:0; text-align:left; overflow:auto; }
+.networkSidebar .lastReglueHistory article { padding:5px 0; }
+.networkSidebar .networkBrandNavigation ul { max-height:220px; }
+.networkWorkspace .networkMainReserveRow { min-height:64px; margin:0 0 8px; }
+.networkWorkspace .networkReserveSave { height:64px; }
+.networkWorkspace .networkButtonCaption { top:36px; min-height:0; }
+.networkWorkspace .networkButtonCaption .networkEditStatus { max-height:28px; overflow:auto; line-height:14px; }
+@media(max-width:1000px) {
+ .networkWorkspace { grid-template-columns:minmax(0,1fr); }
+ .networkSidebar { grid-template-columns:repeat(2,minmax(0,1fr)); }
+ .networkSidebar .networkBrandNavigation { grid-row:auto; }
+}
+@media(max-width:700px) { .networkSidebar { grid-template-columns:minmax(0,1fr); } }
+.networkWorkspace:has(> .networkSidebar:empty) { grid-template-columns:minmax(0,1fr); }
+.networkSidebar:empty { display:none; }

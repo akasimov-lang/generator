@@ -29,3 +29,26 @@ test('queued page redirect hides its actions and preserves editing of another pa
   assert.doesNotMatch(button,/disabled/);
   assert.match(html,/Отправляем на сервер/);
 });
+
+test('each saved domain redirect has a labelled delete action',()=>{
+ const html=renderToStaticMarkup(React.createElement(DomainRedirects,{redirects:[{url:'one.test',value:'main.test/path'}],canon:'main.test',revision:'r',available:true,disabled:false,onSave:async()=>true,onRetargetMain:async()=>true}));
+ assert.match(html,/aria-label="Удалить редирект one.test"/);
+ assert.match(html,/domainRedirectActionSlot/);
+});
+
+test('queued delete preserves destination until confirmed and hides row actions',()=>{
+ const queue=new NetworkEditQueue('site',async()=>new Promise(()=>{}));
+ queue.enqueue({action:'domain_redirect',revision:'r',expected:{rows:[{url:'one.test',value:'main.test/path'}]},redirect_source:'one.test',redirect_original_source:'one.test',redirect_target:'',redirect_delete:true});
+ const html=renderToStaticMarkup(React.createElement(DomainRedirects,{redirects:[{url:'one.test',value:'main.test/path'}],canon:'main.test',revision:'r',available:true,disabled:false,queue,onSave:async()=>true,onRetargetMain:async()=>true}));
+ assert.match(html,/main.test\/path/);
+ assert.doesNotMatch(html,/aria-label="Удалить редирект one.test"/);
+ assert.doesNotMatch(html,/aria-label="Редактировать редирект one.test"/);
+});
+
+test('completed deletion does not resurrect the deleted row from queue history',()=>{
+ const queue=new NetworkEditQueue('site',async()=>new Promise(()=>{}));
+ queue.server.items=[{id:'deleted',status:'completed',message:'Сохранено',request:{action:'domain_redirect',revision:'r',expected:{rows:[]},redirect_source:'one.test',redirect_original_source:'one.test',redirect_target:'',redirect_delete:true}}];
+ const html=renderToStaticMarkup(React.createElement(DomainRedirects,{redirects:[],canon:'main.test',revision:'r',available:true,disabled:false,queue,onSave:async()=>true,onRetargetMain:async()=>true}));
+ assert.match(html,/Доменных редиректов нет/);
+ assert.doesNotMatch(html,/one.test/);
+});

@@ -149,3 +149,35 @@ def test_pasted_url_with_path_is_confirmed_in_queue(env):
     assert queue.execute_step(db, ident)['status'] == 'completed'
     assert remote.data['settings']['redirects'][0]['value'] == 'main.test/Dragonia-Casino/'
     assert len(remote.calls) == 1
+
+
+def test_delete_then_edit_another_row_and_recreate_deleted_redirect(env):
+    db,site,remote=env; prepare(env)
+    first=add(env,redirect_source='old.test',redirect_original_source='old.test',redirect_delete=True)
+    second=add(env,redirect_source='older.test',redirect_original_source='older.test',redirect_target='main.test/other/')
+    assert queue.execute_step(db,first)['status']=='completed'
+    assert queue.execute_step(db,second)['status']=='completed'
+    assert remote.data['settings']['redirects']==[{'url':'older.test','value':'main.test/other/'}]
+    third=add(env,redirect_source='old.test',redirect_target='https://main.test/Returned/')
+    assert queue.execute_step(db,third)['status']=='completed'
+    assert remote.data['settings']['redirects'][-1]=={'url':'old.test','value':'main.test/Returned/'}
+    assert len(remote.calls)==3
+
+
+def test_delete_rejects_concurrent_row_change(env):
+    db,site,remote=env; prepare(env)
+    ident=add(env,redirect_source='old.test',redirect_original_source='old.test',redirect_delete=True)
+    remote.data['settings']['redirects'][0]['value']='external.test/changed/'
+    assert queue.execute_step(db,ident)['status']=='failed'
+    assert len(remote.data['settings']['redirects'])==2
+    assert remote.calls==[]
+
+
+def test_retry_old_enqueue_without_new_optional_delete_flag_is_idempotent(env):
+    db,site,_=env; prepare(env)
+    ident=add(env,redirect_source='old.test',redirect_original_source='old.test',redirect_target='main.test/New/')
+    job=db.get(models.BackgroundJob,ident)
+    payload=dict(job.payload); request=dict(payload['request']); request.pop('redirect_delete',None)
+    job.payload={**payload,'request':request}; db.commit()
+    queue.enqueue(db,site,queue.Request.model_validate(request),'test')
+    assert len(queue.active(db,site.id))==1
