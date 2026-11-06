@@ -91,3 +91,80 @@ def test_registered_report_endpoint_requires_authentication():
     from fastapi.testclient import TestClient
     response=TestClient(app).get('/api/project-reports')
     assert response.status_code==401
+
+
+def test_confirmed_showcase_templates_count_as_layout_even_when_batch_is_partial(env):
+    db,site,_=env
+    edit=models.ProjectPageEdit(id=str(uuid4()),site_id=site.id,page_key='template-receipt',requested_by='anton',fingerprint='test',
+        before_page={'node':{'name':'casinos.hbs','data':'old'}},after_page={'node':{'name':'casinos.hbs','data':'new'}},status='confirmed',updated_at=AT)
+    db.add(edit);db.commit()
+    result=reports.row(db,site,{},START,END,AT,'cache')
+    assert result['layout_work'] and result['showcase_layout_work'] and result['showcase_work']
+    assert not result['template_work'] and not result['menu_work']
+    assert result['events'][0]['message']=='Обновлён шаблон: casinos.hbs'
+
+
+def test_planned_empty_or_unchanged_template_is_not_completed_work():
+    from app.report_work_evidence import template_event
+    edit=SimpleNamespace(id='e',status='pending',updated_at=AT,before_page={'name':'header.hbs','data':'old'},after_page={'name':'header.hbs','data':'new'})
+    assert template_event(edit) is None
+    edit.status='confirmed'
+    assert template_event(edit)['categories']==['template','menu']
+    edit.after_page=deepcopy(edit.before_page)
+    assert template_event(edit) is None
+    edit.after_page={'node':{'name':'new.hbs','created':True}}
+    assert template_event(edit) is None
+
+
+def test_ledger_counts_confirmed_changes_with_their_own_dates_and_not_planned_work():
+    from app.report_work_evidence import ledger_events,work_flags
+    ledger=SimpleNamespace(key='site-menu-repair:report',value={'status':'applying','applied_at':(START-timedelta(days=2)).isoformat(),
+        'receipts':[{'field':'header','status':'confirmed','confirmed_at':AT.isoformat()},
+                    {'field':'styles','status':'unknown','at':AT.isoformat()},
+                    {'field':'layout','status':'confirmed','at':(START-timedelta(days=1)).isoformat()}]})
+    events=ledger_events(ledger,START,END)
+    assert len(events)==1 and events[0]['at']==AT.isoformat()
+    assert work_flags(events)=={'layout_work':True,'showcase_layout_work':False,'template_work':True,'menu_work':True,'showcase_work':False}
+
+
+def test_uploaded_logo_does_not_count_as_template_repair():
+    from app.report_work_evidence import ledger_events,work_flags
+    ledger=SimpleNamespace(key='showcase-example:original',value={'receipts':[{'kind':'logo','brand':'Example','status':'confirmed','verified_at':AT.isoformat()}]})
+    flags=work_flags(ledger_events(ledger,START,END))
+    assert flags['showcase_work'] and not flags['layout_work']
+    ledger.value={'status':'prepared','plan':{'templates':['planned']}}
+    assert ledger_events(ledger,START,END)==[]
+
+
+def test_menu_report_ignores_failed_other_project_and_identical_resends(env):
+    from app.report_work_evidence import menu_events
+    db,site,_=env
+    def log(at,items,project=None,status=200):
+        db.add(models.PublicationLog(endpoint_url='https://webdev.test/projects/menu',created_at=at,response_status=status,
+            request_payload={'action':'menu_sync','project_name':project or site.name,'type':'header','list':items}))
+    old=[{'title':'Old','slug':'/old/'}];new=old+[{'title':'New','slug':'/new/'}]
+    log(START-timedelta(days=1),old)
+    log(START+timedelta(hours=1),old)
+    log(AT,new)
+    log(AT+timedelta(minutes=1),new)
+    log(AT+timedelta(minutes=2),[],status=500)
+    log(AT+timedelta(minutes=3),[],'other.test')
+    db.commit()
+    events=menu_events(db,site.name,START,END)
+    assert len(events)==1 and events[0]['menu_items']==2
+    assert events[0]['at']==AT.isoformat() and 'Old, New' in events[0]['message']
+
+
+def test_report_counts_projects_not_receipts_and_ignores_errors_outside_work_scope(env,monkeypatch):
+    db,site,_=env
+    monkeypatch.setattr('app.report_ids.get',lambda *a:3048)
+    job=models.BackgroundJob(id=str(uuid4()),kind='maintenance_report',status='running',payload={'task_type':reports.TASK,'site_ids':[site.id,'no-work'],
+        'name':'work','report_kind':'weekly_brand','period_start':START.isoformat(),'period_end':END.isoformat()},
+        result={'entries':[{'site_id':site.id,'project':site.name,'included':True,'status':'completed','events':[{},{}],
+            'layout_work':True,'showcase_layout_work':True,'template_work':True,'menu_work':True},
+            {'site_id':'no-work','project':'other.test','included':False,'status':'partial','events':[],'state_error':'Unavailable'}]})
+    db.add(job);db.commit()
+    reports.save_rows(db,job.id,[],finish=True)
+    result=reports.public_view(db,job,{'allowed_site_ids':None})
+    assert result['layout_projects']==result['showcase_layout_projects']==result['template_projects']==result['menu_projects']==1
+    assert result['errors']==0 and result['unverified']==[] and result['status']=='completed'

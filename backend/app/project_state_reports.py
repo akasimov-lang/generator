@@ -13,6 +13,7 @@ from app.security import AuthUser
 from app.reglue_history import utc
 from app.network_state import domain_name, project_network_state
 from app.domain_classification import registrable_root
+from app import report_work_evidence as work
 
 TASK='project_state_report'
 router=APIRouter(prefix='/project-reports',tags=['project-reports'])
@@ -108,13 +109,10 @@ def maintenance_events(db,site_id,start,end):
             elif row.get('status')=='completed' and task not in {'showcase_audit','showcase_inventory','showcase_standardization'}:
                 if within(at,start,end):events.append({'id':job.id+':work','kind':'maintenance','label':job.payload.get('name'),'at':iso(at),'message':row.get('message') or row.get('comment'),'report_url':'/auto-reglue/pilot/report?maintenance='+job.id,'source':'confirmed_report'})
     ledgers=db.info.get('state_report_ledgers')
-    if ledgers is None:ledgers=list(db.scalars(select(models.AutoReglueConfig).where(models.AutoReglueConfig.key.like('site-%repair:%'))))
+    if ledgers is None:ledgers=work.source_ledgers(db)
     for ledger in ledgers:
-        value=ledger.value or {}
-        if value.get('site_id')!=site_id or value.get('status') not in {'applied','confirmed','completed'}:continue
-        at=value.get('applied_at') or value.get('verified_at')
-        if not within(at,start,end) or not any(r.get('status')=='confirmed' for r in value.get('receipts',[])):continue
-        events.append({'id':ledger.key,'kind':'layout','label':'Вёрстка и меню','at':iso(at),'message':'Изменения шаблона, стилей и меню подтверждены чтением Webdev.','source':'confirmed_native_receipts'})
+        if (ledger.value or {}).get('site_id')==site_id:
+            events+=work.ledger_events(ledger,start,end)
     return events
 
 def row(db,site,state,start,end,observed_at,source):
@@ -129,17 +127,18 @@ def row(db,site,state,start,end,observed_at,source):
         return {'at':max(e['at'] for e in observed),'source':'observed_change'} if observed else None
     events=[e for e in network if within(e['at'],start,end)]
     for edit in db.scalars(select(models.ProjectPageEdit).where(models.ProjectPageEdit.site_id==site.id,models.ProjectPageEdit.status=='confirmed',models.ProjectPageEdit.updated_at>=start,models.ProjectPageEdit.updated_at<=end)):
-        event=text_event(edit,site.brand)
+        event=work.template_event(edit) or text_event(edit,site.brand)
         if event:events.append(event)
         elif edit.page_key in {'showcase:work','showcase:casinos'}:
             value=edit.after_page or {}
             events.append({'id':edit.id,'kind':'showcase','label':'Изменение витрины','at':iso(edit.updated_at),'message':value.get('message'),'report_url':'/auto-reglue/pilot/report?maintenance='+value['report_id'] if value.get('report_id') else None,'source':'confirmed_showcase_edit'})
     events+=publication_events(db,site.id,start,end)
+    events+=work.menu_events(db,site.name,start,end)
     report_urls={e.get('report_url') for e in events if e['kind']=='showcase'}
     events+=[e for e in maintenance_events(db,site.id,start,end) if e['kind']!='showcase' or e.get('report_url') not in report_urls]
     events.sort(key=lambda e:(e['at'],e['id']),reverse=True)
     fibery=site.fibery_name or '';number=re.search(r'#\s*(\d+)',fibery)
-    return {'site_id':site.id,'project':site.name,'brand':site.brand,'geo':site.cache_geo,'fibery_name':fibery,'fibery_url':'https://hzhz.fibery.io/favorites/Alfasearch_Config/SEO_Projects/'+number.group(1) if number else None,**current,'reglue_date':latest('reglue',current['main']),'fake_date':latest('fake_path',current['fake_path']),'observed_at':iso(observed_at),'state_source':source,'status':'completed','events':events,'pages_added':sum(e['kind']=='page_added' for e in events),'fake_pages_created':sum(e['kind']=='fake_path' and e.get('created',False) for e in events),'text_changes':sum(e['kind']=='text' and e['text_changed'] for e in events),'layout_work':any(e['kind']=='layout' for e in events),'showcase_work':any(e['kind']=='showcase' for e in events)}
+    return {'site_id':site.id,'project':site.name,'brand':site.brand,'geo':site.cache_geo,'fibery_name':fibery,'fibery_url':'https://hzhz.fibery.io/favorites/Alfasearch_Config/SEO_Projects/'+number.group(1) if number else None,**current,'reglue_date':latest('reglue',current['main']),'fake_date':latest('fake_path',current['fake_path']),'observed_at':iso(observed_at),'state_source':source,'status':'completed','events':events,'pages_added':sum(e['kind']=='page_added' for e in events),'fake_pages_created':sum(e['kind']=='fake_path' and e.get('created',False) for e in events),'text_changes':sum(e['kind']=='text' and e['text_changed'] for e in events),**work.work_flags(events)}
 
 def collect_one(db,job_id,site_id,*,live=True):
     job=db.get(models.BackgroundJob,job_id);site=db.get(models.Site,site_id)
@@ -163,7 +162,7 @@ def save_rows(db,job_id,rows,*,finish=False):
     values.update({r['site_id']:r for r in rows})
     job.result={'entries':[values[sid] for sid in job.payload['site_ids'] if sid in values]}
     if finish:
-        job.status='partial' if any(r['status']=='partial' for r in values.values()) else 'completed';job.finished_at=datetime.now(timezone.utc)
+        job.status='partial' if any(r['status']=='partial' and r.get('included') for r in values.values()) else 'completed';job.finished_at=datetime.now(timezone.utc)
     db.commit()
 
 def public_view(db,job,user,detail=True):
@@ -173,8 +172,8 @@ def public_view(db,job,user,detail=True):
     all_rows=[r for r in (job.result or {}).get('entries',[]) if r['site_id'] in scope]
     rows=[r for r in all_rows if r.get('included',False)]
     from app.report_ids import get
-    result={'id':job.id,'number':get(db,job),'name':job.payload['name'],'kind':job.payload['report_kind'],'brand':job.payload.get('brand'),'status':job.status,'created_at':job.created_at,'finished_at':job.finished_at,'period_start':job.payload['period_start'],'period_end':job.payload['period_end'],'scope':len(scope),'checked':sum('state_source' in r for r in all_rows),'total':len(rows),'projects_with_work':sum(bool(r.get('events')) for r in rows),'pages_added':sum(r.get('pages_added',0) for r in rows),'text_changes':sum(r.get('text_changes',0) for r in rows),'layout_projects':sum(r.get('layout_work',False) for r in rows),'showcase_projects':sum(r.get('showcase_work',False) for r in rows),'errors':sum(r.get('status')=='partial' for r in all_rows)}
-    if detail:result.update(entries=rows,unverified=[{'site_id':r['site_id'],'project':r['project'],'error':r.get('state_error')} for r in all_rows if r.get('status')=='partial' and not r.get('included')])
+    result={'id':job.id,'number':get(db,job),'name':job.payload['name'],'kind':job.payload['report_kind'],'brand':job.payload.get('brand'),'status':job.status,'created_at':job.created_at,'finished_at':job.finished_at,'period_start':job.payload['period_start'],'period_end':job.payload['period_end'],'scope':len(scope),'checked':sum('state_source' in r for r in all_rows),'total':len(rows),'projects_with_work':sum(bool(r.get('events')) for r in rows),'pages_added':sum(r.get('pages_added',0) for r in rows),'text_changes':sum(r.get('text_changes',0) for r in rows),'layout_projects':sum(r.get('layout_work',False) for r in rows),'showcase_projects':sum(r.get('showcase_work',False) for r in rows),'showcase_layout_projects':sum(r.get('showcase_layout_work',False) for r in rows),'template_projects':sum(r.get('template_work',False) for r in rows),'menu_projects':sum(r.get('menu_work',False) for r in rows),'errors':sum(r.get('status')=='partial' for r in rows)}
+    if detail:result.update(entries=rows,unverified=[{'site_id':r['site_id'],'project':r['project'],'error':r.get('state_error')} for r in rows if r.get('status')=='partial'])
     return result
 
 @router.get('')

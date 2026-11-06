@@ -1,22 +1,18 @@
 {
-  "updated_at": "2026-11-06T18:29:59.680177+00:00",
-  "last_confirmed_production": "3d7f0a3d2f248712d620d08fa51c890e81978a44",
+  "updated_at": "2026-11-06T21:58:00.294440+00:00",
+  "last_confirmed_production": "e371b9902f0b2e3dd09d9d760d840a7950d8802c",
   "in_this_release": [
-    "30 concurrent large-text jobs in a shared generation/pilot_texts pool",
-    "Dedicated short-generation, planning and dispatcher workers",
-    "Dashboard menu generation journal and interrupted preview recovery",
-    "Prevent duplicate durable-job dispatch while delivery is queued/unacked",
-    "Audited broker cleanup command: python -m app.queue_maintenance --apply",
-    "Confirmed outside-plan reglues projected into all plans without launching them",
-    "Mixed heading mode defaults; current Main and Fibery in plan rows"
+    "Weekly reports: confirmed showcase template edits, native template repair receipts and menu publications; distinct project counts and dated descriptions",
+    "Separate counters: all layout, showcase layout, other templates, menu",
+    "Exclude verification errors of projects with no weekly work from displayed totals"
   ],
   "next_authorized_work": [
-    "Batch2 alldaybabyla.com (project pelicancasino-reg.com): repair shared inner template/content buttons, desktop menu between logo/account actions, compact mobile burger",
-    "Batch3 Pelican missing favicons only; plan e3bf181f-b4a4-5bbd-9641-1cb4b550f0bf already created for7active projects; preserve existing icons",
-    "Batch4 same3033 report: durable Prepare alternative plan button; strict no stock, own never-Main drop > own never-Main newreg > samebrand/GEO donor newreg not Main within10days; user explicitly authorized prepare+execute selected blocked projects",
-    "Expand internal-page planner: existing menus/general projects, at least5pages;3033 preserveMain/content50%/internal40%",
-    "Resolve remaining actual text queue failures; do not bypass fact/language/meaning validation",
-    "Vitalina favorites5current/42archived: verify before restore; mirror isolatedclone changes without overwriting original dirtytree"
+    "Refresh six existing weekly reports after deployment; preserve originals and history, no new reports",
+    "Continue recovery report3049: inspect Lemon preview8pending/no plans, start remaining prepared alternatives after native fresh checks, resolve stale donor snapshots",
+    "Verify BetOnRed four started targets; never reuse one domain across networks",
+    "Resolve unfinished nanoclear/thexrock/SavaSpin with existing publication receipts; no Main switch to NXDOMAIN",
+    "Finish unique showcase and official logos for www.dominiqueduroseau.com, report3032; original saved, not applied",
+    "Finish missing-only Pelican favicons; keep existing icons; separate uncommitted fix remains outside current release"
   ],
   "paused": [
     "Mass showcase conversions and logo uploads: user now requests one site at a time; log actual changes as report comments",
@@ -28,16 +24,24 @@
     "pelican": "eb11b394-99f4-555d-9ea9-5dc44d04cac4",
     "3038": "bbdb21a4-e48a-470c-9943-1db229b28f8e",
     "3032": "4ddc2b49-3265-4b13-832d-12b40474c382",
-    "pelican_favicons": "e3bf181f-b4a4-5bbd-9641-1cb4b550f0bf"
+    "pelican_favicons": "e3bf181f-b4a4-5bbd-9641-1cb4b550f0bf",
+    "weekly_current": "d70709b5-3f61-59bd-9560-942b445ffb20",
+    "weekly_pelican": "751879fd-6dce-562c-95fe-986a50f1aba2",
+    "weekly_fontan": "08cede83-a3bf-57b5-8632-6f9596bf35a2",
+    "weekly_lemon": "a9d072ce-0226-5bfa-ba92-8f690f3074e3",
+    "weekly_betonred": "23212c57-e08a-58ba-98ea-5906609476fb",
+    "weekly_general": "50fd11c8-784a-5db6-93bd-1c35f24281c3",
+    "recovery3049": "d3cb1f4b-e308-5a22-9e83-b79603db239c"
   },
   "constraints": [
     "Opening or refreshing a plan must never launch reglues",
-    "No new plan execution without user launch",
     "No browser on user Mac",
     "Git-only production deployment after origin sync and production drift check",
     "Preserve uncertain remote-write receipts; confirm before any retry",
     "New pages link to root /; never pin current Main in homepage links",
-    "Literal old-host alternates retarget on reglue; preserve settings.canon placeholders"
+    "Literal old-host alternates retarget on reglue; preserve settings.canon placeholders",
+    "User explicitly authorized replan and execution of unfinished plans; opening/refreshing still must not launch",
+    "Brand/GEO transfers: former Main eligible14days after departure; unknown membership date permitted; unlimited distinct donor domains; current donorMain protected; no stock for alternatives"
   ],
   "known_baseline_test_failures": [
     "test_auto_pilot confirmed_updates old expected fields",
@@ -53,9 +57,16 @@
     "Betonplan fe47d49f-5335-58f6-b71e-57f963acc534:2ready8skipped(1donoronly7noeligible); not launched",
     "76ac1b1 deployed: 15-second settling after confirmed domain addition, reserve confirmation before reglue, bounded recovery of saved fake/head operations and independent ready-content publication.",
     "Seven stuck runs in report3033 recovered and all confirmed completed by Webdev at18:26-18:27UTC:22betPortugal,Italy,Argentina,mojprojektogrodu,Canada,lameronthegulf,saferpatients.",
-    "3d7f0a3 deployed: editable mixed-mode planning percentages; changing network percentages switches to explicit shares; polling preserves local edits."
+    "3d7f0a3 deployed: editable mixed-mode planning percentages; changing network percentages switches to explicit shares; polling preserves local edits.",
+    "e371b99 deployed and healthy: recently reglued donor network allowed, target weekly restriction kept; bulk replan preserves ready headings",
+    "Weekly reports3043–3048 deployed bb1fd58, separate section after Instructions",
+    "Katalog Automatów81394097-5612-4b00-bcd2-f54e83f6352c recovered: published1838words,100%,no error at21:52UTC",
+    "Mendoza and Wartenweiler custom showcases applied and public checks passed; Dominiqueduroseau remains pending"
   ],
   "ready_for_release": [
-    "Reuse reviewed project metadata/headings on whole-plan restart; individual row refresh creates new scheme and headings.8new tests pass;35related pass;6legacy failures reproduced on3d7f0a3;frontend build passes."
+    "Weekly report work classification;15targeted tests passed, TypeScript and Vite build passed"
+  ],
+  "cancelled": [
+    "Vitalina project/favorites audit: user explicitly cancelled"
   ]
 }
