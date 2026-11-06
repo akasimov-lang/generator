@@ -97,9 +97,11 @@ def main_pin_owners(db, domains):
     return owners
 
 
-def require_main_destination(db, site, domains):
+def require_main_destination(db, site, domains, *, plan=None):
     for domain, owners in main_pin_owners(db, domains).items():
         if owners and site.id not in owners:
+            from app.pilot_domain_reuse import validate
+            if plan and domain==domain_key(plan.get('new_main')) and validate(db,plan): continue
             raise ValueError(f"Домен {domain} закреплён как Main с начала массового переклея. Перенос в другую сетку запрещён.")
 
 
@@ -148,11 +150,13 @@ def record_transfer_cooldown(db, domain, added_at, reglued_at):
     db.flush()
     return deadline.isoformat()
 
-def require_transfer_allowed(db, site, domain, now=None, *, ignore_cooldown=False):
+def require_transfer_allowed(db, site, domain, now=None, *, ignore_cooldown=False, plan=None):
     """Unknown date is allowed; all other transfer guards remain mandatory."""
     require_non_project_domain(db, domain)
     if main_pin_owners(db, [domain]).get(domain_key(domain)):
-        raise ValueError('Main закреплён с начала массового переклея и не может переноситься между сетками.')
+        from app.pilot_domain_reuse import validate
+        if not (plan and domain_key(domain)==domain_key(plan.get('new_main')) and validate(db,plan)):
+            raise ValueError('Main закреплён с начала массового переклея и не может переноситься между сетками.')
     if banned_domains(db, site, [domain])[domain]:
         raise ValueError('Домен отмечен БАН в GEO проекта и не может переноситься.')
     if ignore_cooldown:

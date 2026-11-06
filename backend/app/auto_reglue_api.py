@@ -621,6 +621,18 @@ def refresh_pilot_row(job_id: UUID, site_id: UUID, payload: PilotPreviewRequest,
     return auto_pilot.view(db, call(auto_pilot.refresh_row, db, job_id, site_id, payload.request_id, user))
 
 
+@router.post('/pilot/{job_id}/rows/{site_id}/alternative', status_code=202)
+def alternative_pilot_row(job_id: UUID, site_id: UUID, payload: PilotPreviewRequest, user: AuthUser, db: Session = Depends(get_db)):
+    from app import auto_pilot, pilot_row_replan
+    return auto_pilot.view(db, call(pilot_row_replan.request, db, job_id, site_id, payload.request_id, user))
+
+
+@router.post('/pilot/{job_id}/rows/{site_id}/alternative/start', status_code=202)
+def start_alternative_pilot_row(job_id: UUID, site_id: UUID, payload: PilotPreviewRequest, user: AuthUser, db: Session = Depends(get_db)):
+    from app import auto_pilot, pilot_row_replan
+    return auto_pilot.view(db, call(pilot_row_replan.start, db, job_id, site_id, payload.request_id, user))
+
+
 @router.post('/pilot/{job_id}/prepare', status_code=202)
 def reprepare_pilot(job_id: UUID, payload: PilotPreviewRequest, user: AuthUser, db: Session = Depends(get_db)):
     from app import auto_pilot, pilot_replanning

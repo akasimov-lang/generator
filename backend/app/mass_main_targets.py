@@ -47,7 +47,9 @@ def require_target(db, site, state, plan, *, allow_created=False):
     if plan.get('emergency_subdomain') and domain_key(parent) in used:
         raise ValueError('Родитель аварийного поддомена уже использовался как Main.')
     from app.reglue_reserves import authorized_own_drop_reuse
-    if domain_key(domain) in used and not authorized_own_drop_reuse(site, state, domain, plan):
+    from app.pilot_domain_reuse import allows, validate as validate_reuse
+    reuse = allows(site,state,domain,plan) and validate_reuse(db,plan)
+    if domain_key(domain) in used and not (authorized_own_drop_reuse(site, state, domain, plan) or reuse):
         raise ValueError('Выбранный домен уже использовался как Main.')
     if plan.get('create_subdomain') and domain in state['domains'] and not allow_created:
         raise ValueError('Имя поддомена занято после подготовки плана.')

@@ -419,7 +419,8 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
     if payload.action in {"create_subdomains", "create_domains"} and not existing_receipt:
         validate_subdomains(payload.domains, site.cache_domains or [], require_parent=payload.action == "create_subdomains")
         from app.domain_transfer_policy import require_main_destination
-        require_main_destination(db, site, payload.domains)
+        run = db.get(models.AutoReglueRun, auto_run_id) if auto_run_id else None
+        require_main_destination(db, site, payload.domains, plan=run.plan if run else None)
     from app.fake_path_allocation import group_lock, require_available
     path_lock = group_lock(db, site) if payload.action in {'reglue', 'create_fake_main', 'select_fake_main'} else nullcontext()
     with network_lock(db, site.id), path_lock, Remote(db, site) as remote:

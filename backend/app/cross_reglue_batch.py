@@ -88,7 +88,7 @@ def build(db, targets, username, *, persist=True):
                 raise ValueError('Для переноса должны быть заданы бренд и GEO проекта.')
             if auto.config(db, site.id).scope == 'personal' or auto.active_run(db, site.id):
                 raise ValueError('Сетка имеет персональные настройки или незавершённую операцию.')
-            if db.info.get('auto_pilot_preview'):
+            if db.info.get('auto_pilot_preview') and site.id in {target.id for target in targets}:
                 from app.reglue_history import weekly_reason
                 if reason := weekly_reason(site): raise ValueError(reason)
             state = network.read_network(db, site)
@@ -230,6 +230,10 @@ def validate(plans):
             exchanges.add(source)
         elif plan.get('replace_banned_reserve') and plan.get('balance_mode') == 'banned_reserve_fallback':
             pass
+        elif plan.get('former_main') and plan.get('pilot_reuse_job_id'):
+            pass
+        elif (plan.get('pilot_alternative_id') or plan.get('pilot_brand_geo_job_id')) and plan.get('balance_mode') == 'brand_geo_alternative':
+            pass
         elif plan['source_count'] <= plan['target_count']:
             raise ValueError('Домен можно переносить только из большей сетки в меньшую.')
         incoming.add(target); domains.add(domain)
@@ -299,8 +303,8 @@ def reserve(db, batch_id, items, username, *, scheduled=None):
                 require_target(db, source, source_state, plan)
                 if plan.get('requires_newreg') and (source.domain_types or {}).get(plan['new_main']) != 'newreg':
                     raise ValueError('Для переклея без резерва требуется новорег.')
-                cross.transferable(source, source_state, plan['new_main'])
-                cross.require_transfer_allowed(db, source, plan['new_main'])
+                cross.transferable(source, source_state, plan['new_main'], plan=plan)
+                cross.require_transfer_allowed(db, source, plan['new_main'], plan=plan)
                 cross.unique_membership(db, plan['new_main'], {source.id})
             staged.append(run)
         for site_id in sorted({p[k] for _, p in selected for k in ('site_id', 'source_site_id')}):

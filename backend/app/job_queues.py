@@ -5,6 +5,8 @@ SHORT_ACTIONS = {'meta_headings', 'headings', 'full_title_h1', 'full_title_headi
 
 
 def queue_for(db, job):
+    if job.kind == 'pilot_row_replan':
+        return 'short_generation' if (job.result or {}).get('phase') == 'headings' else 'planning'
     if job.kind == 'auto_pilot_preview':
         return 'planning'
     if job.kind == 'pilot_text':

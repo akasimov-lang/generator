@@ -13,6 +13,8 @@ def exclusions(db, plans):
              for row in db.execute(select(models.Site.id, models.Site.name, models.Site.last_reglue_at).where(models.Site.id.in_(ids)))} if ids else {}
     for plan in plans:
         for site_id in dict.fromkeys((plan['site_id'], plan.get('source_site_id', plan['site_id']))):
+            if site_id!=plan['site_id'] and (plan.get('pilot_reuse_job_id') or plan.get('pilot_alternative_id') or plan.get('pilot_brand_geo_job_id')):
+                continue
             site = sites.get(site_id)
             if site and (reason := weekly_reason(site)):
                 reasons[plan['site_id']] = reason if site_id == plan['site_id'] else f'Сетка-донор {site.name}: {reason}'

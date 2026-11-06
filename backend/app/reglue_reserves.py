@@ -126,8 +126,9 @@ def authorized_own_drop_reuse(site, state, domain, plan=None):
 
 
 def require_unused(site, state, domain, *, plan=None):
+    from app.pilot_domain_reuse import allows
     used = [*(site.main_domain_history or []), state.get('canon'), state.get('prev')]
-    if domain_key(domain) in {domain_key(d) for d in used if d} and not authorized_own_drop_reuse(site, state, domain, plan):
+    if domain_key(domain) in {domain_key(d) for d in used if d} and not (authorized_own_drop_reuse(site, state, domain, plan) or allows(site,state,domain,plan)):
         raise ValueError('Выбранный домен уже использовался как Main в этой сетке.')
 
 

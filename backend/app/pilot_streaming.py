@@ -11,6 +11,12 @@ from app.project_cache import ProjectCacheError
 
 def components(plans):
     """A shared donor/recipient must be reserved together before any network write."""
+    alternatives=[p for p in plans if p.get('pilot_alternative_id')]
+    original=[p for p in plans if not p.get('pilot_alternative_id')]
+    if alternatives and original:
+        # Explicitly restarted rows have a new reservation batch. Historical
+        # skipped donor rows must not cancel it; reserve rechecks live ownership.
+        return components(original)+components(alternatives)
     groups=[]
     for plan in plans:
         sites={plan['site_id'],plan.get('source_site_id',plan['site_id'])}
@@ -28,6 +34,7 @@ def text_ready(db,job,plan):
 
 
 def execute(db,job,send):
+    from app.pilot_row_replan import run_id as planned_run_id
     from app.pilot_text_jobs import sync
     from app.pilot_content_publication import enabled, attach, states
     independent_content = enabled(job)
@@ -76,7 +83,7 @@ def execute(db,job,send):
                 for p in batch:
                     site=db.get(models.Site,p['site_id']);db.refresh(site)
                     if reason:=launch.skip_reason(db,site):raise NetworkConflict(reason)
-                entries=[{'site_id':p['site_id'],'request_id':str(uuid5(UUID(job.id),p['site_id'])),
+                entries=[{'site_id':p['site_id'],'request_id':planned_run_id(job,p),
                           'preview_token':p['preview_token']} for p in batch]
                 if group.get('batch_id'):
                     from app.cross_reglue_batch import reserve
@@ -93,7 +100,7 @@ def execute(db,job,send):
         except (ValueError,NetworkConflict,ProjectCacheError,httpx.HTTPError) as error:
             db.rollback()
             for p in pending:
-                run=db.get(models.AutoReglueRun,str(uuid5(UUID(job.id),p['site_id'])))
+                run=db.get(models.AutoReglueRun,planned_run_id(job,p))
                 if run and run.status in ('planned','queued'):
                     run.status='failed';run.message=str(error)[:1500]
                 result['items'][p['site_id']].update(status='failed',reason=str(error)[:1500],

@@ -78,7 +78,7 @@ def build(db, cfg, targets, sites, states, free):
                     continue
             if found: continue
         if not selected:
-            for kind in ('newreg', 'drop'):
+            for kind in ('drop', 'newreg', 'sub_drop', 'sub_newreg'):
                 for domain in state['domains']:
                     if domain_key(domain) in used or target_kind(target, state, domain) != kind: continue
                     try:
@@ -91,7 +91,7 @@ def build(db, cfg, targets, sites, states, free):
             domain, kind = found
             try:
                 plan = cross.make_plan(cfg, target, state, target, state, domain, mode='own_unused', db=db, plans=plans)
-                plan.update(local_target=True, main_target_kind=kind, required_domain_type=kind, requires_newreg=False)
+                plan.update(local_target=True, main_target_kind=kind, required_domain_type=kind.removeprefix('sub_'), requires_newreg=False)
                 save(plan, target)
             except ValueError as error: reasons[target.id] = 'Не удалось подготовить схему: ' + str(error)
         else: unresolved.append(target)
@@ -130,6 +130,16 @@ def build(db, cfg, targets, sites, states, free):
                     try:save(stock.make_plan(db,cfg,target,state,entry,plans),target)
                     except ValueError as error:reasons[target.id]='Не удалось подготовить схему: '+str(error)
                     continue
+            if db.info.get('auto_pilot_preview'):
+                from app.pilot_domain_reuse import candidate as retired_candidate
+                try:
+                    plan=retired_candidate(db,cfg,target,states,sites,used,plans)
+                    save(plan,target)
+                    if plan['source_site_id']!=target.id:
+                        outgoing[plan['source_site_id']]+=1;directions.add((plan['source_site_id'],target.id))
+                    continue
+                except ValueError as error:
+                    reasons[target.id]=str(error)
             from app.mass_main_targets import subdomain_candidate
             from app.pilot_variations import parent_alternate
             from app.network_stock_warning import mark
@@ -153,6 +163,6 @@ def build(db, cfg, targets, sites, states, free):
                 save(fallback, target)
                 mark(db, target, state)
                 continue
-            reasons[target.id] = (CAPACITY_REASONS[0] if blocked else
+            reasons.setdefault(target.id, CAPACITY_REASONS[0] if blocked else
                 CAPACITY_REASONS[1] + (' Дропы из базы исключены для AZ.' if cross.geo_key(target.cache_geo) == 'AZ' else ''))
     return plans, reasons

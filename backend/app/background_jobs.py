@@ -60,6 +60,9 @@ def dispatch_pending(db, send, inflight_ids=None):
 
 def run_job(db, job_id):
     candidate = db.get(models.BackgroundJob, job_id)
+    if candidate and candidate.kind == 'pilot_row_replan':
+        from app.pilot_row_replan import execute
+        return execute(db, job_id)
     if candidate and candidate.kind == 'pilot_content_publication':
         from app.pilot_content_publication import execute
         return execute(db, job_id)

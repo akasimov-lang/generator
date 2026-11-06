@@ -431,6 +431,20 @@ def view(db,job):
         if row.get('completed_elsewhere'):
             from app.pilot_observed_reglues import apply
             apply(row, row['completed_elsewhere'])
+        if not preparing and not row.get('completed_elsewhere'):
+            from app.pilot_row_replan import eligible
+            try:
+                eligible(db,job,row['site_id'])
+                row['can_replan']=True
+            except (ValueError,NetworkConflict):
+                row['can_replan']=False
+            alternative=(job.result.get('items',{}).get(row['site_id'],{}).get('alternative') or {})
+            if alternative:
+                row['alternative']=deepcopy(alternative)
+                child=db.get(models.BackgroundJob,alternative.get('id'))
+                if child and child.status=='queued':row['alternative']['phase']=(child.result or {}).get('phase','network')
+                if child and alternative.get('status')=='ready':
+                    row.update(describe(db,child.result['plan']))
     snapshot['items'].sort(key=lambda row: (row['brand'].casefold(), row.get('geo', ''), row['project'].casefold(), row['site_id']))
     total=len(snapshot['items']);done=sum(r['status'] in launch.TERMINAL|{'skipped'} for r in snapshot['items'])
     snapshot['counts'] = {status:sum(row['status']==status for row in snapshot['items']) for status in snapshot['counts']}

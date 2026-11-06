@@ -23,8 +23,10 @@ def manual_pilot_allowed(db, site_id, run=None):
     job=db.get(models.BackgroundJob,job_id) if job_id else None
     if not job or job.kind!=KIND or job.status!='queued' or not job.payload.get('manual_start') or not job.payload.get('auto_pilot') or not job.payload.get('launched_at'):
         return False
-    if run and (run.initiator!=job.payload['actor'] or run.id!=str(uuid5(UUID(job.id),site_id)) or run.plan.get('scheduled')):
-        return False
+    if run:
+        from app.pilot_row_replan import authorized_run
+        if run.initiator!=job.payload['actor'] or run.plan.get('scheduled') or (run.id!=str(uuid5(UUID(job.id),site_id)) and not authorized_run(db,job,run)):
+            return False
     return any(p['site_id']==site_id for g in job.result['groups'] for p in g.get('plans',[]))
 
 

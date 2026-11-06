@@ -38,14 +38,15 @@ def participant_locks(db, site_id, plan):
         yield
 
 
-def transferable(source, state, domain):
+def transferable(source, state, domain, *, plan=None):
     from app.domain_redirects import require_transfer_free
     require_transfer_free(state, [domain])
     if not state.get('head_verified', state.get('has_head')):
         raise ValueError('Не подтверждены актуальные альтернейты исходной сетки.')
     key = domain_key(domain)
-    protected = [source.name, state['canon'], *reserved_domains(state), *state.get('amp_domains', []),
-                 *(source.main_domain_history or []), *(source.alternate_domain_history or []), *(source.x_default_history or [])]
+    from app.pilot_domain_reuse import allows
+    history = [] if allows(source,state,domain,plan) else [*(source.main_domain_history or []), *(source.alternate_domain_history or []), *(source.x_default_history or [])]
+    protected = [source.name, state['canon'], *reserved_domains(state), *state.get('amp_domains', []), *history]
     markup = state['alternateMarkup'].replace('{{settings.canon}}', state['canon'])
     protected += [link['domain'] for link in alternate_links(markup)]
     if domain not in state['domains'] or key in {domain_key(d) for d in protected}:
@@ -537,8 +538,8 @@ def execute(db, run):
                         raise ValueError('Настройки изменились после предпросмотра.')
                     if not source_matches(db, run, source_state) or not target_matches(db, run, target_state):
                         raise ValueError('Сетки изменились после предпросмотра. Подготовьте план снова.')
-                    transferable(source, source_state, domain)
-                    require_transfer_allowed(db, source, domain)
+                    transferable(source, source_state, domain, plan=plan)
+                    require_transfer_allowed(db, source, domain, plan=plan)
                     unique_membership(db, domain, {source.id})
                     run.plan = {**run.plan, 'started_at': datetime.now(timezone.utc).isoformat()}; db.commit()
                 if not change(db, run, source, 'delete_domain', source_state, domain=domain):
@@ -549,7 +550,7 @@ def execute(db, run):
                 if not run.plan.get('source_released'):
                     run.plan = {**run.plan, 'source_released': True}; db.commit()
                 if addition is None:
-                    require_transfer_allowed(db, target, domain)
+                    require_transfer_allowed(db, target, domain, plan=plan)
                     unique_membership(db, domain, set())
                     if target_state['canon'] != plan['old_main']:
                         raise ValueError('Main принимающей сетки изменился.')
