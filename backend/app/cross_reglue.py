@@ -229,8 +229,10 @@ def source_guard(state):
 def membership_matches(db, run, state, site_id, guard, domains):
     removed = set()
     added = set()
+    parent_id = run.plan.get('list_launch_id') or db.info.get('manual_pilot_job_id')
     for peer in db.scalars(select(models.AutoReglueRun)):
-        if peer.id == run.id or peer.plan.get('batch_id') != run.plan['batch_id']:
+        same_parent = bool(parent_id and peer.plan.get('list_launch_id') == parent_id)
+        if peer.id == run.id or (peer.plan.get('batch_id') != run.plan['batch_id'] and not same_parent):
             continue
         if peer.site_id == site_id:
             addition = db.get(models.NetworkOperation, receipt_id(peer, 'create_domains'))

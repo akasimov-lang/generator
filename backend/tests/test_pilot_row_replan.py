@@ -190,3 +190,30 @@ def test_contested_path_repairs_existing_variant_and_preserves_metadata(launched
     sent=[];launch.execute_step(db,parent.id,sent.append)
     assert len(sent)==1,parent.result['items'][site.id]
     assert db.get(models.AutoReglueRun,sent[0]).plan['fake_main_path']==plan['fake_main_path']
+
+
+def test_two_alternatives_share_donor_without_failing_each_other(pool,monkeypatch):
+    monkeypatch.setattr('app.reglue_title_h1.prepare_for_plan',lambda *a,**k:None)
+    db,sites,remotes,parent=make_preview(pool,3)
+    parent.kind=launch.KIND;parent.status='completed'
+    parent.payload={**parent.payload,'manual_start':True,'launched_at':datetime.now(timezone.utc).isoformat(),'streaming_start':True}
+    result=deepcopy(parent.result)
+    for row in result['items'].values():row.update(status='skipped',reason='Дропы выключены.')
+    parent.result=result;db.commit()
+    donor=sites[2]
+    remotes[donor.id].data['settings']['domains']+=['spare-a.test','spare-b.test','spare-c.test']
+    donor.domain_types={**donor.domain_types,**{d:'newreg' for d in ['spare-a.test','spare-b.test','spare-c.test']}};db.commit()
+    for site in sites[:2]:remotes[site.id].data['settings']['domains']=[site.cache_canon]
+    for site in sites[:2]:
+        request=uuid4();replan.request(db,parent.id,site.id,request,USER)
+        replan.execute(db,str(request));replan.execute(db,str(request))
+        assert db.get(models.BackgroundJob,str(request)).result['plan']['source_site_id']==sites[2].id
+        replan.start(db,parent.id,site.id,request,USER)
+    sent=[];launch.execute_step(db,parent.id,sent.append)
+    assert len(sent)==1,parent.result['items']
+    assert all(parent.result['items'][s.id]['status']!='failed' for s in sites[:2])
+    auto.execute(db,sent[0]);assert db.get(models.AutoReglueRun,sent[0]).status=='completed'
+    launch.execute_step(db,parent.id,sent.append)
+    assert len(set(sent))==2,parent.result['items']
+    auto.execute(db,sent[-1]);assert db.get(models.AutoReglueRun,sent[-1]).status=='completed'
+    assert remotes[sites[2].id].data['settings']['canon']==sites[2].name

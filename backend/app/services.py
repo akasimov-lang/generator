@@ -426,6 +426,9 @@ def detected_content_language(payload: dict) -> str | None:
     text = clean_text(" ".join(chunks))
     if len(re.findall(r"[^\W\d_]", text, flags=re.UNICODE)) < 400:
         return None
+    from app.azerbaijani_language import is_azerbaijani
+    if is_azerbaijani(text):
+        return "az"
     try:
         return normalized_language_code(detect(text))
     except LangDetectException:

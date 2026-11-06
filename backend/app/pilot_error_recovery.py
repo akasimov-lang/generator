@@ -2,6 +2,7 @@
 from copy import deepcopy
 from datetime import datetime, timezone
 from uuid import UUID, uuid4, uuid5
+from sqlalchemy import select
 
 from app import models, mass_reglue_launch as launch
 from app.project_network import NetworkConflict, network_lock
@@ -52,6 +53,8 @@ def transient_reason(reason):
     text=str(reason or '')
     return any(part in text for part in (
         'С сеткой уже выполняется операция', 'Ожидает освобождения сетки',
+        'Одна из сеток уже участвует в другом запуске',
+        'Одна из сеток уже участвует в незавершённом автопереклее',
         'уже используется или зарезервирован в другой сетке этого бренда и GEO',
     ))
 
@@ -65,17 +68,28 @@ def retry_transient_rows(db, job_id, actor):
             return {'job_id':str(job_id),'retried':[]}
         result=deepcopy(job.result)
         plans={p['site_id']:p for g in result.get('groups',[]) for p in g.get('plans',[])}
-        selected=[sid for sid,row in result.get('items',{}).items()
-            if sid in plans and row.get('status')=='failed' and transient_reason(row.get('reason'))
-            and not row.get('run_id') and not db.get(models.AutoReglueRun,run_id(job,plans[sid]))]
+        selected=[]; existing={}
+        for sid,row in result.get('items',{}).items():
+            if sid not in plans or row.get('status')!='failed' or not transient_reason(row.get('reason')):continue
+            run=db.get(models.AutoReglueRun,run_id(job,plans[sid]))
+            if run:
+                operations=db.scalar(select(models.NetworkOperation.id).where(models.NetworkOperation.request_payload['auto_run_id'].as_string()==run.id))
+                if run.site_id!=sid or run.status!='failed' or run.phase!='prepared' or operations or not transient_reason(run.message):continue
+                existing[sid]=run
+            elif row.get('run_id'):continue
+            selected.append(sid)
         if not selected:return {'job_id':job.id,'retried':[]}
         at=datetime.now(timezone.utc).isoformat();key='pilot-error-recovery:'+str(uuid4())
         db.add(models.AutoReglueConfig(key=key,value={'job_id':job.id,'actor':actor,'at':at,
-            'site_ids':selected,'status_before':job.status,'result_before':deepcopy(job.result)}))
+            'site_ids':selected,'status_before':job.status,'result_before':deepcopy(job.result),
+            'runs_before':{sid:{'id':r.id,'status':r.status,'phase':r.phase,'plan':deepcopy(r.plan),'message':r.message} for sid,r in existing.items()}}))
         for sid in selected:
             row=result['items'][sid]
             row['retry_history']=[*row.get('retry_history',[]),{'at':at,'actor':actor,'reason':row['reason'],'backup_key':key}]
             row.update(status='pending',reason=None,phase='prepared')
+            if sid in existing:
+                run=existing[sid];run.status='queued';run.message=None
+                row.update(run_id=run.id,status='queued')
         for g in result['groups']:
             if set(g['site_ids']).intersection(selected):g['status']='prepared'
         job.result=result;job.status='queued';job.error=None

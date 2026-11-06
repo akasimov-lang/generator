@@ -513,7 +513,7 @@ def prepare_run(db, site, request_id, token, username, scope=None, saved_plan=No
         if existing:
             if existing.site_id != site.id: raise ValueError('Этот запуск принадлежит другому проекту.')
             return existing, False
-        if any(active_run(db, key) for key in {site.id, plan.get('source_site_id', site.id)}): raise project_network.NetworkConflict('Одна из сеток уже участвует в незавершённом автопереклее.')
+        if any(active_run(db, key) for key in {site.id, plan.get('source_site_id', site.id)}): raise project_network.NetworkBusy('Одна из сеток уже участвует в незавершённом автопереклее. Ожидаем завершения автоматически.')
         require_available(db, site, plan.get('fake_main_path'))
         run = models.AutoReglueRun(id=str(request_id), site_id=site.id, initiator=username, plan=plan, status='queued', phase='prepared')
         if plan.get('reserve_pool_id'):

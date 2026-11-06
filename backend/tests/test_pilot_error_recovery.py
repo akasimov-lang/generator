@@ -51,3 +51,17 @@ def test_transient_recovery_reuses_alternative_identity_and_leaves_real_errors(e
     assert job.result['items'][done]==before['items'][done]
     assert job.result['items'][started]==before['items'][started]
     assert retry_transient_rows(db,job.id,'test')['retried']==[]
+
+
+def test_transient_recovery_requeues_unstarted_receipt_instead_of_creating_another(env):
+    from app.pilot_error_recovery import retry_transient_rows
+    from app.pilot_row_replan import run_id
+    db,site,_=env
+    plan={'site_id':site.id,'new_main':'next.test'};reason='Одна из сеток уже участвует в другом запуске.'
+    parent=models.BackgroundJob(id=str(uuid4()),kind=launch.KIND,status='completed',payload={'streaming_start':True},result={'items':{site.id:{'status':'failed','reason':reason}},'groups':[{'site_ids':[site.id],'plans':[plan],'status':'done'}]})
+    db.add(parent);db.flush()
+    run=models.AutoReglueRun(id=run_id(parent,plan),site_id=site.id,initiator='test',status='failed',phase='prepared',message=reason,plan=plan)
+    db.add(run);db.commit()
+    assert retry_transient_rows(db,parent.id,'test')['retried']==[site.id]
+    assert run.status=='queued' and parent.result['items'][site.id]['run_id']==run.id
+    assert retry_transient_rows(db,parent.id,'test')['retried']==[]

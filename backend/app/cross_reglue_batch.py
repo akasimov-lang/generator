@@ -322,7 +322,7 @@ def reserve(db, batch_id, items, username, *, scheduled=None):
             if auto.digest(auto.config(db).model_dump()) != plan['config_hash']:
                 raise network.NetworkConflict('Настройки изменились после предпросмотра.')
             if any(auto.blocking_run(db, site_id, run) for site_id in (plan['source_site_id'], run.site_id)):
-                raise network.NetworkConflict('Одна из сеток уже участвует в другом запуске.')
+                raise network.NetworkBusy('Одна из сеток уже участвует в другом запуске. Ожидаем завершения автоматически.')
             if scheduled:
                 schedule, due, now = scheduled[run.site_id]
                 run.plan = {**run.plan, 'scheduled': True, 'scheduled_for': due.isoformat()}
