@@ -1,0 +1,43 @@
+/* PagePilot: project navigation and readable inner pages, 2026-11-06 */
+main.mainContent { width: 100%; min-width: 0; }
+.header-inner { gap: 20px; }
+.header-inner .brand, .header-inner .actions { flex-shrink: 0; }
+.header-inner .actions .account-link { padding: 11px 16px; white-space: nowrap; }
+.pp-menu-toggle { display: none; }
+.pp-main-menu { flex: 1 1 auto; min-width: 0; }
+.pp-main-menu ul { list-style: none; margin: 0; padding: 0; }
+.pp-main-menu > ul { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+.pp-main-menu li { position: relative; margin: 0; padding: 0; }
+.pp-main-menu a { display: block; padding: 9px 10px; border-radius: 8px; color: #fff; font-size: 14px; line-height: 1.4; font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+.pp-main-menu a:hover, .pp-main-menu a:focus-visible { background: #ffffff18; outline: 2px solid #f8c54d; outline-offset: 1px; }
+.pp-main-menu li > ul { display: none; position: absolute; top: 100%; left: 0; z-index: 35; width: 240px; padding: 8px; border: 1px solid #ffffff40; border-radius: 10px; background: #063e43; box-shadow: 0 12px 28px #002b2844; }
+.pp-main-menu li:hover > ul, .pp-main-menu li:focus-within > ul { display: block; }
+.pp-main-menu li li > ul { left: 100%; top: 0; }
+body[data-pilot-page]:not([data-pilot-page="/"]):not([data-pilot-page=""]) .content { max-width: 1100px; margin: 0 auto; padding: 40px 24px 56px; }
+body[data-pilot-page]:not([data-pilot-page="/"]):not([data-pilot-page=""]) .content-block { padding: 0; min-width: 0; overflow-wrap: anywhere; }
+body[data-pilot-page]:not([data-pilot-page="/"]):not([data-pilot-page=""]) h1 { margin: 0 0 28px; font-size: clamp(28px, 3.2vw, 44px); line-height: 1.2; text-wrap: balance; }
+body[data-pilot-page]:not([data-pilot-page="/"]):not([data-pilot-page=""]) .content-block h2 { margin-top: 36px; font-size: clamp(24px, 2.4vw, 32px); }
+.content-block .general-table-wrapper { max-width: 100%; overflow-x: auto; margin: 24px 0; border: 1px solid #d7e4df; border-radius: 10px; }
+.content-block figure { max-width: 100%; margin: 24px 0; }
+.content-block img { max-width: 100%; height: auto; }
+.content-block .button-block { margin: 24px 0; }
+.content-block .btn-content { display: inline-flex; align-items: center; justify-content: center; max-width: 100%; min-height: 48px; padding: 13px 24px; border: 1px solid #c97359; border-radius: 9px; background: #ff987b; color: #173a3d; box-shadow: 0 4px 0 #d57960; font: inherit; font-weight: 700; line-height: 1.4; text-align: center; cursor: pointer; }
+.content-block .btn-content:hover { background: #ffb29c; }
+.content-block .btn-content:focus-visible { outline: 3px solid #08716e; outline-offset: 4px; }
+@media (max-width: 1100px) {
+  .header-inner { flex-wrap: wrap; justify-content: space-between; gap: 12px; padding: 12px 24px; }
+  .pp-menu-toggle { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; padding: 10px 12px; border: 1px solid #ffffff60; border-radius: 8px; background: transparent; color: white; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .pp-menu-toggle:focus-visible { outline: 3px solid #f8c54d; outline-offset: 3px; }
+  .pp-main-menu { display: none; order: 4; flex-basis: 100%; max-height: 65vh; overflow-y: auto; border-top: 1px solid #ffffff30; padding-top: 10px; }
+  .pp-main-menu.pp-open { display: block; }
+  .pp-main-menu > ul { display: block; }
+  .pp-main-menu a { padding: 12px; }
+  .pp-main-menu li > ul, .pp-main-menu li li > ul { display: block; position: static; width: auto; margin-left: 16px; padding: 0 0 0 8px; border: 0; border-left: 1px solid #ffffff40; border-radius: 0; box-shadow: none; }
+}
+@media (max-width: 760px) {
+  .header-inner { padding: 12px 16px; }
+  .header-inner .actions { order: 3; width: 100%; }
+  .header-inner .actions .account-link { flex: 1; padding: 10px 12px; font-size: 13px; }
+  body[data-pilot-page]:not([data-pilot-page="/"]):not([data-pilot-page=""]) .content { padding: 28px 18px 40px; }
+  .content-block .btn-content { width: 100%; }
+}
