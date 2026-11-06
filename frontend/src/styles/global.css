@@ -10578,3 +10578,18 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .pilotContentShare { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; margin: 14px 0; }
 .pilotContentShare input { width: 76px; padding: 5px 8px; }
 .pilotContentShare small { color: var(--muted); font-size: 12px; }
+
+/* Existing menu is context; only the bright proposed tree is submitted. */
+.generatedMenuPreviewLegend { color: var(--muted); font-size: 13px; margin: 8px 0 12px; }
+.generatedMenuPreviewRow.proposed .generatedMenuPreviewText strong,
+.generatedMenuPreviewRow.proposed .generatedMenuPreviewText code { color: var(--primary); font-weight: 650; }
+.generatedMenuPreviewRow.existing { border-left-color: var(--border); background: var(--surface-2); color: var(--muted); }
+.generatedMenuPreviewRow.existing .generatedMenuPreviewBranch,
+.generatedMenuPreviewRow.existing .generatedMenuPreviewText strong,
+.generatedMenuPreviewRow.existing .generatedMenuPreviewText code,
+.generatedMenuPreviewRow.existing .generatedMenuPreviewText b,
+.generatedMenuPreviewRow.existing .generatedMenuPreviewText em { color: var(--muted); font-weight: 400; }
+.generatedMenuPreviewRow.existing .generatedMenuPreviewText b,
+.generatedMenuPreviewRow.existing .generatedMenuPreviewText em { background: transparent; }
+.generatedMenuPreviewTree.existing.nested,
+.generatedMenuPreviewTree.existing.nested > li::before { border-color: var(--border); }

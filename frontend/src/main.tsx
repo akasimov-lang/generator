@@ -5644,8 +5644,15 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
   }
 
   const generatedPreviewNodes = previewNodes(generatedMenuPreview?.items || []);
-  const existingPreviewPaths = new Set(previewNodes((site.default_menu[generatedMenuPreview?.menu_type || generatedMenuType] || []) as GeneratedMenuStructureItem[]).map(node => node.item.slug));
-  const generatedPreviewError = !generatedMenuPreview ? "" : !generatedPreviewNodes.length ? "В предпросмотре нет пунктов. Сгенерируйте структуру заново." : generatedPreviewNodes.some(node => !node.item.title.trim() || !/^\/[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)*\/?$/.test(node.item.slug)) ? "Заполните названия и относительные URL пунктов, например /privacy-policy/." : new Set(generatedPreviewNodes.map(node => node.item.slug.replace(/\/$/, ""))).size !== generatedPreviewNodes.length ? "В предпросмотре повторяются URL. Измените URL или удалите лишние строки." : generatedPreviewNodes.some(node => existingPreviewPaths.has(node.item.slug)) ? "Некоторые URL уже есть в этом меню. Измените их или удалите строки с отметкой «Уже в меню»." : "";
+  const existingPreviewMenuType = generatedMenuPreview?.menu_type || generatedMenuType;
+  const toPreviewItems = (nodes: MenuTreeNode[]): GeneratedMenuStructureItem[] => nodes.map(node => ({
+    title: node.item.title, slug: node.item.path, content_kind: "menu_page", children: toPreviewItems(node.children)
+  }));
+  const existingPreviewItems = toPreviewItems(buildMenuTree(
+    existingPreviewMenuType === "header" ? cachedHeader : cachedFooter, []
+  ));
+  const existingPreviewPaths = new Set(previewNodes(existingPreviewItems).map(node => normalizedTreePath(node.item.slug)));
+  const generatedPreviewError = !generatedMenuPreview ? "" : !generatedPreviewNodes.length ? "В предпросмотре нет пунктов. Сгенерируйте структуру заново." : generatedPreviewNodes.some(node => !node.item.title.trim() || !/^\/[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)*\/?$/.test(node.item.slug)) ? "Заполните названия и относительные URL пунктов, например /privacy-policy/." : new Set(generatedPreviewNodes.map(node => node.item.slug.replace(/\/$/, ""))).size !== generatedPreviewNodes.length ? "В предпросмотре повторяются URL. Измените URL или удалите лишние строки." : generatedPreviewNodes.some(node => existingPreviewPaths.has(normalizedTreePath(node.item.slug))) ? "Некоторые URL уже есть в этом меню. Измените их или удалите строки с отметкой «Уже в меню»." : "";
   function updateGeneratedPreview(items: GeneratedMenuStructureItem[]) {
     setFormError("");
     setGeneratedMenuLevels(previewDepth(items));
@@ -5655,16 +5662,16 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
     }
     setGeneratedMenuPreview(current => current ? { ...current, items, levels: previewDepth(items), top_level_count: items.length } : current);
   }
-  function renderGeneratedMenuPreview(items: GeneratedMenuStructureItem[], depth = 0, parentPath = ""): React.ReactNode {
-    return <ul className={`generatedMenuPreviewTree ${depth === 0 ? "root" : "nested"}`}>{items.map((item, index) => {
+  function renderGeneratedMenuPreview(items: GeneratedMenuStructureItem[], depth = 0, parentPath = "", existing = false): React.ReactNode {
+    return <ul className={`generatedMenuPreviewTree ${depth === 0 ? "root" : "nested"} ${existing ? "existing" : "proposed"}`}>{items.map((item, index) => {
       const itemPath = parentPath ? `${parentPath}.${index}` : String(index);
       const label = itemPath.split('.').map(part => Number(part) + 1).join('.');
-      const editing = editingGeneratedPath === itemPath;
+      const editing = !existing && editingGeneratedPath === itemPath;
       return <li key={itemPath}>
-        <div className={`generatedMenuPreviewRow level${depth + 1}`}>
+        <div className={`generatedMenuPreviewRow level${depth + 1} ${existing ? "existing" : "proposed"}`}>
           <span className="generatedMenuPreviewBranch" aria-hidden="true">{depth === 0 ? <FolderKanban size={16} /> : <CornerDownRight size={16} />}</span>
-          <span className="generatedMenuPreviewText"><span><b>Уровень {depth + 1}</b><strong>{item.title || "Без названия"}</strong>{item.content_kind === "casino_review" ? <em>Обзор казино</em> : item.content_kind === "technical_page" ? <em>Техническая страница</em> : null}{existingPreviewPaths.has(item.slug) && <em className="previewDuplicate">Уже в меню</em>}</span><code>{item.slug || "URL не задан"}</code></span>
-          <div className="generatedMenuPreviewActions"><button type="button" className="iconButton" aria-label={`Изменить пункт ${label}`} title="Изменить название, URL и вложенность" disabled={applyingGeneratedMenu} onClick={() => setEditingGeneratedPath(editing ? null : itemPath)}><Edit3 size={15}/></button><button type="button" className="iconButton danger" aria-label={`Удалить пункт ${label}`} title="Удалить строку и её подпункты из предпросмотра" disabled={applyingGeneratedMenu} onClick={() => { updateGeneratedPreview(editPreviewItem(generatedMenuPreview!.items, itemPath, null)); setEditingGeneratedPath(null); }}><Trash2 size={15}/></button></div>
+          <span className="generatedMenuPreviewText"><span><b>Уровень {depth + 1}</b><strong>{item.title || "Без названия"}</strong><em className="previewItemOrigin">{existing ? "Существующий" : "Новый"}</em>{item.content_kind === "casino_review" ? <em>Обзор казино</em> : item.content_kind === "technical_page" ? <em>Техническая страница</em> : null}{!existing && existingPreviewPaths.has(normalizedTreePath(item.slug)) && <em className="previewDuplicate">Уже в меню</em>}</span><code>{item.slug || "URL не задан"}</code></span>
+          {!existing && <div className="generatedMenuPreviewActions"><button type="button" className="iconButton" aria-label={`Изменить пункт ${label}`} title="Изменить название, URL и вложенность" disabled={applyingGeneratedMenu} onClick={() => setEditingGeneratedPath(editing ? null : itemPath)}><Edit3 size={15}/></button><button type="button" className="iconButton danger" aria-label={`Удалить пункт ${label}`} title="Удалить строку и её подпункты из предпросмотра" disabled={applyingGeneratedMenu} onClick={() => { updateGeneratedPreview(editPreviewItem(generatedMenuPreview!.items, itemPath, null)); setEditingGeneratedPath(null); }}><Trash2 size={15}/></button></div>}
         </div>
         {editing && <div className="generatedMenuPreviewFields">
           <label>Название<input aria-label={`Название пункта ${label}`} maxLength={generatedMenuPreview?.mode === "technical_pages" ? 60 : 40} value={item.title} onChange={event => updateGeneratedPreview(editPreviewItem(generatedMenuPreview!.items, itemPath, { title: event.target.value }))}/></label>
@@ -5672,7 +5679,7 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
           {generatedMenuPreview?.mode !== "casino_reviews" && <label>Родитель<SearchableSelect compact ariaLabel={`Родитель пункта ${label}`} value={parentPath} options={[{value:"", label:"Без вложенности"}, ...generatedPreviewNodes.filter(node => node.path !== itemPath && !node.path.startsWith(`${itemPath}.`) && node.depth + previewDepth([item]) <= 3).map(node => ({value:node.path, label:`${node.item.title} · ур. ${node.depth}`}))]} searchPlaceholder="Найти родительский пункт" onChange={value => { updateGeneratedPreview(movePreviewItem(generatedMenuPreview!.items, itemPath, value)); setEditingGeneratedPath(null); }}/></label>}
           <button type="button" className="button compact secondary" onClick={() => setEditingGeneratedPath(null)}>Готово</button>
         </div>}
-        {item.children?.length ? renderGeneratedMenuPreview(item.children, depth + 1, itemPath) : null}
+        {item.children?.length ? renderGeneratedMenuPreview(item.children, depth + 1, itemPath, existing) : null}
       </li>;
     })}</ul>;
   }
@@ -5843,7 +5850,10 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
           {generatedMenuPreview ? (
             <section className="generatedMenuPreview">
               <header><strong>Предпросмотр</strong><span>{generatedMenuPreview.language.toUpperCase()} · {generatedMenuPreview.geo.toUpperCase()} · {generatedMenuPreview.levels} ур. · верхних пунктов: {generatedMenuPreview.top_level_count} · всего: {generatedPreviewNodes.length}</span></header>
+              <p className="generatedMenuPreviewLegend">Серым — существующие пункты. Ярким — новые: нажмите карандаш, чтобы изменить название, URL или вложенность.</p>
+              {generatedMenuPreview.mode !== "casino_reviews" && renderGeneratedMenuPreview(existingPreviewItems, 0, "", true)}
               {renderGeneratedMenuPreview(generatedMenuPreview.items)}
+              {generatedMenuPreview.mode === "casino_reviews" && renderGeneratedMenuPreview(existingPreviewItems, 0, "", true)}
               {generatedPreviewError && <p className="formError" role="status">{generatedPreviewError}</p>}
             </section>
           ) : <div className="siteMenuPreviewEmpty">Нажмите «Сгенерировать», чтобы увидеть будущую структуру.</div>}
