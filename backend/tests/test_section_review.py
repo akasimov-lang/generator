@@ -9,7 +9,8 @@ from app.security import require_auth
 from test_api_serialization import make_client
 
 
-def test_review_toggle_is_durable_and_scoped_to_exact_menu_item():
+def test_review_toggle_is_durable_and_scoped_to_exact_menu_item(monkeypatch):
+    monkeypatch.setattr("app.menu_page_scope.current_paths", lambda db, site: set())
     client, sessions = make_client()
     with sessions() as db:
         site = db.scalar(select(models.Site))

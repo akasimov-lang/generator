@@ -1147,3 +1147,33 @@ def test_publication_retry_checks_remote_page_and_exposes_progress(db, monkeypat
     assert progress[0][2] == 502
     logs = db.scalars(select(models.PublicationLog).where(models.PublicationLog.content_item_id == item.id)).all()
     assert all(log.request_payload.get('token') != 'secret-token' for log in logs)
+
+
+@pytest.mark.parametrize("remote_state", ["exists", "unavailable", "absent"])
+def test_new_menu_page_checks_webdev_before_first_publication(db, monkeypatch, remote_state):
+    import httpx
+    from unittest.mock import AsyncMock
+    site, item = make_content(db)
+    site.name = "menu-scope.example"
+    site.cache_server_ip = "bear"
+    item.generation_context = {"menu_page_creation_only": True}
+    db.commit()
+    monkeypatch.setattr(service_module, "refresh_project_server_id", lambda *_: "bear")
+    monkeypatch.setattr(service_module, "refresh_project_server_token", AsyncMock(return_value="token"))
+    calls = []
+    class Client:
+        def __init__(self, **kwargs): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def get(self, endpoint, headers):
+            calls.append("read")
+            if remote_state == "unavailable": raise httpx.ReadTimeout("unavailable")
+            pages = [{"id": "old", "slug": "/test/", "title": "Existing original"}] if remote_state == "exists" else []
+            return httpx.Response(200, json={"data": {"pages": pages}}, request=httpx.Request("GET", endpoint))
+        async def post(self, endpoint, json, headers):
+            calls.append("write")
+            return httpx.Response(201, json={"success": True})
+    monkeypatch.setattr(service_module.httpx, "AsyncClient", Client)
+    asyncio.run(publish_item(db, item, site))
+    assert calls == (["read", "write"] if remote_state == "absent" else ["read"])
+    assert item.status == ("publication_pending_confirmation" if remote_state == "absent" else "publication_failed")

@@ -22,7 +22,9 @@ from app.services import (
 
 
 @pytest.fixture()
-def db() -> Session:
+def db(monkeypatch) -> Session:
+    # These tests describe menu selection; remote-page coverage has its own suite.
+    monkeypatch.setattr("app.menu_page_scope.current_paths", lambda db, site: set())
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     Base.metadata.create_all(bind=engine)

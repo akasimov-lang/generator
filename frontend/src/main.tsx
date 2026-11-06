@@ -6884,7 +6884,7 @@ function TasksView({
       {menuStructureFormExpanded ? (
         <Modal
           title="Генерация по структуре меню"
-          subtitle="По одному релевантному тексту для каждого пункта и всех его дочерних разделов"
+          subtitle="Новые тексты только для пунктов меню без страницы на сайте"
           onClose={() => setMenuStructureFormExpanded(false)}
           wide
           className="createGenerationTaskModal"
@@ -6908,7 +6908,7 @@ function TasksView({
                 <label className="checkboxRow"><input type="checkbox" checked={menuStructureAutoPublish} onChange={(event) => setMenuStructureAutoPublish(event.target.checked)} /> Принять и опубликовать</label>
               </div>
             </fieldset>
-            <div className="menuStructureSummary wide">Будут созданы релевантные MAIN-тексты для всех корневых и дочерних пунктов выбранных меню, у которых ещё нет контента. Каждый текст автоматически привязывается к своему пункту и URL.</div>
+            <div className="menuStructureSummary wide">Перед запуском проверим страницы на сайте и тексты в панели. Создадим тексты только для пунктов без страницы и без текущей задачи. Существующие страницы сохранятся. Каждый новый текст привязывается к своему пункту и URL.</div>
             {taskError ? <span className="formError wide">{taskError}</span> : null}
             <div className="formActions wide"><button className="button secondary" type="button" onClick={() => setMenuStructureFormExpanded(false)} disabled={creatingMenuStructure}>Отменить</button><button className="button primary" type="submit" disabled={creatingMenuStructure}><Play size={18} /> {creatingMenuStructure ? "Запускаем" : "Создать и запустить"}</button></div>
           </form>

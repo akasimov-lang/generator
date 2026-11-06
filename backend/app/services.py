@@ -3477,6 +3477,8 @@ def create_menu_structure_task(
     payload: MenuStructureGenerationCreate,
     created_by_user_id: str | None = None,
 ) -> models.GenerationTask:
+    from app.menu_page_scope import current_paths
+    existing_page_paths = current_paths(db, site)
     content_language = project_content_language(site, payload.language)
     menu_types = set(payload.menu_types or ["header"])
     requested_ids = set(payload.section_ids)
@@ -3575,7 +3577,7 @@ def create_menu_structure_task(
     seen_paths: set[str] = set()
     for section in all_sections:
         normalized_path = _normalized_project_slug(section.path)
-        if section.menu_type not in menu_types or normalized_path == "/":
+        if section.menu_type not in menu_types or normalized_path == "/" or normalized_path in existing_page_paths:
             continue
         if requested_ids and section.id not in requested_ids:
             continue
@@ -3677,6 +3679,7 @@ def create_menu_structure_task(
             include_casino_rating=False,
             generation_context={
                 "content_kind": "casino_review" if is_casino_review else "menu_page",
+                "menu_page_creation_only": True,
                 "homepage_interlinking": payload.homepage_interlinking,
                 **({
                     "homepage_anchor": anchor_pool[(index - 1) % len(anchor_pool)],
@@ -5489,7 +5492,9 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
                 on_retry=record_retry,
                 on_attempt=record_attempt,
                 before_retry=verify_before_retry,
-                verify_first=needs_retry_preflight,
+                verify_first=needs_retry_preflight or bool(
+                    (item.generation_context or {}).get("menu_page_creation_only") and not is_republication
+                ),
                 json=request_payload,
                 headers={
                     "Authorization": f"Bearer {token}",
