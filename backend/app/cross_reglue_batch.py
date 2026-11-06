@@ -352,7 +352,10 @@ def authorize(db, run):
     if row.value.get('run_ids', {}).get(run.site_id) != run.id:
         raise ValueError('Запуск не зарезервирован в массовом распределении.')
     original = next((p for p in row.value['plans'] if p['site_id'] == run.site_id), None)
-    if not original or any(run.plan.get(k) != v for k, v in original.items()):
+    from app.pilot_content_publication import enabled
+    parent = db.get(models.BackgroundJob, run.plan['list_launch_id']) if run.plan.get('list_launch_id') else None
+    generated_fields = {'title_h1_preview', 'title_h1_error', 'paragraphs_preview', 'paragraphs_error'} if enabled(parent) else set()
+    if not original or any(run.plan.get(k) != v for k, v in original.items() if k not in generated_fields):
         raise ValueError('Исходный план распределения изменён.')
 
 

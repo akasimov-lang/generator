@@ -632,6 +632,10 @@ def _execute(db, run_id):
                     verify_pages(list(dict.fromkeys(['https://' + target + '/', *plan['required_page_urls']])))
                 except (httpx.HTTPError, ValueError):
                     run.status = 'waiting'; run.message = 'Поддомен добавлен. Ждём HTTPS и доступности страниц схемы; Main ещё не меняем.'; db.commit(); return
+            from app.reglue_settle import ready as provisioning_settled
+            created = db.get(models.NetworkOperation, str(uuid5(UUID(run.id), 'create_subdomains')))
+            if not provisioning_settled(db, run, created, state):
+                return
             run.status = 'running'; db.commit()
             for action in ['reserve', 'reglue', 'alternates']:
                 db.refresh(run)

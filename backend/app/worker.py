@@ -509,7 +509,13 @@ def auto_reglue_recheck_job(self, run_id: str, retry_title_h1: bool = False, req
             if automatic:
                 from app.reglue_monitor import check
                 return check(db, run_id)
-            return check_run(db, run_id, retry_title_h1=retry_title_h1, request_id=request_id)
+            result = check_run(db, run_id, retry_title_h1=retry_title_h1, request_id=request_id)
+            from app.reglue_resume import resumable
+            run = db.get(models.AutoReglueRun, run_id)
+            if result and result.get('status') == 'mismatch' and resumable(run):
+                run.status = 'waiting'; db.commit()
+                auto_reglue_job.delay(run_id)
+            return result
     except NetworkConflict as error:
         raise self.retry(exc=error, countdown=15)
 

@@ -7,6 +7,32 @@ from sqlalchemy import select
 from app import models
 
 
+def retry_saved_head(db, parent, child, head, desired, before):
+    """A bounded retry of the exact idempotent PATCH after a verified 5xx failure."""
+    from datetime import datetime, timedelta, timezone
+    from app.reglue_history import utc
+    run_id = parent.request_payload.get('auto_run_id')
+    run = db.get(models.AutoReglueRun, run_id) if run_id else None
+    if not run or run.status == 'cancelled' or not run.plan.get('list_launch_id'):
+        return False
+    if child.status not in {'unknown', 'failed'} or not child.response_status or child.response_status < 500:
+        return False
+    retries = child.request_payload.get('head_retries', [])
+    if len(retries) >= 2 or not isinstance(head, dict) or any(head.get(k) != before.get(k) for k in desired):
+        return False
+    now = datetime.now(timezone.utc)
+    attempted = utc(retries[-1]['at']) if retries else utc(child.updated_at)
+    if not attempted or now < attempted + timedelta(seconds=15):
+        return False
+    child.request_payload = {**child.request_payload, 'head_retries': [*retries, {
+        'at': now.isoformat(), 'previous_status': child.response_status, 'previous_message': child.message}]}
+    child.status = 'pending'
+    child.response_status = None
+    child.message = 'Повторяем сохранение неизменившейся разметки после ошибки сервера.'
+    db.commit()  # The retry count survives a worker restart.
+    return True
+
+
 def receipt_id(parent):
     return str(uuid5(UUID(parent.id), 'reglue-head' if parent.action == 'reglue' else 'fake-main-head'))
 
@@ -36,7 +62,9 @@ def continue_pending(db, site, remote, state, project):
             parent.message = confirmed
             db.commit()
             continue
-        if child is None:
+        before = payload.get('head_before', {})
+        retry = bool(child and retry_saved_head(db, parent, child, project.get('head'), desired, before))
+        if child is None or retry:
             before = payload['head_before']
             # Another editor may have changed the markup since the path was saved.
             head = project.get('head')
@@ -50,7 +78,8 @@ def continue_pending(db, site, remote, state, project):
                 parent.message = subject + ' изменён, но разметка Webdev изменилась отдельно. Автоматическая замена отменена; проверьте canonical и альтернейты.'
                 db.commit()
                 continue
-            child = models.NetworkOperation(id=receipt_id(parent), site_id=site.id,
+            if child is None:
+                child = models.NetworkOperation(id=receipt_id(parent), site_id=site.id,
                 action='alternates', initiator=parent.initiator, status='pending',
                 request_payload={'folder': payload['folder'],
                     'alternateMarkup': desired.get('alternateMarkup', state['alternateMarkup']),
@@ -60,8 +89,8 @@ def continue_pending(db, site, remote, state, project):
                     'head_sync': desired,
                     'alternates_before': {'markup': state['alternateMarkup'], 'enabled': state['enableAlternates']},
                     'canonical_before': {k: state[k] for k in ('enableCanonical', 'canonicalDefaultMarkup', 'canonicalFakeMainMarkup')}},
-                message='Обновляем прежние адреса в разметке.')
-            db.add(child)
+                    message='Обновляем прежние адреса в разметке.')
+                db.add(child)
             db.commit()  # Record the only write attempt before I/O.
             try:
                 code, body = remote.request('PATCH', '/projects/update-head', {'folder': payload['folder'], **desired})

@@ -1,4 +1,4 @@
-"""Confirm reviewed homepage edits before provisioning or changing Main."""
+"""Publish homepage edits separately for manually launched saved plans."""
 from datetime import datetime, timezone
 from uuid import UUID, uuid5
 
@@ -17,8 +17,8 @@ def failure_status(db, run, before_network):
 def before_network(db, run, state):
     """Keep network resume phases intact, including after an uncertain page save.
 
-    Existing operations whose Main has already changed may finish their reviewed
-    content. New runs must confirm it while the saved old Main is still current.
+    Manual plans delegate content to durable publication jobs. Other runs retain
+    the existing requirement to confirm content before changing Main.
     """
     if not any(run.plan.get(key) for key in ('rewrite_title_h1', 'rewrite_paragraphs')):
         return True
@@ -28,6 +28,12 @@ def before_network(db, run, state):
     if state['canon'] != old_main and not (
             state['canon'] == new_main and main_receipt and main_receipt.status == 'confirmed'):
         raise ValueError('Main изменился вне этого запуска. Сохранение контента остановлено.')
+    from app.pilot_content_publication import attach
+    if attach(db, run):
+        run.phase = run.plan.get('content_return_phase', run.phase)
+        run.plan = {key: value for key, value in run.plan.items() if key != 'content_return_phase'}
+        db.commit()
+        return True
     original_phase = run.plan.get('content_return_phase', run.phase)
     run.plan = {**run.plan, 'content_return_phase': original_phase}
     db.commit()

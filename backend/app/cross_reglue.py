@@ -575,6 +575,10 @@ def execute(db, run):
                     raise ValueError('Создание поддомена не подтверждено Webdev.')
             if not extractions_ready(db, run):
                 raise SourceBusy('Домен добавлен из очереди. Ждём остальные извлечения группы перед сменой Main.')
+            from app.reglue_settle import ready as provisioning_settled
+            created = db.get(models.NetworkOperation, receipt_id(run, 'create_subdomains' if plan.get('create_subdomain') else 'create_domains'))
+            if not provisioning_settled(db, run, created, target_state):
+                return
             if plan.get('create_fake_main_path'):
                 fake_path = plan['create_fake_main_path']
                 if not db.get(models.NetworkOperation, receipt_id(run, 'create_fake_main')):

@@ -18,7 +18,7 @@ def queue_for(db, job):
         'menu_generation': 'short_generation', 'generation_retry': 'generation',
         'maintenance_report': 'automation', 'mass_reglue_list': 'automation',
         'pilot_internal_pages': 'short_generation', 'template_knowledge': 'maintenance',
-        'publication': 'publication', 'page_autolink': 'publication',
+        'publication': 'publication', 'page_autolink': 'publication', 'pilot_content_publication': 'publication',
         'transfer_report_check': 'automation', 'site_template': 'generation',
         'auto_lb': 'generation', 'article_image': 'short_generation',
     }.get(job.kind, 'cache_sync')

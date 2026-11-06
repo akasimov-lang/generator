@@ -9,6 +9,9 @@ from test_project_network import env
 
 @pytest.fixture
 def setup(env, monkeypatch):
+    # Provisioning time is exercised explicitly in test_reglue_resume; other
+    # transfer contracts use an elapsed grace period.
+    monkeypatch.setattr('app.reglue_settle.SECONDS', 0)
     db, source, _ = env
     source.brand = 'Pin-Up'; source.cache_geo = 'az-AZ'; source.project_status = 'mass_actions'
     target = models.Site(name='destination.test', base_url='https://target.test', publication_endpoint='https://target.test/api', brand='Pin-Up', cache_geo='AZ', project_status='mass_actions', cache_canon='target.test')

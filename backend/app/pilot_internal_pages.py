@@ -140,8 +140,9 @@ def plan_options(parent):
 def report_metadata(db, parent):
     """No extra DB reads for old plans or a zero-percent selection."""
     metadata = {"status": parent.status, "finished_at": parent.finished_at, "updated_at": parent.updated_at}
+    from app.pilot_content_publication import merge_metadata
     if not plan_options(parent):
-        return metadata
+        return merge_metadata(db, parent, metadata)
     jobs = db.scalars(select(models.BackgroundJob).where(
         models.BackgroundJob.kind == KIND,
         models.BackgroundJob.payload["parent_job_id"].as_string() == parent.id,
@@ -156,7 +157,7 @@ def report_metadata(db, parent):
         metadata["status"] = "partial"
     metadata["finished_at"] = _latest([parent.finished_at, *(state.get("finished_at") for state in states)]) if metadata["status"] in TERMINAL else None
     metadata["updated_at"] = _latest([parent.updated_at, *(state.get("updated_at") for state in states)])
-    return metadata
+    return merge_metadata(db, parent, metadata)
 
 
 def report_status(db, parent):

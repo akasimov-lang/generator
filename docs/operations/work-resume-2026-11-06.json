@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-11-06T17:10:00Z",
-  "last_confirmed_production": "10cb524781388845a542fc2243929a23b6d00464",
+  "updated_at": "2026-11-06T18:10:00Z",
+  "last_confirmed_production": "9363453720553abbaf5f9b9d4b477f9044aeb1a9",
   "in_this_release": [
     "30 concurrent large-text jobs in a shared generation/pilot_texts pool",
     "Dedicated short-generation, planning and dispatcher workers",
@@ -11,11 +11,13 @@
     "Mixed heading mode defaults; current Main and Fibery in plan rows"
   ],
   "next_authorized_work": [
-    "Separate network execution from pending text generation for already-launched plans; publish each reviewed field as ready, with receipts and before/after history",
-    "Expand internal-page planner to existing menus and general-keyword projects; preserve selected Main targets; plan3033 content50%, internal pages40%",
-    "Investigate Betonred unavailable targets and remove monthly transfer delay only within same brand/GEO while retaining ownership and ban protections",
-    "Verify Vitalina favorites: current5;42 archived by inventory cleanup2026-10-20; do not blindly restore unavailable projects",
-    "Mirror isolated-clone changes into original dirty worktree without overwriting unrelated work"
+    "Batch1 deploy tested receipt recovery, 15s provisioning wait and independent text publication; recheck all stalled3033 runs and continue same receipts",
+    "Batch2 alldaybabyla.com (project pelicancasino-reg.com): repair shared inner template/content buttons, desktop menu between logo/account actions, compact mobile burger",
+    "Batch3 Pelican missing favicons only; plan e3bf181f-b4a4-5bbd-9641-1cb4b550f0bf already created for7active projects; preserve existing icons",
+    "Batch4 same3033 report: durable Prepare alternative plan button; strict no stock, own never-Main drop > own never-Main newreg > samebrand/GEO donor newreg not Main within10days; user explicitly authorized prepare+execute selected blocked projects",
+    "Expand internal-page planner: existing menus/general projects, at least5pages;3033 preserveMain/content50%/internal40%",
+    "Resolve remaining actual text queue failures; do not bypass fact/language/meaning validation",
+    "Vitalina favorites5current/42archived: verify before restore; mirror isolatedclone changes without overwriting original dirtytree"
   ],
   "paused": [
     "Mass showcase conversions and logo uploads: user now requests one site at a time; log actual changes as report comments",
@@ -26,7 +28,8 @@
     "3033": "7baefd4d-50c0-4ef0-a8e6-040d65a1a2ce",
     "pelican": "eb11b394-99f4-555d-9ea9-5dc44d04cac4",
     "3038": "bbdb21a4-e48a-470c-9943-1db229b28f8e",
-    "3032": "4ddc2b49-3265-4b13-832d-12b40474c382"
+    "3032": "4ddc2b49-3265-4b13-832d-12b40474c382",
+    "pelican_favicons": "e3bf181f-b4a4-5bbd-9641-1cb4b550f0bf"
   },
   "constraints": [
     "Opening or refreshing a plan must never launch reglues",
@@ -41,6 +44,12 @@
     "test_auto_pilot confirmed_updates old expected fields",
     "test_auto_pilot participation rejection moved to start",
     "test_auto_pilot old preview cancellation expectation",
-    "test_mass_reglue_launch old task-history draft exclusion expectation"
+    "test_mass_reglue_launch old task-history draft exclusion expectation",
+    "test_reglue_title_h1:5preexisting brandprefix/shortH1 fixtures verified on9363453; current newrealwriter publication testpasses"
+  ],
+  "done_since_previous": [
+    "Dedicated planning30threads verified alongside text30; DBcapacity200; scoped2unusedBetOnRed donor domains prepared, donor Main unchanged and participationFalse",
+    "Cancel stuck fake submission onserver/browser; existingfake path updates canonical/alternates preserving settings.canon",
+    "Betonplan fe47d49f-5335-58f6-b71e-57f963acc534:2ready8skipped(1donoronly7noeligible); not launched"
   ]
 }

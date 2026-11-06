@@ -1,4 +1,4 @@
-"""Launch independent projects as their reviewed text becomes ready."""
+"""Run approved network plans and reviewed text publication independently."""
 from collections import defaultdict
 from copy import deepcopy
 from datetime import datetime, timezone, timedelta
@@ -29,6 +29,8 @@ def text_ready(db,job,plan):
 
 def execute(db,job,send):
     from app.pilot_text_jobs import sync
+    from app.pilot_content_publication import enabled, attach, states
+    independent_content = enabled(job)
     from app.pilot_weekly import exclude
     from app.mass_action_scope import constrain
     from app.pilot_versions import append_version
@@ -47,14 +49,14 @@ def execute(db,job,send):
         pending=[p for p in group_plans if not result['items'][p['site_id']].get('run_id')
                  and result['items'][p['site_id']]['status'] not in launch.TERMINAL|{'skipped'}]
         if not pending:continue
-        failed=next((p for p in group_plans if p.get('title_h1_error') or p.get('paragraphs_error')
+        failed=next((p for p in group_plans if (not independent_content and (p.get('title_h1_error') or p.get('paragraphs_error')))
                      or result['items'][p['site_id']]['status'] in {'failed','skipped','cancelled'}),None)
         if failed:
             for p in pending:
                 reason=failed.get('title_h1_error') or failed.get('paragraphs_error') or 'Связанный проект исключён или завершился ошибкой.'
                 result['items'][p['site_id']].update(status='failed',reason=reason,phase='content_failed')
             save();continue
-        waiting=[p for p in pending if not text_ready(db,job,p)]
+        waiting=[] if independent_content else [p for p in pending if not text_ready(db,job,p)]
         if waiting:
             for p in pending:
                 fields=[label for field,label in (('title_h1','Title/заголовков'),('paragraphs','абзацев'))
@@ -84,6 +86,7 @@ def execute(db,job,send):
                         job.payload['actor'],'mass',saved_plan=p) for e,p in zip(entries,batch)]
                 for run,_ in fresh:
                     run.plan={**run.plan,'list_launch_id':job.id}
+                    if independent_content: attach(db, run)
                     result['items'][run.site_id].update(run_id=run.id,status=run.status,reason=None,phase='prepared')
                     append_version(job,result,next(p for p in batch if p['site_id']==run.site_id),job.payload.get('generation_id',job.id))
                 save()
@@ -100,6 +103,7 @@ def execute(db,job,send):
         if row.get('completed_elsewhere'):continue
         run=db.get(models.AutoReglueRun,row.get('run_id')) if row.get('run_id') else None
         if not run:continue
+        if independent_content: attach(db, run)
         row.update(status=run.status,reason=run.message)
         if run.status=='queued':
             last=launch.utc(result['sent'].get(run.id))
@@ -109,7 +113,8 @@ def execute(db,job,send):
                 except Exception:job.error='Очередь временно недоступна. Отправка будет повторена.'
     for group in result['groups']:
         group['status']='done' if all(result['items'][id]['status'] in launch.TERMINAL|{'skipped'} for id in group['site_ids']) else 'waiting'
-    if all(row['status'] in launch.TERMINAL|{'skipped'} for row in result['items'].values()):
+    content_pending = independent_content and (any(s.status == 'queued' for s in states(db, job.id)) or not result.get('variations_finalized'))
+    if not content_pending and all(row['status'] in launch.TERMINAL|{'skipped'} for row in result['items'].values()):
         job.status='completed';job.finished_at=datetime.now(timezone.utc);job.error=None
     save()
     return {'status':job.status}

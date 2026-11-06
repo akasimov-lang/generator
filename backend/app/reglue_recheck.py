@@ -21,6 +21,9 @@ def checks(db, run, site, project, state):
     from app import project_pages as pages, cross_reglue as cross
     from app.domain_redirects import for_reglue
     plan = run.plan
+    from app.pilot_content_publication import states
+    pending_content = {job.payload['field'] for job in states(db, plan.get('list_launch_id'), run.site_id)
+                       if job.payload['run_id'] == run.id and job.status in {'queued', 'cancelled'}} if plan.get('list_launch_id') else set()
     result = []
     def check(code, label, ok):
         result.append({'code': code, 'label': label, 'ok': bool(ok)})
@@ -39,7 +42,7 @@ def checks(db, run, site, project, state):
         check('REDIRECTS', 'Доменные редиректы', ok)
     elif plan.get('redirect_old_main'):
         check('REDIRECTS', 'Доменные редиректы', False)
-    if plan.get('rewrite_title_h1'):
+    if plan.get('rewrite_title_h1') and 'title_h1' not in pending_content:
         edit = db.get(models.ProjectPageEdit, str(uuid5(UUID(run.id), 'title-h1-save')))
         ok = date_ok = False
         if edit:
@@ -57,7 +60,7 @@ def checks(db, run, site, project, state):
                 site.homepage_title = current.get('title') or ''
         check('TITLE_H1', 'Title/H1', ok)
         check('CONTENT_DATE', 'Дата обновления контента', date_ok)
-    if plan.get('rewrite_paragraphs'):
+    if plan.get('rewrite_paragraphs') and 'paragraphs' not in pending_content:
         edit = db.get(models.ProjectPageEdit, str(uuid5(UUID(run.id), 'paragraphs-save')))
         ok = date_ok = False
         if edit:
@@ -88,6 +91,11 @@ def check_run(db, run_id, *, retry_title_h1=False, request_id=None):
             with network.network_lock(db, site.id):
                 project = fresh_project(db, site)
                 state = network.observe(db, site, project)
+                from app.reglue_resume import reconcile
+                if reconcile(db, site, state):
+                    state = network.read_network(db, site)
+                    project = fresh_project(db, site)
+                    state = network.observe(db, site, project)
                 actual = {**state, 'redirects_verified': isinstance(project['settings'].get('redirects'), list)}
                 for op in db.scalars(select(models.NetworkOperation).where(models.NetworkOperation.site_id == site.id, models.NetworkOperation.status == 'failed')):
                     if op.request_payload.get('auto_run_id') != run.id or op.action not in {'reglue', 'alternates', 'create_fake_main', 'select_fake_main'}: continue

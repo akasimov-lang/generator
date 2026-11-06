@@ -101,6 +101,8 @@ def view(db, job):
         row = dict(item)
         run = db.get(models.AutoReglueRun, row.get('run_id')) if row.get('run_id') else None
         if run: row.update(status=run.status, reason=run.message)
+        from app.pilot_content_publication import merge_row
+        merge_row(db, job, row)
         items.append(row)
     from app.pilot_observed_reglues import project
     project(db, job, items)

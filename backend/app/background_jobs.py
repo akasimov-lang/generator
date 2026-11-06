@@ -60,6 +60,9 @@ def dispatch_pending(db, send, inflight_ids=None):
 
 def run_job(db, job_id):
     candidate = db.get(models.BackgroundJob, job_id)
+    if candidate and candidate.kind == 'pilot_content_publication':
+        from app.pilot_content_publication import execute
+        return execute(db, job_id)
     if candidate and candidate.kind == "menu_generation":
         from app.menu_generation_jobs import execute
         return execute(db, job_id)

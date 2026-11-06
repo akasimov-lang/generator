@@ -330,6 +330,9 @@ def read_network(db, site):
     with network_lock(db, site.id), Remote(db, site) as remote:
         project = remote.project()
         state = observe(db, site, project)
+        from app.reglue_resume import reconcile
+        if reconcile(db, site, state):
+            state = observe(db, site, project)
         from app.reglue_redirects import continue_pending
         state, project = continue_pending(db, site, remote, state, project)
         from app.fake_main_head import continue_pending as continue_fake_head

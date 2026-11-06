@@ -38,7 +38,11 @@ def current(db, child):
     plan = next((p for g in parent.result['groups'] for p in g.get('plans',[])
                  if p['site_id']==child.payload['site_id']),None)
     row = parent.result['items'].get(child.payload['site_id'],{})
-    if not plan or row.get('run_id') or row.get('status') in ('skipped','failed','cancelled'):
+    from app.pilot_content_publication import enabled
+    independent = enabled(parent)
+    run = db.get(models.AutoReglueRun, row['run_id']) if row.get('run_id') else None
+    if run and run.status == 'cancelled': return None
+    if not plan or row.get('status') in ('skipped','cancelled') or (not independent and (row.get('run_id') or row.get('status') == 'failed')):
         return None
     if fingerprint(plan) != child.payload['fingerprint']: return None
     allowed = parent.payload.get('allowed')
@@ -68,7 +72,7 @@ def sync(db, job, result):
                             'parent_id':job.id,'generation_id':generation(job),'site_id':plan['site_id'],
                             'field':field,'fingerprint':fingerprint(plan),'plan':deepcopy(plan)})
                         db.add(child)
-                    if child.status in ('completed','failed'):
+                    if child.status in ('completed','failed','cancelled'):
                         output = child.result or {}
                         if child.status=='completed' and output.get('preview'):
                             plan[field+'_preview'] = deepcopy(output['preview'])
@@ -84,7 +88,13 @@ def sync(db, job, result):
                 result['items'][plan['site_id']].update(**describe(db,plan))
         if changed and group.get('batch_id'):
             ledger=db.get(models.AutoReglueConfig,key(group['batch_id']))
-            if ledger: ledger.value={**ledger.value,'plans':deepcopy(group['plans'])}
+            if ledger:
+                # Freeze network authorizations once runs are reserved. Generated
+                # content belongs to the parent/result and its publication receipts.
+                reserved = set((ledger.value.get('run_ids') or {}))
+                original = {p['site_id']: p for p in ledger.value.get('plans', [])}
+                ledger.value={**ledger.value,'plans':deepcopy([
+                    original.get(p['site_id'], p) if p['site_id'] in reserved else p for p in group['plans']])}
     for field,stats in progress.items():result[field+'_progress']=stats
     result['parallel_texts']=True
     result['variations_finalized']=all(p['done']==p['total'] for p in progress.values())

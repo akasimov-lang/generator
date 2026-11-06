@@ -423,6 +423,8 @@ def view(db,job):
         if not preparing:
             from app.pilot_internal_pages import merge_row
             merge_row(row, row.get('internal_pages'))
+        from app.pilot_content_publication import merge_row as merge_content_jobs
+        merge_content_jobs(db, job, row)
         if row.get('completed_elsewhere'):
             from app.pilot_observed_reglues import apply
             apply(row, row['completed_elsewhere'])
