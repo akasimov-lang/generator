@@ -136,7 +136,7 @@ def finalize(db, job, result):
     internal_pages_eligible = allocate_internal_pages(db, plans, job.payload.get('generation_id', job.id), internal_pages_requested)
     internal_pages_count = sum(bool(p.get('internal_pages', {}).get('enabled')) for p in plans)
     no_alternate_target=count_share(total,shares['without_alternates'])
-    eligible=[p for p in plans if not p.get('parent_domain') and not p.get('create_subdomain')
+    eligible=[p for p in plans if not p.get('parent_domain') and not p.get('create_subdomain') and not (p.get('planning_options') or {}).get('profile_id')
         and (p.get('main_target_kind')=='newreg' or p.get('domain_type')=='newreg' or p.get('required_domain_type')=='newreg')
         and mode(p.get('canonicalFakeMainMarkup'),p.get('fake_main_path'))=='self']
     if mixed:
@@ -177,7 +177,7 @@ def finalize(db, job, result):
         'paragraphs':len(paragraphs), 'paragraphs_requested':paragraphs_count, 'paragraphs_percent':shares['paragraphs'],'canonical_self':counts['self'],'canonical_internal':counts['internal'],
         'internal_pages':internal_pages_count, 'internal_pages_requested':internal_pages_requested,
         'internal_pages_eligible':internal_pages_eligible, 'internal_pages_percent':shares['internal_pages'],
-        'without_alternates':len(without_alternates), 'without_alternates_requested':no_alternate_target, 'catalogue_upper_bound':672, 'used_variants':len({p.get('scheme_variant') for p in plans if p.get('scheme_variant')}),
+        'without_alternates':len(without_alternates), 'without_alternates_requested':no_alternate_target, 'used_variants':len({p.get('combination_id') or p.get('scheme_variant') for p in plans if p.get('combination_id') or p.get('scheme_variant')}),
         'warning': ('Недостаточно подходящих заголовков для заданной доли и режима Title/H1. ' if len(rewrites)<rewrite_count else '') + ('Не хватает совместимых корневых новорегов для заданной доли без альтернейтов. ' if len(without_alternates)<no_alternate_target else '') + ('Не для всех долей поддоменов найдены разрешённые родители. ' if len(subplans)<desired else 'Поддомены сверх заданной доли: исключение для сеток без резервов. ' if len(subplans)>desired and any(p.get('emergency_subdomain') for p in plans) else '') + ('Не хватает совместимых проектов для доли 301.' if len(redirects)<redirect_count else '')}
     result['variations_allocated'] = True
     if internal_pages_count < internal_pages_requested:
@@ -315,7 +315,7 @@ def update_summary(result):
         'internal_pages_eligible':sum(bool((p.get('internal_pages_eligibility') or {}).get('eligible')) for p in plans),
         'canonical_self':counts['self'], 'canonical_internal':counts['internal'],
         'without_alternates':sum(bool(p.get('without_alternates')) for p in plans), 'without_alternates_requested':count_share(no_alt_base,no_alt_percent),
-        'used_variants':len({p.get('scheme_variant') for p in plans if p.get('scheme_variant')}),
+        'used_variants':len({p.get('combination_id') or p.get('scheme_variant') for p in plans if p.get('combination_id') or p.get('scheme_variant')}),
         'warning':'После изменения состава плана доли отличаются от заданных. Обновите весь план для нового распределения.' if mismatch else ''}
     if internal_pages < count_share(total, internal_pages_percent):
         result['variation_summary']['warning'] += ' Не хватает подтверждённых одностраничных монобрендов для заданной доли внутренних страниц.'

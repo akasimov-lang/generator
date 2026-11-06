@@ -6,16 +6,17 @@ export type LastReglue = {
   old_path: string | null; new_path: string | null;
 };
 
-export type RecentNetworkChange = Omit<LastReglue, "new_main"> & {id: string; kind: "reglue" | "fake_path"; new_main: string | null};
+export type RecentNetworkChange = Omit<LastReglue, "new_main"> & {source?: "cache"; comparison?: "observed" | "last_recorded"; id: string; kind: "reglue" | "fake_path"; new_main: string | null};
 export function LastReglueSummary({ last, observedAt, recent }: { last?: LastReglue | null; observedAt?: string | null; recent?: RecentNetworkChange[] }) {
   if (recent?.length) {
-    const observed = observedAt && Number.isFinite(Date.parse(observedAt)) && (!last || Date.parse(observedAt) > Date.parse(last.at))
-      ? [{id: "observed-main", kind: "observed" as const, at: observedAt, old_main: null, new_main: null, old_path: null, new_path: null}] : [];
+    const observed = observedAt && Number.isFinite(Date.parse(observedAt)) && (!last || Date.parse(observedAt) > Date.parse(last.at)) && !recent.some(item=>item.kind === "reglue" && Math.abs(Date.parse(item.at)-Date.parse(observedAt)) < 300000)
+      ? [{id: "observed-main", kind: "observed" as const, source: undefined, comparison: undefined, at: observedAt, old_main: null, new_main: null, old_path: null, new_path: null}] : [];
     const changes = [...recent, ...observed].filter(item => Number.isFinite(Date.parse(item.at))).sort((a,b) => Date.parse(b.at)-Date.parse(a.at)).slice(0,7);
     const path = (value: string | null) => value === null ? "нет данных" : value || "не задан";
     return <div className="lastReglueSummary lastReglueHistory" aria-label="Последние изменения проекта" tabIndex={0}>
       {changes.map(item => <article key={item.id}>
-        <time dateTime={item.at}>{item.kind === "fake_path" ? "Замена внутряка" : item.kind === "observed" ? "Смена Main обнаружена" : "Переклей"}: {new Date(item.at).toLocaleString("ru-RU", {timeZone:"Europe/Moscow"})} МСК</time>
+        <time dateTime={item.at} title={item.source === "cache" ? "Время обнаружения изменения при синхронизации, не время правки в Webdev" : undefined}>{item.source === "cache" && "Кеш · обнаружено · "}{item.kind === "fake_path" ? "Замена внутряка" : item.kind === "observed" ? "Смена Main обнаружена" : "Переклей"}: {new Date(item.at).toLocaleString("ru-RU", {timeZone:"Europe/Moscow"})} МСК</time>
+        {item.comparison === "last_recorded" && <span>По сравнению с последней записью истории</span>}
         {item.kind === "reglue" && <span>Main: {item.old_main || "нет данных"} → {item.new_main}</span>}
         {item.kind !== "observed" && <span>Внутряк: {path(item.old_path)} → {path(item.new_path)}</span>}
       </article>)}

@@ -216,7 +216,7 @@ def observe(db, site, project):
         project = {**project, 'settings': {**settings, 'pageRedirects': []}}
     # Merge observations after reloading the row; never replace history with a remote list.
     db.refresh(site, with_for_update=True)
-    state = observe_network(site, project)
+    state = observe_network(site, project, db=db)
     from app.reglue_reserves import reconcile_memberships
     reconcile_memberships(db, [(site, state)])
     from app.project_cache import _apply_fibery_name

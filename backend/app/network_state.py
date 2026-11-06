@@ -125,7 +125,7 @@ def project_network_state(project: dict) -> dict:
     }
 
 
-def observe_network(site, project: dict) -> dict:
+def observe_network(site, project: dict, *, db=None) -> dict:
     state = project_network_state(project)
     from app.reglue_history import observe_main
     observe_main(site, site.cache_canon, state['canon'])
@@ -146,9 +146,15 @@ def observe_network(site, project: dict) -> dict:
             state[key] = (site.network_state or {}).get(key, state[key])
     if "data" not in project:
         state["content_page_paths"] = (site.network_state or {}).get("content_page_paths", [])
-    if "alternate" not in settings:
-        for key in ("fake_main_settings", "fake_main_paths", "fake_main_current", "fake_main_enabled"):
-            state[key] = (site.network_state or {}).get(key, state[key])
+    previous_alternate = (site.network_state or {}).get("fake_main_settings", {})
+    alternate = settings.get("alternate")
+    if not isinstance(alternate, dict): alternate = {}
+    for remote_key, state_key in (("currentFakeMain", "fake_main_current"), ("enableDynamicRoutes", "fake_main_enabled"), ("fakeMain", "fake_main_paths")):
+        if remote_key not in alternate:
+            state[state_key] = (site.network_state or {}).get(state_key, state[state_key])
+    state["fake_main_settings"] = {**previous_alternate, **alternate}
+    if "canon" not in settings:
+        state["canon"] = (site.network_state or {}).get("canon", state["canon"])
     site.main_domain_history = list(dict.fromkeys(filter(None, [
         *(site.main_domain_history or []), domain_name(site.cache_canon), state["prev"], state["canon"],
     ])))
@@ -179,6 +185,8 @@ def observe_network(site, project: dict) -> dict:
     state["history_edits"] = previous.get("history_edits", [])
     apply_history_overrides(site, state["history_overrides"])
     mark_project_identity(site, state["domains"])
+    from app.network_cache_history import track
+    track(site, previous, state, settings, db)
     site.network_state = state
     return state
 
@@ -218,7 +226,7 @@ def track_domain_membership(previous, state, settings):
 
 
 def state_revision(state: dict) -> str:
-    return hashlib.sha256(json.dumps(state, sort_keys=True, ensure_ascii=True).encode()).hexdigest()
+    return hashlib.sha256(json.dumps({k:v for k,v in state.items() if k not in {"cache_change_history", "cache_change_baseline"}}, sort_keys=True, ensure_ascii=True).encode()).hexdigest()
 
 
 HISTORY_FIELDS = {

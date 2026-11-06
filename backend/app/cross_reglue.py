@@ -188,6 +188,8 @@ def make_plan(cfg, target, state, source, source_state, domain, *, mode='redistr
                     canonicalFakeMainMarkup=fake_canonical_markup(fake_path),
                     required_page_urls=['https://' + domain + '/', 'https://' + domain + fake_path])
     if db is not None:
+        if not db.info.get('canonical_replay_plan'):
+            plan['planning_options'] = auto.effective_project_config(cfg, auto.config(db, target.id)).model_dump()
         from app.canonical_allocation import apply
         apply(db, target, plan, plans)
     plan['preview_token'] = auto.digest(plan)

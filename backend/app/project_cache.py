@@ -907,7 +907,7 @@ def _apply_direct_project_snapshot(
     if canon:
         site.base_url = f"https://{canon}"
         site.publication_endpoint = f"https://{canon}/api/content"
-    observe_network(site, project)
+    observe_network(site, project, db=db)
     site.cache_canon = canon or site.cache_canon
     site.cache_language = str(settings.get("lang") or "").strip() or site.cache_language
     site.cache_geo = str(settings.get("geo") or "").strip() or site.cache_geo
@@ -1502,7 +1502,7 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
         site.base_url = f"https://{canon}"
         _reset_newly_transferred_domain_memory(site, domains, previous_domain_owners)
         _record_network_snapshot(site, canon, domains, now)
-        observe_network(site, project)
+        observe_network(site, project, db=db)
         site.cache_canon = canon
         site.cache_language = language
         site.cache_geo = geo

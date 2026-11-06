@@ -61,6 +61,13 @@ def constrain(db, filters, allowed=None, targets=()):
 
 
 def stamp_plan(db, plan, state, site, filters=None):
+    if plan.get('combination_id') and not db.info.get('canonical_replay_plan'):
+        from app.reglue_combinations import History, identity
+        if plan['combination_id'] != identity(plan):
+            available = (plan.get('combination_history') or {}).get('compatible_variants', 1)
+            History(db).stamp(plan, available=available)
+            from app.auto_reglue import digest
+            plan.pop('preview_token', None); plan['preview_token'] = digest(plan)
     filters = filters or db.info.get('mass_action_filter')
     if not filters:
         return plan

@@ -411,6 +411,9 @@ def build_plan(site, state, global_cfg, cfg, *, db=None):
             'revision': state.get('revision') or state_revision(state), 'config_hash': digest([global_cfg.model_dump(), cfg.model_dump()])}
     classification = classify_domains(state['domains'], getattr(site, 'domain_types', None) or {}, site.main_domain_history or [], state['canon'])
     plan['domain_classification'] = {domain: classification.get(domain) for domain in {target, language_host, x_default}}
+    if db is None or not db.info.get('canonical_replay_plan'):
+        plan['planning_options'] = cfg.model_dump()
+        plan['language'] = language
     if naming_index is not None: plan['naming_allocation_index'] = naming_index
     plan['alternates_before'] = {'markup': state['alternateMarkup'], 'enabled': state['enableAlternates']}
     plan['preview_token'] = digest(plan)

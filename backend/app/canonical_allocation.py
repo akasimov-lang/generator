@@ -29,11 +29,21 @@ def apply(db, site, plan, plans=()):
     from app.pilot_schemes import allocate_parent_x_defaults, validate_parent_x_default
     saved = db.info.get('canonical_replay_plan') or {}
     if saved:
-        for key in ('x_default_parent_path', 'x_default_policy_version', 'parent_alternate_domain'):
+        for key in ('x_default_parent_path', 'x_default_policy_version', 'parent_alternate_domain', 'combination_id', 'combination_settings', 'combination_history', 'planning_options', 'language', 'brand', 'domain_type'):
             if key in saved: plan[key] = saved[key]
         validate_parent_x_default(plan)
     else:
-        allocate_parent_x_defaults([plan], fixed=[*db.info.get('canonical_allocation_plans', []), *plans])
+        fixed = [*db.info.get('canonical_allocation_plans', []), *plans]
+        allocate_parent_x_defaults([plan], fixed=fixed)
+        if plan.get('scope') == 'mass' and not db.info.get('auto_pilot_preview'):
+            from app.pilot_schemes import assign
+            from app.reglue_combinations import History
+            if (plan.get('planning_options') or {}).get('profile_id') or plan.get('scheme_mode') == 'locale_base':
+                # A manually selected template is a constraint, not a catalogue suggestion.
+                plan.setdefault('brand', site.brand)
+                History(db, fixed).stamp(plan)
+            else:
+                assign(db, [plan], fixed=fixed)
 
 
 def _apply(db, site, plan, plans=()):

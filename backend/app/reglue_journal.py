@@ -166,6 +166,8 @@ def recent_for_site(db, site, limit=7):
             items.append({'id': op.id, 'kind': 'fake_path', 'at': change['at'],
                           'old_main': before.get('main'), 'new_main': after.get('main') or before.get('main'),
                           'old_path': change['before'], 'new_path': change['after']})
+    from app.network_cache_history import KEY, visible
+    items.extend(visible((site.network_state or {}).get(KEY, []), items))
     return sorted(items, key=lambda item: (utc(item['at']), item['id']), reverse=True)[:limit]
 
 

@@ -38,3 +38,18 @@ test('recent history preserves a newer externally observed Main change without i
  assert.ok(html.indexOf('Смена Main обнаружена')<html.indexOf('Переклей:'));
  assert.equal((html.match(/Внутряк:/g)||[]).length,1);
 });
+
+test('cache observations are explicitly labelled and keep old and new paths',()=>{
+ const html=render({recent:[{id:'cache',source:'cache',comparison:'last_recorded',kind:'fake_path',at:'2026-11-06T09:00:00Z',old_main:'main.test',new_main:'main.test',old_path:'/dragonia-casino/',new_path:'/risorse%20per%20le%20scuole/'}]});
+ assert.match(html,/Кеш · обнаружено/);
+ assert.match(html,/Время обнаружения изменения при синхронизации/);
+ assert.match(html,/последней записью истории/);
+ assert.match(html,/\/dragonia-casino\/ → \/risorse%20per%20le%20scuole\//);
+});
+
+test('detailed cached Main change replaces the legacy observation placeholder',()=>{
+ const html=render({last,observedAt:'2026-11-06T09:00:00Z',recent:[{id:'cache',source:'cache',kind:'reglue',at:'2026-11-06T09:00:00Z',old_main:'old.test',new_main:'new.test',old_path:'/old/',new_path:'/new/'}]});
+ assert.equal((html.match(/<article/g)||[]).length,1);
+ assert.match(html,/old.test → new.test/);
+ assert.doesNotMatch(html,/Смена Main обнаружена/);
+});

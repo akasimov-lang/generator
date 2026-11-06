@@ -1,5 +1,6 @@
 """Explicit scheme catalogue; incompatible combinations never reach execution."""
 from collections import Counter
+from copy import deepcopy
 from html import escape
 from sqlalchemy import select
 from app import models
@@ -95,11 +96,17 @@ def strategy(plan):
     kind=plan.get('domain_type') or plan.get('required_domain_type') or 'newreg'
     if plan.get('parent_domain') or plan.get('create_subdomain'):return 'sub_'+kind
     if plan.get('reserve_pool_id'):return 'pool_drop'
-    return ('own_' if plan.get('source_site_id')==plan['site_id'] else 'other_')+kind
+    return ('own_' if plan.get('source_site_id',plan['site_id'])==plan['site_id'] else 'other_')+kind
 
 
 def assign(db,plans, *, fixed=(), exclude=None):
-    history=list(db.scalars(select(models.AutoReglueRun).where(models.AutoReglueRun.status=='completed')))
+    from app.reglue_combinations import History, identity
+    selected_ids = {p['site_id'] for p in plans}
+    fixed = list({p['site_id']:p for p in fixed if p['site_id'] not in selected_ids}.values())
+    combinations = History(db, fixed)
+    # Allocate parent paths before comparing actual combinations, keeping the existing split.
+    allocate_parent_x_defaults(plans, fixed=fixed)
+    history=list(db.scalars(select(models.AutoReglueRun).where(models.AutoReglueRun.status=='completed').order_by(models.AutoReglueRun.created_at, models.AutoReglueRun.id)))
     counts,local,personal=Counter(),Counter(),Counter()
     fake_counts, fake_global, last_fake = Counter(), Counter(), {}
     def group(p):return brand_key(p.get('brand')),geo_key(p.get('geo'))
@@ -112,11 +119,20 @@ def assign(db,plans, *, fixed=(), exclude=None):
     for run in history:record({**run.plan,'site_id':run.site_id})
     for p in fixed:record(p)
     for plan in plans:
-        if not plan.get('fake_main_path') or plan.get('scheme_mode')=='clean':continue
+        site=db.get(models.Site,plan['site_id'])
+        if site:
+            plan.update(brand=site.brand, geo=geo_key(site.cache_geo))
+        if not plan.get('fake_main_path') or plan.get('scheme_mode')=='clean' or (plan.get('planning_options') or {}).get('profile_id'):
+            combinations.stamp(plan); combinations.record(plan)
+            continue
         site=db.get(models.Site,plan['site_id'])
         lang=(site.cache_language or plan.get('language') or '').replace('_','-').split('-')[0].lower()
         geo=geo_key(site.cache_geo)
         if not lang or not geo:continue
+        plan.update(brand=site.brand, geo=geo, language=lang)
+        if not plan.get('domain_type'):
+            root = parent_domain(plan) or plan['new_main']
+            plan['domain_type'] = (site.domain_types or {}).get(root) or plan.get('parent_kind')
         parent = parent_domain(plan)
         canonical=plan.get('canonical_mode') or mode(plan.get('canonicalFakeMainMarkup'),plan['fake_main_path'])
         candidates=[v for v in CATALOGUE if v['canonical']==canonical and v['links'] and v['fake_on']
@@ -130,7 +146,7 @@ def assign(db,plans, *, fixed=(), exclude=None):
         def rank(v):
             key=v['id']+suffix
             role=v['fake_on']
-            return (bool(role and role==last_fake.get(group(plan))),
+            return (*combinations.rank(rendered[key]), bool(role and role==last_fake.get(group(plan))),
                     fake_counts[(group(plan),role)] if role else 0,
                     personal[(site.id,key)],local[(group(plan),key)],counts[key],
                     fake_global[role] if role else 0,v['id'])
@@ -144,28 +160,53 @@ def assign(db,plans, *, fixed=(), exclude=None):
                 return frozenset(links),v['fake_on']
             candidates=[v for v in candidates if signature(v)!=signature(previous)]
         if not candidates:raise ValueError('Нет другой совместимой схемы для проекта.')
-        chosen=min(candidates,key=rank)
-        plan['fake_hreflang_role']=chosen['fake_on']
-        plan['scheme_variant']=chosen['id']+suffix
-        if not chosen['links']:
-            plan['alternateMarkup']='';plan['enableAlternates']=False
-            plan['required_page_urls']=['https://'+plan['new_main']+'/']
-        else:
-            codes={'lang':lang,'locale':lang+'-'+geo,'x-default':'x-default'}
-            links=[]
-            for key in chosen['links']:
-                path=plan['fake_main_path'] if key==chosen['fake_on'] else '/'
-                links.append((codes[key],'https://'+plan['new_main']+path))
-            parent=parent_domain(plan)
-            if parent:
-                # Prefer x-default for the parent; retain the fake link on another hreflang.
-                links=[(code,href) for code,href in links if code!='x-default']
-                links.append(('x-default','https://'+parent+'/'));plan['parent_alternate_domain']=parent
-            plan['alternateMarkup']='\n'.join('<link rel="alternate" hreflang="'+escape(code,quote=True)+'" href="'+escape(href,quote=True)+'" />' for code,href in links)
-            plan['enableAlternates']=True
-            if len(links) == 1:
-                plan['canonical_mode'] = 'self'
-                plan['canonicalFakeMainMarkup'] = '<link rel="canonical" href="https://{{settings.canon}}/" />'
-            validate_single_alternate(plan)
+        rendered = {}
+        unique = {}
+        for candidate in candidates:
+            trial = deepcopy(plan)
+            try:
+                render(trial, candidate, suffix, lang, geo)
+            except ValueError:
+                continue
+            key = candidate['id'] + suffix
+            rendered[key] = trial
+            unique.setdefault(identity(trial), candidate)
+        candidates = list(unique.values())
+        if not candidates: raise ValueError('Нет совместимой комбинации настроек проекта.')
+        chosen = min(candidates, key=rank)
+        plan.update(rendered[chosen['id'] + suffix])
+        combinations.stamp(plan, available=len(candidates))
+        combinations.record(plan)
         record(plan)
-    allocate_parent_x_defaults(plans, fixed=fixed)
+
+
+def render(plan, chosen, suffix, lang, geo):
+    plan['fake_hreflang_role']=chosen['fake_on']
+    plan['scheme_variant']=chosen['id']+suffix
+    if not chosen['links']:
+        plan['alternateMarkup']='';plan['enableAlternates']=False
+        plan['required_page_urls']=['https://'+plan['new_main']+'/']
+    else:
+        codes={'lang':lang,'locale':lang+'-'+geo,'x-default':'x-default'}
+        links=[]
+        if not plan.get('pilot_variation_version') and plan.get('scheme_mode') in {'preserve', 'add_auxiliary'}:
+            basic = {lang.lower(), (lang+'-'+geo).lower(), 'x-default'}
+            links = [(link['hreflang'], link['href']) for link in alternate_links(plan.get('alternateMarkup') or '') if link['hreflang'].lower() not in basic]
+        for key in chosen['links']:
+            path=plan['fake_main_path'] if key==chosen['fake_on'] else '/'
+            host = plan.get('x_default_domain') if key == 'x-default' else plan.get('language_domain')
+            links.append((codes[key],'https://'+(host or plan['new_main'])+path))
+        parent=parent_domain(plan)
+        if parent:
+            # Prefer x-default for the parent; retain the fake link on another hreflang.
+            links=[(code,href) for code,href in links if code!='x-default']
+            links.append(('x-default','https://'+parent+'/'));plan['parent_alternate_domain']=parent
+        plan['alternateMarkup']='\n'.join('<link rel="alternate" hreflang="'+escape(code,quote=True)+'" href="'+escape(href,quote=True)+'" />' for code,href in links)
+        plan['enableAlternates']=True
+        if len(links) == 1:
+            plan['canonical_mode'] = 'self'
+            plan['canonicalFakeMainMarkup'] = '<link rel="canonical" href="https://{{settings.canon}}/" />'
+        if parent:
+            apply_parent_x_default(plan, use_internal=plan.get('x_default_parent_path', '/') != '/')
+        plan['required_page_urls'] = list(dict.fromkeys([*(plan.get('required_page_urls') or []), *[x['href'] for x in alternate_links(plan['alternateMarkup'])]]))
+        validate_single_alternate(plan)

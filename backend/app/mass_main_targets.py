@@ -55,8 +55,10 @@ def require_target(db, site, state, plan, *, allow_created=False):
 def subdomain_candidate(db, site, state, kind, cfg, *, prefer_geo=False, excluded_parents=(), allocation_plans=()):
     parent_kind = kind.removeprefix('sub_')
     roles = classify_domains(state['domains'], site.domain_types or {})
+    from app import auto_reglue as auto
+    project_options = auto.effective_project_config(cfg, auto.config(db, site.id))
     options = SimpleNamespace(parent_kind=parent_kind, language=(site.cache_language or '').lower().replace('_', '-').split('-')[0],
-        subdomain_add_casino=cfg.domain_settings.subdomain_add_casino, subdomain_name_style=cfg.domain_settings.subdomain_name_style)
+        subdomain_add_casino=project_options.subdomain_add_casino, subdomain_name_style=project_options.subdomain_name_style)
     # Both inputs come from the same freshly verified live network snapshot.
     naming_site = SimpleNamespace(id=site.id, name=site.name, brand=site.brand, cache_geo=geo_key(site.cache_geo).lower(),
         cache_language=site.cache_language or '', cache_domains=state['domains'], domain_types=site.domain_types or {},

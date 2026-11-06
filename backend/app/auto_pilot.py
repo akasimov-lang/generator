@@ -39,6 +39,7 @@ def describe(db, plan):
     def resolved(markup, main):
         return (markup or '').replace('{{settings.canon}}', main or '').replace('{{reqPath}}', '/')
     return {'title_rewrite_mode':plan.get('title_rewrite_mode', 'minimal'), 'paragraphs_preview':plan.get('paragraphs_preview'), 'paragraphs_error':plan.get('paragraphs_error'), 'rewrite_paragraphs':bool(plan.get('rewrite_paragraphs')), 'emergency_subdomain':bool(plan.get('emergency_subdomain')), 'title_h1_current':plan.get('title_h1_current'), 'title_h1_preview':plan.get('title_h1_preview'), 'title_h1_error':plan.get('title_h1_error'), 'old_main':plan.get('old_main'), 'new_main':plan.get('new_main'), 'source_project':plan.get('source_project') or (source.name if source else plan.get('project')),
+            'combination_id':plan.get('combination_id'), 'combination_settings':deepcopy(plan.get('combination_settings')), 'combination_history':deepcopy(plan.get('combination_history')),
             'scheme':'; '.join(parts), 'fake_path':fake, 'internal_pages':deepcopy(internal_pages) or None,
             'internal_pages_eligibility':deepcopy(plan.get('internal_pages_eligibility')),
             'new_fake_path':fake if plan.get('create_fake_main_path') and fake!=(plan.get('old_fake_main_path') or (plan.get('target_guard',{}).get('fake_main_settings') or {}).get('currentFakeMain')) else None,
