@@ -162,6 +162,9 @@ def view(job, db=None):
     if job.payload.get('task_type') in {'showcase_inventory', 'showcase_standardization'}:
         from app import report_ids
         compact = [{key: row[key] for key in ('site_id','project','status','main','geo','inventory','error','migration') if key in row} for row in entries]
+        for row in compact:
+            if isinstance(row.get('migration'),dict):
+                row['migration']={key:value for key,value in row['migration'].items() if key!='plan'}
         return {**summary(job, report_ids.get(db, job) if db is not None else None, entries=compact),
                 'updated_at': job.updated_at, 'entries': compact,
                 'inventory_excluded': job.payload.get('scope', {}).get('excluded_today', [])}

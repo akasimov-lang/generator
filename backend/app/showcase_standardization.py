@@ -53,11 +53,18 @@ def card_record(markup,node,brand):
     fields={f['key']:f['value'] for f in own.get('fields',[])}
     image=next((n for n in node.walk() if n.tag=='img' and valid_logo(n.attrs.get('alt')) and safe_url(n.attrs.get('src'))),None)
     bonus=node.first({'bonus-value','bonusText','casinoBonus','card_bonus'})
+    if not bonus:
+        bonus=next((n for n in node.walk() if any('bonus' in c.lower() for c in n.classes) and re.search(r'\d',n.text()) and len(n.text())<500),None)
+    if not bonus:
+        bonus=next((n for n in node.walk() if n.tag in {'p','div','span','strong'} and re.search(r'\d.*(?:%|free spins|\bFS\b|Welcome Package)|(?:\$|€|£)\s*\d',n.text(),re.I) and len(n.text())<180 and not re.search(r'Min\. Deposit|Payout|Payments:',n.text(),re.I)),None)
     if not fields.get('bonus') and bonus:fields['bonus']=bonus.text()
     if not fields.get('bonus'):raise ValueError('Не определено точное бонусное предложение: '+brand)
-    actions=[]
-    for a in (n for n in node.walk() if n.tag=='a' and safe_url(n.attrs.get('href')) and n.text()):
-        actions.append('<a href="'+escape(a.attrs['href'],quote=True)+'" target="'+escape(a.attrs.get('target','_blank'),quote=True)+'" rel="'+escape(a.attrs.get('rel','nofollow sponsored noopener'),quote=True)+'">'+escape(a.text())+'</a>')
+    from app.showcase_brands import plain
+    controls=[n for n in node.walk() if getattr(n,'closed',False) and (n.tag=='a' and (safe_url(n.attrs.get('href')) or n.attrs.get('href','').startswith('#') or n.attrs.get('onclick') or n.attrs.get('data-split')) or n.tag=='button') and plain(markup[n.start:n.end])]
+    actions=[markup[n.start:n.end] for n in controls if not any(parent.start<n.start and parent.end>n.end for parent in controls)]
+    if not fields.get('rating'):
+        match=re.search(r'\b\d+(?:[.,]\d+)?\s*/\s*(?:5|10)\b',node.text())
+        if match:fields['rating']=match.group()
     return {'brand':brand,'bonus':fields['bonus'],'rating':fields.get('rating',''),'conditions':node.text(),
             'logo_src':image.attrs['src'] if image else None,'actions_html':' '.join(dict.fromkeys(actions))}
 
@@ -83,8 +90,8 @@ STYLE='''<style>
 .pp-standard{display:grid;gap:16px;width:100%;grid-column:1/-1;flex:1 0 100%;margin:20px 0;font-family:inherit}
 .pp-standard.pp-standard .pp-standard-card{display:grid;grid-template-columns:minmax(130px,180px) minmax(0,1fr) minmax(130px,200px);gap:20px;align-items:center;width:100%;box-sizing:border-box;padding:22px;border:1px solid #8b94a666;border-radius:14px;background:var(--showcase-card-bg,#fff);color:var(--showcase-card-color,#1c2638)}
 .pp-standard .pp-standard-brand{min-width:0;text-align:center}.pp-standard .pp-standard-brand img{display:block;width:150px;max-width:100%;height:82px;object-fit:contain;margin:0 auto 10px}.pp-standard .casino-brand{display:block;overflow-wrap:anywhere;font-size:18px;line-height:1.3;font-weight:700}
-.pp-standard .bonus-value{font-size:20px;line-height:1.4;font-weight:700;overflow-wrap:anywhere}.pp-standard .casino-rating{display:block;margin-top:8px;font-weight:600}.pp-standard .pp-standard-actions{display:grid;gap:8px}.pp-standard .pp-standard-actions a{display:block;padding:12px;border-radius:8px;background:var(--showcase-button-bg,#3557d6);color:#fff;text-decoration:none;text-align:center;font-weight:700;line-height:1.3}
-.pp-standard .pp-standard-terms{grid-column:1/-1;margin:0;font-size:13px}.pp-standard .pp-standard-terms p{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.5}.pp-standard summary{cursor:pointer}
+.pp-standard .bonus-value{font-size:20px;line-height:1.4;font-weight:700;overflow-wrap:anywhere}.pp-standard .casino-rating{display:block;margin-top:8px;font-weight:600}.pp-standard .pp-standard-actions{display:grid;gap:8px}.pp-standard .pp-standard-actions a,.pp-standard .pp-standard-actions button{display:block;padding:12px;border-radius:8px;background:var(--showcase-button-bg,#3557d6);color:#fff;text-decoration:none;text-align:center;font-weight:700;line-height:1.3}
+.pp-standard .pp-standard-terms{grid-column:1/-1;margin:0;font-size:13px}.pp-standard .pp-standard-terms p{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.5}.pp-standard .pp-standard-actions a>button{padding:0;background:transparent;border:0;color:inherit;width:100%}.pp-standard summary{cursor:pointer}
 @media(max-width:640px){.pp-standard.pp-standard .pp-standard-card{grid-template-columns:1fr;gap:14px;padding:16px}.pp-standard .casino-brand{font-size:16px}.pp-standard .bonus-value{text-align:center;font-size:18px}.pp-standard .pp-standard-actions,.pp-standard .pp-standard-terms{grid-column:1}}
 </style>'''
 
@@ -94,7 +101,7 @@ def template(group,details_label):
     return STYLE+'<section class="pp-standard">{{#each casinos.'+group+'}}<article class="casino-card pp-standard-card"><div class="pp-standard-brand">{{#if (findLogo this ../casinos.basic "src")}}<img src="{{findLogo this ../casinos.basic "src"}}" alt="'+v('brand')+'" loading="lazy">{{/if}}<strong class="casino-brand">'+v('brand')+'</strong><span class="casino-rating">'+v('rating')+'</span></div><div class="bonus-value">'+v('bonus')+'</div><div class="pp-standard-actions">{{{findValueInObjectByKey this "actions_html" "value" false}}}</div><details class="pp-standard-terms"><summary>'+escape(details_label)+'</summary><p>'+v('conditions')+'</p></details></article>{{/each}}</section>'
 
 
-def prepare(project,public_html,expected_brands,details_label='Details'):
+def prepare(project,public_html,expected_brands,details_label='Details',public_pages=None):
     """Prepare every connected legacy table/card block, failing closed on ambiguity."""
     planned=deepcopy(project);data=planned.setdefault('data',{});casinos=data.setdefault('casinos',{})
     if not isinstance(casinos,dict):raise ValueError('Формат данных casinos требует отдельного адаптера.')
@@ -103,25 +110,30 @@ def prepare(project,public_html,expected_brands,details_label='Details'):
     gallery=next((f for f in basic if f.get('key')=='logo' and f.get('type')=='gallery'),None)
     if gallery is None:gallery={'key':'logo','type':'gallery','data':[]};basic.append(gallery)
     if not isinstance(gallery.get('data'),list):raise ValueError('Не определена галерея логотипов.')
-    public_records={identity(brand):card_record(public_html,node,brand) for node,brand in card_nodes(public_html) if identity(brand) in {identity(x) for x in expected_brands}}
+    public_pages={**(public_pages or {}),'/':public_html}
+    def records_for(markup,wanted):
+        return {identity(brand):card_record(markup,node,brand) for node,brand in card_nodes(markup) if identity(brand) in {identity(x) for x in wanted}}
+    public_records=records_for(public_html,expected_brands)
     original_defs={s['name'].removesuffix('.hbs'):s for s in project.get('shortcodes',[]) if isinstance(s,dict) and isinstance(s.get('data'),str)}
-    used=set()
-    def visit(name):
+    used=set();owners={}
+    def visit(name,slug,path=()):
         name=str(name).removesuffix('.hbs')
-        if name in used or name in {'header','footer','menu','navigation'}:return
-        used.add(name)
-        for sub in re.findall(r'{{>\s*["\']?([\w .-]+?)["\']?\s*}}',str(original_defs.get(name,{}).get('data',''))):visit(sub)
+        if name in path or name in {'header','footer','menu','navigation'}:return
+        used.add(name);owners.setdefault(name,set()).add(slug)
+        for sub in re.findall(r'{{>\s*["\']?([\w .-]+?)["\']?\s*}}',str(original_defs.get(name,{}).get('data',''))):visit(sub,slug,(*path,name))
     for page in data.get('pages',[]):
         for block in (page.get('content') or {}).get('blocks',[]):
-            if block.get('type')=='shortcode' and isinstance(block.get('data'),dict):visit(block['data'].get('shortcode',''))
-    for sub in re.findall(r'{{>\s*["\']?([\w .-]+?)["\']?\s*}}',str(project.get('layout') or '')):visit(sub)
+            if block.get('type')=='shortcode' and isinstance(block.get('data'),dict):visit(block['data'].get('shortcode',''),page.get('slug') or '/')
+    for sub in re.findall(r'{{>\s*["\']?([\w .-]+?)["\']?\s*}}',str(project.get('layout') or '')):visit(sub,'/')
     groups={};new_templates=[];logo_ids={str(x.get('id')) for x in gallery['data']};next_logo=1790000000000
     def group_for(records):
         nonlocal next_logo
-        key=tuple(identity(r['brand']) for r in records)
+        key=digest(records)
         if key in groups:return groups[key]
-        group='pagepilot_standard_'+str(len(groups)+1);name='casinos-standard-'+str(len(groups)+1)
-        if group in casinos or name in original_defs:raise ValueError('Обнаружен существующий шаблон стандартизации. Требуется повторное чтение.')
+        index=len(groups)+1
+        group='pagepilot_standard_'+str(index);name='casinos-standard-'+str(index)
+        while group in casinos or name in original_defs:
+            index+=1;group='pagepilot_standard_'+str(index);name='casinos-standard-'+str(index)
         cards=[]
         for record in records:
             fields=[{'key':key,'type':'text','value':record.get(key,'')} for key in ('brand','bonus','rating','conditions','actions_html')]
@@ -140,8 +152,14 @@ def prepare(project,public_html,expected_brands,details_label='Details'):
         if not nodes:continue
         names=[brand for _,brand in nodes]
         if len(unique_brands(names))!=len(names):raise ValueError('Повторяющиеся карточки в шаблоне '+name)
-        if any(identity(brand) not in public_records for brand in names):raise ValueError('Не подтверждены публичные карточки шаблона '+name)
-        replacement=group_for([public_records[identity(brand)] for brand in names]);new=markup
+        own=None
+        for slug in sorted(owners.get(name,{'/'})):
+            if slug not in public_pages:continue
+            records=records_for(public_pages[slug],names)
+            if all(identity(brand) in records for brand in names):
+                own=records;break
+        if own is None:raise ValueError('Не подтверждены публичные карточки шаблона '+name)
+        replacement=group_for([own[identity(brand)] for brand in names]);new=markup
         for index,(node,_) in reversed(list(enumerate(nodes))):new=new[:node.start]+('{{> '+replacement+'}}' if index==0 else '')+new[node.end:]
         changed={**source,'data':new};changed_templates.append((source,changed))
         actual=next(s for s in planned['shortcodes'] if s.get('name')==source['name']);actual['data']=new
@@ -158,8 +176,9 @@ def prepare(project,public_html,expected_brands,details_label='Details'):
                 field='code' if kind=='code' else 'html';markup=value.get(field,'');nodes=card_nodes(markup)
                 if not nodes:blocks.append(block);continue
                 names=[brand for _,brand in nodes]
-                if any(identity(b) not in public_records for b in names):raise ValueError('Не подтверждена карточка HTML-блока.')
-                name=group_for([public_records[identity(b)] for b in names]);cursor=0
+                own=records_for(public_pages.get(page.get('slug') or '/',public_html),names)
+                if any(identity(b) not in own for b in names):raise ValueError('Не подтверждена карточка HTML-блока.')
+                name=group_for([own[identity(b)] for b in names]);cursor=0
                 for index,(node,_) in enumerate(nodes):
                     fragment=markup[cursor:node.start]
                     if fragment:blocks.append({**block,'id':str(block.get('id','code'))+'-part-'+str(index),'data':{**value,field:fragment}})
@@ -175,7 +194,7 @@ def prepare(project,public_html,expected_brands,details_label='Details'):
     home=next((p for p in data.get('pages',[]) if not str(p.get('slug') or '').strip('/')),None)
     if home is None:raise ValueError('Не определена главная страница.')
     brands=page_inventory(planned,home)['brands']
-    if {identity(x) for x in brands}!={identity(x) for x in expected_brands}:raise ValueError('Состав брендов после подготовки не совпадает с исходным. Публикация остановлена.')
+    if {identity(x) for x in brands}!={identity(x) for x in expected_brands}:raise ValueError('Состав брендов после подготовки не совпадает с исходным. Было: '+', '.join(expected_brands)+'; подготовлено: '+', '.join(brands))
     return {'before_revision':digest(project),'casinos_before':(project.get('data') or {}).get('casinos'),
             'casinos_after':casinos,'templates':changed_templates,'new_templates':new_templates,
             'pages':changed_pages,'brands_before':expected_brands,'brands_after':brands,'planned_project':planned}
@@ -189,10 +208,20 @@ def publish(db,site,remote,plan,report_id,actor='anton'):
     from app import models
     from app.project_pages import page_key,editable
     current=remote.project()
-    if digest(current)!=plan['before_revision']:raise ValueError('Проект изменился после подготовки. Требуется обновить план.')
+    if digest(current)!=plan['before_revision']:
+        # Resume the confirmed, still-unused dataset stage without resending it.
+        saved_id=str(uuid5(UUID(report_id),site.id+':showcase-standard:'+plan['before_revision']+':casinos:cards'))
+        saved=db.get(models.ProjectPageEdit,saved_id) if db is not None else None
+        restored=deepcopy(current)
+        if saved and saved.status=='confirmed' and (current.get('data') or {}).get('casinos')==plan['casinos_after']:
+            if plan['casinos_before'] is None:restored.get('data',{}).pop('casinos',None)
+            else:restored.setdefault('data',{})['casinos']=plan['casinos_before']
+        if digest(restored)!=plan['before_revision'] and saved and saved.status=='confirmed' and plan['casinos_before'] is None:
+            restored.setdefault('data',{})['casinos']=None
+        if digest(restored)!=plan['before_revision']:raise ValueError('Проект изменился после подготовки. Требуется обновить план.')
     receipts=[]
     def send(kind,key,before,after,path,payload,read,confirmed=lambda a,b:a==b):
-        request_id=str(uuid5(UUID(report_id),site.id+':showcase-standard:'+kind+':'+key))
+        request_id=str(uuid5(UUID(report_id),site.id+':showcase-standard:'+plan['before_revision']+':'+kind+':'+key))
         op=db.get(models.ProjectPageEdit,request_id)
         actual=read(remote.project())
         if op:
@@ -220,7 +249,12 @@ def publish(db,site,remote,plan,report_id,actor='anton'):
     for before,after in [(None,s) for s in plan['new_templates']]+plan['templates']:
         after={k:after[k] for k in ('name','data')};before={k:before[k] for k in ('name','data')} if before else None
         filename=after['name'].removesuffix('.hbs')
-        send('template',filename,before,after,'/projects/shortcode',
+        if before is None:
+            send('template_create',filename,None,{'name':after['name'],'created':True},'/projects/shortcode/new',
+                 {'project':site.name,'filename':filename,'requiredPermission':'create-shortcode','initiator':actor},
+                 lambda p,name=after['name']:get_template(p,name),lambda a,b:a is not None and a.get('name')==b['name'])
+            before=get_template(remote.project(),after['name'])
+        send('template_save',filename,before,after,'/projects/shortcode',
              {'project':site.name,'filename':filename,'contents':quote(after['data'],safe=";/?:@&=+$,-_.!~*'()#"),'initiator':actor},
              lambda p,name=after['name']:get_template(p,name))
     for before,after in plan['pages']:
