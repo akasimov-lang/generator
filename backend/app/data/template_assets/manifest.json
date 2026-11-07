@@ -1115,6 +1115,286 @@
       "height": 84,
       "verified_at": "2026-11-07",
       "showcase_ready": true
+    },
+    {
+      "id": "hotline",
+      "name": "Hotline Casino",
+      "aliases": [],
+      "kind": "brandmark",
+      "logo": "showcase/hotline.png",
+      "surface": "dark",
+      "source": "https://hotlinecasino.com/",
+      "source_page": "https://hotlinecasino.com/",
+      "sha256": "9632e72a7f8345a2bef9d92c2dd3e892494c5485da4f99a4e1d372a8f58ef635",
+      "width": 600,
+      "height": 600,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
+    },
+    {
+      "id": "candy",
+      "name": "Candy Casino",
+      "aliases": [],
+      "kind": "wordmark",
+      "logo": "showcase/candy.png",
+      "surface": "light",
+      "source": "https://candy.casino/images/logo.svg",
+      "source_page": "https://candy.casino/",
+      "sha256": "04bf96c74381e918af594388c6f98421638cc0ff4b93d8cdf4027fcac30e71f1",
+      "width": 600,
+      "height": 488,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
+    },
+    {
+      "id": "betify",
+      "name": "Betify Casino",
+      "aliases": [
+        "Betify"
+      ],
+      "kind": "brandmark",
+      "logo": "showcase/betify.png",
+      "surface": "light",
+      "source": "https://downloads.intercomcdn.com/i/o/438148/19f61a7903edf19b8ad5174d/f50c73d00fda2bd6d78ce4082e70f008.png",
+      "source_page": "https://help.betify.com/en/",
+      "sha256": "b487d8548bb5aa1fd74bf5ec95411faebc7d5e375f7ad39b7beebf755d700a8f",
+      "width": 500,
+      "height": 500,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
+    },
+    {
+      "id": "dragonslots",
+      "name": "DragonSlots",
+      "aliases": [
+        "Dragon Slots"
+      ],
+      "kind": "brandmark",
+      "logo": "showcase/dragonslots.png",
+      "surface": "dark",
+      "source": "https://ddixegqtj1r7z.cloudfront.net/site/upload/logos/13c72b9b-6f74-46a3-a4af-91cc4001d272/1767884888_dragonslots-loader.svg",
+      "source_page": "https://dragonslots.com/",
+      "sha256": "2559774ebdd5838b70017565bc683ea7282e51c97c5c65d5d76bd6fe3619657b",
+      "width": 600,
+      "height": 600,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
+    },
+    {
+      "id": "merlin",
+      "name": "Merlin Casino",
+      "aliases": [],
+      "kind": "wordmark",
+      "logo": "showcase/merlin.png",
+      "surface": "light",
+      "source": "https://wizardaffiliates.com/wp-content/uploads/2025/08/Merlin-Casino-New-Logo-2025.png",
+      "source_page": "https://wizardaffiliates.com/",
+      "sha256": "029497802ac405cfac9c195896c41dfaaa58579fd55d5db266d679e3def9d089",
+      "width": 250,
+      "height": 150,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
+    },
+    {
+      "id": "wolfy",
+      "name": "Wolfy Casino",
+      "aliases": [],
+      "kind": "wordmark",
+      "logo": "showcase/wolfy.png",
+      "surface": "light",
+      "source": "https://www.wolfyaffiliates.com/wp-content/uploads/2025/10/Logotip_Wolfy-300x276.webp",
+      "source_page": "https://www.wolfyaffiliates.com/",
+      "sha256": "1239a426d5c8b13530d304aa14a21b08ecc3b11ee553783c48102b41c48481ef",
+      "width": 300,
+      "height": 276,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
+    },
+    {
+      "id": "hitnspin",
+      "name": "Hit'n'Spin",
+      "aliases": [
+        "Hitnspin",
+        "Hit N Spin"
+      ],
+      "kind": "wordmark",
+      "logo": "showcase/hitnspin.png",
+      "surface": "dark",
+      "source": "https://hitnspin.com/spa-assets/svg/logo.svg?format=webp",
+      "source_page": "https://hitnspin.com/",
+      "sha256": "81a6ec5dd75897ec9a0f84f4879772ba79937362270f2d355c8d85e71ddd273d",
+      "width": 600,
+      "height": 235,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
+    },
+    {
+      "id": "xonbet",
+      "name": "XonBet Casino",
+      "aliases": [
+        "XonBet",
+        "XON"
+      ],
+      "kind": "wordmark",
+      "logo": "showcase/xonbet.png",
+      "surface": "dark",
+      "source": "https://xon.bet/img/logo/dark-theme/logo-md.svg",
+      "source_page": "https://xon.bet/",
+      "sha256": "220551fa50d5fc25f6dadf9b10c911076815fdbb6ba5c9469e81f58c31a386c8",
+      "width": 600,
+      "height": 273,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
+    },
+    {
+      "id": "20bet",
+      "name": "20BET",
+      "aliases": [],
+      "kind": "wordmark",
+      "logo": "showcase/20bet.png",
+      "surface": "dark",
+      "source": "https://dwmu1hf7ovvid.cloudfront.net/site/upload/logos/be6bc2c6-0fc7-4c67-82b8-bd06dd0f33b4/1784534893_20bet-loader.webp",
+      "source_page": "https://20bet.com/",
+      "sha256": "560d1854511a82e7cf99c49fa37df02e451b11686482ff7467c7e23227d87b64",
+      "width": 512,
+      "height": 244,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
+    },
+    {
+      "id": "mycasino",
+      "name": "MyCasino",
+      "aliases": [
+        "My Casino"
+      ],
+      "kind": "wordmark",
+      "logo": "showcase/mycasino.png",
+      "surface": "light",
+      "source": "https://www.mycasino.ch/",
+      "source_page": "https://www.mycasino.ch/",
+      "sha256": "dd886d8b3fafbd784bd50422605f92b7b8c53d7842b065b140721e7827ce6e67",
+      "width": 600,
+      "height": 216,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
+    },
+    {
+      "id": "royspins",
+      "name": "RoySpins",
+      "aliases": [
+        "Roy Spins"
+      ],
+      "kind": "wordmark",
+      "logo": "showcase/royspins.png",
+      "surface": "dark",
+      "source": "https://royspins.com/",
+      "source_page": "https://royspins.com/",
+      "sha256": "77011d4c6d40faa2a74864555ca2e66da2ff94f0368f5ae1efea4365cf1fda5c",
+      "width": 600,
+      "height": 273,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
+    },
+    {
+      "id": "oshi",
+      "name": "Oshi Casino",
+      "aliases": [
+        "Oshi"
+      ],
+      "kind": "wordmark",
+      "logo": "showcase/oshi.png",
+      "surface": "dark",
+      "source": "https://www.oshi.io/",
+      "source_page": "https://www.oshi.io/",
+      "sha256": "a5d6f2d0ae38a9efaecbf45e1d647ccd967b9cad660ed0a3cc767860b53618af",
+      "width": 62,
+      "height": 31,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
+    },
+    {
+      "id": "swiss4win",
+      "name": "Swiss4Win",
+      "aliases": [],
+      "kind": "wordmark",
+      "logo": "showcase/swiss4win.png",
+      "surface": "dark",
+      "source": "https://www.swiss4win.ch/library/.customization/logo.svg",
+      "source_page": "https://www.swiss4win.ch/",
+      "sha256": "d74769f3eeb58191c496739df6813be68de708ac2ece84fd23fe001f2a043ac3",
+      "width": 600,
+      "height": 127,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
+    },
+    {
+      "id": "cobra",
+      "name": "Cobra Casino",
+      "aliases": [
+        "Cobra"
+      ],
+      "kind": "wordmark",
+      "logo": "showcase/cobra.png",
+      "surface": "light",
+      "source": "https://highaffiliates.com/wp-content/uploads/2025/03/Cobra.svg",
+      "source_page": "https://highaffiliates.com/",
+      "sha256": "794572083dcf7a1d937c4059813137ffd41346c6ca359750f5a1d26051de06a4",
+      "width": 600,
+      "height": 209,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
+    },
+    {
+      "id": "7melons",
+      "name": "7 Melons",
+      "aliases": [
+        "7Melons"
+      ],
+      "kind": "wordmark",
+      "logo": "showcase/7melons.png",
+      "surface": "dark",
+      "source": "https://www.grandcasino-bern.ch/sites/default/files/2026-08/Logo%2520white%2520normal.svg",
+      "source_page": "https://www.grandcasino-bern.ch/de",
+      "sha256": "af5de49490d65f39ac1e66da2946ebab90c63659f53bb70cf4d45c102108a7b0",
+      "width": 1500,
+      "height": 504,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
+    },
+    {
+      "id": "gamrfirst",
+      "name": "Gamrfirst",
+      "aliases": [
+        "Gamr First"
+      ],
+      "kind": "wordmark",
+      "logo": "showcase/gamrfirst.png",
+      "surface": "dark",
+      "source": "https://images.squarespace-cdn.com/content/v1/60aedd95a74c4c4033f9d064/1362f838-49fe-44af-857d-d115369cf581/Screenshot+2024-05-31+at+9.54.39%E2%80%AFAM.png",
+      "source_page": "https://www.bigtimegaming.com/news/gamr-first-launch",
+      "sha256": "f8030ed05cfbfc9fa4d5b454f634de7aa1afc2cfe424fdeb8078db6ed65bf51e",
+      "width": 508,
+      "height": 184,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
+    },
+    {
+      "id": "777",
+      "name": "777 Casino",
+      "aliases": [
+        "Casino777",
+        "Casino 777"
+      ],
+      "kind": "wordmark",
+      "logo": "showcase/777.png",
+      "surface": "dark",
+      "source": "https://support.casino777.ch/hc/theming_assets/01M5Z27TPGP13T3XVD972E6PEM",
+      "source_page": "https://support.casino777.ch/hc/en-us",
+      "sha256": "10a6f005a0b15e2947eb29a400bff828f72c3242bf6b5790a64c58599b78277e",
+      "width": 1268,
+      "height": 598,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
     }
   ],
   "payments": [
