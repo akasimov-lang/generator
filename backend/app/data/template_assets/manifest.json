@@ -174,13 +174,19 @@
       "id": "leovegas",
       "name": "LeoVegas",
       "aliases": [],
-      "kind": "brand_mark",
-      "source": "https://cdn.leovegas.com/frontend/8.1.8/public/static/img/favicon.png",
-      "logo": "leovegas-logo.png",
+      "kind": "wordmark",
+      "source": "https://images.ctfassets.net/kijvoxi4q0zn/2qwQcjRQ3TetEpVipd1HHe/dfe67f84422cdb1e5834f544da7da4b1/leovegas-logo.png",
+      "logo": "showcase/leovegas.png",
       "favicon": "leovegas-favicon.png",
       "surface": "dark",
       "favicon_source": "https://cdn.leovegas.com/frontend/8.1.8/public/static/img/favicon.png",
-      "favicon_derived": false
+      "favicon_derived": false,
+      "source_page": "https://www.leovegasaffiliates.com/downloads",
+      "sha256": "0b7b315190e32c5569dcb6ef0d44b86002ef202392ef23125502fd486f05c662",
+      "width": 380,
+      "height": 93,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
     },
     {
       "id": "fanduel",
@@ -770,6 +776,155 @@
       "sha256": "acc33d7f36e2706ef4aaf64517b5705ac122d17e5db3ff217fbfdc444bcf5dd5",
       "width": 2500,
       "height": 826,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
+    },
+    {
+      "id": "betrivers",
+      "name": "BetRivers",
+      "aliases": [
+        "BetRivers Casino"
+      ],
+      "kind": "wordmark",
+      "logo": "showcase/betrivers.png",
+      "surface": "dark",
+      "source": "https://images.prismic.io/rushstreet/ZjovUkMTzAJOCnDG__Logo_200x90.png",
+      "source_page": "https://www.rushstreetinteractive.com/",
+      "sha256": "9469890ffb7cd7b2f99dec07cb8c217d572321aab8339c3d960979977a43a47d",
+      "width": 200,
+      "height": 90,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
+    },
+    {
+      "id": "playojo",
+      "name": "PlayOJO",
+      "aliases": [
+        "Play OJO"
+      ],
+      "kind": "wordmark",
+      "logo": "showcase/playojo.png",
+      "surface": "dark",
+      "source": "https://aws-origin.image-tech-storage.com/tenants/playojo/playojo.com/_nuxt/logo_en.BG7Z5U3Q.png",
+      "source_page": "https://www.playojo.com/",
+      "sha256": "068a9753a15ebf1e5cf543cb588674add5ea68c1454db84075e8aed85ea7a736",
+      "width": 150,
+      "height": 141,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
+    },
+    {
+      "id": "sports-interaction",
+      "name": "Sports Interaction",
+      "aliases": [],
+      "kind": "wordmark",
+      "logo": "showcase/sports-interaction.png",
+      "surface": "light",
+      "source": "https://www.entaingroup.com/media/nwndf3ot/image.png",
+      "source_page": "https://www.entaingroup.com/investor-relations/investor-overview/",
+      "sha256": "ce5209dd318f9386bcfd3a40eec7cb730f859b63481707c6ec0e5b349173ccc0",
+      "width": 812,
+      "height": 176,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
+    },
+    {
+      "id": "betway",
+      "name": "Betway",
+      "aliases": [
+        "Betway Casino"
+      ],
+      "kind": "wordmark",
+      "logo": "showcase/betway.png",
+      "surface": "dark",
+      "source": "https://www.superpartners.com/logos/betway-logo.svg",
+      "source_page": "https://www.superpartners.com/",
+      "sha256": "995944fe97435d136906d650f0477f2dd14018b4a7484c7a2bed431a159b8d12",
+      "width": 450,
+      "height": 144,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
+    },
+    {
+      "id": "spin-casino",
+      "name": "Spin Casino",
+      "aliases": [
+        "SpinCasino"
+      ],
+      "kind": "wordmark",
+      "logo": "showcase/spin-casino.png",
+      "surface": "dark",
+      "source": "https://www.superpartners.com/logos/spin-casino-logo.svg",
+      "source_page": "https://www.superpartners.com/",
+      "sha256": "c582a1dc487198378a2416b9fb75029d940f3b8ea75a5e7ee32b84ea5d5b4839",
+      "width": 450,
+      "height": 180,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
+    },
+    {
+      "id": "ruby-fortune",
+      "name": "Ruby Fortune",
+      "aliases": [
+        "RubyFortune"
+      ],
+      "kind": "wordmark",
+      "logo": "showcase/ruby-fortune.png",
+      "surface": "light",
+      "source": "https://dm.imagethumb.com/images/rfc/logo.svg",
+      "source_page": "https://www.spin-brands.com/",
+      "sha256": "a971f7d51e1b3f86e40bbeb9b05a902b533bbc914ab7df8d9a80a5ee3b99e2f7",
+      "width": 450,
+      "height": 276,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
+    },
+    {
+      "id": "partycasino",
+      "name": "PartyCasino",
+      "aliases": [
+        "Party Casino"
+      ],
+      "kind": "wordmark",
+      "logo": "showcase/partycasino.png",
+      "surface": "dark",
+      "source": "https://www.partycasino.com/",
+      "source_page": "https://www.partycasino.com/",
+      "sha256": "cbd7cd0c7fbd21860bb3119135f9d1b033a3df310455b070849fdb291a7b236f",
+      "width": 1254,
+      "height": 159,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
+    },
+    {
+      "id": "northstar-bets",
+      "name": "NorthStar Bets",
+      "aliases": [
+        "NorthStarBets"
+      ],
+      "kind": "wordmark",
+      "logo": "showcase/northstar-bets.png",
+      "surface": "dark",
+      "source": "https://www.northstarbets.ca/library/lp/static-page-assets/images/logo.webp",
+      "source_page": "https://www.northstarbets.ca/",
+      "sha256": "bd340b8522419755c4fbc5eeee4855e5e6e9f901af41d792f8d09e508720581a",
+      "width": 470,
+      "height": 80,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
+    },
+    {
+      "id": "granawin",
+      "name": "Granawin",
+      "aliases": [],
+      "kind": "wordmark",
+      "logo": "showcase/granawin.png",
+      "surface": "dark",
+      "source": "https://d2zru5u0rxc37.cloudfront.net/site/upload/custom_asset/granawinlogo.svg",
+      "source_page": "https://granawin.com/",
+      "sha256": "c80df229ce286c665e7fd27475cc8fcfc4f7ae576060803b08410ab791bb788a",
+      "width": 450,
+      "height": 109,
       "verified_at": "2026-11-07",
       "showcase_ready": true
     }
