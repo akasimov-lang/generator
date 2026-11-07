@@ -15,7 +15,7 @@ def page(text):return {'slug':'/test/','content':{'blocks':[{'id':'p','type':'pa
 
 def test_current_drop_scheme_resolves_template_without_modifying_it(env):
     _,site,_=env;site.domain_types={'main.test':'drop'}
-    state={'canon':'www.main.test','fake_main_current':'/pl/','fake_main_enabled':True,'enableCanonical':True,'canonicalDefaultMarkup':'<link rel="canonical" href="https://{{settings.canon}}/pl/">','enableAlternates':True,'alternateMarkup':'<link rel="alternate" hreflang="pl" href="https://{{settings.canon}}/">'}
+    state={'canon':'www.main.test','fake_main_current':'/pl/','fake_main_enabled':True,'enableCanonical':True,'canonicalDefaultMarkup':'<link rel="canonical" href="https://{{settings.canon}}{{reqPath}}">','canonicalFakeMainMarkup':'<link rel="canonical" href="https://{{settings.canon}}/pl/">','enableAlternates':True,'alternateMarkup':'<link rel="alternate" hreflang="pl" href="https://{{settings.canon}}/">'}
     original=deepcopy(state);result=reports.scheme(site,state)
     assert result['main_type']=='drop' and 'Canonical на внутряк' in result['scheme']
     assert 'www.main.test' in result['alternate'] and state==original
@@ -225,3 +225,67 @@ def test_description_only_change_is_not_a_title_h1_rewrite():
     before=page('body');after={**before,'description':'Updated description'}
     edit=SimpleNamespace(id='desc',before_page=before,after_page=after,updated_at=AT)
     assert reports.text_event(edit,'Pelican')['heading_changes']==[]
+
+
+def test_homepage_and_current_inner_use_special_canonical_when_alternates_enabled(env):
+    _,site,_=env
+    state={'canon':'main.test','fake_main_current':'/current/','fake_main_enabled':True,
+        'enableCanonical':True,'enableAlternates':True,
+        'canonicalDefaultMarkup':'<link rel="canonical" href="https://{{settings.canon}}{{reqPath}}">',
+        'canonicalFakeMainMarkup':'<link rel="canonical" href="https://{{settings.canon}}/current/">'}
+    result=reports.scheme(site,state)
+    assert result['canonical']==result['inner_canonical']=='<link rel="canonical" href="https://main.test/current/">'
+    assert result['canonical_source']=='fake_main' and 'Canonical на внутряк' in result['scheme']
+    assert result['canonical_templates']['default']==state['canonicalDefaultMarkup']
+
+
+def test_disabled_alternates_use_default_canonical_with_each_request_path(env):
+    _,site,_=env
+    state={'canon':'main.test','fake_main_current':'/current/','fake_main_enabled':True,
+        'enableCanonical':True,'enableAlternates':False,
+        'canonicalDefaultMarkup':'<link rel="canonical" href="https://{{settings.canon}}{{reqPath}}">',
+        'canonicalFakeMainMarkup':'<link rel="canonical" href="https://obsolete.test/old/">'}
+    result=reports.scheme(site,state)
+    assert result['canonical']=='<link rel="canonical" href="https://main.test/">'
+    assert result['inner_canonical']=='<link rel="canonical" href="https://main.test/current/">'
+    assert result['canonical_source']=='default' and 'Canonical на главную' in result['scheme']
+
+
+def test_special_canonical_request_placeholder_resolves_home_and_inner_separately(env):
+    _,site,_=env
+    state={'canon':'main.test','fake_main_current':'/current/','fake_main_enabled':True,
+        'enableCanonical':True,'enableAlternates':True,
+        'canonicalDefaultMarkup':'<link rel="canonical" href="https://wrong.test/">',
+        'canonicalFakeMainMarkup':'<link rel="canonical" href="https://{{settings.canon}}{{reqPath}}">'}
+    result=reports.scheme(site,state)
+    assert result['canonical']=='<link rel="canonical" href="https://main.test/">'
+    assert result['inner_canonical']=='<link rel="canonical" href="https://main.test/current/">'
+
+
+def test_disabled_canonical_is_not_shown_as_an_active_tag(env):
+    _,site,_=env
+    state={'canon':'main.test','fake_main_current':'/current/','fake_main_enabled':True,
+        'enableCanonical':False,'enableAlternates':True,
+        'canonicalDefaultMarkup':'<link rel="canonical" href="https://main.test/">',
+        'canonicalFakeMainMarkup':'<link rel="canonical" href="https://main.test/current/">'}
+    result=reports.scheme(site,state)
+    assert result['canonical']==result['inner_canonical']==''
+    assert result['canonical_source']=='disabled' and 'Canonical выключен' in result['scheme']
+    assert result['canonical_templates']['fake_main']==state['canonicalFakeMainMarkup']
+
+
+def test_empty_special_canonical_does_not_fall_back_to_unapplied_default(env):
+    _,site,_=env
+    state={'canon':'main.test','enableCanonical':True,'enableAlternates':True,
+        'canonicalDefaultMarkup':'<link rel="canonical" href="https://main.test/">'}
+    result=reports.scheme(site,state)
+    assert result['canonical']=='' and 'Canonical не задан' in result['scheme']
+
+
+def test_report_canonical_parser_ignores_alternate_href_and_external_root(env):
+    _,site,_=env
+    state={'canon':'main.test','fake_main_current':'/current/','fake_main_enabled':True,
+        'enableCanonical':True,'enableAlternates':True,
+        'canonicalFakeMainMarkup':'<link rel="alternate" href="https://main.test/current/" hreflang="pl"><link rel="canonical" href="https://other.test/">'}
+    result=reports.scheme(site,state)
+    assert 'Canonical см. разметку' in result['scheme']

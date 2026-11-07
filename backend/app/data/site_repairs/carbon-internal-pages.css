@@ -1,0 +1,90 @@
+/* PagePilot: CarbonCraftworks internal article layout, 2026-11-07 */
+body[data-cc-page]:not([data-cc-page="/"]):not([data-cc-page=""]) .contentMain {
+  width: min(960px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 24px 0 48px;
+  overflow-wrap: break-word;
+}
+body[data-cc-page]:not([data-cc-page="/"]):not([data-cc-page=""]) .content-block > h1 {
+  max-width: 100%;
+  margin: 24px 0;
+}
+body[data-cc-page]:not([data-cc-page="/"]):not([data-cc-page=""]) .content-block > h2 {
+  margin: 36px 0 18px;
+}
+body[data-cc-page]:not([data-cc-page="/"]):not([data-cc-page=""]) .content-block > :is(ul, ol) {
+  margin: 16px 0 24px;
+}
+body[data-cc-page]:not([data-cc-page="/"]):not([data-cc-page=""]) .content-block figure {
+  max-width: 100%;
+  margin: 28px 0;
+}
+body[data-cc-page]:not([data-cc-page="/"]):not([data-cc-page=""]) .content-block img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+}
+body[data-cc-page]:not([data-cc-page="/"]):not([data-cc-page=""]) .content-block .general-table-wrapper {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  margin: 24px 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+body[data-cc-page]:not([data-cc-page="/"]):not([data-cc-page=""]) .general-table-wrapper table {
+  margin: 0;
+}
+body[data-cc-page]:not([data-cc-page="/"]):not([data-cc-page=""]) .content-block .button-block {
+  display: flex;
+  justify-content: center;
+  margin: 26px 0 30px;
+}
+body[data-cc-page]:not([data-cc-page="/"]):not([data-cc-page=""]) .content-block .btn-content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  min-height: 52px;
+  padding: 14px 28px;
+  border: 1px solid #74ffc1;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #43f5ac 0%, #12e68b 48%, #08cd79 100%);
+  box-shadow: 0 8px 20px #0de58a26, inset 0 1px 0 #a9ffd76b;
+  color: #071c12;
+  font: 800 17px/1.4 "Trebuchet MS", Arial, sans-serif;
+  text-align: center;
+  text-decoration: none;
+  white-space: normal;
+  cursor: pointer;
+  transition: filter .16s, box-shadow .16s;
+}
+body[data-cc-page]:not([data-cc-page="/"]):not([data-cc-page=""]) .content-block .btn-content:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 10px 24px #0de58a3d, inset 0 1px 0 #a9ffd76b;
+}
+body[data-cc-page]:not([data-cc-page="/"]):not([data-cc-page=""]) .content-block .btn-content:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 4px;
+}
+@media (max-width: 600px) {
+  body[data-cc-page]:not([data-cc-page="/"]):not([data-cc-page=""]) .contentMain {
+    width: calc(100% - 32px);
+    padding: 10px 0 32px;
+  }
+  body[data-cc-page]:not([data-cc-page="/"]):not([data-cc-page=""]) .content-block > h1 {
+    margin: 20px 0;
+  }
+  body[data-cc-page]:not([data-cc-page="/"]):not([data-cc-page=""]) .content-block .btn-content {
+    width: 100%;
+    font-size: 16px;
+    padding: 13px 20px;
+  }
+  body[data-cc-page]:not([data-cc-page="/"]):not([data-cc-page=""]) .general-table-wrapper table {
+    min-width: 620px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body[data-cc-page] .content-block .btn-content { transition: none; }
+}

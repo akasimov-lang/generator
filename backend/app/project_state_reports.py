@@ -38,17 +38,28 @@ def scheme(site,state):
     path=state.get('fake_main_current') or ''
     def resolve(markup,req='/'):
         return str(markup or '').replace('{{settings.canon}}',main).replace('{{reqPath}}',req)
-    canonical=resolve(state.get('canonicalDefaultMarkup'))
-    inner_canonical=resolve(state.get('canonicalFakeMainMarkup'),path or '/')
-    # Canonical is not an alternate link: inspect href directly.
-    href=re.search(r'''href=["']([^"']+)["']''',canonical)
-    dest=href.group(1) if href else ''
-    canon_label=('выключен' if not state.get('enableCanonical') else 'на внутряк' if path and urlsplit(dest).path.rstrip('/')==path.rstrip('/') else 'на главную' if dest and urlsplit(dest).path in {'','/'} else 'см. разметку')
+    # Webdev applies the special template to the homepage/current fake page
+    # only when alternates are enabled. Other pages use the default template.
+    # See docs/integrations/webdev-network.md (verified public HTML contract).
+    templates={'default':str(state.get('canonicalDefaultMarkup') or ''),
+               'fake_main':str(state.get('canonicalFakeMainMarkup') or '')}
+    canonical_enabled=bool(state.get('enableCanonical'))
+    canonical_source=('fake_main' if state.get('enableAlternates') else 'default') if canonical_enabled else 'disabled'
+    markup=templates.get(canonical_source,'')
+    canonical=resolve(markup,'/')
+    inner_canonical=resolve(markup,path) if path and state.get('fake_main_enabled') else ''
+    from app.canonical_allocation import canonical_href
+    dest=canonical_href(canonical) or ''
+    target=urlsplit(dest)
+    same_host=not target.netloc or domain_name(target.netloc).removeprefix('www.')==main.removeprefix('www.')
+    canon_label=('выключен' if not canonical_enabled else 'не задан' if not dest
+        else 'на внутряк' if same_host and path and target.path.rstrip('/')==path.rstrip('/')
+        else 'на главную' if same_host and target.path in {'','/'} else 'см. разметку')
     label={'drop':'Дроп','newreg':'Новорег','unknown':'Тип домена не указан'}[kind]
     parts=[label+(' · поддомен' if main.removeprefix('www.')!=root else ''),('внутряк '+path+(' (выключен)' if not state.get('fake_main_enabled') else '')) if path else 'внутряк не назначен','с альтернейтами' if state.get('enableAlternates') else 'без альтернейтов','Canonical '+canon_label]
     redirects=state.get('domain_redirects') or []
     if redirects:parts.append('редиректы доменов: '+str(len(redirects)))
-    return {'main':main,'main_type':kind,'root_domain':root,'fake_path':path,'fake_enabled':bool(state.get('fake_main_enabled')),'scheme':'; '.join(parts),'alternate':resolve(state.get('alternateMarkup')) if state.get('enableAlternates') else '', 'canonical':canonical,'inner_canonical':inner_canonical,'redirects':redirects,'head_known':bool(state.get('has_head'))}
+    return {'main':main,'main_type':kind,'root_domain':root,'fake_path':path,'fake_enabled':bool(state.get('fake_main_enabled')),'scheme':'; '.join(parts),'alternate':resolve(state.get('alternateMarkup')) if state.get('enableAlternates') else '', 'canonical':canonical,'inner_canonical':inner_canonical,'canonical_source':canonical_source,'canonical_templates':templates,'redirects':redirects,'head_known':bool(state.get('has_head'))}
 
 def network_events(operations):
     events=[]
