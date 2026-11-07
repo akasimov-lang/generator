@@ -5,7 +5,7 @@ from uuid import uuid4
 from sqlalchemy.dialects import postgresql
 
 from app import models
-from app.weekly_digest_sources import collect, _ledgers
+from app.weekly_digest_sources import collect, _ledgers, _maintenance
 from test_project_network import env
 
 START = datetime(2026, 11, 1, 21, tzinfo=timezone.utc)
@@ -136,3 +136,41 @@ def test_collector_restores_caller_info_and_ignores_weekly_report_as_work(env):
     result = collect(db, START, END)
     assert result['rows'] == [] and db.info['state_report_sources'] is sentinel
     assert 'state_report_ledgers' not in db.info and 'state_report_menu_logs' not in db.info
+
+
+def test_maintenance_filters_derived_reports_before_loading_json(env, monkeypatch):
+    db, site, _ = env
+    db.add_all([
+        models.BackgroundJob(kind='maintenance_report', payload={'task_type': 'project_state_report'},
+            result={'entries': [{'site_id': site.id, 'private_snapshot': 'large report'}]}),
+        models.BackgroundJob(kind='maintenance_report', payload={'task_type': 'weekly_digest'},
+            result={'entries': [{'site_id': site.id, 'private_snapshot': 'large digest'}]}),
+        models.BackgroundJob(kind='maintenance_report', payload={'task_type': 'showcase_standardization'},
+            result={'entries': [{'site_id': site.id, 'status': 'completed'}]}),
+        models.BackgroundJob(kind='maintenance_report', payload={},
+            result={'entries': [{'site_id': site.id, 'status': 'completed'}]}),
+    ])
+    db.commit()
+    site_id = site.id
+    read_types = []
+    original_execute = db.execute
+    closed = []
+    def execute(statement, *args, **kwargs):
+        assert statement.get_execution_options()['yield_per'] == 1
+        result = original_execute(statement, *args, **kwargs)
+        class Stream:
+            def mappings(self):
+                for source in result.mappings():
+                    # The database must not send large derived reports at all.
+                    assert source['task_type'] not in {'project_state_report', 'weekly_digest'}
+                    read_types.append(source['task_type'])
+                    yield source
+            def close(self):
+                result.close()
+                closed.append(True)
+        return Stream()
+    monkeypatch.setattr(db, 'execute', execute)
+    rows = _maintenance(db)[site_id]
+    assert len(rows) == 2
+    assert set(read_types) == {'showcase_standardization', None}
+    assert closed == [True]

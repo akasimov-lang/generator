@@ -24,22 +24,29 @@ INFO_KEYS = ('state_report_sources', 'state_report_ledgers', 'state_report_menu_
 
 def _maintenance(db):
     grouped = defaultdict(list)
+    task_type = models.BackgroundJob.payload['task_type'].as_string()
     q = select(models.BackgroundJob.id,
-        models.BackgroundJob.payload['task_type'].as_string().label('task_type'),
+        task_type.label('task_type'),
         models.BackgroundJob.payload['name'].as_string().label('name'),
         models.BackgroundJob.result['entries'].label('entries'),
-    ).where(models.BackgroundJob.kind == 'maintenance_report')
-    for source in db.execute(q).mappings():
-        if source['task_type'] in {'project_state_report', 'weekly_digest'}:
-            continue
-        for entry in source['entries'] or []:
-            if not isinstance(entry, dict) or not entry.get('site_id'):
-                continue
-            safe = {k: entry[k] for k in ('site_id', 'status', 'confirmed_at', 'finished_at', 'message', 'comment') if k in entry}
-            migration = entry.get('migration') or {}
-            safe['migration'] = {k: migration[k] for k in MIGRATION_FIELDS if k in migration}
-            grouped[entry['site_id']].append(SimpleNamespace(id=source['id'],
-                payload={'task_type': source['task_type'], 'name': source['name']}, result={'entries': [safe]}))
+    ).where(models.BackgroundJob.kind == 'maintenance_report',
+        # Reports contain large derived snapshots, not original work receipts.
+        # Exclude them before the driver decodes their JSON (not in Python).
+        or_(task_type.is_(None), task_type.notin_(['project_state_report', 'weekly_digest'])),
+    ).execution_options(yield_per=1)
+    result = db.execute(q)
+    try:
+        for source in result.mappings():
+            for entry in source['entries'] or []:
+                if not isinstance(entry, dict) or not entry.get('site_id'):
+                    continue
+                safe = {k: entry[k] for k in ('site_id', 'status', 'confirmed_at', 'finished_at', 'message', 'comment') if k in entry}
+                migration = entry.get('migration') or {}
+                safe['migration'] = {k: migration[k] for k in MIGRATION_FIELDS if k in migration}
+                grouped[entry['site_id']].append(SimpleNamespace(id=source['id'],
+                    payload={'task_type': source['task_type'], 'name': source['name']}, result={'entries': [safe]}))
+    finally:
+        result.close()
     return grouped
 
 
