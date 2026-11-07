@@ -64,3 +64,17 @@ def test_manual_refresh_rebuilds_unchanged_snapshot(monkeypatch):
         cache.tasks(db, {'username': 'anton'})
         cache.tasks(db, {'username': 'anton'}, refresh=True)
         assert len(calls) == 2
+
+
+def test_cache_key_fits_production_column_without_weakening_scope():
+    user={'username':'a'*300,'allowed_site_ids':['s'*100]*100}
+    assert len(cache.key(user,0,50,'q'*200)) <= models.AutoReglueConfig.__table__.c.key.type.length
+
+
+def test_cache_storage_failure_keeps_list_available(monkeypatch):
+    from sqlalchemy.exc import OperationalError
+    with session() as db:
+        monkeypatch.setattr('app.auto_pilot.tasks',lambda *a,**k:{'items':[{'id':'visible'}],'total':1})
+        def unavailable(self):raise OperationalError('cache commit',{},Exception('unavailable'))
+        monkeypatch.setattr(Session,'commit',unavailable)
+        assert cache.tasks(db,{'username':'anton'})['items']==[{'id':'visible'}]

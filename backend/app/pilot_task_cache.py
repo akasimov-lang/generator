@@ -3,12 +3,14 @@ from copy import deepcopy
 from datetime import datetime, timezone
 import hashlib
 import json
+import logging
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import SQLAlchemyError
 from app import models
 from app.project_network import network_lock, NetworkConflict
 
-PREFIX = 'pilot-tasks-cache:'
+PREFIX = 'pilot-tasks:'
 VERSION = 1
 KINDS = ('auto_pilot_preview', 'mass_reglue_list', 'maintenance_report', 'pilot_internal_pages',
          'pilot_content_publication', 'pilot_text', 'pilot_row_replan')
@@ -55,12 +57,15 @@ def tasks(db, user, offset=0, limit=50, *, q='', refresh=False):
             data = auto_pilot.tasks(db, user, offset, limit, q=q)
             # Cache construction never commits unrelated caller changes.
             from sqlalchemy.orm import Session
-            with Session(bind=db.get_bind()) as storage:
-                record = storage.get(models.AutoReglueConfig, cache_key)
-                payload = {'revision': stamp, 'data': jsonable_encoder(data), 'saved_at': datetime.now(timezone.utc).isoformat()}
-                if record: record.value = payload
-                else: storage.add(models.AutoReglueConfig(key=cache_key, value=payload))
-                storage.commit()
+            try:
+                with Session(bind=db.get_bind()) as storage:
+                    record = storage.get(models.AutoReglueConfig, cache_key)
+                    payload = {'revision': stamp, 'data': jsonable_encoder(data), 'saved_at': datetime.now(timezone.utc).isoformat()}
+                    if record: record.value = payload
+                    else: storage.add(models.AutoReglueConfig(key=cache_key, value=payload))
+                    storage.commit()
+            except SQLAlchemyError as error:
+                logging.getLogger(__name__).warning("Plan list cache write failed: %s", type(error).__name__)
             return data
     except NetworkConflict:
         # Another request is building the same view. Keep its last saved snapshot.
