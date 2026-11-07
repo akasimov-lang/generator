@@ -2,7 +2,8 @@
 
 Stored network/cache observations remain labelled with their original time. No
 Webdev requests or content/network mutations are made while collecting reports.
-Large original-project backups and upload bodies are never selected as ledgers.
+Large original-project backups are streamed one at a time and discarded before
+ledger evidence is retained; upload bodies never enter the resulting report.
 """
 from collections import defaultdict
 from copy import deepcopy
@@ -43,22 +44,29 @@ def _maintenance(db):
 
 
 def _ledgers(db):
-    # JSON projections are intentional: value also contains whole project
-    # backups and, for logo repairs, potentially large encoded asset bodies.
-    config = models.AutoReglueConfig
+    # Some original-project backups contain escaped NULs from binary assets.
+    # PostgreSQL JSON field extraction rejects those anywhere in the document;
+    # raw JSON retrieval lets the Python decoder handle them. Stream Core
+    # columns to avoid retaining whole backups in the ORM identity map.
+    config = models.AutoReglueConfig.__table__.c
     fields = ('site_id', 'status', 'applied_at', 'verified_at', 'receipts', 'contrast_receipt')
-    q = select(config.key, *(config.value[k].label(k) for k in fields)).where(
-        config.key.like('site-%repair:%') | config.key.like('showcase-%'))
+    q = select(config.key, config.value).where(
+        config.key.like('site-%repair:%') | config.key.like('showcase-%')).execution_options(yield_per=1)
     grouped = defaultdict(list)
-    for source in db.execute(q).mappings():
-        if not source['site_id']:
-            continue
-        value = {k: source[k] for k in fields if source[k] is not None}
-        value['receipts'] = [{k: receipt[k] for k in RECEIPT_FIELDS if k in receipt}
-                             for receipt in source['receipts'] or [] if isinstance(receipt, dict)]
-        if isinstance(source['contrast_receipt'], dict):
-            value['contrast_receipt'] = {k: source['contrast_receipt'][k] for k in RECEIPT_FIELDS if k in source['contrast_receipt']}
-        grouped[source['site_id']].append(SimpleNamespace(key=source['key'], value=value))
+    result = db.execute(q)
+    try:
+        for source in result.mappings():
+            raw = source['value']
+            if not isinstance(raw, dict) or not raw.get('site_id'):
+                continue
+            value = {k: raw[k] for k in fields if raw.get(k) is not None}
+            value['receipts'] = [{k: receipt[k] for k in RECEIPT_FIELDS if k in receipt}
+                                 for receipt in raw.get('receipts') or [] if isinstance(receipt, dict)]
+            if isinstance(raw.get('contrast_receipt'), dict):
+                value['contrast_receipt'] = {k: raw['contrast_receipt'][k] for k in RECEIPT_FIELDS if k in raw['contrast_receipt']}
+            grouped[raw['site_id']].append(SimpleNamespace(key=source['key'], value=value))
+    finally:
+        result.close()
     return grouped
 
 

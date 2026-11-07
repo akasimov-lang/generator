@@ -1,0 +1,24 @@
+.wf-showcase{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;width:100%;margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.wf-showcase.wf-group-2{grid-template-columns:repeat(3,minmax(0,1fr))}
+.wf-showcase,.wf-showcase *{box-sizing:border-box}
+.wf-showcase .wf-card{display:flex;flex-direction:column;min-width:0;width:auto;margin:0;padding:24px;border:1px solid #314157;border-top:3px solid #ff8b38;border-radius:12px;background:linear-gradient(135deg,#162237,#101927);color:#f4f7fc;box-shadow:0 10px 24px #00000020;overflow:visible;transform:none}
+.wf-showcase .wf-card:hover{transform:none;border-color:#536681;border-top-color:#ff8b38;box-shadow:0 10px 24px #00000020}
+.wf-showcase .wf-masthead{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 20px;padding:0;border:0;background:none;position:static;width:100%;min-height:0;box-shadow:none}
+.wf-showcase .wf-kicker{display:block;margin-bottom:7px;font-size:11px;font-weight:650;line-height:1.4;letter-spacing:.08em;text-transform:uppercase;color:#b2c0d2}
+.wf-showcase .wf-card .casino-brand{display:block;margin:0;padding:0;font-size:24px;font-weight:750;line-height:1.2;letter-spacing:-.025em;color:#f4f7fc;text-align:left;overflow-wrap:anywhere}
+.wf-showcase .wf-score{display:grid;grid-template-columns:auto auto;align-items:center;gap:2px 5px;flex-shrink:0;padding:9px 10px;border:1px solid #3c4a5e;border-radius:9px;background:#0c1421;color:#ffc16b}
+.wf-showcase .wf-score>span{font-size:16px}.wf-showcase .wf-score .casino-rating{margin:0;padding:0;color:#f4f7fc;font-size:18px;font-weight:750;line-height:1.15}.wf-showcase .wf-score small{grid-column:1/-1;font-size:9px;line-height:1.2;letter-spacing:.02em;color:#b2c0d2}
+.wf-showcase .wf-logo{height:76px;margin:0 0 16px}.wf-showcase .wf-logo img{max-width:170px;width:100%;height:76px;object-fit:contain;object-position:left center;margin:0}
+.wf-showcase .wf-offer{margin:0;padding:15px 17px;border-left:3px solid #ff8b38;border-radius:0 8px 8px 0;background:#302722;color:#ffd1a4}
+.wf-showcase .wf-offer>span{display:block;margin-bottom:5px;font-size:11px;line-height:1.4;font-weight:550;color:#e2c6ae}
+.wf-showcase .wf-offer .bonus-value{display:block;margin:0;font-size:24px;font-weight:800;line-height:1.25;letter-spacing:-.02em;color:#ffd1a4;text-align:left;overflow-wrap:anywhere}
+.wf-showcase .wf-providers{margin:16px 0 0;padding:0;font-size:12px;line-height:1.6;color:#b8c7da;text-align:left;white-space:normal;overflow:visible}
+.wf-showcase .wf-features{display:grid;gap:9px;margin:16px 0 22px;padding:0;list-style:none;color:#e1e9f5;font-size:13px;line-height:1.5}
+.wf-showcase .wf-features li{position:relative;margin:0;padding:0 0 0 20px;line-height:1.5;color:#e1e9f5}.wf-showcase .wf-features li:before{content:"✓";position:absolute;left:0;top:0;color:#ffad68;font-size:13px;font-weight:700}
+.wf-showcase .wf-facts{display:grid;gap:12px;margin:18px 0 22px;padding:0;font-size:12px;line-height:1.55}.wf-showcase .wf-facts>div{display:grid;grid-template-columns:62px minmax(0,1fr);gap:8px}.wf-showcase .wf-facts dt{margin:0;color:#9eafc5;font-weight:500}.wf-showcase .wf-facts dd{margin:0;color:#e1e9f5;overflow-wrap:anywhere}
+.wf-showcase .wf-actions{display:block;margin:auto 0 0;padding:0;background:none;border:0;box-shadow:none;position:static;width:100%}
+.wf-showcase .wf-actions a,.wf-showcase .wf-actions button{display:flex;justify-content:center;align-items:center;gap:8px;width:100%;min-height:44px;margin:0;padding:12px 16px;border:1px solid #ffad68;border-radius:8px;background:#ff8b38;color:#201109;font:750 14px/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;text-decoration:none;text-align:center;box-shadow:none;cursor:pointer}
+.wf-showcase .wf-actions a:hover,.wf-showcase .wf-actions button:hover{background:#ffab6b;opacity:1;box-shadow:none}.wf-showcase .wf-actions a:focus-visible,.wf-showcase .wf-actions button:focus-visible{outline:3px solid #fff;outline-offset:3px}.wf-showcase .wf-actions svg{width:16px;height:16px;flex-shrink:0;margin:0}
+.wf-showcase .wf-icons{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 0}.wf-showcase .wf-icons img{height:24px;width:auto;object-fit:contain}
+@media(max-width:1050px){.wf-showcase.wf-group-2{grid-template-columns:repeat(2,minmax(0,1fr))}.wf-showcase .wf-card{padding:20px}.wf-showcase .wf-card .casino-brand{font-size:22px}}
+@media(max-width:680px){.wf-showcase,.wf-showcase.wf-group-2{grid-template-columns:minmax(0,1fr);gap:16px}.wf-showcase .wf-card{padding:18px}.wf-showcase .wf-masthead{gap:10px;margin-bottom:16px}.wf-showcase .wf-card .casino-brand{font-size:22px}.wf-showcase .wf-offer{padding:13px}.wf-showcase .wf-offer .bonus-value{font-size:23px}.wf-showcase .wf-features{font-size:13px}.wf-showcase .wf-kicker{font-size:10px}}

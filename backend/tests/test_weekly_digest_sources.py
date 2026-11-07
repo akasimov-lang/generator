@@ -2,8 +2,10 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
+from sqlalchemy.dialects import postgresql
+
 from app import models
-from app.weekly_digest_sources import collect
+from app.weekly_digest_sources import collect, _ledgers
 from test_project_network import env
 
 START = datetime(2026, 11, 1, 21, tzinfo=timezone.utc)
@@ -92,6 +94,35 @@ def test_native_receipts_and_menu_baseline_are_collected_without_backups(env):
     assert row['layout_work'] and row['showcase_work'] and row['menu_work']
     assert [e['message'] for e in row['events'] if e['kind'] == 'menu'] == ['Добавлены пункты: New']
     assert 'PRIVATE' not in str(result)
+
+
+def test_ledger_streams_raw_json_with_nul_backup_and_retains_only_receipts(env, monkeypatch):
+    db, site, _ = env
+    key = 'showcase-nul:original'
+    receipt = {'field': 'shortcode', 'status': 'confirmed', 'at': AT.isoformat()}
+    db.add(models.AutoReglueConfig(key=key, value={'site_id': site.id,
+        'original_project': {'files': {'.DS_Store': 'PRIVATE\x00binary'}},
+        'receipts': [{**receipt, 'upload': 'PRIVATE\x00upload'}]}))
+    db.commit()
+    site_id = site.id
+    statements = []
+    original_execute = db.execute
+    def execute(statement, *args, **kwargs):
+        statements.append(statement)
+        return original_execute(statement, *args, **kwargs)
+    monkeypatch.setattr(db, 'execute', execute)
+    ledgers = _ledgers(db)
+    assert len(ledgers[site_id]) == 1
+    ledger = ledgers[site_id][0]
+    assert ledger.key == key
+    assert ledger.value == {'site_id': site_id, 'receipts': [receipt]}
+    assert len(statements) == 1
+    assert '->' not in str(statements[0].compile(dialect=postgresql.dialect()))
+    assert statements[0].get_execution_options()['yield_per'] == 1
+    assert not any(isinstance(obj, models.AutoReglueConfig) for obj in db.identity_map.values())
+    stored = original_execute(models.AutoReglueConfig.__table__.select().where(
+        models.AutoReglueConfig.key == key)).mappings().one()
+    assert stored['value']['original_project']['files']['.DS_Store'] == 'PRIVATE\x00binary'
 
 
 def test_collector_restores_caller_info_and_ignores_weekly_report_as_work(env):
