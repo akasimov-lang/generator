@@ -1,7 +1,7 @@
 export type PageEditFields = {title:string;description:string;content:Record<string,unknown>};
 export type PageEditPayload = PageEditFields & {request_id:string;revision:string};
 export type SavedPageDraft = PageEditPayload & {saved_at:string;status:"draft"|"pending"|"unknown"|"failed"};
-export type PageSaveReceipt<T=unknown> = {id:string;status:string;error?:string;page?:T};
+export type PageSaveReceipt<T=unknown> = {id:string;status:string;error?:string;page?:T;background?:boolean};
 type DraftStorage = Pick<Storage,"getItem"|"setItem"|"removeItem">;
 
 export function editablePageFingerprint(value:PageEditFields):string {

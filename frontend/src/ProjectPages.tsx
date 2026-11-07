@@ -14,7 +14,7 @@ export type PageRow = { key: string; title: string; slug: string; is_home: boole
 type Page = PageRow & { shortcodes?:ShortcodeInfo[]; source?: string; warning?: string; description: string; content: { blocks: Block[]; [key: string]: unknown }; revision: string };
 type AutolinkEntry = PageRow & { status: string; message: string; paragraph: string; block_index: number | null; block_id?: string | null };
 type AutolinkReport = { id: string; status: string; error?: string | null; entries: AutolinkEntry[] };
-type Result = { id: string; status: string; error?: string; page?: Page };
+type Result = { id: string; status: string; background?: boolean; error?: string; page?: Page };
 type ServerPageDraft = {id:string;revision:string;title:string;description:string;content:Page["content"];created_at:string;updated_at:string;operation?:Result|null};
 const errorText = (e: unknown) => e instanceof Error ? e.message : "Не удалось выполнить запрос";
 const browserDraftStorage = () => {try{return window.localStorage;}catch{return null;}};
@@ -263,8 +263,8 @@ export function PageEditor({ siteId, row, api, onClose, onSaved, breadcrumbs, re
         setDraftLocation(location);setDurableFingerprint(editablePageFingerprint(draft));
         setPage({...initialRow.current,...live,title:draft.title,description:draft.description,content:draft.content as Page["content"],revision:draft.revision});
         setOperation(receipt||(["pending","unknown"].includes(draft.status)?{id:draft.request_id,status:draft.status}:null));
-        setMessage(`Восстановлен черновик, сохранённый ${location}.`);
-        setError(recoveryError||receipt?.error||(["pending","unknown"].includes(draft.status)?"Результат публикации пока не подтверждён. Проверьте сохранение.":""));
+        setMessage(receipt?.background&&receipt.status==="pending"?"Сохраняем в фоне. Можно покинуть страницу.":`Восстановлен черновик, сохранённый ${location}.`);
+        setError(recoveryError||receipt?.error||(!receipt?.background&&["pending","unknown"].includes(draft.status)?"Результат публикации пока не подтверждён. Проверьте сохранение.":""));
       }else{
         savedDraft.current=null;setDurableFingerprint("");setDraftLocation("");setOperation(null);setPage(live);
       }
@@ -276,7 +276,7 @@ export function PageEditor({ siteId, row, api, onClose, onSaved, breadcrumbs, re
     finally { if(sequence===loadSequence.current)setLoading(false); }
   }, [api, path,siteId,draftActorId]);
   React.useEffect(() => { if (fullPage) void load(); else openDetailPage(`/page-editor/${encodeURIComponent(siteId)}/${encodeURIComponent(row.key)}/`);return()=>{loadSequence.current++;}; }, [fullPage, load, siteId, row.key]);
-  const leave = React.useCallback((navigate: () => void) => { if (!busy && (!unsavedChanges || window.confirm("Есть несохранённые изменения. Закрыть редактор без сохранения?"))) { routeExitApproved.current = true; navigate(); } }, [busy, unsavedChanges]);
+  const leave = React.useCallback((navigate: () => void) => { if ((!unsavedChanges || window.confirm("Есть несохранённые изменения. Закрыть редактор без сохранения?"))) { routeExitApproved.current = true; navigate(); } }, [unsavedChanges]);
   const close = React.useCallback(() => leave(onClose), [leave, onClose]);
   React.useEffect(() => {
     if (fullPage) return;
@@ -294,7 +294,7 @@ export function PageEditor({ siteId, row, api, onClose, onSaved, breadcrumbs, re
     const address = window.location.href, state = window.history.state;
     const guard = (event: PopStateEvent) => {
       if (routeExitApproved.current || !unsavedChanges) return;
-      if (!busy && window.confirm("Есть несохранённые изменения. Выйти без сохранения?")) return;
+      if (window.confirm("Есть несохранённые изменения. Выйти без сохранения?")) return;
       event.stopImmediatePropagation(); window.history.pushState(state, "", address);
     };
     window.addEventListener("popstate", guard, true);
@@ -328,6 +328,12 @@ export function PageEditor({ siteId, row, api, onClose, onSaved, breadcrumbs, re
       if(savedDraft.current?.request_id===result.id)savedDraft.current=null;
       setDurableFingerprint("");setDraftLocation("");
       const next=result.page;setPage(next);setOriginal(editablePageFingerprint(next));onSaved(next);setMessage("Изменения сохранены в Webdev и подтверждены.");setError("");
+    } else if(result.status === "pending" && result.background) {
+      if(savedDraft.current?.request_id===result.id){
+        savedDraft.current={...savedDraft.current,status:"pending"};
+        const storage=browserDraftStorage();if(storage&&draftKey.current)writePageDraft(storage,draftKey.current,savedDraft.current);
+      }
+      setError("");setMessage("Сохраняем в фоне. Можно покинуть страницу; результат появится в проекте.");
     } else {
       if(savedDraft.current?.request_id===result.id){
         savedDraft.current={...savedDraft.current,status:result.status==="failed"?"failed":"unknown"};
@@ -336,6 +342,18 @@ export function PageEditor({ siteId, row, api, onClose, onSaved, breadcrumbs, re
       setError(result.error || "Сохранение ещё не подтверждено. Проверьте результат.");
     }
   }
+  const receiveLatest=React.useRef(receive);receiveLatest.current=receive;
+  React.useEffect(()=>{
+    if(!operation?.background||operation.status!=="pending")return;
+    let stopped=false;let timer:ReturnType<typeof setTimeout>;
+    const poll=async()=>{
+      try{const value=await api<Result>(`${path}/edits/${operation.id}`);if(stopped)return;await receiveLatest.current(value);if(value.status!=="pending")return;}
+      catch{/* The server keeps the job; a transient polling failure does not resend it. */}
+      if(!stopped)timer=setTimeout(poll,4000);
+    };
+    timer=setTimeout(poll,2000);
+    return()=>{stopped=true;clearTimeout(timer);};
+  },[api,path,operation?.id,operation?.background,operation?.status]);
   async function save() {
     if (!page) return;
     setBusy(true); setError(""); setMessage("");
@@ -361,7 +379,7 @@ export function PageEditor({ siteId, row, api, onClose, onSaved, breadcrumbs, re
       if(storage&&draftKey.current)writePageDraft(storage,draftKey.current,savedDraft.current);
       const {request_id,revision,title,description,content}=draft;
       publicationStarted=true;setOperation({id:request_id,status:"unknown"});
-      await receive(await api<Result>(path,{method:"PUT",body:JSON.stringify({request_id,revision,title,description,content})}));
+      await receive(await api<Result>(path+"?background=true",{method:"PUT",body:JSON.stringify({request_id,revision,title,description,content})}));
     }
     catch (e) {
       setError(errorText(e));
@@ -421,7 +439,7 @@ export function PageEditor({ siteId, row, api, onClose, onSaved, breadcrumbs, re
   const validContent = page?.content && Array.isArray(page.content.blocks);
   if (!fullPage) return null;
   return <div className={`pp-page-editor pp-page-editor-route ${documentMode ? "pp-document-mode" : ""}`} ref={dialog} tabIndex={-1} role="region" aria-label={`Редактор страницы: ${page?.title || row.title}`} onKeyDown={handleKeys}>
-    <header className="pp-editor-header"><div><button type="button" className="pp-editor-back" disabled={busy} onClick={close}><ArrowLeft size={16} />Назад</button><nav className="pp-editor-breadcrumbs" aria-label="Хлебные крошки редактора"><ol>{(breadcrumbs || [{ label: "Все страницы", onClick: onClose }]).map((item, index) => <li key={index}><button type="button" disabled={busy} onClick={() => leave(item.onClick)}>{item.label}</button><ChevronRight size={13} aria-hidden="true" /></li>)}<li aria-current="page">{isHome ? "Главная страница" : (page?.title || row.title)}</li></ol></nav><h2>{page?.title || row.title}</h2><small>{slug}</small></div><div className="pp-editor-actions"><button type="button" className="button secondary" disabled={!publicPageUrl} title={publicPageUrl || "Адрес страницы недоступен"} onClick={() => window.open(publicPageUrl, "_blank", "noopener,noreferrer")}><ExternalLink size={16} />Посмотреть на сайте</button><button type="button" className="button secondary" disabled={busy} onClick={() => void reloadFromSite()}><RefreshCcw size={16} />Загрузить заново</button><button type="button" className="button primary" disabled={(!dirty && !unsavedChanges) || busy || loading || !!unresolved || !validContent} onClick={() => void save()}><Save size={16} />{busy ? "Проверяем…" : "Сохранить на сайте"}</button><button className="pp-icon" type="button" aria-label="Закрыть редактор" disabled={busy} onClick={close}><X size={24} /></button></div></header>
+    <header className="pp-editor-header"><div><button type="button" className="pp-editor-back" onClick={close}><ArrowLeft size={16} />Назад</button><nav className="pp-editor-breadcrumbs" aria-label="Хлебные крошки редактора"><ol>{(breadcrumbs || [{ label: "Все страницы", onClick: onClose }]).map((item, index) => <li key={index}><button type="button" onClick={() => leave(item.onClick)}>{item.label}</button><ChevronRight size={13} aria-hidden="true" /></li>)}<li aria-current="page">{isHome ? "Главная страница" : (page?.title || row.title)}</li></ol></nav><h2>{page?.title || row.title}</h2><small>{slug}</small></div><div className="pp-editor-actions"><button type="button" className="button secondary" disabled={!publicPageUrl} title={publicPageUrl || "Адрес страницы недоступен"} onClick={() => window.open(publicPageUrl, "_blank", "noopener,noreferrer")}><ExternalLink size={16} />Посмотреть на сайте</button><button type="button" className="button secondary" disabled={busy || !!unresolved} onClick={() => void reloadFromSite()}><RefreshCcw size={16} />Загрузить заново</button><button type="button" className="button primary" disabled={(!dirty && !unsavedChanges) || busy || loading || !!unresolved || !validContent} onClick={() => void save()}><Save size={16} />{operation?.background&&unresolved ? "Сохраняем в фоне…" : busy ? "Отправляем…" : "Сохранить на сайте"}</button><button className="pp-icon" type="button" aria-label="Закрыть редактор" onClick={close}><X size={24} /></button></div></header>
     <main className="pp-editor-main">{loading && <p role="status">Загрузка страницы…</p>}{error && <div className="pp-page-error" role="alert">{error}{unresolved && <button className="button secondary" disabled={busy} onClick={() => void check()}>Проверить сохранение</button>}</div>}{message && <p role="status" className="pp-page-success"><Check size={18} />{message}</p>}
       {!loading && page && <><div className="pp-shortcode-layout"><ShortcodeSidebar content={page.content} catalog={shortcodes} onNavigate={index=>{const element=document.getElementById(`page-editor-block-${index}`);element?.scrollIntoView({block:"center",behavior:"smooth"});element?.querySelector<HTMLElement>('input,textarea,[contenteditable="true"]')?.focus({preventScroll:true});}}/><div className="pp-editor-content"><div className="pp-editor-info"><span>{unsavedChanges ? "Есть несохранённые изменения" : dirty ? `Черновик сохранён ${draftLocation}; ещё не опубликован` : "Загружена сохранённая версия"} · Изменения публикуются кнопкой «Сохранить на сайте».</span><button type="button" className="button secondary compact" onClick={() => void navigator.clipboard.writeText(JSON.stringify({ title: page.title, description: page.description, content: page.content }, null, 2)).then(() => setMessage("Черновик скопирован")).catch(() => setError("Браузер не разрешил копирование."))}><Copy size={14} />Скопировать черновик</button></div>
       {page?.source === "cache" && <p className="muted" role="status">{page.warning || "Сохранённая версия из серверного кеша. При сохранении проверяется актуальная версия в Webdev."}</p>}

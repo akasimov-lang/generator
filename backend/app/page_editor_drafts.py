@@ -44,9 +44,16 @@ def result(row, db):
     if operation and (operation.site_id != row.site_id or operation.page_key != row.page_key
                       or operation.requested_by != row.requested_by or operation.fingerprint != fingerprint):
         operation = None
+    from app.page_save_jobs import matching_job, result as job_result
+    job = matching_job(db, row.site_id, row.page_key, row.id)
+    queued = None
+    if job and job.payload["actor"] == row.requested_by:
+        request = job.payload["request"]
+        if all(request.get(k) == v for k, v in {**(row.input_metadata or {}), "content": row.input_content}.items()):
+            queued = job_result(job)
     return {"id": row.id, "status": row.status, **(row.input_metadata or {}),
             "content": row.input_content, "created_at": row.created_at, "updated_at": row.updated_at,
-            "operation": operation_result(operation) if operation else None}
+            "operation": queued or (operation_result(operation) if operation else None)}
 
 
 @router.put("/{key}/draft")

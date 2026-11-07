@@ -268,15 +268,25 @@ def confirm(db, operation, remote, site):
     else:
         operation.status, operation.error = "unknown", "Webdev пока не подтвердил изменения. Проверьте результат перед новой попыткой."
     db.commit()
+    from app.page_save_jobs import resolved
+    resolved(db, operation)
     return operation_result(operation, current if operation.status == "confirmed" else None)
 
 
 @router.get("/{key}/edits/{request_id}")
 def check_edit(site_id: str, key: str, request_id: UUID, user: AuthUser, db: Session = Depends(get_db)):
     site = site_for(db, site_id)
+    if user.get("allowed_site_ids") is not None and site_id not in user["allowed_site_ids"]:
+        raise HTTPException(404, "Проект недоступен.")
+    from app.page_save_jobs import matching_job, result
+    job = matching_job(db, site_id, key, request_id)
+    if job and job.status not in {"completed", "failed"}:
+        return result(job)
     operation = db.scalar(select(models.ProjectPageEdit).where(models.ProjectPageEdit.id == str(request_id),
         models.ProjectPageEdit.site_id == site_id, models.ProjectPageEdit.page_key == key))
     if not operation:
+        if job:
+            return result(job)
         raise HTTPException(404, "Операция не найдена.")
     if operation.status not in {"pending", "unknown"}:
         return operation_result(operation)
@@ -285,8 +295,13 @@ def check_edit(site_id: str, key: str, request_id: UUID, user: AuthUser, db: Ses
 
 
 @router.put("/{key}")
-def save_page(site_id: str, key: str, payload: PageEdit, user: AuthUser, db: Session = Depends(get_db)):
+def save_page(site_id: str, key: str, payload: PageEdit, user: AuthUser, db: Session = Depends(get_db), background: bool = False):
     site = site_for(db, site_id)
+    if user.get("allowed_site_ids") is not None and site_id not in user["allowed_site_ids"]:
+        raise HTTPException(404, "Проект недоступен.")
+    if background:
+        from app.page_save_jobs import enqueue
+        return enqueue(db, site, key, payload, user["username"])
     with remote_errors(), network_lock(db, site_id):
         operation = db.scalar(select(models.ProjectPageEdit).where(models.ProjectPageEdit.id == str(payload.request_id)))
         fingerprint = digest(payload.model_dump(mode="json"))
