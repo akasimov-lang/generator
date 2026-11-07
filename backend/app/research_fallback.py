@@ -9,7 +9,12 @@ def saved_brief(db, item):
     context = reference_context.collect(db, site, geo=task.geo if task else None)
     warning = ('Новые страницы конкурентов не найдены или недоступны. '
                'Используем сохранённую базу знаний и материалы проекта.')
+    recovery = (item.generation_context or {}).get('competitor_search_recovery')
+    if recovery:
+        warning = (f"Сервис конкурентов недоступен после {recovery['attempts']} попыток "
+                   f"с паузой {recovery['retry_delay_seconds']} секунд. " + warning)
     item.competitor_brief = {'research_status': 'saved_context', 'warning': warning,
+        'search_recovery': recovery,
         'reference_context': reference_context.audit(context), 'competitor_summary': [],
         'competitor_urls': [], 'content_gaps': [], 'topics_to_cover': []}
     item.competitor_brief_text = warning + reference_context.prompt(context)

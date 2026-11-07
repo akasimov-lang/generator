@@ -49,6 +49,8 @@ DATAFORSEO_LOCATIONS_PATH = "/serp/google/locations"
 DATAFORSEO_SERP_PATH = "/serp/google/organic/live/advanced"
 COMPETITOR_RESULTS_PER_QUERY = 6
 COMPETITOR_RESEARCH_MAX_ATTEMPTS = 6
+COMPETITOR_REQUEST_MAX_ATTEMPTS = 7
+COMPETITOR_REQUEST_RETRY_DELAY_SECONDS = 15
 MAX_COMPETITOR_PAGE_CHARS = 1_200_000
 MAX_COMPETITOR_TEXT_CHARS = 60_000
 DATAFORSEO_COUNTRY_ALIASES = {"UK": "GB"}
@@ -2411,17 +2413,26 @@ async def call_dataforseo_google_serp(provider: models.AiProvider, keyword: str,
         }
     ]
     async with httpx.AsyncClient(timeout=45) as client:
-        for attempt in range(3):
+        for attempt in range(COMPETITOR_REQUEST_MAX_ATTEMPTS):
             try:
                 response = await client.post(endpoint, json=body, auth=(login, password), headers={"Content-Type": "application/json"})
             except httpx.TransportError as exc:
-                if attempt == 2:
-                    raise ValueError(f"DataForSEO request failed after 3 attempts: {type(exc).__name__}") from exc
-                await asyncio.sleep(attempt + 1)
+                if attempt + 1 == COMPETITOR_REQUEST_MAX_ATTEMPTS:
+                    raise DataForSEOTransientError(
+                        f"DataForSEO request failed after {COMPETITOR_REQUEST_MAX_ATTEMPTS} attempts: {type(exc).__name__}"
+                    ) from exc
+                await asyncio.sleep(COMPETITOR_REQUEST_RETRY_DELAY_SECONDS)
                 continue
             try:
                 response.raise_for_status()
             except httpx.HTTPStatusError as exc:
+                if response.status_code in (408, 429) or response.status_code >= 500:
+                    if attempt + 1 == COMPETITOR_REQUEST_MAX_ATTEMPTS:
+                        raise DataForSEOTransientError(
+                            f"DataForSEO HTTP {response.status_code} after {COMPETITOR_REQUEST_MAX_ATTEMPTS} attempts"
+                        ) from exc
+                    await asyncio.sleep(COMPETITOR_REQUEST_RETRY_DELAY_SECONDS)
+                    continue
                 provider.validation_status = "invalid"
                 provider.validation_message = describe_dataforseo_error(exc)
                 provider.validated_at = datetime.now(timezone.utc)
@@ -2439,6 +2450,9 @@ async def call_dataforseo_google_serp(provider: models.AiProvider, keyword: str,
                 provider.last_used_at = datetime.now(timezone.utc)
                 return payload
             if task_status == 40101:
+                if attempt + 1 < COMPETITOR_REQUEST_MAX_ATTEMPTS:
+                    await asyncio.sleep(COMPETITOR_REQUEST_RETRY_DELAY_SECONDS)
+                    continue
                 raise DataForSEOTransientError(describe_dataforseo_payload_error(payload))
             raise ValueError(describe_dataforseo_payload_error(payload))
     raise ValueError("DataForSEO SERP request did not return a response")
@@ -2492,27 +2506,39 @@ async def collect_competitor_serp_for_item(db: Session, item: models.ContentItem
     item.competitor_research_error = None
     db.commit()
 
-    for page in db.scalars(select(models.CompetitorPage).where(models.CompetitorPage.content_item_id == item.id)).all():
-        db.delete(page)
-    for result in db.scalars(select(models.CompetitorResult).where(models.CompetitorResult.content_item_id == item.id)).all():
-        db.delete(result)
-    item.competitor_brief = None
-    item.competitor_brief_text = None
-    db.flush()
-
+    # Keep saved research until a replacement SERP actually exists. An unavailable
+    # search provider must not erase the sources needed to continue generation.
     seen_urls: set[str] = set()
-    total_results = 0
+    collected_results = []
     for query_index, query in enumerate(queries, start=1):
         query.status = "collecting"
         db.commit()
-        payload = await call_dataforseo_google_serp(provider, query.query, task.geo, task.language)
-        if not extract_organic_serp_items(payload):
-            fallback_query = ' '.join(('casino ' + re.sub(r'\bcasino\b', '', query.query, flags=re.I).strip()).split())
-            if fallback_query.casefold() != ' '.join(query.query.split()).casefold():
-                payload = await call_dataforseo_google_serp(provider, fallback_query, task.geo, task.language)
-                item.generation_context = {**(item.generation_context or {}), 'competitor_query_recovery': [
-                    *(item.generation_context or {}).get('competitor_query_recovery', []),
-                    {'original': query.query, 'retry': fallback_query, 'results': len(extract_organic_serp_items(payload))}]}
+        try:
+            payload = await call_dataforseo_google_serp(provider, query.query, task.geo, task.language)
+            if not extract_organic_serp_items(payload):
+                fallback_query = ' '.join(('casino ' + re.sub(r'\bcasino\b', '', query.query, flags=re.I).strip()).split())
+                if fallback_query.casefold() != ' '.join(query.query.split()).casefold():
+                    payload = await call_dataforseo_google_serp(provider, fallback_query, task.geo, task.language)
+                    item.generation_context = {**(item.generation_context or {}), 'competitor_query_recovery': [
+                        *(item.generation_context or {}).get('competitor_query_recovery', []),
+                        {'original': query.query, 'retry': fallback_query, 'results': len(extract_organic_serp_items(payload))}]}
+        except DataForSEOTransientError as error:
+            notice = ('Сервис конкурентов временно недоступен после 7 попыток с паузой 15 секунд. '
+                      'Генерация продолжается по доступным источникам и базе знаний проекта.')
+            query.status = 'search_unavailable'
+            item.generation_context = {**(item.generation_context or {}),
+                'research_notice': notice,
+                'competitor_search_recovery': {
+                    'query': query.query, 'error': str(error)[:500],
+                    'attempts': COMPETITOR_REQUEST_MAX_ATTEMPTS,
+                    'retry_delay_seconds': COMPETITOR_REQUEST_RETRY_DELAY_SECONDS,
+                    'at': datetime.now(timezone.utc).isoformat(),
+                    'retained_results': len(collected_results),
+                }}
+            db.commit()
+            # The provider already exhausted its bounded retry budget. Avoid
+            # repeating the same outage cycle for every remaining query.
+            break
         added_for_query = 0
         for serp_item in extract_organic_serp_items(payload)[:COMPETITOR_RESULTS_PER_QUERY]:
             url = serp_item["url"]
@@ -2522,7 +2548,7 @@ async def collect_competitor_serp_for_item(db: Session, item: models.ContentItem
             if normalized_url in seen_urls:
                 continue
             seen_urls.add(normalized_url)
-            db.add(
+            collected_results.append(
                 models.CompetitorResult(
                     content_item_id=item.id,
                     query_id=query.id,
@@ -2537,13 +2563,23 @@ async def collect_competitor_serp_for_item(db: Session, item: models.ContentItem
                 )
             )
             added_for_query += 1
-            total_results += 1
         query.result_count = added_for_query
         query.status = "serp_collected"
         item.competitor_research_progress = 5 + int(query_index / len(queries) * 30)
         db.commit()
 
-    item.competitor_research_status = "serp_collected" if total_results else "serp_empty"
+    if collected_results:
+        for page in db.scalars(select(models.CompetitorPage).where(models.CompetitorPage.content_item_id == item.id)).all():
+            db.delete(page)
+        for result in db.scalars(select(models.CompetitorResult).where(models.CompetitorResult.content_item_id == item.id)).all():
+            db.delete(result)
+        item.competitor_brief = None
+        item.competitor_brief_text = None
+        db.flush()
+        db.add_all(collected_results)
+    has_results = bool(collected_results) or bool(db.scalar(select(func.count(models.CompetitorResult.id)).where(
+        models.CompetitorResult.content_item_id == item.id)))
+    item.competitor_research_status = "serp_collected" if has_results else "serp_empty"
     db.commit()
     db.refresh(item)
     return item
@@ -2564,9 +2600,8 @@ async def fetch_competitor_pages_for_item(db: Session, item: models.ContentItem)
     item.competitor_research_progress = 35
     db.commit()
 
-    for page in db.scalars(select(models.CompetitorPage).where(models.CompetitorPage.content_item_id == item.id)).all():
-        db.delete(page)
-    db.flush()
+    saved_pages = {page.competitor_result_id: page for page in db.scalars(
+        select(models.CompetitorPage).where(models.CompetitorPage.content_item_id == item.id))}
 
     headers = {
         "User-Agent": "Mozilla/5.0 (compatible; ContentGeneratorBot/1.0; +https://ai-seo-content-panel.site)",
@@ -2574,6 +2609,13 @@ async def fetch_competitor_pages_for_item(db: Session, item: models.ContentItem)
     }
     async with httpx.AsyncClient(timeout=25, follow_redirects=True, headers=headers) as client:
         for result_index, result in enumerate(results, start=1):
+            saved_page = saved_pages.get(result.id)
+            if (saved_page and saved_page.http_status and saved_page.http_status < 400
+                    and (clean_text(saved_page.text_content) or saved_page.headings)):
+                # Resume after an interruption without deleting useful fetched sources.
+                continue
+            if saved_page:
+                db.delete(saved_page)
             page_data = {
                 "title": None,
                 "h1": None,
@@ -2651,6 +2693,14 @@ def build_competitor_brief_for_item(db: Session, item: models.ContentItem) -> mo
         for page in pages
         if (page.http_status or 0) < 400 and (clean_text(page.text_content) or (page.headings or []))
     ]
+    from app import reference_context
+    task = db.get(models.GenerationTask, item.task_id)
+    site_id = item.site_id or (task.site_id if task else None)
+    site = db.get(models.Site, site_id) if site_id else None
+    scope = reference_context.selected_scope(getattr(site, 'brand', ''), task.geo if task else '')
+    if scope:
+        analyzable_pages = [page for page in analyzable_pages if reference_context.relevant(
+            ' '.join([page.title or '', page.h1 or '']), scope, url=page.url or '')]
     if not analyzable_pages:
         from app.research_fallback import saved_brief
         return saved_brief(db, item)
