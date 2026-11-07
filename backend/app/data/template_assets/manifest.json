@@ -987,6 +987,44 @@
       "height": 200,
       "showcase_ready": true,
       "verified_at": "2026-11-07"
+    },
+    {
+      "id": "apollo-games",
+      "name": "Apollo Games",
+      "aliases": [
+        "Apollo",
+        "Apollo Online Casino",
+        "Apollo Casino"
+      ],
+      "kind": "wordmark",
+      "source": "https://www.apollogames.com/templates/site/apollo/assets/images/logo.svg",
+      "source_page": "https://www.apollogames.com/",
+      "logo": "showcase/apollo-games.png",
+      "surface": "dark",
+      "sha256": "96f3e4c476b032b5b2c1b136dc36cb30eff36e9e70c2d3642473ab88358a665a",
+      "width": 600,
+      "height": 162,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
+    },
+    {
+      "id": "admiral",
+      "name": "Admiral Casino",
+      "aliases": [
+        "Admiral",
+        "Casino Admiral",
+        "Admiral Casino online CZ"
+      ],
+      "kind": "wordmark",
+      "source": "https://www.casinoadmiral.cz/wp-content/uploads/casino-admiral-logo_cropped.svg",
+      "source_page": "https://www.casinoadmiral.cz/",
+      "logo": "showcase/admiral.png",
+      "surface": "dark",
+      "sha256": "d8a405f8b10158ea5ecf378f2052f241730fb24745f38af4ac0909fc6ceb1c90",
+      "width": 600,
+      "height": 174,
+      "verified_at": "2026-11-07",
+      "showcase_ready": true
     }
   ],
   "payments": [
