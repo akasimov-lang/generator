@@ -1,0 +1,5 @@
+Tool: built-in imagegen
+Usage: user-approved neutral placeholder for Spilleautomaten.dk on flex-mind.com.
+This is a generated illustration, not an official brand logo.
+
+Use case: stylized-concept. Asset type: compact neutral casino illustration used as a missing-logo placeholder above a casino name on a dark navy website card. Subject: a tasteful roulette wheel, two ivory dice and a small stack of casino chips in one cohesive horizontal composition. Polished three-dimensional editorial icon, clean shapes, modest gold, red, ivory and green accents readable at 160px width. Isolated on a truly transparent background. No brand identity, no text, no lettering, no watermark, no surrounding badge or frame. Keep all objects fully in frame with minimal transparent padding.

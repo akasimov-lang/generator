@@ -126,13 +126,19 @@
       "id": "bwin",
       "name": "Bwin",
       "aliases": [],
-      "kind": "brand_mark",
-      "source": "https://www.google.com/s2/favicons?domain=www.bwin.com&sz=128",
-      "logo": "bwin-logo.png",
+      "kind": "wordmark",
+      "source": "https://www.entainpartners.com/images/GVCPARTNERS/bwin_logo.png",
+      "logo": "showcase/bwin.png",
       "favicon": "bwin-favicon.png",
-      "surface": "dark",
+      "surface": "light",
       "favicon_source": "https://www.google.com/s2/favicons?domain=www.bwin.com&sz=128",
-      "favicon_derived": false
+      "favicon_derived": false,
+      "source_page": "https://www.entainpartners.com/gvcBrands.do",
+      "sha256": "eac3f6ec6be986b4be243b1cceadd81e0f2a974aa468e9fbcc14a0512f0d36f1",
+      "width": 131,
+      "height": 50,
+      "showcase_ready": true,
+      "verified_at": "2026-11-07"
     },
     {
       "id": "dafabet",
@@ -331,12 +337,18 @@
       "name": "Unibet",
       "aliases": [],
       "kind": "wordmark",
-      "source": "https://www.unibet.com",
-      "logo": "unibet-logo.png",
+      "source": "https://www.unibet.com/kwp-bundle-store/kwp-assets/0.13.0/assets/unibet/logos/logo.svg",
+      "logo": "showcase/unibet.png",
       "favicon": "unibet-favicon.png",
       "surface": "dark",
       "favicon_source": "https://www.unibet.com/kwp-bundle-store/kwp-assets/0.12.0/assets/unibet/favicon.png",
-      "favicon_derived": false
+      "favicon_derived": false,
+      "source_page": "https://www.unibet.com/",
+      "sha256": "0d236b7b1ebd7600db9c6833bd64a88f828c71783b7c5cd51de33b6653c49e50",
+      "width": 960,
+      "height": 240,
+      "showcase_ready": true,
+      "verified_at": "2026-11-07"
     },
     {
       "id": "casino-days",
@@ -927,6 +939,36 @@
       "height": 109,
       "verified_at": "2026-11-07",
       "showcase_ready": true
+    },
+    {
+      "id": "betinia",
+      "name": "Betinia",
+      "aliases": [],
+      "kind": "wordmark",
+      "source": "https://cdn.prod.website-files.com/6800cd125279be03ff4eecee/680fa29841f12981ae937611_betinia%20%282%29.avif",
+      "source_page": "https://www.2rbo.com/",
+      "surface": "dark",
+      "logo": "showcase/betinia.png",
+      "sha256": "e5bf57cdd45167ed2a05228df90f1e8c523a97bb480bfcf7317140ca7b3f2084",
+      "width": 300,
+      "height": 113,
+      "showcase_ready": true,
+      "verified_at": "2026-11-07"
+    },
+    {
+      "id": "royal-casino",
+      "name": "Royal Casino",
+      "aliases": [],
+      "kind": "wordmark",
+      "source": "https://api.royalcasino.dk/media/themes/logoRC.png",
+      "source_page": "https://www.royalcasino.dk/",
+      "surface": "dark",
+      "logo": "showcase/royal.png",
+      "sha256": "eca107d87c90f9d31588a685d7a33d63c61c2480d0e1113f19b5f2bd3d331571",
+      "width": 210,
+      "height": 100,
+      "showcase_ready": true,
+      "verified_at": "2026-11-07"
     }
   ],
   "payments": [
@@ -1238,6 +1280,21 @@
       "source": "https://cdn.evolution.com/uploads/big_time_gaming_colour_70032741dd.svg",
       "logo": "bigtimegaming-logo.png",
       "surface": "light"
+    }
+  ],
+  "placeholders": [
+    {
+      "id": "casino-roulette-dice-chips",
+      "name": "Casino illustration",
+      "file": "placeholders/casino-roulette-dice-chips.png",
+      "kind": "generated_illustration",
+      "generator": "built-in imagegen",
+      "official_logo": false,
+      "created_at": "2026-11-07",
+      "sha256": "828135791f9217f3c1f11a669da7d831299a686eb66499cbf130ce33155a18f7",
+      "width": 640,
+      "height": 320,
+      "description": "Neutral roulette, dice and chips; user approved placeholder for missing Spilleautomaten wordmark."
     }
   ]
 }
