@@ -25,7 +25,7 @@ def template():
     markup = '''<section class="dd-showcase" aria-label="Porównanie kasyn online">
 {{#each casinos.pagepilot_standard_1}}<article class="casino-card dd-card">
 <div class="dd-logo {{findValueInObjectByKey this "dd_logo_theme" "value" false}}">
-{{#if (findValueInObjectByKey this "logo" "id" false)}}<img src="{{findLogo this ../casinos.basic "src"}}" alt="{{findValueInObjectByKey this "brand" "value" false}}" width="210" height="90" loading="lazy">{{/if}}
+{{#if (findValueInObjectByKey this "logo" "id" false)}}<img src="{{findLogo this ../casinos.basic "src"}}" alt="{{findValueInObjectByKey this "brand" "value" false}}" width="210" height="90" loading="lazy">{{else}}<strong class="dd-wordmark">{{findValueInObjectByKey this "brand" "value" false}}</strong>{{/if}}
 </div>
 <div class="dd-masthead"><h3 class="casino-brand">{{findValueInObjectByKey this "brand" "value" false}}</h3><span class="dd-index" aria-hidden="true"></span></div>
 <div class="dd-offer"><span class="dd-label">Bonus powitalny</span><strong class="bonus-value">{{findValueInObjectByKey this "bonus" "value" false}}</strong></div>
