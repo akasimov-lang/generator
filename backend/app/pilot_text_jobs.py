@@ -130,6 +130,8 @@ def execute(db, job_id):
                          if field=='title_h1' else paragraphs_ready(db,plan))
                 if not ready and not plan.get(field+'_error'):
                     plan[field+'_error']='Текст не прошёл проверку выбранного режима. Обновите генерацию проекта.'
+            except NetworkConflict:
+                raise
             except Exception:
                 db.rollback()
                 # Do not strand the parent or expose provider responses/credentials.

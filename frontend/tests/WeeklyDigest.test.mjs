@@ -13,7 +13,7 @@ const transformed = vite.transformWithOxc
   ? await vite.transformWithOxc(source, new URL('../src/WeeklyDigest.tsx', import.meta.url).pathname, {jsx: {runtime: 'classic'}})
   : await vite.transformWithEsbuild(source, 'WeeklyDigest.tsx', {loader: 'tsx', jsx: 'transform'});
 const compiled = transformed.code.replace(/from ['"](react|lucide-react)['"]/g, (_, name) => `from ${JSON.stringify(pathToFileURL(require.resolve(name)).href)}`);
-const {currentMoscowWeek, validWeek, DigestText, WeeklyDigestLinks} = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+const {currentMoscowWeek, validWeek, DigestText, WeeklyDigestLinks, WeeklyReviewItems} = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
 const render = (component, props) => renderToStaticMarkup(React.createElement(component, props));
 
 test('the new week starts at Monday midnight Moscow, even while UTC is still Sunday', () => {
@@ -62,4 +62,14 @@ test('week archive opens the exact saved period and marks only the current perio
   assert.equal((html.match(/aria-current="date"/g) || []).length, 1);
   assert.match(html, /Наполняется в течение недели/);
   assert.match(html, /Завершённая неделя/);
+});
+
+test('unfinished counter opens the exact week and preserves the saved text version',()=>{
+ const html=render(DigestText,{text:'**Незавершённые задачи и задачи с ошибками: 4 — требуют ручного разбора.**',issuesHref:'/weekly-reports?week=2026-11-02&issues=1&text=saved'});
+ assert.match(html,/href="\/weekly-reports\?week=2026-11-02&amp;issues=1&amp;text=saved"/);
+ assert.match(html,/Незавершённые задачи и задачи с ошибками: 4/);
+});
+test('problem list shows the affected work, reason and source plan',()=>{
+ const html=render(WeeklyReviewItems,{items:[{key:'one',site_id:'site',project:'example.test',kind:'text',field:'paragraphs',status:'failed',reason:'Numeric conditions changed',report_url:'/auto-reglue/pilot/logs?id=plan'}],updatedAt:'2026-11-07T09:00:00Z'});
+ assert.match(html,/example.test/);assert.match(html,/Переписывание текста/);assert.match(html,/Numeric conditions changed/);assert.match(html,/href="\/auto-reglue\/pilot\/logs\?id=plan"/);
 });

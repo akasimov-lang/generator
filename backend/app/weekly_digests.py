@@ -158,12 +158,14 @@ def public_view(record, user, *, detail=True):
         review = [r for r in value.get('review',[]) if r.get('site_id') in allowed]
         stats = aggregate(rows,operations,runs,manual_review_count=len(review))
     else:
+        review = value.get('review', [])
         stats = value.get('stats') or aggregate([],[],[])
     result = {k:value.get(k) for k in ('id','week_start','week_end','title','status',
               'period_start','period_end','updated_at')}
     result.update(projects=stats['overall']['projects'],
                   manual_review_count=stats['manual_review_count'])
     if detail:
+        result['review_items'] = deepcopy(review)
         result['text'] = render(stats,value['period_start'],value['period_end'],
                                 observed_at=value.get('updated_at')) if restricted else value.get('text','')
         if not restricted and value.get('saved_text'):

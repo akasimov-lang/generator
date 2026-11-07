@@ -182,3 +182,12 @@ def test_next_week_archive_does_not_hide_previous_week_unfinished_task(env):
     db.get(models.GenerationTask, branch.result['task_id']).archived_at = END + timedelta(seconds=1)
     db.commit()
     assert len(unresolved(db, START, END)) == 1
+
+
+def test_review_snapshot_includes_project_reason_and_parent_link(env):
+    db, site, _ = env; owner = parent(db, site)
+    branch = job(db, site, owner, field='paragraphs'); branch.error='Numerical conditions changed'; db.commit()
+    ref=unresolved(db, START, END)[0]
+    assert ref['project']==site.name and ref['field']=='paragraphs'
+    assert ref['reason']=='Numerical conditions changed' and ref['status']=='failed'
+    assert ref['report_url']=='/auto-reglue/pilot/logs?id='+owner.id

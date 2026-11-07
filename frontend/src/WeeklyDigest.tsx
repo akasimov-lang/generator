@@ -13,7 +13,8 @@ export type DigestSummary = {
   projects: number;
   manual_review_count: number;
 };
-export type Digest = DigestSummary & {text: string; saved_text?: string; saved_text_at?: string | null};
+type ReviewItem={key:string;site_id:string;project?:string;kind:string;field?:string;status?:string;reason?:string|null;updated_at?:string;report_url?:string};
+export type Digest = DigestSummary & {text: string; saved_text?: string; saved_text_at?: string | null;review_items?:ReviewItem[]};
 type DigestList = {reports: DigestSummary[]; current_week: string};
 
 const dateTime = (value?: string | null) => value
@@ -62,7 +63,7 @@ function inline(text: string): React.ReactNode[] {
 }
 
 /** The digest format is text, lists and emphasis. Remote HTML is always escaped. */
-export function DigestText({text}: {text: string}) {
+export function DigestText({text,issuesHref}: {text: string;issuesHref?:string}) {
   const lines = text.replace(/\r\n?/g, '\n').split('\n');
   const blocks: React.ReactNode[] = [];
   let i = 0;
@@ -72,7 +73,7 @@ export function DigestText({text}: {text: string}) {
     const key = i;
     const heading = line.match(/^#{1,4}\s+(.+)$/) || line.match(/^\*\*(.+)\*\*$/);
     if (heading) {
-      blocks.push(<h3 key={key}>{inline(heading[1])}</h3>);
+      blocks.push(<h3 key={key}>{issuesHref&&/^Незавершённые задачи и задачи с ошибками:/.test(heading[1])?<a href={issuesHref}>{inline(heading[1])}</a>:inline(heading[1])}</h3>);
       i++;
       continue;
     }
@@ -139,7 +140,9 @@ export function WeeklyDigest({api, week}: {api: Api; week: string}) {
   const [report, setReport] = React.useState<Digest | null>(null);
   const [error, setError] = React.useState('');
   const [loading, setLoading] = React.useState(false);
-  const [saved, setSaved] = React.useState(false);
+  const savedVersion=new URLSearchParams(window.location.search).get('text')==='saved';
+  const issues=new URLSearchParams(window.location.search).get('issues')==='1';
+  const [saved, setSaved] = React.useState(savedVersion);
   const [copyState, setCopyState] = React.useState('');
   const request = React.useRef(0);
   const load = React.useCallback(async (silent = false) => {
@@ -153,7 +156,7 @@ export function WeeklyDigest({api, week}: {api: Api; week: string}) {
       if (seq === request.current) setError(error instanceof Error ? error.message : 'Не удалось загрузить отчёт за неделю.');
     } finally { if (seq === request.current) setLoading(false); }
   }, [api, week]);
-  React.useEffect(() => { setReport(null); setSaved(false); setCopyState(''); void load(); return () => { ++request.current; }; }, [load]);
+  React.useEffect(() => { setReport(null); setSaved(savedVersion); setCopyState(''); void load(); return () => { ++request.current; }; }, [load,savedVersion]);
   React.useEffect(() => {
     if (report?.status !== 'open') return;
     const timer = setInterval(() => { if (!document.hidden) void load(true); }, 60000);
@@ -168,15 +171,22 @@ export function WeeklyDigest({api, week}: {api: Api; week: string}) {
     } catch { setCopyState('Не удалось скопировать автоматически. Выделите и скопируйте текст отчёта.'); }
   };
   return <section className="dataPanel stateReports weeklyDigestPage">
-    <header className="stateReportTools"><a className="button secondary compact" href="/weekly-reports"><ArrowLeft size={15}/>Все отчёты</a><h2><FileText size={20}/>{report?.title || 'Отчёт за неделю'}</h2><button className="button secondary compact" disabled={loading} onClick={() => void load()}><RefreshCw size={15}/>Обновить</button></header>
+    <header className="stateReportTools"><a className="button secondary compact" href={issues?`/weekly-reports?week=${encodeURIComponent(week)}${saved?'&text=saved':''}`:'/weekly-reports'}><ArrowLeft size={15}/>{issues?'Назад к отчёту':'Все отчёты'}</a><h2><FileText size={20}/>{issues?'Незавершённые задачи и ошибки':report?.title || 'Отчёт за неделю'}</h2><button className="button secondary compact" disabled={loading} onClick={() => void load()}><RefreshCw size={15}/>Обновить</button></header>
     {error && <p role="alert">{error}</p>}
     {loading && !report && <p role="status">Загружаем отчёт…</p>}
-    {report && <>
+    {report && !issues && <>
       <div className="weeklyDigestToolbar"><span className={`weeklyDigestStatus ${report.status}`}>{report.status === 'open' ? 'Наполняется в течение недели' : 'Завершённая неделя'}</span><span className="stateReportHint">{report.updated_at ? `Обновлён ${dateTime(report.updated_at)} МСК` : 'Сводка подготавливается'}</span><button className="button secondary compact" disabled={!text} onClick={() => void copy()}>{copyState === 'Скопировано' ? <Check size={15}/> : <Copy size={15}/>}Скопировать текст</button></div>
       {report.saved_text && <div className="weeklyDigestVersions" role="group" aria-label="Версия текстового отчёта"><button className="stateReportFilter" aria-pressed={!saved} onClick={() => { setSaved(false); setCopyState(''); }}>Актуальная сводка</button><button className="stateReportFilter" aria-pressed={saved} onClick={() => { setSaved(true); setCopyState(''); }}>Сводка из чата{report.saved_text_at ? ` · ${dateTime(report.saved_text_at)} МСК` : ''}</button></div>}
       {copyState && <p className="stateReportHint" role="status">{copyState}</p>}
       {saved && <p className="stateReportHint">Сохранённое текстовое описание из чата. Новые работы отображаются в актуальной сводке.</p>}
-      {text ? <DigestText text={text}/> : <p className="weeklyDigestEmpty">Отчёт создан. Здесь появится сводка по мере подтверждения работ за эту неделю.</p>}
+      {text ? <DigestText text={text} issuesHref={`/weekly-reports?week=${encodeURIComponent(week)}&issues=1${saved?'&text=saved':''}`}/> : <p className="weeklyDigestEmpty">Отчёт создан. Здесь появится сводка по мере подтверждения работ за эту неделю.</p>}
     </>}
+    {report&&issues&&<WeeklyReviewItems items={report.review_items||[]} updatedAt={report.updated_at}/>}
   </section>;
+}
+
+export function WeeklyReviewItems({items,updatedAt}:{items:ReviewItem[];updatedAt?:string|null}) {
+ const kinds:Record<string,string>={reglue:'Переклей',internal_pages:'Внутренние страницы',title_h1:'Title / H1',paragraphs:'Переписывание текста',text:'Генерация текста'};
+ const statuses:Record<string,string>={queued:'В очереди',running:'Выполняется',waiting:'Ожидает подтверждения',failed:'Ошибка',partial:'Частично'};
+ return <><p className="stateReportHint">Задач: {items.length}. Данные отчёта на {dateTime(updatedAt)} МСК.</p>{items.length?<div className="stateReportScroll"><table><thead><tr><th>Проект</th><th>Работа</th><th>Состояние / причина</th><th>Обновлено · МСК</th><th>Исходный план</th></tr></thead><tbody>{items.map(item=><tr key={item.key}><td>{item.project||item.site_id}</td><td>{kinds[item.field||item.kind]||item.kind}</td><td><strong>{statuses[item.status||'']||item.status||'Требует разбора'}</strong>{item.reason&&<p>{item.reason}</p>}</td><td>{dateTime(item.updated_at)||'—'}</td><td>{item.report_url&&safeLink(item.report_url)?<a href={item.report_url}>Открыть план</a>:'—'}</td></tr>)}</tbody></table></div>:<p>Незавершённых задач и ошибок в этой сводке нет.</p>}</>;
 }

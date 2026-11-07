@@ -1,3 +1,4 @@
+import {readPilotTasks, savePilotTasks, clearPilotTasks} from "./pilotTaskCache";
 import { pilotDomainFilter } from "./pilotFilterNavigation";
 import React from "react";
 import {createVisiblePoll} from "./visiblePoll";
@@ -71,30 +72,50 @@ export function PilotReportIdentity({task}:{task:Pick<Task,"id"|"report_id"|"rep
  return <div className="pilotReportIdentity">{Number.isInteger(task.report_id)&&Number(task.report_id)>=3000&&<a className="pilotReportId" href={href}>{task.mode!=="preview"&&!task.planning_only?"Отчёт по плану":"План"} №{task.report_id}</a>}<strong className="pilotReportName"><a href={href} title={task.name}>{task.name}</a></strong></div>;
 }
 
-export function AutoPilotPage({api,logs=false,reports=false,renderProjects}:{api:Api;logs?:boolean;reports?:boolean;renderProjects?:ProjectRenderer}) {
+export function AutoPilotPage({api,logs=false,reports=false,renderProjects,cacheScope=""}:{api:Api;logs?:boolean;reports?:boolean;renderProjects?:ProjectRenderer;cacheScope?:string}) {
  const maintenance=new URLSearchParams(window.location.search).get("maintenance");
  const direct=new URLSearchParams(window.location.search).has("id")||(!reports&&(logs||new URLSearchParams(window.location.search).has("new")));
- const [history,setHistory]=React.useState<Tasks|null>(null),[error,setError]=React.useState(""),[offset,setOffset]=React.useState(0);
+ const [history,setHistory]=React.useState<Tasks|null>(()=>cacheScope?readPilotTasks<Tasks>(cacheScope,pilotTaskListPath(0,"")):null),[error,setError]=React.useState(""),[offset,setOffset]=React.useState(0);
  const [search,setSearch]=React.useState(""),[query,setQuery]=React.useState("");
  React.useEffect(()=>{const timer=setTimeout(()=>setQuery(search.trim()),250);return()=>clearTimeout(timer);},[search]);
- const changeSearch=(value:string)=>{setSearch(value);setOffset(0);setHistory(null);setError("");};
+ const changeSearch=(value:string)=>{setSearch(value);setOffset(0);setHistory(cacheScope?readPilotTasks<Tasks>(cacheScope,pilotTaskListPath(0,value.trim())):null);setError("");};
  const [deleting,setDeleting]=React.useState<string|null>(null);
  const deletingRef=React.useRef(false);
+ const [refreshRequest,setRefreshRequest]=React.useState(0),[refreshing,setRefreshing]=React.useState(false);
+ const forceRefresh=React.useRef(false);
  async function deleteDraft(task:Task){
   if(deletingRef.current)return;
   deletingRef.current=true;setDeleting(task.id);setError("");
   try{
    await api(`/auto-reglue/pilot/${task.id}`,{method:"DELETE"});
+   clearPilotTasks();
    const total=Math.max(0,(history?.total||0)-1);
    setHistory(current=>current?{...current,total,items:current.items.filter(item=>item.id!==task.id),has_more:offset+current.items.length-1<total}:current);
    if(offset>=total&&offset>0)setOffset(Math.max(0,Math.floor((total-1)/50)*50));
   }catch(e){setError(e instanceof Error?e.message:"Не удалось удалить черновик");}
   finally{deletingRef.current=false;setDeleting(null);}
  }
- React.useEffect(()=>{if(direct||maintenance||deleting||search.trim()!==query)return;let active=true;const load=()=>void api<Tasks>(pilotTaskListPath(offset,query),{cache:"no-store"}).then(data=>{if(active&&!deletingRef.current){if(offset>0&&offset>=data.total){setOffset(Math.max(0,Math.floor((data.total-1)/50)*50));return;}setHistory(data);setError("");}}).catch(e=>{if(active)setError(e instanceof Error?e.message:"Не удалось загрузить задания");});load();const timer=setInterval(load,5000);return()=>{active=false;clearInterval(timer);};},[api,direct,maintenance,offset,deleting,search,query]);
+ React.useEffect(()=>{
+  if(direct||maintenance||deleting||search.trim()!==query)return;
+  let active=true;const path=pilotTaskListPath(offset,query);
+  const saved=cacheScope?readPilotTasks<Tasks>(cacheScope,path):null;if(saved)setHistory(saved);
+  const load=async()=>{
+   setRefreshing(true);const fresh=forceRefresh.current;forceRefresh.current=false;
+   try {
+    const data=await api<Tasks>(path+(fresh?"&refresh=true":""),{cache:"no-store"});
+    if(!active||deletingRef.current)return;
+    if(offset>0&&offset>=data.total){setOffset(Math.max(0,Math.floor((data.total-1)/50)*50));return;}
+    if(cacheScope)savePilotTasks(cacheScope,path,data);
+    setHistory(data);setError("");
+   } catch(e) {if(active)setError(e instanceof Error?e.message:"Не удалось загрузить задания");}
+   finally {if(active)setRefreshing(false);}
+  };
+  const stop=createVisiblePoll({load,intervalMs:5000,immediate:true});
+  return()=>{active=false;stop();};
+ },[api,direct,maintenance,offset,deleting,search,query,cacheScope,refreshRequest]);
  if(maintenance)return <MaintenanceReport api={api} id={maintenance}/>;
  if(direct||(!reports&&!search.trim()&&!query&&history&&history.total===0))return <AutoPilotDetail api={api} logs={logs} renderProjects={renderProjects}/>;
- return <section className="dataPanel pilotPanel"><header className="pilotTools"><a className="button secondary compact" href="/auto-reglue"><ArrowLeft size={16}/>Массовые действия</a><h2>{reports?<ScrollText size={20}/>:<Bot size={20}/>} {reports?"Планы и отчёты":"Auto Pilot — массовые переклеи"}</h2><a className="button primary compact" href="/auto-reglue/pilot?new=1"><Play size={16}/>Новый план</a></header>
+ return <section className="dataPanel pilotPanel"><header className="pilotTools"><a className="button secondary compact" href="/auto-reglue"><ArrowLeft size={16}/>Массовые действия</a><h2>{reports?<ScrollText size={20}/>:<Bot size={20}/>} {reports?"Планы и отчёты":"Auto Pilot — массовые переклеи"}</h2><button type="button" className="button secondary compact" disabled={refreshing} onClick={()=>{forceRefresh.current=true;setRefreshRequest(n=>n+1);}}><RefreshCw size={16}/>{refreshing?"Обновляем…":"Обновить"}</button><a className="button primary compact" href="/auto-reglue/pilot?new=1"><Play size={16}/>Новый план</a></header>
  <PilotTaskSearch value={search} onChange={changeSearch} total={history?.total}/>
  {error&&<p role="alert">{error}</p>}{!history&&!error&&<p role="status">Загружаем задания…</p>}
  {history?.total===0&&<p role="status">{query?"По этому запросу заданий не найдено.":"Черновиков и запусков пока нет. Нажмите «Новый план», чтобы перейти к планированию."}</p>}

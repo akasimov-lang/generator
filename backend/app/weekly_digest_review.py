@@ -81,7 +81,10 @@ def unresolved(db, start, end):
     result = []
     for (parent_id, site_id), attempts in grouped_runs.items():
         if _latest(attempts).status not in DONE:
-            result.append({'key': f'plan:{parent_id}:{site_id}:reglue', 'site_id': site_id, 'kind': 'reglue'})
+            current = _latest(attempts)
+            result.append({'key': f'plan:{parent_id}:{site_id}:reglue', 'site_id': site_id, 'kind': 'reglue',
+                           'parent_id': parent_id, 'status': current.status, 'reason': current.message,
+                           'updated_at': _time(current.updated_at).isoformat()})
 
     grouped_jobs = defaultdict(list)
     internal_jobs = []
@@ -132,5 +135,13 @@ def unresolved(db, start, end):
                 if items and all(i.status == 'published' and i.published_at and _time(i.published_at) < end for i in items):
                     continue
         suffix = kind + (':' + field if field else '')
-        result.append({'key': f'plan:{parent_id}:{site_id}:{suffix}', 'site_id': site_id, 'kind': kind})
+        result.append({'key': f'plan:{parent_id}:{site_id}:{suffix}', 'site_id': site_id, 'kind': kind,
+                       'parent_id': parent_id, 'field': field, 'status': job.status, 'reason': job.error,
+                       'updated_at': _time(job.updated_at).isoformat()})
+    sites = {s.id: s for s in db.scalars(select(models.Site).where(models.Site.id.in_({r['site_id'] for r in result})))} if result else {}
+    for ref in result:
+        site = sites.get(ref['site_id'])
+        ref['project'] = site.name if site else ref['site_id']
+        parent = parents.get(ref['parent_id'])
+        ref['report_url'] = '/auto-reglue/pilot' + ('/logs' if parent and parent.kind == 'mass_reglue_list' else '') + '?id=' + ref['parent_id']
     return sorted(result, key=lambda r: r['key'])

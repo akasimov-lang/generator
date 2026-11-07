@@ -6,10 +6,20 @@ import re
 from app.content_metrics import target_percent
 
 VERSION = 2
+NUMERIC_CONDITIONS = (
+    'Keep numerical offer conditions unchanged: bonus/deposit/withdrawal amounts, percentages, '
+    'free-spin counts, wagering multipliers, minimums, maximums, fees and validity/processing periods. '
+    'Preserve each value together with its currency or unit, applicable condition and qualifiers such as '
+    '"up to", "from" and "at least". Do not swap values between conditions, round them, convert currencies, '
+    'spell a number out or substitute a competitor offer. For example, 100% up to 500 PLN with wagering '
+    'x35 must retain all three conditions. Rewrite the surrounding prose freely; this rule protects '
+    'numerical conditions, not the wording, sentence order or original explanation. '
+)
 INSTRUCTIONS = (
     'Rewrite naturally in the original language. New meanings, angles and explanations are allowed in '
     'rewritten and newly added paragraphs when relevant to the page and supplied brand/GEO knowledge. '
     'Preserve the main topic and do not contradict the offer; sentence-by-sentence equivalence is not required. '
+    + NUMERIC_CONDITIONS +
     'Some paragraphs should be fully rephrased on the same topic at roughly the same length. '
     'Use lists or tables only when they clarify the material. Never create a list with fewer than 2 items. '
     'Add at most 2 new lists per project, including tables converted to lists. '

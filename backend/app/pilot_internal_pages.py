@@ -111,7 +111,7 @@ def snapshot(db, parent_id, site_id, plan=None):
         if task.archived_at:
             output.update(status="cancelled", reason="Задание генерации удалено. Повтор автоматически не запускается.")
         elif items and output["published"] == len(items):
-            output.update(status="completed", progress=100)
+            output.update(status="completed", progress=100, reason=None)
         elif items and all(item.status in FAILED_ITEMS or item.status == "published" for item in items):
             output.update(status="partial" if output["published"] else "failed", progress=100,
                           reason="Не все внутренние страницы опубликованы. Подробности — в задании генерации.")

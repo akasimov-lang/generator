@@ -1,3 +1,4 @@
+import {clearPilotTasks} from "./pilotTaskCache";
 import { ProjectStateReports } from "./ProjectStateReports";
 import { MenuPageIdentityEditor } from "./MenuPageIdentityEditor";
 import { projectType, projectTypeFilter, matchesProjectType, type ProjectTypeFilter } from "./projectTypeFilter";
@@ -1031,6 +1032,7 @@ function App() {
       if (!response) throw networkError instanceof Error ? networkError : new Error("Failed to fetch");
       if (response.status === 401) {
         localStorage.removeItem("admin_token");
+        clearPilotTasks();
         setAuthNotice("Срок действия токена истёк. Войдите заново, чтобы получить новый токен.");
         setToken("");
         setCurrentUser(null);
@@ -1049,6 +1051,7 @@ function App() {
         throw requestError;
       }
       const data = await response.json();
+      if(method!=="GET")clearPilotTasks();
       projectApiResult(path, method);
       return data;
       } catch (error) { projectApiResult(path, method, error); throw error; }
@@ -1359,6 +1362,7 @@ function App() {
               onClick={() => {
                 setMobileMenuOpen(false);
                 localStorage.removeItem("admin_token");
+                clearPilotTasks();
                 setToken("");
                 setCurrentUser(null);
                         setArchivedTasks([]);
@@ -1489,10 +1493,10 @@ function App() {
         {activeView === "guide" && <React.Suspense fallback={<p>Загрузка инструкции…</p>}><UserGuideView /></React.Suspense>}
         {activeView === "autoReglue" && <><GlobalProjectSearchResults sites={siteSnapshot} query={massSearchQuery} onOpen={openMassSearchProject} loading={!catalogLoaded&&!catalogError}/><div style={{display:globalMassQuery?"none":undefined}}><AutoReglueView refreshToken={massRefreshToken} api={api} onNetworksChanged={loadAll} renderReport={(onScopeChange, selectionIds, onSelection, moveActions, headerContainer) => <MassActionStatistics massOnly refreshToken={massRefreshToken} catalogReady={catalogLoaded} catalogError={catalogError} onInventoryChanged={loadAll} headerContainer={headerContainer} api={api} onScopeChange={onScopeChange} renderProjects={(ids, refresh, scopeLabel) => <SitesView projectScopeLabel={scopeLabel} embedded massActions api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={updates => { mergeSites(updates); refresh(); }} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll} selectionIds={selectionIds} onSelectionChange={onSelection} headerActions={moveActions} />} />} /></div></>}
         {activeView === "reglueReserves" && <ReglueReservesPage api={api} />}
-        {activeView === "autoPilot" && <AutoPilotPage api={api} renderProjects={(ids, label) => catalogError ? <p role="alert">{catalogError}</p> : !catalogLoaded ? <p role="status">Загружаем проекты…</p> : <SitesView key={label} embedded showProjectTypeFilters api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} projectScopeLabel={label} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/>}/>}
-        {activeView === "autoPilotLogs" && <AutoPilotPage api={api} logs renderProjects={(ids, label) => catalogError ? <p role="alert">{catalogError}</p> : !catalogLoaded ? <p role="status">Загружаем проекты…</p> : <SitesView key={label} embedded showProjectTypeFilters api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} projectScopeLabel={label} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/>}/>}
+        {activeView === "autoPilot" && <AutoPilotPage key={JSON.stringify([currentUser.username,currentUser.is_admin,currentUser.allowed_site_ids])} cacheScope={JSON.stringify([currentUser.username,currentUser.is_admin,currentUser.allowed_site_ids])} api={api} renderProjects={(ids, label) => catalogError ? <p role="alert">{catalogError}</p> : !catalogLoaded ? <p role="status">Загружаем проекты…</p> : <SitesView key={label} embedded showProjectTypeFilters api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} projectScopeLabel={label} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/>}/>}
+        {activeView === "autoPilotLogs" && <AutoPilotPage key={JSON.stringify([currentUser.username,currentUser.is_admin,currentUser.allowed_site_ids])} cacheScope={JSON.stringify([currentUser.username,currentUser.is_admin,currentUser.allowed_site_ids])} api={api} logs renderProjects={(ids, label) => catalogError ? <p role="alert">{catalogError}</p> : !catalogLoaded ? <p role="status">Загружаем проекты…</p> : <SitesView key={label} embedded showProjectTypeFilters api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} projectScopeLabel={label} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/>}/>}
         {activeView === "weeklyReports" && <ProjectStateReports api={api}/>}
-        {(activeView === "autoPilotReport" || activeView === "massActionReport") && <AutoPilotPage api={api} reports renderProjects={(ids, label) => catalogError ? <p role="alert">{catalogError}</p> : !catalogLoaded ? <p role="status">Загружаем проекты…</p> : <SitesView key={label} embedded showProjectTypeFilters api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} projectScopeLabel={label} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/>}/>}
+        {(activeView === "autoPilotReport" || activeView === "massActionReport") && <AutoPilotPage key={JSON.stringify([currentUser.username,currentUser.is_admin,currentUser.allowed_site_ids])} cacheScope={JSON.stringify([currentUser.username,currentUser.is_admin,currentUser.allowed_site_ids])} api={api} reports renderProjects={(ids, label) => catalogError ? <p role="alert">{catalogError}</p> : !catalogLoaded ? <p role="status">Загружаем проекты…</p> : <SitesView key={label} embedded showProjectTypeFilters api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} projectScopeLabel={label} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/>}/>}
         {activeView === "autoReglueGuide" && <><a className="button secondary" href="/guide" onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("guide"); } }}>Все инструкции</a><AutoReglueGuide backLabel="Вернуться к автопереклею" onBack={() => navigateTo("autoReglue")} /></>}
         {activeView === "settings" && <SettingsView api={api} currentUser={currentUser} designVersion={designVersion} onDesignVersionChange={setDesignVersion} inputStyle={inputStyle} onInputStyleChange={setInputStyle} onChanged={loadAll} />}
       </main>
