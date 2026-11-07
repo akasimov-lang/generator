@@ -969,6 +969,24 @@
       "height": 100,
       "showcase_ready": true,
       "verified_at": "2026-11-07"
+    },
+    {
+      "id": "n1bet",
+      "name": "N1Bet",
+      "aliases": [
+        "N1 Bet",
+        "N1 Bet Casino"
+      ],
+      "kind": "wordmark",
+      "source": "https://n1.partners/img/n1bet-logo.svg",
+      "source_page": "https://n1.partners/brands/n1bet",
+      "logo": "showcase/n1bet.png",
+      "surface": "dark",
+      "sha256": "be193e59592bbe7b72735bad74698bb1109f8d7b9372d40fba71689818ff5dee",
+      "width": 600,
+      "height": 200,
+      "showcase_ready": true,
+      "verified_at": "2026-11-07"
     }
   ],
   "payments": [
