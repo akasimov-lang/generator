@@ -3,7 +3,6 @@ import { MenuPageIdentityEditor } from "./MenuPageIdentityEditor";
 import { projectType, projectTypeFilter, matchesProjectType, type ProjectTypeFilter } from "./projectTypeFilter";
 import { ArrowLeft } from "lucide-react";
 import { pilotFilterReturnPath, projectFromPilotFilter } from "./pilotFilterNavigation";
-import { showcaseBrandCount, type ShowcaseSummary } from "./showcaseCount";
 import { ReglueJournalCard, ReglueJournalPage } from "./ReglueJournal";
 import { DashboardActivity } from "./DashboardActivity";
 import { siteGeoFilterCode } from "./siteGeoFilter";
@@ -285,6 +284,7 @@ type Site = {
   menu_library: MenuLibraryItem[];
   default_banners: string[];
   showcase_payload: Record<string, unknown> | null;
+  cache_showcase?: {count: number | null; brands: string[]; checked_at: string} | null;
   external_project_id: string | null;
   cache_canon: string | null;
   cache_reserve?: string | null;
@@ -8767,7 +8767,6 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
     }
   }, [preferencesKey]);
   const [managedSites, setManagedSites] = React.useState<Site[]>(sites);
-  const [showcaseCounts, setShowcaseCounts] = React.useState<Record<string, number | null>>({});
   const [cacheResult, setCacheResult] = React.useState<ProjectCacheSyncResult | null>(null);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [geoFilter, setGeoFilter] = React.useState(() => siteGeoFilterCode(storedPreferences.geoFilter));
@@ -8988,7 +8987,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       fiberyNameManual: Boolean(site.fibery_name_manual),
       projectTeam: site.project_team,
       needsTeamReview: typeof site.project_team === "string" && ["", "rankomen"].includes(site.project_team.trim().toLowerCase()),
-      subdomainsCount: showcaseCounts[site.id] ?? null,
+      subdomainsCount: site.cache_showcase?.count ?? null,
       domainsCount: site.domains_count,
       domains: Array.isArray(site.cache_domains) ? site.cache_domains : [],
       syncedAt: site.cache_synced_at
@@ -9057,27 +9056,6 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       - Number(isExactNetworkDomainSearch(left.domains, normalizedQuery));
   });
   const networkRefreshScope = JSON.stringify(filteredRows.map(row=>row.id).sort());
-  React.useEffect(() => {
-    if (massActions) return;
-    let active = true;
-    const pending: string[] = JSON.parse(networkRefreshScope);
-    setShowcaseCounts({});
-    async function loadCounts() {
-      while (active && pending.length) {
-        const id = pending.shift()!;
-        let count: number | null = null;
-        try {
-          const endpoint = `/sites/${encodeURIComponent(id)}/showcase`;
-          let showcase = await api<ShowcaseSummary>(endpoint);
-          if (active && !showcase.management?.complete) showcase = await api<ShowcaseSummary>(`${endpoint}?refresh=true`);
-          count = showcaseBrandCount(showcase);
-        } catch { /* Unknown is distinct from an empty showcase. */ }
-        if (active) setShowcaseCounts(current => ({...current, [id]: count}));
-      }
-    }
-    void Promise.all([loadCounts(), loadCounts(), loadCounts()]);
-    return () => { active = false; };
-  }, [api, networkRefreshScope, snapshotUpdatedAt, massActions]);
   async function downloadProjectTable() {
     if (exportingTable || !filteredRows.length) return;
     setExportingTable(true); setExportTableError("");

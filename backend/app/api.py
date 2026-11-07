@@ -480,6 +480,8 @@ def list_sites(_: AuthUser, db: Session = Depends(get_db), include_grouped_inact
 
     from app.project_notices import refresh_and_commit_notices
     refresh_and_commit_notices(db, sites)
+    from app.showcase_cache import preload
+    preload(db, sites)
     return sites
 
 
@@ -515,6 +517,8 @@ def list_cached_projects(_: AuthUser, db: Session = Depends(get_db)) -> Any:
     sites = db.scalars(select(models.Site).where(models.Site.is_active.is_(True), models.Site.hidden_from_projects.is_(False))).all()
     from app.project_notices import refresh_and_commit_notices
     refresh_and_commit_notices(db, sites)
+    from app.showcase_cache import preload
+    preload(db, sites)
     return sorted(sites, key=lambda site: (status_order.get(site.project_status, 3), not site.has_menu, site.name.lower()))
 
 

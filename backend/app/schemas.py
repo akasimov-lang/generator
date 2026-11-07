@@ -84,6 +84,18 @@ class SiteBrandUpdate(BaseModel):
 
 
 class SiteResponse(BaseModel):
+    cache_showcase: dict[str, Any] | None = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def saved_showcase(cls, value):
+        from sqlalchemy.orm import object_session
+        from app.models import Site
+        if isinstance(value, Site) and (db := object_session(value)) is not None:
+            from app.showcase_cache import cached
+            value.cache_showcase = cached(db, value)
+        return value
+
     cache_reserve: str | None = None
     added_to_system_at: datetime | None = None
     network_domain_counts: dict[str, int] = Field(default_factory=dict)

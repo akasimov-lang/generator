@@ -106,7 +106,10 @@ def run_job(db, job_id):
     job.started_at = datetime.now(timezone.utc)
     db.commit()  # Duplicated broker deliveries must never repeat remote mutations.
     try:
-        if job.kind == 'generation_retry':
+        if job.kind == 'showcase_cache_refresh':
+            from app.showcase_cache import execute
+            result = execute(db, job)
+        elif job.kind == 'generation_retry':
             from app.worker import run_content_item_pipeline_job
             result = run_content_item_pipeline_job.run(job.payload['content_id'], job.payload['collect_competitors'])
         elif job.kind == "article_image":

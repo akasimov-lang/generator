@@ -158,6 +158,8 @@ def confirm(db, operation, remote):
     project = remote.project()
     if not operation.after_page.get('logo_upload_pending') and (project.get('data') or {}).get('casinos') == operation.after_page['casinos']:
         operation.status, operation.error = 'confirmed', None
+        from app.showcase_cache import capture
+        capture(db, db.get(models.Site, operation.site_id), project, source='webdev')
     else:
         operation.status, operation.error = 'unknown', 'Webdev пока не подтвердил изменения. Проверьте сохранение; повторной отправки не было.'
     db.commit()
@@ -180,6 +182,9 @@ def load(site_id: str, user: AuthUser, db: Session = Depends(get_db), refresh: b
         project, source, warning = read_project(db, site, refresh=True)
         response = view(project, source, warning)
     response['management']['record_id'] = showcase_management.remember(db, site, user, response['management'])
+    from app.showcase_cache import capture
+    capture(db, site, project, source=source)
+    db.commit()
     return response
 
 

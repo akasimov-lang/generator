@@ -910,6 +910,8 @@ def _apply_direct_project_snapshot(
     observe_network(site, project, db=db)
     from app.report_evidence import capture
     capture(db, site, project, source='webdev')
+    from app.showcase_cache import capture as capture_showcase
+    capture_showcase(db, site, project, source='webdev', at=synced_at)
     site.cache_canon = canon or site.cache_canon
     site.cache_language = str(settings.get("lang") or "").strip() or site.cache_language
     site.cache_geo = str(settings.get("geo") or "").strip() or site.cache_geo
@@ -1392,6 +1394,8 @@ def sync_project_data_update(
             site.cache_server_ip = server_id
         from app.report_evidence import capture
         capture(db, site, project, source='webdev', at=synced_at)
+        from app.showcase_cache import capture as capture_showcase
+        capture_showcase(db, site, project, at=synced_at)
         _confirm_published_content(db, site, project, synced_at)
         _confirm_synchronized_sections(db, site, menu)
     db.commit()
@@ -1509,6 +1513,8 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
         observe_network(site, project, db=db)
         from app.report_evidence import capture
         capture(db, site, project)
+        from app.showcase_cache import capture as capture_showcase
+        capture_showcase(db, site, project, at=now)
         site.cache_canon = canon
         site.cache_language = language
         site.cache_geo = geo
