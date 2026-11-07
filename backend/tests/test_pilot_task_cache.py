@@ -78,3 +78,28 @@ def test_cache_storage_failure_keeps_list_available(monkeypatch):
         def unavailable(self):raise OperationalError('cache commit',{},Exception('unavailable'))
         monkeypatch.setattr(Session,'commit',unavailable)
         assert cache.tasks(db,{'username':'anton'})['items']==[{'id':'visible'}]
+
+
+def test_site_cache_timestamp_refresh_does_not_rebuild_report_list(monkeypatch):
+    with session() as db:
+        site=models.Site(name='example.test',base_url='https://example.test',publication_endpoint='/publish',brand='Lemon',cache_geo='PL')
+        db.add(site);db.commit();calls=[]
+        monkeypatch.setattr('app.auto_pilot.tasks',lambda *a,**k:calls.append(1) or {'items':[]})
+        cache.tasks(db,{'username':'anton'})
+        site.cache_synced_at=datetime.now(timezone.utc);site.homepage_title='Refreshed';db.commit()
+        cache.tasks(db,{'username':'anton'})
+        assert len(calls)==1
+
+
+def test_search_cache_tracks_brand_and_domain_changes_but_not_polling(monkeypatch):
+    with session() as db:
+        site=models.Site(name='example.test',base_url='https://example.test',publication_endpoint='/publish',brand='Lemon',cache_geo='PL',cache_domains=[{'domain':'old.test','status':'active'}])
+        db.add(site);db.commit();calls=[]
+        monkeypatch.setattr('app.auto_pilot.tasks',lambda *a,**k:calls.append(1) or {'items':[]})
+        cache.tasks(db,{'username':'anton'},q='Lemon')
+        site.cache_synced_at=datetime.now(timezone.utc);db.commit()
+        cache.tasks(db,{'username':'anton'},q='Lemon');assert len(calls)==1
+        site.brand='Pelican';db.commit()
+        cache.tasks(db,{'username':'anton'},q='Lemon');assert len(calls)==2
+        site.cache_domains=[{'domain':'new.test','status':'active'}];db.commit()
+        cache.tasks(db,{'username':'anton'},q='Lemon');assert len(calls)==3
