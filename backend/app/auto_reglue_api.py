@@ -615,6 +615,12 @@ def delete_pilot_draft(job_id: UUID, user: AuthUser, db: Session = Depends(get_d
     return call(auto_pilot.delete_draft, db, job_id, user)
 
 
+@router.delete('/reports/{report_id}')
+def delete_report_from_list(report_id: UUID, user: AuthUser, db: Session = Depends(get_db)):
+    from app.report_list_visibility import hide
+    return call(hide, db, report_id, user)
+
+
 @router.post('/pilot/{job_id}/rows/{site_id}/refresh')
 def refresh_pilot_row(job_id: UUID, site_id: UUID, payload: PilotPreviewRequest, user: AuthUser, db: Session = Depends(get_db)):
     from app import auto_pilot

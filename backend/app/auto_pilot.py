@@ -102,10 +102,13 @@ def tasks(db, user, offset=0, limit=50, *, q=''):
     """Saved drafts and launches; reading never creates or dispatches work."""
     from app import maintenance_reports, report_ids
     numbers = report_ids.ensure(db)
+    from app.report_list_visibility import hidden_ids
+    hidden = hidden_ids(db, user['username'])
     visible=[]
     query=select(models.BackgroundJob).where(models.BackgroundJob.kind.in_([launch.PREVIEW_KIND, launch.KIND, maintenance_reports.KIND]),
         models.BackgroundJob.payload['actor'].as_string()==user['username']).order_by(models.BackgroundJob.created_at.desc(),models.BackgroundJob.id.desc())
     for job in db.scalars(query):
+        if job.id in hidden: continue
         if job.payload.get('task_type') == 'project_state_report': continue
         try:
             if job.kind == maintenance_reports.KIND: maintenance_reports.get(db, job.id, user)

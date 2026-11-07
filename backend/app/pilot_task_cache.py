@@ -28,6 +28,7 @@ def revision(db, *, search=False):
               (models.AutoReglueRun, None), (models.ContentItem, None), (models.GenerationTask, None),
               (models.NetworkOperation, None),
               (models.AutoReglueConfig, or_(models.AutoReglueConfig.key.startswith('pilot-cancel:'),
+                 models.AutoReglueConfig.key.startswith('pilot-report-hidden:'),
                  models.AutoReglueConfig.key.startswith('pilot-replan:'),
                  models.AutoReglueConfig.key.startswith('pilot-report-id:')))]
     columns = []

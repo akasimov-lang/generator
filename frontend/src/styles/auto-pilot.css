@@ -103,3 +103,7 @@
 .pilotTable tr.completedElsewhere>td:first-child{border-left:3px solid var(--success,#22845b)}
 .pilotObservedReglue{margin-top:8px;overflow-wrap:anywhere}
 .pilotObservedReglue strong{color:var(--success,#22845b)}
+
+.pilotReportActions{display:inline-flex;align-items:center;flex-wrap:nowrap;gap:10px;white-space:nowrap}
+.pilotDeleteReport{display:inline-flex;align-items:center;justify-content:center;flex:0 0 30px;width:30px;height:30px;padding:0;border:1px solid #efb4b4;border-radius:7px;background:transparent;color:#d52e39;cursor:pointer}
+.pilotDeleteReport:hover{background:#fff0f1;border-color:#d52e39}.pilotDeleteReport:focus-visible{outline:2px solid #d52e39;outline-offset:3px}.pilotDeleteReport:disabled{opacity:.5;cursor:wait}
