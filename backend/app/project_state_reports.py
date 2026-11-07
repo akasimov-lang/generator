@@ -6,7 +6,7 @@ from urllib.parse import urlsplit
 import re
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 from app import models
 from app.db import get_db
 from app.security import AuthUser
@@ -106,18 +106,31 @@ def text_event(edit,brand):
 def publication_events(db,site_id,start,end):
     """First confirmed create per path, never retries, updates, or draft generation."""
     from app.page_word_count import page_word_count
-    pairs=db.execute(select(models.PublicationLog,models.ContentItem).join(models.ContentItem,models.ContentItem.id==models.PublicationLog.content_item_id).where(models.ContentItem.site_id==site_id).order_by(models.PublicationLog.created_at,models.PublicationLog.id)).all()
+    log_model,item_model=models.PublicationLog,models.ContentItem
+    # A project's publication history includes full remote responses and LLM
+    # research. Counting pages needs neither, nor all payloads at once.
+    pairs=db.execute(select(log_model,item_model).options(
+        load_only(log_model.id,log_model.created_at,log_model.response_status,
+                  log_model.error_message,log_model.endpoint_url,log_model.request_payload),
+        load_only(item_model.id,item_model.slug,item_model.published_url,
+                  item_model.published_at,item_model.deletion_confirmed_at),
+    ).join(item_model,item_model.id==log_model.content_item_id).where(
+        item_model.site_id==site_id,log_model.created_at<=end,
+    ).order_by(log_model.created_at,log_model.id).execution_options(yield_per=1))
     first={};known={}
-    for log,item in pairs:
-        if not log.response_status or not 200<=log.response_status<300 or log.error_message:continue
-        page=(log.request_payload or {}).get('page') or {};path=normalized_path(page.get('slug') or item.published_url or item.slug)
-        endpoint=urlsplit(log.endpoint_url).path.rstrip('/')
-        if endpoint.endswith('/update'):known.setdefault(path,log.created_at);continue
-        # Equal timestamps do not prove an update predates the first create;
-        # UUID ordering must not randomly remove a newly published page.
-        if not endpoint.endswith('/create') or (path in known and known[path]<log.created_at) or path in first:continue
-        if not item.published_at and not item.deletion_confirmed_at:continue
-        first[path]={'id':log.id,'kind':'page_added','label':'Добавлена страница','at':iso(log.created_at),'confirmed_at':iso(item.published_at),'path':path,'words':page_word_count(page),'source':'confirmed_create_publication'}
+    try:
+        for log,item in pairs:
+            if not log.response_status or not 200<=log.response_status<300 or log.error_message:continue
+            page=(log.request_payload or {}).get('page') or {};path=normalized_path(page.get('slug') or item.published_url or item.slug)
+            endpoint=urlsplit(log.endpoint_url).path.rstrip('/')
+            if endpoint.endswith('/update'):known.setdefault(path,log.created_at);continue
+            # Equal timestamps do not prove an update predates the first create;
+            # UUID ordering must not randomly remove a newly published page.
+            if not endpoint.endswith('/create') or (path in known and known[path]<log.created_at) or path in first:continue
+            if not item.published_at and not item.deletion_confirmed_at:continue
+            first[path]={'id':log.id,'kind':'page_added','label':'Добавлена страница','at':iso(log.created_at),'confirmed_at':iso(item.published_at),'path':path,'words':page_word_count(page),'source':'confirmed_create_publication'}
+    finally:
+        pairs.close()
     return [v for v in first.values() if within(v['at'],start,end)]
 
 def maintenance_events(db,site_id,start,end):

@@ -239,7 +239,8 @@ services:
         condition: service_healthy
     cpus: 0.25
     cpu_shares: 256
-    mem_limit: 384m
+    # Weekly evidence collection shares this cgroup with the Celery parent.
+    mem_limit: 512m
     stop_grace_period: 120s
     command: celery -A app.worker.celery_app worker --loglevel=info --hostname=maintenance@%h --queues=maintenance --concurrency=1
 

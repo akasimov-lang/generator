@@ -59,6 +59,34 @@ def test_week_boundary_uses_utc_equivalent_of_moscow_monday():
     assert reports.within('2026-11-01T21:00:00Z',START,END)
     assert not reports.within('2026-11-01T20:59:59Z',START,END)
 
+
+def test_publication_counter_omits_large_responses_and_research(env, monkeypatch):
+    from sqlalchemy import event
+    db,site,_=env
+    task=models.GenerationTask(id=str(uuid4()),title='test',site_id=site.id,geo='PL',language='pl',prompt_template='test')
+    db.add(task);db.flush()
+    item=models.ContentItem(id=str(uuid4()),task_id=task.id,site_id=site.id,topic='t',slug='/new/',
+        generated_json={'private':'generated body'},competitor_brief={'private':'research body'},
+        idempotency_key=str(uuid4()),status='published',published_at=AT)
+    db.add(item);db.flush()
+    db.add(models.PublicationLog(content_item_id=item.id,endpoint_url='https://webdev.test/projects/create',
+        request_payload={'page':page('one two')|{'slug':item.slug}},response_status=201,
+        response_body={'private':'remote project backup'},created_at=AT))
+    db.commit();site_id=site.id
+    db.expunge_all()
+    statements=[]
+    def capture(conn,cursor,statement,parameters,context,executemany):
+        if statement.lstrip().upper().startswith('SELECT'):statements.append(statement)
+    event.listen(db.bind,'before_cursor_execute',capture)
+    try:
+        events=reports.publication_events(db,site_id,START,END)
+    finally:
+        event.remove(db.bind,'before_cursor_execute',capture)
+    assert len(events)==1 and events[0]['words']==2
+    assert len(statements)==1
+    assert 'response_body' not in statements[0]
+    assert 'generated_json' not in statements[0] and 'competitor_brief' not in statements[0]
+
 def test_report_access_filters_rows_and_totals_for_colleagues(env,monkeypatch):
     db,site,_=env
     monkeypatch.setattr('app.report_ids.get',lambda *a:3044)
