@@ -2109,7 +2109,7 @@ function ProjectWorkspaceView({
   }).map(item => ({ id: item.id, name: item.name, main: item.cache_canon || "", domainCount: item.domains_count, geoLabel: `${localeFlag(siteGeoFilterCode(item.cache_geo))} ${siteGeoFilterCode(item.cache_geo) || "—"}`.trim() })) : [];
   const [brandSavingId, setBrandSavingId] = React.useState<string | null>(null);
   const [brandError, setBrandError] = React.useState<{ siteId: string; message: string } | null>(null);
-  const workspaceBrands = [...new Set(["Общие ключи", "NV Casino", "Vinder Casino", "Kajot Casino", "Hugo Casino", ...sites.map(site => site.brand?.trim()).filter((brand): brand is string => !!brand)])].sort((a, b) => a.localeCompare(b, "ru"));
+  const workspaceBrands = [...new Set(["Общие ключи", "NV Casino", "Vinder Casino", "Kajot Casino", "Hugo Casino", "Joe Fortune", "Rizz Casino", ...sites.map(site => site.brand?.trim()).filter((brand): brand is string => !!brand)])].sort((a, b) => a.localeCompare(b, "ru"));
   async function changeWorkspaceBrand(value: string) {
     if (!selectedSite || brandSavingId || value === selectedSite.brand) return;
     const siteId = selectedSite.id;
