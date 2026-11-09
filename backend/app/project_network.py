@@ -253,7 +253,7 @@ def observe(db, site, project):
             operation.status = "confirmed"
             from app.reglue_history import confirm
             confirm(site, operation)
-            if operation.action in {"reglue", "create_fake_main", "select_fake_main"}:
+            if operation.action in {"reglue", "create_fake_main", "select_fake_main", "alternates"}:
                 from app.reglue_journal import snapshot
                 from datetime import datetime, timezone
                 operation.request_payload = {**operation.request_payload,

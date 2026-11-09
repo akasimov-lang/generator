@@ -17,6 +17,11 @@
 .lastReglueHistory article:last-child { border-bottom: 0; }
 .lastReglueHistory article > * { display: block; overflow-wrap: anywhere; }
 .lastReglueHistory time { color: var(--text); font-weight: 600; }
+.lastAlternatesChange { margin-top: 4px; }
+.lastAlternatesChange summary { cursor: pointer; color: var(--primary); }
+.lastAlternatesChange summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.lastAlternatesChange > div { margin-top: 6px; }
+.lastAlternatesChange pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 4px 0; font-size: inherit; line-height: inherit; }
 @media (max-width: 700px) { .lastReglueSummary.lastReglueHistory { width: min(440px, 85vw); } }
 
 /* History and brand navigation share the right column without covering controls. */

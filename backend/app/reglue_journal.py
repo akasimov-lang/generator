@@ -1,6 +1,7 @@
 """Read-only journal built from confirmed PagePilot receipts, never current cache."""
 from collections import defaultdict
 from datetime import date, datetime, time, timezone
+import re
 from urllib.parse import quote, urlsplit
 
 from fastapi import APIRouter, Depends, Query
@@ -143,11 +144,11 @@ def latest_for_site(db, site):
 
 
 def recent_for_site(db, site, limit=20):
-    """Confirmed Main and active fake-path changes by any actor, newest first."""
+    """Confirmed Main, fake-path and alternate changes, newest first."""
     operations = db.scalars(select(models.NetworkOperation).where(
         models.NetworkOperation.site_id == site.id,
         models.NetworkOperation.status == 'confirmed',
-        models.NetworkOperation.action.in_(['reglue', 'create_fake_main', 'select_fake_main']))).all()
+        models.NetworkOperation.action.in_(['reglue', 'create_fake_main', 'select_fake_main', 'alternates']))).all()
     items = []
     for op in operations:
         payload = op.request_payload or {}
@@ -159,6 +160,10 @@ def recent_for_site(db, site, limit=20):
             items.append({'id': op.id, 'kind': 'reglue', 'at': confirmed_at(op).isoformat(),
                           'old_main': old_main or None, 'new_main': new_main,
                           'old_path': before.get('fake_path'), 'new_path': after.get('fake_path')})
+        elif op.action == 'alternates':
+            change = alternate_change(op)
+            if change:
+                items.append(change)
         else:
             change = path_change(op)
             if not change or change['before'] == change['after']:
@@ -169,6 +174,26 @@ def recent_for_site(db, site, limit=20):
     from app.network_cache_history import KEY, visible
     items.extend(visible((site.network_state or {}).get(KEY, []), items))
     return sorted(items, key=lambda item: (utc(item['at']), item['id']), reverse=True)[:limit]
+
+
+def alternate_change(operation):
+    """Use the immutable write receipt, including legacy receipts without a baseline."""
+    payload = operation.request_payload or {}
+    markup, enabled = payload.get('alternateMarkup'), payload.get('enableAlternates')
+    if not isinstance(markup, str) or not isinstance(enabled, bool):
+        return None
+    previous = payload.get('alternates_before')
+    before = ({'markup': previous['markup'], 'enabled': previous['enabled']}
+              if isinstance(previous, dict) and isinstance(previous.get('markup'), str)
+              and isinstance(previous.get('enabled'), bool) else None)
+    after = {'markup': markup, 'enabled': enabled}
+    # Canonical-only saves use the same action and must not invent an alternate change.
+    normalize = lambda value: re.sub(r'>\s+<', '><', value.strip())
+    if before and before['enabled'] == enabled and normalize(before['markup']) == normalize(markup):
+        return None
+    return {'id': operation.id, 'kind': 'alternates', 'at': confirmed_at(operation).isoformat(),
+            'initiator': operation.initiator, 'alternates_before': before, 'alternates_after': after,
+            'old_main': None, 'new_main': None, 'old_path': None, 'new_path': None}
 
 
 @router.get("/summary")

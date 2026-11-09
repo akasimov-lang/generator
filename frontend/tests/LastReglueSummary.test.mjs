@@ -53,3 +53,25 @@ test('detailed cached Main change replaces the legacy observation placeholder',(
  assert.match(html,/old.test → new.test/);
  assert.doesNotMatch(html,/Смена Main обнаружена/);
 });
+
+test('confirmed alternate update shares the sidebar history with timestamp and saved markup',()=>{
+ const html=render({recent:[{id:'alts',kind:'alternates',at:'2026-11-09T11:48:00Z',initiator:'anton',old_main:null,new_main:null,old_path:null,new_path:null,alternates_before:{markup:'<link rel="alternate" hreflang="pl" href="https://old.test/" />',enabled:true},alternates_after:{markup:'<link rel="alternate" hreflang="pl" href="https://new.test/" />',enabled:false}}]});
+ assert.match(html,/Обновление альтернейтов: 09.11.2026, 14:48:00 МСК/);
+ assert.match(html,/Подтверждено · anton/);assert.match(html,/Включены → Выключены/);
+ assert.match(html,/<summary>Разметка до и после<\/summary>/);
+ assert.match(html,/https:\/\/old.test/);assert.match(html,/https:\/\/new.test/);
+ assert.match(html,/&lt;link/);assert.doesNotMatch(html,/<link rel="alternate"|Внутряк:|Переклей:/);
+});
+
+test('legacy alternate history distinguishes an unknown baseline from empty markup',()=>{
+ const html=render({recent:[{id:'legacy',kind:'alternates',at:'2026-11-09T11:48:00Z',old_main:null,new_main:null,old_path:null,new_path:null,alternates_before:null,alternates_after:{markup:'',enabled:false}}]});
+ assert.match(html,/Нет исходных данных → Выключены/);
+ assert.match(html,/Исходная разметка не сохранена/);assert.match(html,/Разметка пустая/);
+});
+
+test('alternate changes sort with Main and fake-page events without replacing their labels',()=>{
+ const html=render({recent:[{...last,id:'main',kind:'reglue'},{...last,id:'path',kind:'fake_path',at:'2026-10-30T13:00:00Z'},{...last,id:'alts',kind:'alternates',at:'2026-10-30T14:00:00Z',alternates_after:{markup:'',enabled:false}}]});
+ assert.ok(html.indexOf('Обновление альтернейтов')<html.indexOf('Замена внутряка'));
+ assert.ok(html.indexOf('Замена внутряка')<html.indexOf('Переклей:'));
+ assert.equal((html.match(/Внутряк:/g)||[]).length,2);
+});
