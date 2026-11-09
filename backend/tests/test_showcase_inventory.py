@@ -42,7 +42,7 @@ def test_receipt_counts_only_changed_group_and_ignores_logo_gallery():
 
 def test_inventory_report_returns_compact_evidence_without_full_project_backups():
     now=datetime.now(timezone.utc)
-    job=SimpleNamespace(id='id',created_at=now,started_at=now,updated_at=now,finished_at=now,status='completed',payload={'task_type':'showcase_inventory','name':'Inventory','scope':{'excluded_today':[]}},result={'entries':[{'site_id':'x','project':'x.test','status':'completed','before':{'pages':['large backup']},'migration':{'status':'planned','plan':{'large':'source backup'}},'inventory':{'internal_total':0}}]})
+    job=SimpleNamespace(id='id',kind='maintenance_report',created_at=now,started_at=now,updated_at=now,finished_at=now,status='completed',payload={'task_type':'showcase_inventory','name':'Inventory','scope':{'excluded_today':[]}},result={'entries':[{'site_id':'x','project':'x.test','status':'completed','before':{'pages':['large backup']},'migration':{'status':'planned','plan':{'large':'source backup'}},'inventory':{'internal_total':0}}]})
     report=view(job)
     assert 'before' not in report['entries'][0]
     assert 'plan' not in report['entries'][0]['migration']

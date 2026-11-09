@@ -196,9 +196,12 @@ def view(job, db=None):
         for row in compact:
             if isinstance(row.get('migration'),dict):
                 row['migration']={key:value for key,value in row['migration'].items() if key!='plan'}
+            if isinstance(row.get('completeness'), dict):
+                row['completeness'] = {key: value for key, value in row['completeness'].items() if key != 'cards'}
         return {**summary(job, report_ids.get(db, job) if db is not None else None, entries=compact),
                 'updated_at': job.updated_at, 'entries': compact,
                 'inventory_excluded': job.payload.get('scope', {}).get('excluded_today', []),
+                'inventory_monobrands': job.payload.get('audit_refresh', {}).get('confirmed_monobrands', []),
                 'audit_only': bool(job.payload.get('audit_only'))}
     if factual:
         from app.maintenance_evidence import enrich
