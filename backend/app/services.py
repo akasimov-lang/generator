@@ -1242,6 +1242,8 @@ async def build_gemini_content(
         include_toc=include_toc,
         include_faq=include_faq,
     )
+    if include_faq and not any(block.get("type") == "faq" for block in page["content"]["blocks"]):
+        raise ValueError("Модель не вернула распознаваемые вопросы и ответы FAQ, обязательные по ТЗ. Публикация остановлена.")
     base_payload["generation_meta"]["generator"] = "gemini"
     base_payload["generation_meta"]["model"] = provider.model
     base_payload["generation_meta"]["usage"] = usage
@@ -2979,7 +2981,9 @@ def build_blocks_from_ai_text(
             heading = explicit_heading.group(2).strip() if explicit_heading else line.rstrip(":").strip()
             if heading and heading.lower() != title.lower() and not is_intro_heading(heading):
                 headings.append(heading)
-                blocks.append(header_block(heading, 2))
+                marker = explicit_heading.group(1) if explicit_heading else "H2"
+                level = len(marker) if marker.startswith("#") else int(marker[1:])
+                blocks.append(header_block(heading, level))
             index += 1
             continue
 
@@ -2997,18 +3001,6 @@ def build_blocks_from_ai_text(
         while toc_position < len(blocks) and blocks[toc_position].get("type") == "paragraph":
             toc_position += 1
         blocks.insert(toc_position, toc_block(headings[:8]))
-    has_inline_faq = bool(re.search(r"\bFAQ\b|Häufig gestellte Fragen|häufige Fragen", generated_text, flags=re.IGNORECASE))
-    if include_faq and not any(block.get("type") == "faq" for block in blocks) and not has_inline_faq:
-        blocks.append(
-            faq_block(
-                [
-                    {
-                        "question": f"What is {title} about?",
-                        "answer": f"This page explains {topic} and gives practical context for readers.",
-                    }
-                ]
-            )
-        )
     if shortcode:
         blocks.append(shortcode_block(shortcode))
     from app.content_toc import normalize_toc_blocks
@@ -3177,6 +3169,7 @@ _FAQ_HEADINGS = {
     "domande frequenti",
     "veelgestelde vragen",
     "často kladené otázky",
+    "často kladené dotazy",
 }
 _FAQ_QUESTION_MARKER = re.compile(
     r"(?:^|\s)(?:<strong>\s*)?(?:Q|Question|Вопрос|Pytanie|Frage|Pregunta|Pergunta)\s*:\s*(?:</strong>\s*)?",
@@ -3192,6 +3185,7 @@ def _is_faq_heading(block: dict) -> bool:
     if block.get("type") != "header" or not isinstance(block.get("data"), dict):
         return False
     heading = clean_text(block["data"].get("text")).casefold().strip(" .:–—-")
+    heading = re.sub(r"\s*\(faq\)$", "", heading).strip()
     return heading in _FAQ_HEADINGS
 
 
@@ -3271,12 +3265,20 @@ def normalize_editor_faq_blocks(blocks: list[dict]) -> list[dict]:
         paragraph_texts: list[str] = []
         while paragraph_end < len(blocks):
             candidate = blocks[paragraph_end]
-            if not isinstance(candidate, dict) or candidate.get("type") != "paragraph":
+            if not isinstance(candidate, dict):
                 break
             data = candidate.get("data")
             if not isinstance(data, dict):
                 break
-            paragraph_texts.append(str(data.get("text") or ""))
+            text = str(data.get("text") or "")
+            if candidate.get("type") == "header":
+                if data.get("level", 2) <= block["data"].get("level", 2) or not clean_text(text).endswith("?"):
+                    break
+                paragraph_texts.append("Q: " + text + " A: ")
+            elif candidate.get("type") == "paragraph":
+                paragraph_texts.append(text)
+            else:
+                break
             paragraph_end += 1
 
         prefix, items = _parse_inline_faq("\n".join(paragraph_texts))

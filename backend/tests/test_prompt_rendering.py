@@ -278,7 +278,8 @@ def test_gemini_content_generation_passes_competitor_brief_to_prompt(monkeypatch
                                     "Meta Description: Test description.\n"
                                     "H1: A different and overly long H1 invented by the model\n"
                                     "Intro:\n"
-                                    "Test content about safe providers."
+                                    "Test content about safe providers.\n"
+                                    "H2: FAQ\nQ: What should I check?\nA: Read the current terms."
                                 )
                             }
                         ]
@@ -322,7 +323,7 @@ def test_gemini_content_generation_passes_competitor_brief_to_prompt(monkeypatch
     assert CONTENT_EDITORIAL_TEXT in captured["prompt"]
     assert "Mehr Details zu KYC und Limits" in captured["prompt"]
     assert generated["pages"][0]["title"] == "Beste Online Casinos in Deutschland 2026: Legale Anbieter im Vergleich"
-    assert generated["pages"][0]["content"]["blocks"][0]["data"]["text"] == "Beste Online Casinos in Deutschland 2026"
+    assert service_module.clean_text(generated["pages"][0]["content"]["blocks"][0]["data"]["text"]) == "Beste Online Casinos in Deutschland 2026"
 
     generated_with_separate_title = asyncio.run(
         build_gemini_content(
