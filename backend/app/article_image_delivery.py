@@ -88,9 +88,19 @@ def picture(raw):
         size = image.size
         output = BytesIO()
         # Native Webdev supports PNG/JPEG uploads, not WebP or SVG.
-        image.convert('RGBA' if 'A' in image.getbands() else 'RGB').save(output, 'PNG')
+        image.convert('RGB').save(output, 'JPEG', quality=95, optimize=True)
     if output.tell() > MAX_BYTES: raise ValueError('Изображение статьи превышает лимит загрузки.')
     return output.getvalue(), size
+
+
+def verify_copy(raw, original_size):
+    _, size = picture(raw)
+    width, height = original_size
+    # Webdev serves optimized copies (commonly 800px wide); reject distorted
+    # or tiny responses, while accepting its proportional optimization.
+    if size[0] < min(400, width) or abs(size[0] / size[1] - width / height) > 0.02:
+        raise ValueError('Загруженное изображение искажено или имеет недостаточный размер.')
+    return size
 
 
 def public_image(url):
@@ -118,6 +128,15 @@ def public_image(url):
     raise ValueError('Слишком много перенаправлений изображения.')
 
 
+def verify_existing(raw):
+    if b'<svg' in raw[:2000]:
+        from xml.etree import ElementTree
+        if ElementTree.fromstring(raw).tag.rsplit('}',1)[-1] != 'svg':
+            raise ValueError('Некорректное SVG-изображение.')
+    else:
+        picture(raw)
+
+
 def source_bytes(db, url):
     parsed = urlsplit(url)
     match = re.fullmatch(r'/api/article-images/media/([a-f0-9-]{36})\.webp', parsed.path)
@@ -136,33 +155,61 @@ def source_bytes(db, url):
 def upload(db, site, remote, origin, url):
     raw = source_bytes(db, url)
     fingerprint = hashlib.sha256(raw).hexdigest()
-    key = 'article-delivery:' + site.id + ':' + fingerprint[:20]
+    key = 'article-delivery-v2:' + site.id + ':' + fingerprint[:20]
     receipt = db.get(models.AutoReglueConfig, key)
+    if receipt is None:
+        # Read only a few JSON fields from old receipts. Their full native
+        # responses are immutable history and may include large binary arrays.
+        from sqlalchemy import select
+        legacy_key = 'article-delivery:' + site.id + ':' + fingerprint[:20]
+        value = models.AutoReglueConfig.value
+        legacy = db.execute(select(value['status'].as_string(), value['path'].as_string(),
+            value['error'].as_string()).where(models.AutoReglueConfig.key == legacy_key)).first()
+        if legacy:
+            status, path, error = legacy
+            record = {'site_id':site.id,'source':url,'sha256':fingerprint,'legacy_key':legacy_key}
+            if path:
+                record.update(status='uploaded',path=path)
+            elif '413 Payload Too Large' in (error or ''):
+                record.update(status='rejected',http=413,error=error)
+            else:
+                # A lost response is inspected by its deterministic file path;
+                # never send a second upload for an ambiguous legacy request.
+                candidate = '/uploads/img/articles/webp/article-' + fingerprint[:24] + '.webp'
+                _, source_size = picture(raw)
+                verify_copy(public_image(urljoin(origin,candidate)), source_size)
+                record.update(status='uploaded',path=candidate)
+            receipt = models.AutoReglueConfig(key=key,value=record)
+            db.add(receipt); db.commit()
     if receipt and receipt.value.get('status') in {'confirmed', 'uploaded'} and receipt.value.get('path'):
         path = receipt.value['path']
-        picture(public_image(urljoin(origin, path)))
-        receipt.value = {**receipt.value, 'status':'confirmed', 'checked_at':datetime.now(timezone.utc).isoformat()}
+        _, original_size = picture(raw)
+        actual_size = verify_copy(public_image(urljoin(origin, path)), original_size)
+        receipt.value = {**receipt.value, 'status':'confirmed', 'dimensions':list(actual_size), 'checked_at':datetime.now(timezone.utc).isoformat()}
         db.commit()
         return path
-    if receipt:
+    if receipt and not (receipt.value.get('status') == 'rejected' and receipt.value.get('http') == 413):
         raise ValueError('Предыдущая загрузка изображения не подтверждена. Повторная запись остановлена до сверки.')
-    png, size = picture(raw)
-    receipt = models.AutoReglueConfig(key=key, value={'status':'pending','site_id':site.id,'source':url,
-        'sha256':fingerprint,'started_at':datetime.now(timezone.utc).isoformat()})
+    jpeg, size = picture(raw)
+    previous = deepcopy(receipt.value) if receipt else None
+    receipt = receipt or models.AutoReglueConfig(key=key)
+    receipt.value = {'status':'pending','site_id':site.id,'source':url,
+        'sha256':fingerprint,'started_at':datetime.now(timezone.utc).isoformat(), 'upload_format':'jpeg', 'previous_attempt':previous}
     db.add(receipt); db.commit()
     try:
         _, response = remote.request('POST','/projects/image', {'folder':site.name,
-            'name':'article-' + fingerprint[:24] + '.png','buffer':base64.b64encode(png).decode(),
+            'name':'article-' + fingerprint[:24] + '.jpg','buffer':base64.b64encode(jpeg).decode(),
             'customPath':'articles'})
         path = response.get('webpPath') or response.get('imagePath') if isinstance(response,dict) else None
         if not isinstance(response,dict) or response.get('error') != 'none' or not isinstance(path,str) or not path.startswith('/uploads/') or '..' in path or urlsplit(path).netloc:
             raise ValueError('Webdev не подтвердил загрузку изображения статьи.')
-        receipt.value = {**receipt.value, 'status':'uploaded','path':path,'response':response}; db.commit()
-        _, actual_size = picture(public_image(urljoin(origin, path)))
-        if actual_size != size: raise ValueError('Размеры загруженного изображения не совпадают с исходником.')
-        receipt.value = {**receipt.value,'status':'confirmed','checked_at':datetime.now(timezone.utc).isoformat()}; db.commit()
+        receipt.value = {**receipt.value, 'status':'uploaded','path':path,'response':{k:response[k] for k in ('error','imagePath','webpPath') if k in response}}; db.commit()
+        actual_size = verify_copy(public_image(urljoin(origin, path)), size)
+        receipt.value = {**receipt.value,'status':'confirmed','dimensions':list(actual_size),'checked_at':datetime.now(timezone.utc).isoformat()}; db.commit()
         return path
     except Exception as error:
+        if isinstance(error, httpx.HTTPStatusError) and error.response.status_code == 413:
+            receipt.value = {**receipt.value, 'status':'rejected', 'http':413}
         receipt.value = {**receipt.value,'error':str(error)[:500]}; db.commit()
         raise
 
@@ -189,7 +236,7 @@ def localize_payload(db, site, payload, remote=None, project=None):
             if external(url): continue
             absolute = urljoin(urljoin(origin, str(page.get('slug') or '/').lstrip('/')), url)
             if absolute not in checked:
-                picture(public_image(absolute)); checked.add(absolute)
+                verify_existing(public_image(absolute)); checked.add(absolute)
             parsed = urlsplit(absolute)
             local[url] = parsed.path + ('?' + parsed.query if parsed.query else '')
         page['content'] = replace_urls(page.get('content'), local)
@@ -197,7 +244,7 @@ def localize_payload(db, site, payload, remote=None, project=None):
         if not external(url): continue
         parsed = urlsplit(url)
         if parsed.netloc == urlsplit(origin).netloc and parsed.path.startswith('/uploads/'):
-            picture(public_image(urljoin(origin, parsed.path)))
+            verify_existing(public_image(urljoin(origin, parsed.path)))
             mapping[url] = parsed.path + ('?' + parsed.query if parsed.query else '')
         else:
             mapping[url] = upload(db,site,remote,origin,url)

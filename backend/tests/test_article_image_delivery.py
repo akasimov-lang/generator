@@ -91,3 +91,33 @@ def test_same_relative_filename_resolves_independently_for_each_page(setup,monke
     assert seen==['https://main.test/topic/deep/image.webp','https://main.test/other/image.webp']
     assert [x['content']['blocks'][1]['data']['file']['url'] for x in result['pages']]==['/topic/deep/image.webp','/other/image.webp']
     assert not calls
+
+
+def test_native_optimized_image_keeps_aspect_ratio_and_receipt_has_no_binary_response(setup,monkeypatch):
+    db,site,remote,calls=setup
+    output=BytesIO();Image.new('RGB',(800,200),'blue').save(output,'WEBP')
+    monkeypatch.setattr(delivery,'public_image',lambda url:output.getvalue())
+    def request(*args):calls.append(args);return 200,{'error':'none','webpPath':'/uploads/articles/test.webp','sharpToArr':{'0':25}}
+    remote.request=request
+    delivery.localize_payload(db,site,payload(),remote,{'settings':{'canon':'main.test'}})
+    row=db.query(models.AutoReglueConfig).one()
+    assert row.value['dimensions']==[800,200]
+    assert 'sharpToArr' not in row.value['response']
+    assert calls[0][2]['name'].endswith('.jpg')
+
+
+def test_distorted_or_tiny_native_copy_is_rejected():
+    output=BytesIO();Image.new('RGB',(200,200),'blue').save(output,'PNG')
+    with pytest.raises(ValueError,match='искажено'):delivery.verify_copy(output.getvalue(),(1200,300))
+
+
+def test_legacy_upload_reused_without_modifying_original_receipt(setup):
+    import hashlib
+    db,site,remote,calls=setup
+    key='article-delivery:'+site.id+':'+hashlib.sha256(raw()).hexdigest()[:20]
+    old={'status':'uploaded','path':'/uploads/original.webp','response':{'sharpToArr':{'0':137}},'error':'old dimension check'}
+    db.add(models.AutoReglueConfig(key=key,value=deepcopy(old)));db.commit()
+    delivery.localize_payload(db,site,payload(),remote,{'settings':{'canon':'main.test'}})
+    assert not calls
+    assert db.get(models.AutoReglueConfig,key).value==old
+    assert db.query(models.AutoReglueConfig).count()==2
