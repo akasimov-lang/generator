@@ -1,0 +1,20 @@
+import React from "react";
+type Row={site_id:string;project:string;main?:string;brand?:string;fibery_name?:string;geo?:string;status:string;error?:string;image_localization?:{phase?:string;pages_count?:number|null;images_count?:number|null;fixed_links?:number;checked_at?:string;issues?:string[];pages?:{slug:string;error?:string}[]}};
+export type ArticleImageReportData={entries:Row[];total:number;status:string;updated_at?:string;excluded_projects?:{project:string}[]};
+export function normalizeArticleImages(raw:unknown):ArticleImageReportData{
+ const r=raw as ArticleImageReportData;return {entries:Array.isArray(r.entries)?r.entries:[],total:r.total,status:r.status,updated_at:r.updated_at,excluded_projects:r.excluded_projects};
+}
+const flag=(geo?:string)=>{const c=(geo||"").split(/[-_]/).pop()?.toUpperCase()||"";return /^[A-Z]{2}$/.test(c)?String.fromCodePoint(...[...c].map(x=>127397+x.charCodeAt(0))):"";};
+const total=(rows:Row[],key:"pages_count"|"images_count"|"fixed_links")=>rows.reduce((n,r)=>n+(r.image_localization?.[key]||0),0);
+export function ArticleImageReport({report}:{report:ArticleImageReportData}){
+ const done=report.entries.filter(r=>["completed","failed","partial","skipped"].includes(r.status)).length;
+ return <><p>Проекты со статусом «Массовые действия»: {report.entries.length}. Проверено: {done}. Внутренних страниц: {total(report.entries,"pages_count")}. Изображений: {total(report.entries,"images_count")}. Исправлено ссылок: {total(report.entries,"fixed_links")}.</p>
+ <p>План: сохранить изображения в папках проектов, заменить ссылки в статьях на относительные и проверить файлы и опубликованные страницы. Счётчики исправлений содержат только подтверждённые сохранения.</p>
+ <div className="maintenanceChangesScroll"><table className="showcaseInventoryTable articleImageReport"><thead><tr><th>Проект / Webdev</th><th>Имя Fibery</th><th>Бренд сайта</th><th>Main домен</th><th>Внутренних страниц</th><th>Изображений</th><th>Ссылок исправлено</th><th>Статус</th></tr></thead><tbody>{report.entries.map(row=>{
+ const data=row.image_localization;const status=["completed","skipped"].includes(row.status)?"Готово":["failed","partial"].includes(row.status)?"Ошибка":"Выполняется";
+ const main=row.main?.replace(/^https?:\/\//,"").replace(/\/$/,"");
+ return <tr key={row.site_id}><th scope="row"><a href={`/project-network/${encodeURIComponent(row.project)}/`}><span aria-label={`GEO ${row.geo||"не задано"}`}>{flag(row.geo)}</span> {row.project}</a><small><a href={`https://webdev-alfasearch.ru/projects/${encodeURIComponent(row.project)}`} target="_blank" rel="noopener noreferrer">Открыть Webdev ↗</a></small></th><td>{row.fibery_name||"Не задано"}</td><td>{row.brand||"Не задано"}</td><td>{main&&/^[a-z0-9.-]+(?::\d+)?$/i.test(main)?<a href={`https://${main}/`} target="_blank" rel="noopener noreferrer">{main}</a>:row.main||"Не определён"}</td><td>{data?.pages_count??"—"}</td><td>{data?.images_count??"—"}</td><td>{data?.fixed_links??0}</td><td><strong>{status}</strong>{data?.phase&&status==="Выполняется"&&<small>{({inventory:"Чтение страниц",inventoried:"Подготовка переноса",uploading:"Загрузка файлов",verifying:"Проверка публикации"} as Record<string,string>)[data.phase]||data.phase}</small>}{row.error&&<small className="showcaseInventoryError">{row.error}</small>}{!!data?.issues?.length&&<details><summary>Подробности · {data.issues.length}</summary><ul>{data.issues.map((issue,i)=><li key={i}>{issue}</li>)}</ul></details>}{data?.checked_at&&<small>{new Date(data.checked_at).toLocaleString("ru-RU",{timeZone:"Europe/Moscow"})} МСК</small>}</td></tr>;
+ })}</tbody></table></div>
+ <p>Изображения считаются в содержимом внутренних страниц. Общие изображения шапки и футера в счётчик не входят. «Ошибка» также означает, что сохранение выполнено, но публичная проверка не прошла; причина указана в строке.</p>
+ {!!report.excluded_projects?.length&&<details><summary>Исключены до начала работ: статус отличается от «Массовые действия» · {report.excluded_projects.length}</summary><p>{report.excluded_projects.map(p=>p.project).join(", ")}</p></details>}</>;
+}

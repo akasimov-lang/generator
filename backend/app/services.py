@@ -5489,6 +5489,9 @@ async def publish_item(db: Session, item: models.ContentItem, site: models.Site,
         async with httpx.AsyncClient(timeout=90.0) as client:
             token = await refresh_project_server_token(client)
             ensure_content_slug_available(db, item, section=section)
+            from app.article_image_delivery import localize_payload
+            item.generated_json = localize_payload(db, site, item.generated_json)
+            db.commit()
             request_payload = build_project_page_payload(item, site, token, section=section)
             if page_to_update:
                 request_payload["id"] = page_to_update["id"]
@@ -5827,6 +5830,13 @@ async def publish_campaign_bundle(db: Session, campaign_id: str, log_id: str) ->
         if not site:
             raise ProjectCacheError("Publication project was not found")
         refresh_project_server_id(db, site)
+        from app.article_image_delivery import localize_payload
+        for change in changes:
+            item = items_by_id.get(str(change.get("content_item_id") or ""))
+            if item is not None:
+                item.generated_json = localize_payload(db, site, item.generated_json)
+                change["payload"] = build_publication_payload(db, item)
+        db.commit()
         project_payload = payload.get("project") if isinstance(payload.get("project"), dict) else {}
         payload = {**payload, "project": {**project_payload, "server_id": site.cache_server_ip}}
         log.request_payload = payload

@@ -1177,3 +1177,43 @@ def test_new_menu_page_checks_webdev_before_first_publication(db, monkeypatch, r
     asyncio.run(publish_item(db, item, site))
     assert calls == (["read", "write"] if remote_state == "absent" else ["read"])
     assert item.status == ("publication_pending_confirmation" if remote_state == "absent" else "publication_failed")
+
+
+def test_article_image_delivery_failure_prevents_text_publication(db, monkeypatch):
+    from app import article_image_delivery
+    from unittest.mock import AsyncMock
+    site,item=make_content(db)
+    site.cache_server_ip='bear';db.commit()
+    monkeypatch.setattr(service_module,'refresh_project_server_id',lambda *_:'bear')
+    monkeypatch.setattr(service_module,'refresh_project_server_token',AsyncMock(return_value='token'))
+    def fail(*args):raise ValueError('Image upload not confirmed')
+    monkeypatch.setattr(article_image_delivery,'localize_payload',fail)
+    post=AsyncMock();monkeypatch.setattr(service_module.httpx.AsyncClient,'post',post)
+    asyncio.run(publish_item(db,item,site))
+    assert item.status=='publication_failed'
+    post.assert_not_awaited()
+    log=db.scalars(select(models.PublicationLog).where(models.PublicationLog.content_item_id==item.id)).all()[-1]
+    assert 'Image upload not confirmed' in log.error_message
+
+
+def test_article_image_delivery_saves_local_paths_before_text_request(db, monkeypatch):
+    import copy,httpx
+    from app import article_image_delivery
+    from unittest.mock import AsyncMock
+    site,item=make_content(db);site.cache_server_ip='bear';db.commit();order=[]
+    monkeypatch.setattr(service_module,'refresh_project_server_id',lambda *_:'bear')
+    monkeypatch.setattr(service_module,'refresh_project_server_token',AsyncMock(return_value='token'))
+    def deliver(db,site,payload):
+        order.append('images');result=copy.deepcopy(payload)
+        result['pages'][0]['content']['blocks'].append({'type':'image','data':{'file':{'url':'/uploads/articles/ready.webp'}}})
+        return result
+    monkeypatch.setattr(article_image_delivery,'localize_payload',deliver)
+    async def post(self,endpoint,**kwargs):
+        order.append('text')
+        assert kwargs['json']['page']['content']['blocks'][-1]['data']['file']['url']=='/uploads/articles/ready.webp'
+        assert item.generated_json['pages'][0]['content']['blocks'][-1]['data']['file']['url']=='/uploads/articles/ready.webp'
+        return httpx.Response(201,json={'success':True})
+    monkeypatch.setattr(service_module.httpx.AsyncClient,'post',post)
+    asyncio.run(publish_item(db,item,site))
+    assert order==['images','text']
+    assert item.status=='publication_pending_confirmation'
