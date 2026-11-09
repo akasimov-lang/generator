@@ -53,6 +53,8 @@ def image_urls(content):
 
 def replace_urls(content, mapping):
     result = deepcopy(content)
+    mapping = {old:new for old,new in mapping.items() if old != new}
+    if not mapping: return result
     def markup(value):
         def tag_replace(tag):
             raw = ATTR.sub(lambda m: m['prefix'] + m['q'] + escape(mapping.get(unescape(m['url']), unescape(m['url'])), quote=True) + m['q'], tag[0])
