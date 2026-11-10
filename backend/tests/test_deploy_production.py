@@ -70,6 +70,21 @@ def test_missing_server_copy_stops_before_checkout(deployment):
     assert not (work / '.git/deployed-revision').exists()
 
 
+def test_existing_identical_whitelist_is_not_rewritten(deployment):
+    _, source, target, binary, _, _, _, run = deployment
+    assert run().returncode == 0
+    target.chmod(0o444)
+    before = target.stat().st_mtime_ns
+    # A protected active file needs no write when its bytes already match.
+    cp = binary / 'cp'
+    cp.write_text('#!/bin/sh\nexit 77\n')
+    cp.chmod(0o755)
+    result = run()
+    assert result.returncode == 0, result.stderr
+    assert target.read_bytes() == source.read_bytes()
+    assert target.stat().st_mtime_ns == before
+
+
 def test_checkout_failure_restores_server_copy_without_marking_deployed(deployment):
     work, source, target, binary, _, _, _, run = deployment
     wrapper = binary / 'git'

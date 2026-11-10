@@ -12,7 +12,14 @@ flock -n 9 || { echo 'Another deployment is running.' >&2; exit 1; }
 vpn_source=${PAGEPILOT_VPN_WHITELIST:-/home/akasimov/pagepilot-server/whitelist_vpn.conf}
 [ -s "$vpn_source" ] || { echo 'Missing server VPN whitelist; deployment stopped before checkout.' >&2; exit 1; }
 vpn_target="$worktree/infra/nginx/whitelists/whitelist_vpn.conf"
-restore_vpn() { mkdir -p "$(dirname "$vpn_target")"; cp -p "$vpn_source" "$vpn_target"; cmp -s "$vpn_source" "$vpn_target"; }
+restore_vpn() {
+  # Existing runtime files may be root-owned. Do not rewrite identical rules.
+  if ! cmp -s "$vpn_source" "$vpn_target"; then
+    mkdir -p "$(dirname "$vpn_target")"
+    cp -p "$vpn_source" "$vpn_target"
+  fi
+  cmp -s "$vpn_source" "$vpn_target"
+}
 trap restore_vpn EXIT
 trap 'exit 129' HUP
 trap 'exit 130' INT
