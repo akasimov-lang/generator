@@ -23,6 +23,20 @@ def test_saved_list_survives_new_sessions_and_skips_full_report_build(monkeypatc
         assert len(calls) == 1
 
 
+def test_complete_collection_is_cached_separately_from_paginated_views(monkeypatch):
+    with session() as db:
+        calls = []
+        def build(db, user, offset, limit, **kwargs):
+            calls.append(limit)
+            rows = [{'id': str(i), 'group': 'layout'} for i in range(125)]
+            return {'items': rows if limit is None else rows[:limit], 'total': 125, 'has_more': limit is not None}
+        monkeypatch.setattr('app.auto_pilot.tasks', build)
+        assert len(cache.tasks(db, {'username': 'anton'}, limit=None)['items']) == 125
+        assert len(cache.tasks(db, {'username': 'anton'}, limit=None)['items']) == 125
+        assert len(cache.tasks(db, {'username': 'anton'})['items']) == 50
+        assert calls == [None, 50]
+
+
 def test_cache_separates_users_permissions_search_and_pagination(monkeypatch):
     with session() as db:
         calls = []

@@ -47,7 +47,7 @@ def refresh_legacy_receipts(db, *, now=None, force=False):
         if not isinstance(task, dict) or not TASK_URL.fullmatch(str(task.get('url') or '')):
             continue
         receipt = {k: task[k] for k in ('url', 'title', 'public_id', 'project_number', 'task_id',
-            'fibery/public-id', 'fibery/id', 'Alfasearch Config/Name', 'verified_at') if k in task}
+            'fibery/public-id', 'fibery/id', 'Alfasearch Config/Name', 'verified_at', 'created_at', 'fibery/creation-date') if k in task}
         project = task.get('Alfasearch Config/SEO Project')
         if isinstance(project, dict):
             receipt['Alfasearch Config/SEO Project'] = {k: project[k] for k in ('fibery/id', 'fibery/public-id') if k in project}
@@ -68,12 +68,14 @@ def project_number(value):
     return match.group(1) if match else None
 
 
-def feed(db, user, *, query='', before=None, limit=50):
+def feed(db, user, *, query='', before=None, limit=50, site_id=None):
     allowed = user.get('allowed_site_ids')
     sites_query = select(models.Site).options(load_only(models.Site.id, models.Site.name,
         models.Site.fibery_name, models.Site.cache_canon))
     if allowed is not None:
         sites_query = sites_query.where(models.Site.id.in_(allowed))
+    if site_id is not None:
+        sites_query = sites_query.where(models.Site.id == site_id)
     sites = {s.id: s for s in db.scalars(sites_query)}
     by_number = {}
     for site in sites.values():
@@ -99,12 +101,14 @@ def feed(db, user, *, query='', before=None, limit=50):
         number_project = str(task.get('project_number') or
             (task.get('Alfasearch Config/SEO Project') or {}).get('fibery/public-id') or '')
         projects = [sites[site_id]] if site_id in sites else by_number.get(number_project, []) if not site_id else []
-        if allowed is not None and (site_id and site_id not in sites or not projects):
+        if (allowed is not None or project_filter is not None) and (site_id and site_id not in sites or not projects):
             return
         at = utc(task.get('verified_at')) or utc(at)
+        created_at = utc(task.get('created_at') or task.get('fibery/creation-date'))
         row = {'id': number, 'number': number, 'title': safe_text(task.get('title') or
             task.get('Alfasearch Config/Name') or 'SEO-задача #' + number),
             'url': match.group(0), 'at': at.isoformat(), 'verified_at': at.isoformat(),
+            'created_at': created_at.isoformat() if created_at else None,
             'kind': kind, 'status': 'created', 'projects': [project(s) for s in projects],
             'fibery_project_url': 'https://hzhz.fibery.io/favorites/Alfasearch_Config/SEO_Projects/' + number_project if number_project.isdigit() else None,
             'project_number': number_project}
@@ -113,11 +117,14 @@ def feed(db, user, *, query='', before=None, limit=50):
             # Several work reports may update one task. Keep its latest title,
             # earliest confirmation date and one row in the collection.
             first = min(existing['at'], row['at'])
+            created = row['created_at'] or existing['created_at']
             if existing['verified_at'] > row['verified_at']:
                 row = existing
             row['at'] = first
+            row['created_at'] = created
         tasks[number] = row
 
+    project_filter = site_id
     job = models.BackgroundJob
     jobs_query = select(job.id, job.status, job.error, job.created_at, job.finished_at,
         job.payload['site_id'].as_string().label('site_id'),
@@ -125,7 +132,7 @@ def feed(db, user, *, query='', before=None, limit=50):
         job.payload['due_at'].as_string().label('due_at'),
         job.result['task'].label('task'), job.result['verified_at'].as_string().label('verified_at')
     ).where(job.kind == 'fibery_reglue')
-    if allowed is not None:
+    if allowed is not None or project_filter is not None:
         jobs_query = jobs_query.where(job.payload['site_id'].as_string().in_(sites))
     for row in db.execute(jobs_query).mappings():
         if row['task']:

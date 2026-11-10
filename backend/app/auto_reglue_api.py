@@ -555,6 +555,13 @@ def pilot_tasks(user: AuthUser, offset: int = Query(0,ge=0), limit: int = Query(
     return pilot_task_cache.tasks(db,user,offset,limit,q=q,group=group,refresh=refresh)
 
 
+@router.get('/pilot/task-collection')
+def pilot_task_collection(user: AuthUser, q: str = Query('',max_length=200), refresh: bool = False, db: Session = Depends(get_db)):
+    from app import pilot_task_cache
+    # One compact permission-scoped snapshot; tabs and pagination reuse it.
+    return pilot_task_cache.tasks(db,user,limit=None,q=q,refresh=refresh)
+
+
 @router.get('/maintenance-reports/{report_id}')
 def maintenance_report(report_id: UUID, user: AuthUser, db: Session = Depends(get_db), archive: bool = False):
     from app import maintenance_reports

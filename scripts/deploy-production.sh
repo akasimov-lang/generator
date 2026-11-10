@@ -8,7 +8,18 @@ flock -n 9 || { echo 'Another deployment is running.' >&2; exit 1; }
 [ "$(git --git-dir="$repo" rev-parse refs/heads/main)" = "$revision" ] || {
   echo 'Main moved after this push; refusing to deploy an outdated commit.' >&2; exit 1;
 }
+# Runtime VPN access rules stay on this server and are never taken from Git.
+vpn_source=${PAGEPILOT_VPN_WHITELIST:-/home/akasimov/pagepilot-server/whitelist_vpn.conf}
+[ -s "$vpn_source" ] || { echo 'Missing server VPN whitelist; deployment stopped before checkout.' >&2; exit 1; }
+vpn_target="$worktree/infra/nginx/whitelists/whitelist_vpn.conf"
+restore_vpn() { mkdir -p "$(dirname "$vpn_target")"; cp -p "$vpn_source" "$vpn_target"; cmp -s "$vpn_source" "$vpn_target"; }
+trap restore_vpn EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 git --git-dir="$repo" --work-tree="$worktree" checkout -f main
+restore_vpn
+trap - EXIT HUP INT TERM
 cd "$worktree"
 test -f .env
 compose() { docker compose -f docker-compose.yml -f docker-compose.production.yml "$@"; }

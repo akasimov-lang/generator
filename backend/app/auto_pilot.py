@@ -120,7 +120,7 @@ def tasks(db, user, offset=0, limit=50, *, q='', group='all'):
     from app.pilot_report_groups import partition, group as report_group
     visible, group_counts = partition(visible, group)
     items=[]
-    for job in visible[offset:offset+limit]:
+    for job in visible[offset:offset+limit if limit is not None else None]:
         if job.kind == maintenance_reports.KIND:
             items.append({**maintenance_reports.summary(job), 'report_id': numbers[job.id], 'group': report_group(job)})
             continue
@@ -139,7 +139,7 @@ def tasks(db, user, offset=0, limit=50, *, q='', group='all'):
         items.append({'id':job.id,'group':report_group(job),'report_id':numbers[job.id],'name':draft_name(job),'mode':'preview' if job.kind==launch.PREVIEW_KIND else 'execution','status':visible_status,'created_at':job.created_at,
             'launched_at':job.payload.get('launched_at') or job.started_at or job.created_at,
             'finished_at':metadata['finished_at'],'total':len(snapshot['items']),'counts':snapshot['counts'],**lifecycle})
-    return {'items':items,'total':len(visible),'has_more':offset+limit<len(visible),'group_counts':group_counts}
+    return {'items':items,'total':len(visible),'has_more':limit is not None and offset+limit<len(visible),'group_counts':group_counts}
 
 
 def scope_sites(db, user):

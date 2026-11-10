@@ -90,6 +90,38 @@ def test_empty_permission_scope_does_not_expose_counts_or_tasks(env):
     assert result['total'] == 0 and not result['items'] and not result['pending']
 
 
+def test_project_feed_filters_reglues_and_legacy_receipts_before_pagination(env):
+    db, site, other = env
+    legacy(db); job(db, site); job(db, other, '33312'); job(db, other, status='queued')
+    result = feed(db, USER, site_id=site.id, limit=1)
+    assert result['total'] == 2 and result['next_before']
+    assert all(p['id'] == site.id for r in result['items'] for p in r['projects'])
+    assert not result['pending']
+    denied = feed(db, {**USER, 'allowed_site_ids': [other.id]}, site_id=site.id)
+    assert denied['total'] == 0 and not denied['items'] and not denied['pending']
+
+
+def test_project_task_creation_time_is_separate_from_receipt_confirmation(env):
+    db, site, _ = env
+    row = job(db, site, minutes=20)
+    row.result = {**row.result, 'task': {**row.result['task'], 'created_at': AT.isoformat()}}
+    db.commit()
+    task = feed(db, USER, site_id=site.id)['items'][0]
+    assert task['created_at'] == AT.isoformat()
+    assert task['at'] != task['created_at']
+
+
+def test_later_receipt_without_creation_time_keeps_original_creation_date(env):
+    db, site, _ = env
+    first = legacy(db)
+    first.value = {**first.value, 'fibery_task': {**first.value['fibery_task'], 'created_at': AT.isoformat()}}
+    db.commit()
+    legacy(db, 'later-without-date', 'Updated title', minutes=10)
+    task, = feed(db, USER, site_id=site.id)['items']
+    assert task['created_at'] == AT.isoformat()
+    assert task['title'] == 'Updated title'
+
+
 def test_cursor_keeps_same_timestamp_tasks_and_incoming_rows_without_duplicates(env):
     db, site, _ = env
     job(db, site, '101'); job(db, site, '102'); job(db, site, '103')

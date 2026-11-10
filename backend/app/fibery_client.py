@@ -85,7 +85,7 @@ class FiberyClient:
         return result
 
     def task(self, task_id):
-        rows = self.query(TASK_TYPE, ['fibery/id', 'fibery/public-id', 'Alfasearch Config/Name',
+        rows = self.query(TASK_TYPE, ['fibery/id', 'fibery/public-id', 'fibery/creation-date', 'Alfasearch Config/Name',
             {'Alfasearch Config/SEO Project': ['fibery/id', 'fibery/public-id']},
             {'Alfasearch Config/ТЗ': ['Collaboration~Documents/secret']},
             {'workflow/state': ['enum/name']}], ['=', ['fibery/id'], '$id'], {'$id': task_id})
@@ -140,4 +140,4 @@ class FiberyClient:
         return {'task_id': task_id, 'public_id': str(verified['fibery/public-id']),
                 'project_id': project['fibery/id'], 'project_number': str(project_number),
                 'url': HOST + '/favorites/Alfasearch_Config/SEO_Tasks/' + str(verified['fibery/public-id']),
-                'title': title, 'description_verified': True}
+                'title': title, 'created_at': verified.get('fibery/creation-date'), 'description_verified': True}

@@ -27,5 +27,6 @@ ops/
 infra/certbot/
 infra/nginx/whitelist-backup-*/
 infra/nginx/whitelists/*~
+infra/nginx/whitelists/whitelist_vpn.conf
 *.prepared
 certbot-renew.log

@@ -1,3 +1,4 @@
+import {ProjectFiberyTasks} from "./ProjectFiberyTasks";
 import {clearPilotTasks} from "./pilotTaskCache";
 import { ProjectStateReports } from "./ProjectStateReports";
 import { MenuPageIdentityEditor } from "./MenuPageIdentityEditor";
@@ -2780,7 +2781,7 @@ function ProjectWorkspaceView({
       {selectedSite ? (
         <>
           <WorkspaceTabPane active={activeTab === "overview"} storagePrefix={`${currentUsername}:${selectedSite.id}:overview`}>
-            {overview ? <FastProjectOverviewPanel key={selectedSite.id} overview={overview} content={siteContent} sections={sections} logs={logs} /> : null}
+            {overview ? <FastProjectOverviewPanel key={selectedSite.id} overview={overview} content={siteContent} sections={sections} logs={logs} api={api} /> : null}
           </WorkspaceTabPane>
           {activeTab === "autoLb" && <AutoLbPanel key={`auto-lb:${selectedSite.id}`} siteId={selectedSite.id} api={api} />}
           {activeTab === "logs" && <ProjectLogs key={`logs:${selectedSite.id}`} siteId={selectedSite.id} project={selectedSite.name} api={sourceApi} onBack={() => onTabChange("network", selectedSite.name)} />}
@@ -2957,7 +2958,7 @@ function ProjectCoreUpdateNotice({ siteId, publicationStamp, api, onChanged }: {
   );
 }
 
-function ProjectOverviewPanel({ overview, content, sections, logs }: { overview: SiteOverview; content: ContentItem[]; sections: Section[]; logs: PublicationLog[] }) {
+function ProjectOverviewPanel({ overview, content, sections, logs, api }: { overview: SiteOverview; content: ContentItem[]; sections: Section[]; logs: PublicationLog[]; api: ViewProps["api"] }) {
   const recentContent = overview.recent_content.length ? overview.recent_content : content;
   return (
     <section className="viewStack">
@@ -2984,6 +2985,7 @@ function ProjectOverviewPanel({ overview, content, sections, logs }: { overview:
             ])}
           />
         </DataPanel>
+        <div className="viewStack"><ProjectFiberyTasks key={overview.site.id} siteId={overview.site.id} api={api}/><details><summary>Публикационные логи</summary>
         <DataPanel title="Публикационные логи">
           <ResponsiveTable
             columns={["Время", "Статус", "Endpoint"]}
@@ -2994,6 +2996,7 @@ function ProjectOverviewPanel({ overview, content, sections, logs }: { overview:
             ])}
           />
         </DataPanel>
+        </details></div>
       </div>
     </section>
   );
