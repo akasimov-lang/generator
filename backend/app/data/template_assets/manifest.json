@@ -764,15 +764,27 @@
         "Tokyo"
       ],
       "kind": "wordmark",
-      "logo": "showcase/tokyo-casino.png",
+      "logo": "showcase/tokyo-casino-wordmark.png",
       "surface": "dark",
       "source": "https://affilmaster.sk/wp-content/uploads/2024/08/TY-LogoText.png",
       "source_page": "https://affilmaster.sk/tokyo-casino-affiliate/",
-      "sha256": "33ce84ce8cc02d0730cab0aa2d8dc8e08dd8660b4faec4d2af19c410a7d7d7a7",
-      "width": 200,
-      "height": 200,
-      "verified_at": "2026-11-07",
-      "showcase_ready": true
+      "sha256": "585dd5a61d2c9ff7a7d3d77e91e667b66a1e45296db54328f0376ca3c48737f9",
+      "width": 600,
+      "height": 116,
+      "verified_at": "2026-11-10",
+      "showcase_ready": true,
+      "original_logo": "showcase/tokyo-casino.png",
+      "normalization": {
+        "method": "trim excess canvas; preserve wordmark proportions",
+        "source_logo": "showcase/tokyo-casino.png",
+        "source_box": [
+          33,
+          87,
+          167,
+          113
+        ],
+        "visible_wordmark_checked": true
+      }
     },
     {
       "id": "tipsport",
@@ -1093,13 +1105,25 @@
       "kind": "wordmark",
       "source": "https://tipsport.brandcloud.pro/storage/12097/previews/500x500/3ebe31bcb0ace2c556588ae80fd4aad3.webp",
       "source_page": "https://tipsport.brandcloud.pro/en/document/105989/202708",
-      "logo": "showcase/chance.png",
+      "logo": "showcase/chance-wordmark.png",
       "surface": "dark",
-      "sha256": "e03ec92070692d069aa7eca8ea71e4f6833271fca67509dbc3591a70451003e4",
-      "width": 500,
-      "height": 500,
-      "verified_at": "2026-11-07",
-      "showcase_ready": true
+      "sha256": "727128411c571f9d766bcb2ed2cb4c463c6d92bf51726491d1781b08a39f10d0",
+      "width": 600,
+      "height": 152,
+      "verified_at": "2026-11-10",
+      "showcase_ready": true,
+      "original_logo": "showcase/chance.png",
+      "normalization": {
+        "method": "trim excess canvas; preserve wordmark proportions",
+        "source_logo": "showcase/chance.png",
+        "source_box": [
+          0,
+          187,
+          500,
+          314
+        ],
+        "visible_wordmark_checked": true
+      }
     },
     {
       "id": "sazka-hry",
