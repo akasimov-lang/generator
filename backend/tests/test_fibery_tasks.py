@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 
 from app import models
 from app.db import Base, get_db
-from app.fibery_tasks import feed
+from app.fibery_tasks import feed, refresh_legacy_receipts, RECEIPT_PREFIX
 from app.dashboard_activity import router
 from app.security import require_auth
 
@@ -47,6 +47,7 @@ def legacy(db, key='earlier', title='Ionickiss: витрина', minutes=0):
         'fibery/public-id': '33302', 'Alfasearch Config/Name': title, 'verified_at': at.isoformat(),
         'Alfasearch Config/SEO Project': {'fibery/public-id': '254'}, 'url': URL + '33302'}}, created_at=at, updated_at=at)
     db.add(row); db.commit()
+    refresh_legacy_receipts(db, now=at, force=True)
     return row
 
 
@@ -127,6 +128,7 @@ def test_unknown_legacy_project_is_kept_for_admin_without_guessing_site(env):
     row = legacy(db)
     row.value = {'fibery_task': {**row.value['fibery_task'], 'Alfasearch Config/SEO Project': {'fibery/public-id': '999'}}}
     db.commit()
+    refresh_legacy_receipts(db, force=True)
     item, = feed(db, USER)['items']
     assert not item['projects'] and item['fibery_project_url'].endswith('/999')
 
@@ -137,9 +139,28 @@ def test_legacy_binary_backups_do_not_hide_task_receipts(env):
     row.value = {**row.value, 'before': {'shortcodes': [{'name': '.DS_Store', 'data': '\x00binary'}]}}
     db.add(models.AutoReglueConfig(key='unrelated-backup', value={'before': {'data': '\x00binary'}}))
     db.commit()
+    refresh_legacy_receipts(db, force=True)
     item, = feed(db, USER)['items']
     assert item['number'] == '33302'
     assert 'before' not in item and 'binary' not in str(item)
+
+
+def test_new_legacy_tasks_are_indexed_on_next_refresh_without_copying_backups(env):
+    db, _, _ = env
+    refresh_legacy_receipts(db, now=AT)
+    record = models.AutoReglueConfig(key='new-work', value={'fibery_task': {
+        'url': URL + '33399', 'title': 'Новая SEO-задача', 'project_number': '254',
+        'description': 'PRIVATE_DESCRIPTION', 'secret': 'PRIVATE_SECRET'}, 'before': 'LARGE_BACKUP'},
+        created_at=AT + timedelta(seconds=20), updated_at=AT + timedelta(seconds=20))
+    db.add(record); db.commit()
+    assert refresh_legacy_receipts(db, now=AT + timedelta(seconds=30)) == 0
+    assert not feed(db, USER)['items']
+    assert refresh_legacy_receipts(db, now=AT + timedelta(seconds=61)) == 1
+    item, = feed(db, USER)['items']
+    assert item['number'] == '33399'
+    from sqlalchemy import select
+    stored = db.scalar(select(models.AutoReglueConfig.value).where(models.AutoReglueConfig.key.startswith(RECEIPT_PREFIX)))
+    assert 'PRIVATE' not in str(stored) and 'LARGE_BACKUP' not in str(stored)
 
 
 def test_http_collection_requires_auth_and_validates_pagination(env):

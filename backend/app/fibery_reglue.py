@@ -100,7 +100,9 @@ def tick(db, now=None):
         job.error = 'Обработка прервалась. Проверяем существующую задачу Fibery перед продолжением.'
         recovered += 1
     db.commit()
-    return {'created': created, 'recovered': recovered}
+    from app.fibery_tasks import refresh_legacy_receipts
+    indexed = refresh_legacy_receipts(db, now=now)
+    return {'created': created, 'recovered': recovered, 'indexed': indexed}
 
 
 def execute(db, job_id, *, client=None, now=None):

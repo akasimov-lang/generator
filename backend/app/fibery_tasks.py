@@ -1,15 +1,66 @@
 """Read-only dashboard index of Fibery tasks created through PagePilot."""
 import re
+from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
+from uuid import NAMESPACE_URL, uuid5
 
 from sqlalchemy import String, cast, select
 from sqlalchemy.orm import load_only
+from sqlalchemy.exc import IntegrityError
 
 from app import models
 from app.project_notifications import safe_text
 from app.reglue_history import utc
 
 TASK_URL = re.compile(r'https://hzhz\.fibery\.io/favorites/Alfasearch_Config/SEO_Tasks/(\d+)')
+INDEX_KEY = 'fibery-task-index'
+RECEIPT_PREFIX = 'fibery-task-receipt:'
+
+
+def refresh_legacy_receipts(db, *, now=None, force=False):
+    """Index old work ledgers off the request path; never copy their backups."""
+    now = utc(now) or datetime.now(timezone.utc)
+    if db.get(models.AutoReglueConfig, INDEX_KEY) is None:
+        try:
+            with db.begin_nested():
+                db.add(models.AutoReglueConfig(key=INDEX_KEY, value={}))
+                db.flush()
+        except IntegrityError:
+            pass
+    state = db.scalar(select(models.AutoReglueConfig).where(models.AutoReglueConfig.key == INDEX_KEY)
+                      .with_for_update().execution_options(populate_existing=True))
+    last = utc((state.value or {}).get('at'))
+    if last and now < last + timedelta(minutes=1) and not force:
+        db.commit()
+        return 0
+    full_at = utc((state.value or {}).get('full_at'))
+    full = force or not full_at or now >= full_at + timedelta(days=1)
+    config = models.AutoReglueConfig
+    query = select(config.key, config.value, config.updated_at).where(
+        config.key != INDEX_KEY, ~config.key.startswith(RECEIPT_PREFIX),
+        cast(config.value, String).contains('"fibery_task"'))
+    if not full and last:
+        query = query.where(config.updated_at >= last - timedelta(minutes=5))
+    count = 0
+    for key, value, at in db.execute(query):
+        task = value.get('fibery_task') if isinstance(value, dict) else None
+        if not isinstance(task, dict) or not TASK_URL.fullmatch(str(task.get('url') or '')):
+            continue
+        receipt = {k: task[k] for k in ('url', 'title', 'public_id', 'project_number', 'task_id',
+            'fibery/public-id', 'fibery/id', 'Alfasearch Config/Name', 'verified_at') if k in task}
+        project = task.get('Alfasearch Config/SEO Project')
+        if isinstance(project, dict):
+            receipt['Alfasearch Config/SEO Project'] = {k: project[k] for k in ('fibery/id', 'fibery/public-id') if k in project}
+        id_ = RECEIPT_PREFIX + str(uuid5(NAMESPACE_URL, key))
+        target = db.get(models.AutoReglueConfig, id_)
+        if target is None:
+            target = models.AutoReglueConfig(key=id_, value={})
+            db.add(target)
+        target.value = {'task': receipt, 'at': utc(at).isoformat()}
+        count += 1
+    state.value = {'at': now.isoformat(), 'full_at': now.isoformat() if full else full_at.isoformat()}
+    db.commit()
+    return count
 
 
 def project_number(value):
@@ -86,15 +137,12 @@ def feed(db, user, *, query='', before=None, limit=50):
                 'error': safe_text(row['error']), 'at': utc(row['created_at']).isoformat(),
                 'due_at': row['due_at'], 'projects': [project(site)] if site else []})
 
-    # Legacy ledgers can contain binary backup strings (including \u0000).
-    # PostgreSQL's JSON operators reject such a whole document even when the
-    # requested key is unrelated. Filter serialized JSON, decode selected
-    # ledgers in Python, and expose only their task receipt.
+    # The scheduler indexes historical ledgers separately. Dashboard requests
+    # only read compact receipts, never scan or decode article backups.
     config = models.AutoReglueConfig
-    for value, at in db.execute(select(config.value, config.updated_at).where(
-            cast(config.value, String).contains('"fibery_task"'))):
+    for value in db.scalars(select(config.value).where(config.key.startswith(RECEIPT_PREFIX))):
         if isinstance(value, dict):
-            add(value.get('fibery_task'), at)
+            add(value.get('task'), value.get('at'))
 
     search = query.strip().casefold()
     def matches(row):
