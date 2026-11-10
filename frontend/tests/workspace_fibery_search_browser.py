@@ -46,8 +46,18 @@ with sync_playwright() as playwright:
             data = {"site": site, "stats": {}, "recent_content": []}
         elif path.endswith("/menu-capabilities"):
             data = {"check_status": "completed"}
+        elif path.endswith(("/network/indexing", "/network/sitemap")):
+            data = None
         route.fulfill(content_type="application/json", body=json.dumps(data))
 
+    # Keep the normal HTTPS context when the server's public IP is outside the VPN whitelist.
+    if asset_origin := os.environ.get("PAGEPILOT_ASSET_ORIGIN"):
+        def deployed_asset(route):
+            parsed = urlparse(route.request.url)
+            response = route.fetch(url=asset_origin.rstrip("/") + parsed.path +
+                                   ("?" + parsed.query if parsed.query else ""))
+            route.fulfill(response=response)
+        page.route("**/*", deployed_asset)
     page.route("**/api/**", api)
     page.goto(base + "/project-overview/")
     search = page.get_by_role("searchbox", name="Поиск по всем сайтам", exact=True)
