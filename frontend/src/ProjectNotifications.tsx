@@ -3,10 +3,10 @@ import { CircleAlert, RefreshCcw, ArrowLeft } from "lucide-react";
 import { localProjectNotices, projectNotice, noticeSynced, NOTICE_EVENT, PROJECT_CHANGED_EVENT, setNotificationProject, type ProjectNotice } from "./projectNotificationEvents";
 
 type Api = <T>(path: string, options?: RequestInit) => Promise<T>;
-type Entry = {id:string; source:string; status:string; code:string; message:string; context:string; severity:string; active:boolean; created_at:string; occurrences:number; client_key?:string; resolved_at?:string};
+type Entry = {id:string; source:string; status:string; code:string; message:string; context:string; severity:string; active:boolean; created_at:string; occurrences:number; client_key?:string; resolved_at?:string; task_url?:string; task_title?:string};
 type Feed = {active_count:number;total:number;items:Entry[];active_client_keys?:string[]};
-const names:Record<string,string> = {interface:"Интерфейс",network:"Сетка",reglue:"Переклей",page_edit:"Редактирование страницы",page_generation:"Генерация страницы",auto_lb:"АвтоЛБ",image:"Изображения",menu:"Меню",generation:"Генерация",competitors:"Конкуренты",indexing:"Индексация",deletion:"Удаление",publication:"Публикация",job:"Фоновая задача"};
-const states:Record<string,string> = {active:"Актуально",resolved:"Устранено",confirmed:"Подтверждено",completed:"Завершено",failed:"Ошибка",error:"Ошибка",warning:"Предупреждение",unknown:"Проверяется",pending:"Проверяется",queued:"В очереди",running:"Выполняется",waiting:"Ожидание",ready:"Готово",index_submitted:"Отправлено в индексатор"};
+const names:Record<string,string> = {fibery:"SEO-задача Fibery",interface:"Интерфейс",network:"Сетка",reglue:"Переклей",page_edit:"Редактирование страницы",page_generation:"Генерация страницы",auto_lb:"АвтоЛБ",image:"Изображения",menu:"Меню",generation:"Генерация",competitors:"Конкуренты",indexing:"Индексация",deletion:"Удаление",publication:"Публикация",job:"Фоновая задача"};
+const states:Record<string,string> = {collecting:"Собираем работы · 3 минуты",active:"Актуально",resolved:"Устранено",confirmed:"Подтверждено",completed:"Завершено",failed:"Ошибка",error:"Ошибка",warning:"Предупреждение",unknown:"Проверяется",pending:"Проверяется",queued:"В очереди",running:"Выполняется",waiting:"Ожидание",ready:"Готово",index_submitted:"Отправлено в индексатор"};
 const date = (value:string) => value ? new Date(value).toLocaleString("ru-RU",{timeZone:"Europe/Moscow"}) : "Дата не сохранена";
 function localEntry(notice:ProjectNotice):Entry { return {id:"local:"+notice.key,source:"interface",status:notice.active?"active":"resolved", code:notice.code,message:notice.message,context:notice.context||"",severity:notice.severity,active:notice.active,created_at:notice.created_at||new Date().toISOString(),occurrences:1,client_key:notice.key}; }
 function useNotices(siteId:string) {
@@ -30,6 +30,10 @@ export function ProjectNotificationCenter({siteId,project,username,api,href,onOp
     try {const next=await api<Feed>(`/sites/${siteId}/notifications?limit=100&active_only=true`);if(Array.isArray(next.items)) {setFeed(next);setLoadError("");}}
     catch {setLoadError("Не удалось загрузить журнал проекта. Откройте его и повторите загрузку.");}
   },[api,siteId]);
+  React.useEffect(()=>{
+    const timer=window.setInterval(()=>{if(!document.hidden)void reload();},15000);
+    return()=>window.clearInterval(timer);
+  },[reload]);
   React.useEffect(()=>{
     let alive=true;
     setNotificationProject(siteId);setFeed({active_count:0,total:0,items:[]});
@@ -80,6 +84,10 @@ export function ProjectLogs({siteId,project,api,onBack}:{siteId:string;project:s
   const local=useNotices(siteId);
   const load=React.useCallback(async()=>{setLoading(true);setError("");try{const next=await api<Feed>(`/sites/${siteId}/notifications?limit=50&offset=${offset}&active_only=${activeOnly}&q=${encodeURIComponent(search)}`);if(!Array.isArray(next.items))throw new Error("Журнал вернул неполный ответ.");setFeed(next);}catch(e){setError(e instanceof Error?e.message:String(e));}finally{setLoading(false);}},[api,siteId,offset,activeOnly,search]);
   React.useEffect(()=>{void load();},[load]);
+  React.useEffect(()=>{
+    const timer=window.setInterval(()=>{if(!document.hidden)void load();},15000);
+    return()=>window.clearInterval(timer);
+  },[load]);
   const extra=local.filter(n=>n.active&&!feed?.items.some(item=>item.client_key===n.key)).map(localEntry);
   return <section className="dataPanel projectLogs"><div className="panelHeader"><h2>Логи проекта · {project}</h2><div className="networkActions"><button type="button" className="button secondary compact" onClick={onBack}><ArrowLeft size={14}/>К проекту</button><button type="button" className="button secondary compact" disabled={loading} onClick={()=>void load()}><RefreshCcw size={14}/>Обновить журнал</button></div></div>
     <div className="projectLogsFilters"><button type="button" className={`button compact ${!activeOnly?"primary":"secondary"}`} onClick={()=>{setActiveOnly(false);setOffset(0);}}>Весь журнал</button><button type="button" className={`button compact ${activeOnly?"primary":"secondary"}`} onClick={()=>{setActiveOnly(true);setOffset(0);}}>Актуальные · {feed?.active_count??0}</button><form onSubmit={e=>{e.preventDefault();setSearch(query);setOffset(0);}}><input type="search" maxLength={200} aria-label="Поиск по логам" placeholder="Код или текст ошибки" value={query} onChange={e=>setQuery(e.target.value)}/><button type="submit" className="button secondary compact">Найти</button></form></div>
@@ -89,6 +97,7 @@ export function ProjectLogs({siteId,project,api,onBack}:{siteId:string;project:s
   </section>;
 }
 
-function LogEntry({item}:{item:Entry}) {
-  return <details className={`projectLogEntry ${item.active?item.severity:"resolved"}`}><summary><span>{date(item.created_at)}</span><b>{item.code||names[item.source]||item.source}</b><span className="projectLogSummary">{item.message.slice(0,200)}</span><small>{item.active?states[item.status]||"Актуально":item.status==="failed"?"Ошибка в истории":states[item.status]||item.status}</small></summary><div><p>{names[item.source]||item.source} · {states[item.status]||item.status} · {item.active?"Требует внимания":"История"}</p><pre>{item.message}</pre>{item.context&&<pre>{item.context}</pre>}<small>Запись: {item.id}{item.occurrences>1?` · Повторений: ${item.occurrences}`:""}{item.resolved_at?` · Устранено: ${date(item.resolved_at)}`:""}</small></div></details>;
+export function LogEntry({item}:{item:Entry}) {
+  const taskUrl=item.task_url&&/^https:\/\/hzhz\.fibery\.io\/favorites\/Alfasearch_Config\/SEO_Tasks\/\d+$/.test(item.task_url)?item.task_url:null;
+  return <details className={`projectLogEntry ${item.active?item.severity:"resolved"}`}><summary><span>{date(item.created_at)}</span><b>{item.code||names[item.source]||item.source}</b><span className="projectLogSummary">{item.message.slice(0,200)}</span><small>{item.active?states[item.status]||"Актуально":item.status==="failed"?"Ошибка в истории":states[item.status]||item.status}</small></summary><div><p>{names[item.source]||item.source} · {states[item.status]||item.status} · {item.active?(item.severity==="info"?"Примечание":"Требует внимания"):"История"}</p>{taskUrl&&<p><a href={taskUrl} target="_blank" rel="noopener noreferrer">Открыть SEO-задачу в Fibery: {item.task_title||item.message}</a></p>}<pre>{item.message}</pre>{item.context&&<pre>{item.context}</pre>}<small>Запись: {item.id}{item.occurrences>1?` · Повторений: ${item.occurrences}`:""}{item.resolved_at?` · Устранено: ${date(item.resolved_at)}`:""}</small></div></details>;
 }

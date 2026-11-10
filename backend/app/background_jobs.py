@@ -33,6 +33,10 @@ def dispatch_pending(db, send, inflight_ids=None):
     now = datetime.now(timezone.utc)
     jobs = db.scalars(select(models.BackgroundJob).where(
         models.BackgroundJob.status == "queued",
+        or_(models.BackgroundJob.kind != 'fibery_reglue',
+            (models.BackgroundJob.payload['due_at'].as_string() <= now.isoformat()) &
+            or_(models.BackgroundJob.result['next_attempt_at'].as_string().is_(None),
+                models.BackgroundJob.result['next_attempt_at'].as_string() <= now.isoformat())),
         models.BackgroundJob.id.not_in(inflight_ids or []),
         or_(models.BackgroundJob.dispatched_at.is_(None),
             models.BackgroundJob.dispatched_at < now - timedelta(minutes=1)),
@@ -40,6 +44,10 @@ def dispatch_pending(db, send, inflight_ids=None):
                models.BackgroundJob.created_at).limit(100).with_for_update(skip_locked=True)).all()
     sent = 0
     for job in jobs:
+        if job.kind == 'fibery_reglue':
+            from app.fibery_reglue import due
+            if not due(job):
+                continue
         if job.kind == 'generation_retry':
             from app.generation_retry import due
             from app.queue_maintenance import obsolete_retry
@@ -60,6 +68,9 @@ def dispatch_pending(db, send, inflight_ids=None):
 
 def run_job(db, job_id):
     candidate = db.get(models.BackgroundJob, job_id)
+    if candidate and candidate.kind == 'fibery_reglue':
+        from app.fibery_reglue import execute
+        return execute(db, job_id)
     if candidate and candidate.kind == 'project_page_save':
         from app.page_save_jobs import execute
         return execute(db, job_id)

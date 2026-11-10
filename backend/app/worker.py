@@ -44,9 +44,11 @@ celery_app.conf.update(
         "app.worker.dispatch_background_jobs": {"queue": "background_dispatch"},
         "app.worker.check_site_menu_visibility": {"queue": "menu_checks"},
         "app.worker.refresh_weekly_digests": {"queue": "maintenance"},
+        "app.worker.schedule_fibery_reglue": {"queue": "maintenance"},
     },
 )
 celery_app.conf.beat_schedule = {
+    "schedule-fibery-reglue": {"task": "app.worker.schedule_fibery_reglue", "schedule": 15.0, "options": {"expires": 60}},
     "weekly-work-digests": {"task": "app.worker.refresh_weekly_digests", "schedule": crontab(minute="*"), "options": {"expires": 60}},
     "monitor-reglue-results": {"task": "app.worker.dispatch_reglue_monitor", "schedule": 60.0},
     "dispatch-background-jobs": {"task": "app.worker.dispatch_background_jobs", "schedule": 5.0},
@@ -73,6 +75,13 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(hour=2, minute=50),
     },
 }
+
+
+@celery_app.task(name="app.worker.schedule_fibery_reglue", soft_time_limit=60, time_limit=90)
+def schedule_fibery_reglue_job():
+    from app.fibery_reglue import tick
+    with SessionLocal() as db:
+        return tick(db)
 
 
 @celery_app.task(name="app.worker.refresh_weekly_digests", soft_time_limit=240, time_limit=270)

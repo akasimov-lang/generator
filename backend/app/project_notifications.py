@@ -128,11 +128,18 @@ def collect(db, site):
 
     # Jobs associated indirectly with a text or project are included without fetching payload bodies.
     job = models.BackgroundJob
+    from app.fibery_reglue import KIND as FIBERY_KIND, notice as fibery_notice
+    fibery_jobs = db.scalars(select(job).where(job.kind == FIBERY_KIND,
+        job.payload['site_id'].as_string() == site.id).order_by(job.created_at.desc())).all()
+    for index, row in enumerate(fibery_jobs):
+        entry = fibery_notice(row)
+        entry['active'] = row.status != 'completed' or index == 0
+        entries.append(entry)
     scope = or_(job.payload['site_id'].as_string() == site.id,
         job.payload['content_id'].as_string().in_(item_ids), job.payload['task_id'].as_string().in_(task_ids),
         job.payload['generation_id'].as_string().in_(select(models.AutoLbGeneration.id).where(models.AutoLbGeneration.site_id == site.id)),
         job.payload['draft_id'].as_string().in_(select(models.ProjectPageDraft.id).where(models.ProjectPageDraft.site_id == site.id)))
-    for id, kind, status, error, at in db.execute(select(job.id, job.kind, job.status, job.error, job.updated_at).where(scope)):
+    for id, kind, status, error, at in db.execute(select(job.id, job.kind, job.status, job.error, job.updated_at).where(scope, job.kind != FIBERY_KIND)):
         add('job', id, status, error or f'{kind}: {status}', at,
             active=status == 'failed' and kind not in {'auto_lb', 'project_page_ai', 'article_image'}, code=kind.upper())
 

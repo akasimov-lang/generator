@@ -17,6 +17,7 @@ def queue_for(db, job):
     if job.kind == 'maintenance_report' and job.payload.get('planning_only'):
         return 'planning'
     return {
+        'fibery_reglue': 'maintenance',
         'menu_generation': 'short_generation', 'generation_retry': 'generation',
         'maintenance_report': 'automation', 'mass_reglue_list': 'automation',
         'pilot_internal_pages': 'short_generation', 'template_knowledge': 'maintenance',

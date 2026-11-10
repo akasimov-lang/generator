@@ -255,12 +255,17 @@ def observe(db, site, project):
             confirm(site, operation)
             if operation.action in {"reglue", "create_fake_main", "select_fake_main", "alternates"}:
                 from app.reglue_journal import snapshot
+                from app.fibery_reglue_evidence import network_snapshot
                 from datetime import datetime, timezone
                 operation.request_payload = {**operation.request_payload,
+                    "fibery_after": network_snapshot(state),
                     "confirmed_at": operation.request_payload.get("confirmed_at") or datetime.now(timezone.utc).isoformat(),
                     "journal_after": snapshot(state)}
             if operation.action == "reglue" and operation.request_payload.get("redirect_sync"):
                 operation.request_payload = {**operation.request_payload, "redirects_after": state["domain_redirects"]}
+            if operation.action == "reglue":
+                from app.fibery_reglue import schedule_confirmed
+                schedule_confirmed(db, operation)
             operation.message = ("Домены появились в сетке. Завершение настройки HTTPS проверяйте отдельно." if operation.action in {"create_subdomains", "create_domains"} else "Изменение подтверждено чтением настроек проекта.")
     from app.network_indexing import confirm_manual_indexing
     from app.domain_transfer_queue import observe as observe_transfer_queue
@@ -628,6 +633,9 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
             request.update(retarget(project, state.get('fake_main_current'),
                                     request['alternate'].get('currentFakeMain'), state['canon']))
         stored_request = dict(request)
+        if payload.action in {"reglue", "create_fake_main", "select_fake_main", "alternates"}:
+            from app.fibery_reglue_evidence import network_snapshot
+            stored_request['fibery_before'] = network_snapshot(state)
         if payload.action in {"reglue", "create_fake_main", "select_fake_main"}:
             from app.reglue_journal import snapshot
             stored_request["journal_before"] = snapshot(state)
