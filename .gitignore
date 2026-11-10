@@ -29,3 +29,4 @@ infra/nginx/whitelist-backup-*/
 infra/nginx/whitelists/*~
 *.prepared
 certbot-renew.log
+infra/nginx/whitelists/whitelist_vpn.conf
