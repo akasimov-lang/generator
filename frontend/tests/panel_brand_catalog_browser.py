@@ -37,7 +37,10 @@ errors, writes = [], []
 with sync_playwright() as pw:
     browser = pw.chromium.launch(headless=True, args=['--disable-dev-shm-usage'])
     page = browser.new_page(viewport={'width': 1440, 'height': 1000})
-    page.on('pageerror', lambda error: errors.append(str(error)))
+    def page_error(error):
+        errors.append(str(error))
+        print('PAGEERROR', str(error), flush=True)
+    page.on('pageerror', page_error)
     page.add_init_script('localStorage.setItem("admin_token","mock");sessionStorage.setItem("popup_permission_prompt_closed","true")')
 
     def route(request):
@@ -66,6 +69,14 @@ with sync_playwright() as pw:
             data = {'check_status': 'completed'}
         elif path.endswith('/pages'):
             data = {'pages': [home], 'total': 1}
+        elif path.endswith('/autolink-pages'):
+            data = None
+        elif path.endswith(('/network/indexing', '/network/sitemap')):
+            data = None
+        elif path.endswith('/pages/home'):
+            data = home
+        elif path.endswith('/draft'):
+            data = None
         elif path.endswith('/showcase'):
             data = showcase
         request.fulfill(content_type='application/json', body=json.dumps(data))
