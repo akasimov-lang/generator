@@ -131,6 +131,17 @@ def test_unknown_legacy_project_is_kept_for_admin_without_guessing_site(env):
     assert not item['projects'] and item['fibery_project_url'].endswith('/999')
 
 
+def test_legacy_binary_backups_do_not_hide_task_receipts(env):
+    db, _, _ = env
+    row = legacy(db)
+    row.value = {**row.value, 'before': {'shortcodes': [{'name': '.DS_Store', 'data': '\x00binary'}]}}
+    db.add(models.AutoReglueConfig(key='unrelated-backup', value={'before': {'data': '\x00binary'}}))
+    db.commit()
+    item, = feed(db, USER)['items']
+    assert item['number'] == '33302'
+    assert 'before' not in item and 'binary' not in str(item)
+
+
 def test_http_collection_requires_auth_and_validates_pagination(env):
     db, site, _ = env
     job(db, site)

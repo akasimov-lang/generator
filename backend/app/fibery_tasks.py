@@ -2,7 +2,7 @@
 import re
 from urllib.parse import quote
 
-from sqlalchemy import select
+from sqlalchemy import String, cast, select
 from sqlalchemy.orm import load_only
 
 from app import models
@@ -86,12 +86,15 @@ def feed(db, user, *, query='', before=None, limit=50):
                 'error': safe_text(row['error']), 'at': utc(row['created_at']).isoformat(),
                 'due_at': row['due_at'], 'projects': [project(site)] if site else []})
 
-    # Older SEO work stored explicit receipts in per-project ledgers. Fetch only
-    # the receipt, not the potentially large backups stored alongside it.
+    # Legacy ledgers can contain binary backup strings (including \u0000).
+    # PostgreSQL's JSON operators reject such a whole document even when the
+    # requested key is unrelated. Filter serialized JSON, decode selected
+    # ledgers in Python, and expose only their task receipt.
     config = models.AutoReglueConfig
-    for task, at in db.execute(select(config.value['fibery_task'], config.updated_at).where(
-            config.value['fibery_task']['url'].as_string().is_not(None))):
-        add(task, at)
+    for value, at in db.execute(select(config.value, config.updated_at).where(
+            cast(config.value, String).contains('"fibery_task"'))):
+        if isinstance(value, dict):
+            add(value.get('fibery_task'), at)
 
     search = query.strip().casefold()
     def matches(row):
