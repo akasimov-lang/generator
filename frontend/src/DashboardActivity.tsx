@@ -1,5 +1,6 @@
 import * as React from "react";
 import { History, RefreshCw } from "lucide-react";
+import { DashboardFiberyTasks } from "./DashboardFiberyTasks";
 import "./styles/dashboard-activity.css";
 
 type Api = <T>(path: string, options?: RequestInit) => Promise<T>;
@@ -128,5 +129,16 @@ function MassReportView({ api, id }: { api: Api; id: string }) {
 
 export function DashboardActivity({ api }: { api: Api }) {
   const report = new URLSearchParams(window.location.search).get("mass_report");
-  return report ? <MassReportView api={api} id={report} /> : <LiveActivity api={api} />;
+  const [collection, setCollection] = React.useState(() => new URLSearchParams(window.location.search).get("collection") === "fibery" ? "fibery" : "activity");
+  function choose(value: string) {
+    setCollection(value);
+    const url = new URL(window.location.href);
+    if (value === "fibery") url.searchParams.set("collection", "fibery"); else url.searchParams.delete("collection");
+    window.history.replaceState(window.history.state, "", url);
+  }
+  if (report) return <MassReportView api={api} id={report} />;
+  return <div><div className="dashboardCollections" role="group" aria-label="Подборка на дашборде">
+    <button className={`button compact ${collection === "activity" ? "primary" : "secondary"}`} type="button" aria-pressed={collection === "activity"} onClick={() => choose("activity")}>История действий</button>
+    <button className={`button compact ${collection === "fibery" ? "primary" : "secondary"}`} type="button" aria-pressed={collection === "fibery"} onClick={() => choose("fibery")}>Задачи Fibery</button>
+  </div>{collection === "fibery" ? <DashboardFiberyTasks api={api} /> : <LiveActivity api={api} />}</div>;
 }

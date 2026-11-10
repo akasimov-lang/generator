@@ -1,0 +1,20 @@
+.dashboardCollections{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.dashboardFibery header,.dashboardFibery h2{display:flex;align-items:center;gap:10px}
+.dashboardFibery header{justify-content:space-between;flex-wrap:wrap}
+.dashboardFibery h2{margin:0;font-size:1.15rem}
+.dashboardFiberyCount{padding:3px 9px;border-radius:20px;background:var(--surface-muted,#edf2ff);color:var(--text,#25334a);font-size:.82rem}
+.dashboardFiberySearch{display:flex;align-items:center;gap:10px;max-width:600px;margin:16px 0}
+.dashboardFiberySearch input{width:100%;min-width:0}
+.dashboardFiberyList,.dashboardFiberyPending ul{list-style:none;padding:0;margin:12px 0}
+.dashboardFiberyTask{display:grid;grid-template-columns:145px minmax(0,1fr) 170px;gap:20px;padding:18px 0;border-bottom:1px solid var(--border,#d8e0eb)}
+.dashboardFiberyTask:last-child{border-bottom:0}
+.dashboardFiberyDetails,.dashboardFiberyDate,.dashboardFiberyLinks,.dashboardFiberyProject{display:flex;flex-direction:column;gap:6px;min-width:0}
+.dashboardFiberyDetails strong,.dashboardFiberyProject{overflow-wrap:anywhere}
+.dashboardFiberyDate,.dashboardFiberyTask small{font-size:.8rem;color:var(--muted,#62748d)}
+.dashboardFiberyLinks{align-items:flex-start;justify-content:center}
+.dashboardFiberyStatus{font-size:.8rem;font-weight:600;color:var(--success,#21805b)}
+.dashboardFiberyPagination{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:16px;font-size:.85rem}
+.dashboardFiberyPending{border:1px solid var(--border,#d8e0eb);border-radius:12px;padding:12px 16px;margin-top:18px}
+.dashboardFiberyPending summary{cursor:pointer;font-weight:600}
+.dashboardFiberyPending li{display:flex;flex-direction:column;gap:6px;padding:12px 0;overflow-wrap:anywhere}
+@media(max-width:700px){.dashboardFiberyTask{grid-template-columns:1fr;gap:12px}.dashboardFiberyDate{flex-direction:row;justify-content:space-between}.dashboardFiberyLinks{flex-direction:row;justify-content:space-between;align-items:center}.dashboardFiberySearch{max-width:100%}}

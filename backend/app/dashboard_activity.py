@@ -219,6 +219,13 @@ def listing(user: AuthUser, db: Session = Depends(get_db), before: str | None = 
     return feed(db, user, before=before, limit=limit)
 
 
+@router.get("/fibery-tasks")
+def fibery_tasks(user: AuthUser, db: Session = Depends(get_db), before: str | None = None,
+                 q: str = Query(default='', max_length=200), limit: int = Query(default=50, ge=1, le=200)):
+    from app.fibery_tasks import feed as tasks_feed
+    return tasks_feed(db, user, query=q, before=before, limit=limit)
+
+
 @router.get("/reports/{report_id}")
 def legacy_report(report_id: str, user: AuthUser, db: Session = Depends(get_db)):
     from app.mass_action_reports import entry
