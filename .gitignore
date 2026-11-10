@@ -30,3 +30,4 @@ infra/nginx/whitelists/*~
 infra/nginx/whitelists/whitelist_vpn.conf
 *.prepared
 certbot-renew.log
+infra/nginx/whitelists/whitelist_vpn.conf
