@@ -19,7 +19,28 @@ class FiberyConflict(FiberyError):
 
 
 def normalized_document(value):
-    return re.sub(r'\n{3,}', '\n\n', re.sub(r'(?m)^\* ', '- ', value.strip()))
+    # Fibery serializes soft line breaks as HTML and escapes literal Markdown.
+    # Keep fenced source verbatim: alternate markup is part of the audit evidence.
+    lines, fence = [], None
+    for line in value.strip().splitlines():
+        marker = re.match(r'^\s*(`{3,}|~{3,})', line)
+        if marker:
+            token = marker.group(1)
+            if fence is None:
+                fence = token
+            elif token[0] == fence[0] and len(token) >= len(fence):
+                fence = None
+            lines.append(line)
+        elif fence:
+            lines.append(line)
+        else:
+            line = re.sub(r'<br\s*/?>', '\n', line, flags=re.IGNORECASE)
+            line = re.sub(r'\\([\\`*_{}\[\]()#+\-.!>])', r'\1', line)
+            line = re.sub(r'(?m)^\* ', '- ', line)
+            if not line and lines and not lines[-1]:
+                continue
+            lines.append(re.sub(r'\n{3,}', '\n\n', line))
+    return '\n'.join(lines)
 
 
 class FiberyClient:

@@ -4,7 +4,7 @@ import json
 import httpx
 import pytest
 
-from app.fibery_client import FiberyClient, FiberyConflict, FiberyError
+from app.fibery_client import FiberyClient, FiberyConflict, FiberyError, normalized_document
 
 
 @pytest.fixture
@@ -85,3 +85,26 @@ def test_wrong_project_relation_stops_all_writes(remote):
     writes=list(state['writes'])
     with pytest.raises(FiberyConflict):create(client)
     assert state['writes']==writes
+
+
+def test_fibery_soft_breaks_and_literal_markdown_are_read_back(remote):
+    client,state=remote
+    description='Проект Fibery: #626_bet on red _CZ\nДата: 10.11.2026\n\n- Main: old.test → new.test.'
+    args=dict(task_id='deterministic-id',project_number='626',title='Переклей',description=description)
+    client.ensure_task(**args)
+    writes=list(state['writes'])
+    state['content']='Проект Fibery: #626_bet on red \\_CZ<br>Дата: 10.11.2026\n\n* Main: old.test → new.test.'
+    assert client.ensure_task(**args)['description_verified']
+    assert state['writes']==writes
+
+
+def test_document_normalization_preserves_alternate_source():
+    before='Разметка:\n```html\n<link href="https://a.test/_path/" />\n<br>\n\n\n```'
+    after=before.replace('<br>', '\n')
+    assert normalized_document(before)!=normalized_document(after)
+
+
+def test_document_normalization_keeps_actual_report_changes():
+    before='Main: old.test → new.test.<br>Внутренняя страница: /old/ → /new/'
+    after='Main: old.test → other.test.\nВнутренняя страница: /old/ → /new/'
+    assert normalized_document(before)!=normalized_document(after)
