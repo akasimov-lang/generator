@@ -620,11 +620,9 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
             <summary>Альтернейты: было / {operation.status === "confirmed" ? "стало" : "запрошено"}</summary>
             <div className="networkAlternatesComparison">
               <div><strong>Было</strong>{operation.alternates_before ? <>
-                <p>{operation.alternates_before.enabled ? "Включены" : "Выключены"}</p>
                 <pre>{operation.alternates_before.markup || "Разметка пустая"}</pre>
               </> : <p className="muted">Исходные альтернейты не сохранены.</p>}</div>
               <div><strong>{operation.status === "confirmed" ? "Стало" : "Запрошено"}</strong>{operation.alternates_after ? <>
-                <p>{operation.alternates_after.enabled ? "Включены" : "Выключены"}</p>
                 <pre>{operation.alternates_after.markup || "Разметка пустая"}</pre>
               </> : <p className="muted">Данные не сохранены.</p>}</div>
             </div>

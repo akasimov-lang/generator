@@ -22,7 +22,6 @@ export function LastReglueSummary({ last, observedAt, recent }: { last?: LastReg
         {(item.kind === "reglue" || item.kind === "fake_path") && <span>Внутряк: {path(item.old_path)} → {path(item.new_path)}</span>}
         {item.kind === "alternates" && <>
           <span>Подтверждено{item.initiator ? ` · ${item.initiator}` : ""}</span>
-          <span>{alternateState(item.alternates_before)} → {alternateState(item.alternates_after)}</span>
           <details className="lastAlternatesChange"><summary>Разметка до и после</summary>
             <AlternateMarkup label="Было" value={item.alternates_before}/>
             <AlternateMarkup label="Стало" value={item.alternates_after}/>
@@ -50,9 +49,6 @@ export function LastReglueSummary({ last, observedAt, recent }: { last?: LastReg
   </div>;
 }
 
-function alternateState(value?: AlternatesSnapshot | null) {
-  return value ? value.enabled ? "Включены" : "Выключены" : "Нет исходных данных";
-}
 function AlternateMarkup({label, value}: {label: string; value?: AlternatesSnapshot | null}) {
   return <div><strong>{label}</strong>{value ? <pre>{value.markup || "Разметка пустая"}</pre> : <span>Исходная разметка не сохранена.</span>}</div>;
 }

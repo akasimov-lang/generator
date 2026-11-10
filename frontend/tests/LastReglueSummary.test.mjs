@@ -57,7 +57,7 @@ test('detailed cached Main change replaces the legacy observation placeholder',(
 test('confirmed alternate update shares the sidebar history with timestamp and saved markup',()=>{
  const html=render({recent:[{id:'alts',kind:'alternates',at:'2026-11-09T11:48:00Z',initiator:'anton',old_main:null,new_main:null,old_path:null,new_path:null,alternates_before:{markup:'<link rel="alternate" hreflang="pl" href="https://old.test/" />',enabled:true},alternates_after:{markup:'<link rel="alternate" hreflang="pl" href="https://new.test/" />',enabled:false}}]});
  assert.match(html,/Обновление альтернейтов: 09.11.2026, 14:48:00 МСК/);
- assert.match(html,/Подтверждено · anton/);assert.match(html,/Включены → Выключены/);
+ assert.match(html,/Подтверждено · anton/);assert.doesNotMatch(html,/Включены|Выключены/);
  assert.match(html,/<summary>Разметка до и после<\/summary>/);
  assert.match(html,/https:\/\/old.test/);assert.match(html,/https:\/\/new.test/);
  assert.match(html,/&lt;link/);assert.doesNotMatch(html,/<link rel="alternate"|Внутряк:|Переклей:/);
@@ -65,7 +65,7 @@ test('confirmed alternate update shares the sidebar history with timestamp and s
 
 test('legacy alternate history distinguishes an unknown baseline from empty markup',()=>{
  const html=render({recent:[{id:'legacy',kind:'alternates',at:'2026-11-09T11:48:00Z',old_main:null,new_main:null,old_path:null,new_path:null,alternates_before:null,alternates_after:{markup:'',enabled:false}}]});
- assert.match(html,/Нет исходных данных → Выключены/);
+ assert.doesNotMatch(html,/Включены|Выключены|Нет исходных данных →/);
  assert.match(html,/Исходная разметка не сохранена/);assert.match(html,/Разметка пустая/);
 });
 
