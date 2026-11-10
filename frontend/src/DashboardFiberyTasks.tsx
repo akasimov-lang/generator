@@ -42,9 +42,11 @@ export function DashboardFiberyTasks({ api }: { api: Api }) {
   const [reload, setReload] = React.useState(0);
   const before = cursors.at(-1) || "";
   React.useEffect(() => {
-    const timer = window.setTimeout(() => { setQuery(input.trim()); setCursors([]); }, 300);
+    const next = input.trim();
+    if (next === query) return;
+    const timer = window.setTimeout(() => { setQuery(next); setCursors([]); }, 300);
     return () => window.clearTimeout(timer);
-  }, [input]);
+  }, [input, query]);
   React.useEffect(() => {
     let live = true;
     setData(null); setError("");
