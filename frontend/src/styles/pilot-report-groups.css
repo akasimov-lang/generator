@@ -1,0 +1,8 @@
+.pilotReportGroups{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:12px 0}
+.pilotReportGroups button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:34px;padding:5px 11px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--muted);font-family:inherit;font-size:13px;font-weight:600;line-height:1.4;cursor:pointer}
+.pilotReportGroups button:hover{color:var(--text);border-color:var(--brand-text,var(--primary))}
+.pilotReportGroups button.active{color:var(--brand-text,var(--primary));background:var(--brand-soft,var(--primary-soft));border-color:var(--brand-text,var(--primary))}
+.pilotReportGroups button:focus-visible{outline:2px solid var(--brand-text,var(--primary));outline-offset:3px}
+.pilotReportGroupCount{min-width:20px;padding:1px 5px;border-radius:5px;background:var(--surface-2);color:var(--text);font-size:11px;font-weight:700;line-height:1.4;font-variant-numeric:tabular-nums}
+.pilotReportGroups .active .pilotReportGroupCount{background:var(--brand-bg);color:#fff}
+@media(max-width:600px){.pilotReportGroups{gap:5px}.pilotReportGroups button{min-height:36px;padding:5px 8px}}

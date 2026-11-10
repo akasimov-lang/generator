@@ -11,14 +11,14 @@ from app import models
 from app.project_network import network_lock, NetworkConflict
 
 PREFIX = 'pilot-tasks:'
-VERSION = 1
+VERSION = 2
 KINDS = ('auto_pilot_preview', 'mass_reglue_list', 'maintenance_report', 'pilot_internal_pages',
          'pilot_content_publication', 'pilot_text', 'pilot_row_replan')
 
 
-def key(user, offset, limit, query):
+def key(user, offset, limit, query, group='all'):
     scope = {'user': user['username'], 'allowed': sorted(user['allowed_site_ids']) if user.get('allowed_site_ids') is not None else None,
-             'offset': offset, 'limit': limit, 'query': query.strip(), 'version': VERSION}
+             'offset': offset, 'limit': limit, 'query': query.strip(), 'group': group, 'version': VERSION}
     return PREFIX + hashlib.sha256(json.dumps(scope, sort_keys=True).encode()).hexdigest()
 
 
@@ -48,9 +48,9 @@ def revision(db, *, search=False):
     return hashlib.sha256(json.dumps(values, default=str).encode()).hexdigest()
 
 
-def tasks(db, user, offset=0, limit=50, *, q='', refresh=False):
+def tasks(db, user, offset=0, limit=50, *, q='', group='all', refresh=False):
     from app import auto_pilot
-    cache_key = key(user, offset, limit, q)
+    cache_key = key(user, offset, limit, q, group)
     stamp = revision(db, search=bool(q.strip()))
     cached = db.get(models.AutoReglueConfig, cache_key)
     value = (cached.value or {}) if cached else {}
@@ -62,7 +62,7 @@ def tasks(db, user, offset=0, limit=50, *, q='', refresh=False):
                 db.refresh(cached)
                 if not refresh and cached.value.get('revision') == stamp:
                     return deepcopy(cached.value['data'])
-            data = auto_pilot.tasks(db, user, offset, limit, q=q)
+            data = auto_pilot.tasks(db, user, offset, limit, q=q, group=group)
             # Cache construction never commits unrelated caller changes.
             from sqlalchemy.orm import Session
             try:
@@ -78,4 +78,4 @@ def tasks(db, user, offset=0, limit=50, *, q='', refresh=False):
     except NetworkConflict:
         # Another request is building the same view. Keep its last saved snapshot.
         if cached: return deepcopy(cached.value['data'])
-        return auto_pilot.tasks(db, user, offset, limit, q=q)
+        return auto_pilot.tasks(db, user, offset, limit, q=q, group=group)

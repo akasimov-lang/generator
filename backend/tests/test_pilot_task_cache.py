@@ -26,7 +26,7 @@ def test_saved_list_survives_new_sessions_and_skips_full_report_build(monkeypatc
 def test_cache_separates_users_permissions_search_and_pagination(monkeypatch):
     with session() as db:
         calls = []
-        def build(db, user, offset, limit, q=''):
+        def build(db, user, offset, limit, q='', group='all'):
             calls.append(1); return {'items': [], 'total': len(calls), 'has_more': False}
         monkeypatch.setattr('app.auto_pilot.tasks', build)
         assert cache.tasks(db, {'username': 'anton'})['total'] == 1

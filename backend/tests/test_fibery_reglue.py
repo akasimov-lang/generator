@@ -116,6 +116,23 @@ def test_late_confirmation_is_listed_as_started_but_does_not_change_window_resul
     assert evidence['alternates_after']['markup']==BEFORE
 
 
+def test_task_description_keeps_changes_but_omits_internal_journal(setup):
+    db, site, _, op = setup
+    operation(db, site, 'alternates', 30, alternateMarkup=AFTER, enableAlternates=True)
+    evidence = build(db, site, op)
+    description = evidence['description']
+    assert 'Main: old.test → new.test' in description
+    assert 'https://old.test/old/' in description and 'https://new.test/new/' in description
+    assert BEFORE in description and AFTER in description
+    assert 'Фейковая внутренняя страница:' in description
+    assert 'Проект PagePilot:' not in description and 'Проект Fibery:' not in description
+    assert 'Подтверждение переклея:' not in description and 'Окно сбора работ:' not in description
+    assert 'Включены.' not in description and 'Состояние включения' not in description
+    assert 'Работы в интервале:' not in description and 'Журнал PagePilot:' not in description
+    assert op.id not in description
+    assert evidence['events'] and evidence['window_start'] and evidence['project']
+
+
 def test_missing_fibery_mapping_waits_and_never_creates_in_an_arbitrary_project(setup):
     db,site,_,op=setup;site.fibery_name=None
     job=feature.ensure_job(db,op);db.commit();client=Client()

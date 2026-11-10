@@ -1,7 +1,6 @@
 """Freeze a six-minute work log from receipts, never from today's project cache."""
 from datetime import timedelta
 import re
-from urllib.parse import quote
 
 from sqlalchemy import or_, select
 
@@ -12,7 +11,6 @@ from app.reglue_history import MOSCOW, utc
 from app.reglue_journal import confirmed_at
 
 WINDOW = timedelta(minutes=3)
-SUCCESS = {'confirmed', 'completed', 'published', 'sitemap_done', 'index_submitted', 'ready', 'generated', 'approved'}
 LABELS = {
     'reglue': 'Переклей Main', 'reserve': 'Выбор резервного домена',
     'create_fake_main': 'Создание/выбор фейковой внутренней страницы',
@@ -152,9 +150,6 @@ def build(db, site, operation):
 def render(evidence):
     e = evidence
     lines = [f'Переклей: {text(e["source"])} → {text(e["target"])}', '',
-        f'Проект PagePilot: {text(e["project"])}', f'Проект Fibery: {text(e["fibery_name"])}',
-        f'Подтверждение переклея: {stamp(e["confirmed_at"])}.',
-        f'Окно сбора работ: {stamp(e["window_start"])} — {stamp(e["window_end"])} (3 минуты до и 3 минуты после).', '',
         f'- Main: {text(e["source"])} → {text(e["target"])}.',
         f'- Фейковая внутренняя страница: {e["old_path"] if e["old_path"] is not None else "исходное значение не сохранено"} → {e["new_path"] if e["new_path"] is not None else "результат не сохранён"}.', '']
     for side, heading, domain in [('before', 'Альтернейты до изменений', e['source']), ('after', 'Альтернейты после изменений', e['target'])]:
@@ -163,8 +158,6 @@ def render(evidence):
         if value is None:
             lines += ['- Исторический снимок не сохранён. Текущие настройки не подставлялись вместо него.', '']
             continue
-        enabled = value.get('enabled')
-        lines.append('- ' + ('Включены.' if enabled is True else 'Отключены.' if enabled is False else 'Состояние включения не сохранено.'))
         links = alternate_links(value['markup'])
         for link in links:
             href = link['href'].replace('{{settings.canon}}', domain or '')
@@ -176,12 +169,4 @@ def render(evidence):
         # Keep exact templates as well as the readable, domain-resolved list.
         fence = '`' * max(3, max((len(part) for part in re.findall(r'`+', value['markup'])), default=0) + 1)
         lines += ['', fence + 'html', value['markup'], fence, '']
-    lines += ['Работы в интервале:', '']
-    for event in e['events']:
-        status = ('подтверждено' if event['status'] in SUCCESS else 'начато в интервале; результат получен позднее'
-                  if event['status'] == 'pending_at_window_end' else 'не подтверждено: ' + event['status'])
-        actor = '; ' + text(event['actor']) if event.get('actor') else ''
-        lines.append(f'- {stamp(event["at"])} — {text(event["description"])} — {status}{actor}.')
-    lines += ['', f'Журнал PagePilot: https://ai-seo-content-panel.site/project-logs/{quote(e["project"], safe="")}/',
-              f'ID подтверждённого переклея: {e["operation_id"]}.']
-    return '\n'.join(lines)
+    return '\n'.join(lines).rstrip()

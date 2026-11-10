@@ -1,9 +1,10 @@
 import React from "react";
 import {Search,X} from "lucide-react";
 
-export function pilotTaskListPath(offset:number,query:string):string {
+export function pilotTaskListPath(offset:number,query:string,group="all"):string {
  const params=new URLSearchParams({offset:String(Math.max(0,offset))});
  if(query.trim())params.set("q",query.trim());
+ if(group!=="all")params.set("group",group);
  return `/auto-reglue/pilot/tasks?${params}`;
 }
 

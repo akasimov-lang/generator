@@ -1,3 +1,4 @@
+import {PilotReportGroups, reportGroupFromSearch, type ReportGroup, type ReportGroupCounts} from "./PilotReportGroups";
 import {readPilotTasks, savePilotTasks, clearPilotTasks} from "./pilotTaskCache";
 import { pilotDomainFilter } from "./pilotFilterNavigation";
 import React from "react";
@@ -65,8 +66,8 @@ function TitleH1({row}:{row:Row}) {
 }
 const date=(value:string)=>new Date(value).toLocaleString("ru-RU",{timeZone:"Europe/Moscow"});
 
-type Task={display_status?:string;planning_only?:boolean;report_id?:number;report_url?:string;name:string;mode:"preview"|"execution"|"maintenance";id:string;status:string;launched_at:string;finished_at?:string;total:number;counts:Record<string,number>};
-type Tasks={items:Task[];total:number;has_more:boolean};
+type Task={group?:ReportGroup;display_status?:string;planning_only?:boolean;report_id?:number;report_url?:string;name:string;mode:"preview"|"execution"|"maintenance";id:string;status:string;launched_at:string;finished_at?:string;total:number;counts:Record<string,number>};
+type Tasks={group_counts?:ReportGroupCounts;items:Task[];total:number;has_more:boolean};
 export function PilotReportIdentity({task}:{task:Pick<Task,"id"|"report_id"|"report_url"|"name"|"mode"> & Partial<Pick<Task,"planning_only"|"finished_at">>}) {
  const href=task.mode==="maintenance"?(task.report_url||`/auto-reglue/pilot/report?maintenance=${encodeURIComponent(task.id)}`):`/auto-reglue/pilot${task.mode==="execution"?"/logs":""}?id=${encodeURIComponent(task.id)}`;
  return <div className="pilotReportIdentity">{Number.isInteger(task.report_id)&&Number(task.report_id)>=3000&&<a className="pilotReportId" href={href}>{task.mode!=="preview"&&!task.planning_only?"Отчёт по плану":"План"} №{task.report_id}</a>}<strong className="pilotReportName"><a href={href} title={task.name}>{task.name}</a></strong></div>;
@@ -75,10 +76,19 @@ export function PilotReportIdentity({task}:{task:Pick<Task,"id"|"report_id"|"rep
 export function AutoPilotPage({api,logs=false,reports=false,renderProjects,cacheScope=""}:{api:Api;logs?:boolean;reports?:boolean;renderProjects?:ProjectRenderer;cacheScope?:string}) {
  const maintenance=new URLSearchParams(window.location.search).get("maintenance");
  const direct=new URLSearchParams(window.location.search).has("id")||(!reports&&(logs||new URLSearchParams(window.location.search).has("new")));
- const [history,setHistory]=React.useState<Tasks|null>(()=>cacheScope?readPilotTasks<Tasks>(cacheScope,pilotTaskListPath(0,"")):null),[error,setError]=React.useState(""),[offset,setOffset]=React.useState(0);
+ const [group,setGroup]=React.useState<ReportGroup>(()=>reportGroupFromSearch(window.location.search));
+ const [groupCounts,setGroupCounts]=React.useState<ReportGroupCounts>();
+ const [history,setHistory]=React.useState<Tasks|null>(()=>cacheScope?readPilotTasks<Tasks>(cacheScope,pilotTaskListPath(0,"",group)):null),[error,setError]=React.useState(""),[offset,setOffset]=React.useState(0);
  const [search,setSearch]=React.useState(""),[query,setQuery]=React.useState("");
  React.useEffect(()=>{const timer=setTimeout(()=>setQuery(search.trim()),250);return()=>clearTimeout(timer);},[search]);
- const changeSearch=(value:string)=>{setSearch(value);setOffset(0);setHistory(cacheScope?readPilotTasks<Tasks>(cacheScope,pilotTaskListPath(0,value.trim())):null);setError("");};
+ const changeSearch=(value:string)=>{setSearch(value);setGroupCounts(undefined);setOffset(0);setHistory(cacheScope?readPilotTasks<Tasks>(cacheScope,pilotTaskListPath(0,value.trim(),group)):null);setError("");};
+ const changeGroup=(value:ReportGroup)=>{
+  if(value===group)return;
+  setGroup(value);setOffset(0);setError("");
+  setHistory(cacheScope?readPilotTasks<Tasks>(cacheScope,pilotTaskListPath(0,query,value)):null);
+  const url=new URL(window.location.href);if(value==="all")url.searchParams.delete("group");else url.searchParams.set("group",value);
+  window.history.replaceState(window.history.state,"",url);
+ };
  const [deleting,setDeleting]=React.useState<string|null>(null);
  const deletingRef=React.useRef(false);
  const [refreshRequest,setRefreshRequest]=React.useState(0),[refreshing,setRefreshing]=React.useState(false);
@@ -97,8 +107,8 @@ export function AutoPilotPage({api,logs=false,reports=false,renderProjects,cache
  }
  React.useEffect(()=>{
   if(direct||maintenance||deleting||search.trim()!==query)return;
-  let active=true;const path=pilotTaskListPath(offset,query);
-  const saved=cacheScope?readPilotTasks<Tasks>(cacheScope,path):null;if(saved)setHistory(saved);
+  let active=true;const path=pilotTaskListPath(offset,query,group);
+  const saved=cacheScope?readPilotTasks<Tasks>(cacheScope,path):null;if(saved){setHistory(saved);setGroupCounts(saved.group_counts);}
   const load=async()=>{
    setRefreshing(true);const fresh=forceRefresh.current;forceRefresh.current=false;
    try {
@@ -106,19 +116,20 @@ export function AutoPilotPage({api,logs=false,reports=false,renderProjects,cache
     if(!active||deletingRef.current)return;
     if(offset>0&&offset>=data.total){setOffset(Math.max(0,Math.floor((data.total-1)/50)*50));return;}
     if(cacheScope)savePilotTasks(cacheScope,path,data);
-    setHistory(data);setError("");
+    setHistory(data);setGroupCounts(data.group_counts);setError("");
    } catch(e) {if(active)setError(e instanceof Error?e.message:"Не удалось загрузить задания");}
    finally {if(active)setRefreshing(false);}
   };
   const stop=createVisiblePoll({load,intervalMs:5000,immediate:true});
   return()=>{active=false;stop();};
- },[api,direct,maintenance,offset,deleting,search,query,cacheScope,refreshRequest]);
+ },[api,direct,maintenance,offset,deleting,search,query,group,cacheScope,refreshRequest]);
  if(maintenance)return <MaintenanceReport api={api} id={maintenance}/>;
- if(direct||(!reports&&!search.trim()&&!query&&history&&history.total===0))return <AutoPilotDetail api={api} logs={logs} renderProjects={renderProjects}/>;
+ if(direct||(!reports&&group==="all"&&!search.trim()&&!query&&history&&history.total===0))return <AutoPilotDetail api={api} logs={logs} renderProjects={renderProjects}/>;
  return <section className="dataPanel pilotPanel"><header className="pilotTools"><a className="button secondary compact" href="/auto-reglue"><ArrowLeft size={16}/>Массовые действия</a><h2>{reports?<ScrollText size={20}/>:<Bot size={20}/>} {reports?"Планы и отчёты":"Auto Pilot — массовые переклеи"}</h2><button type="button" className="button secondary compact" disabled={refreshing} onClick={()=>{forceRefresh.current=true;setRefreshRequest(n=>n+1);}}><RefreshCw size={16}/>{refreshing?"Обновляем…":"Обновить"}</button><a className="button primary compact" href="/auto-reglue/pilot?new=1"><Play size={16}/>Новый план</a></header>
+ <PilotReportGroups value={group} counts={groupCounts??history?.group_counts} onChange={changeGroup}/>
  <PilotTaskSearch value={search} onChange={changeSearch} total={history?.total}/>
  {error&&<p role="alert">{error}</p>}{!history&&!error&&<p role="status">Загружаем задания…</p>}
- {history?.total===0&&<p role="status">{query?"По этому запросу заданий не найдено.":"Черновиков и запусков пока нет. Нажмите «Новый план», чтобы перейти к планированию."}</p>}
+ {history?.total===0&&<p role="status">{query?"По этому запросу заданий не найдено.":group!=="all"?"В этой группе отчётов пока нет.":"Черновиков и запусков пока нет. Нажмите «Новый план», чтобы перейти к планированию."}</p>}
  {history&&history.total>0&&<><table className="pilotTable pilotTasks"><thead><tr><th>План / выполнение · МСК</th><th>Проектов</th><th>Выполнено</th><th>Пропущено</th><th>Ошибок</th><th>Состояние</th><th>Завершено · МСК</th><th>Задание</th></tr></thead><tbody>{history.items.map(task=><tr key={task.id}><td><PilotReportIdentity task={task}/><small>{date(task.launched_at)}</small></td><td>{task.total}</td><td>{task.counts.completed||0}</td><td>{task.counts.skipped||0}</td><td>{(task.counts.failed||0)+(task.counts.partial||0)}</td><td>{task.display_status||(task.mode==="preview"?(task.status==="completed"?"План готов":"Планирование"):labels[task.status]||task.status)}</td><td>{task.finished_at?date(task.finished_at):"—"}</td><td>{task.mode==="maintenance"?<span className="pilotReportActions"><a href={task.report_url}>Открыть отчёт</a><button type="button" className="pilotDeleteReport" aria-label={`Удалить отчёт из списка: ${task.name}`} title="Удалить отчёт из списка" disabled={deleting!==null} onClick={()=>void deleteDraft(task)}>{deleting===task.id?<RefreshCw size={16}/>:<X size={18}/>}</button></span>:task.mode==="preview"?<><a href={`/auto-reglue/pilot?id=${task.id}`}>Открыть план</a><button type="button" className="button secondary compact pilotDeleteDraft" aria-label={`Удалить черновик: ${task.name}`} disabled={deleting!==null} onClick={()=>void deleteDraft(task)}><Trash2 size={14}/>{deleting===task.id?"Удаляем…":"Удалить черновик"}</button></>:<><span className="pilotReportActions"><a href={`/auto-reglue/pilot/logs?id=${task.id}`}>Открыть таблицу</a><button type="button" className="pilotDeleteReport" aria-label={`Удалить отчёт из списка: ${task.name}`} title="Удалить отчёт из списка" disabled={deleting!==null} onClick={()=>void deleteDraft(task)}>{deleting===task.id?<RefreshCw size={16}/>:<X size={18}/>}</button></span><br/><a href={`/auto-reglue/pilot/logs?id=${task.id}&issues=1`}>Ошибки и примечания</a></>}</td></tr>)}</tbody></table><footer className="pilotTools"><button type="button" className="button secondary compact" disabled={!offset} onClick={()=>setOffset(Math.max(0,offset-50))}>Назад</button><span>{offset+1}–{offset+history.items.length} из {history.total}</span><button type="button" className="button secondary compact" disabled={!history.has_more} onClick={()=>setOffset(offset+50)}>Далее</button></footer></>}
  </section>;
 }

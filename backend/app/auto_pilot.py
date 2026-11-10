@@ -98,7 +98,7 @@ def draft_name(job):
     return f"{prefix}{', '.join(scope.brands) or 'Все бренды'} · {', '.join(scope.geos) or 'Все ГЕО'} · {count} проектов · {date}"
 
 
-def tasks(db, user, offset=0, limit=50, *, q=''):
+def tasks(db, user, offset=0, limit=50, *, q='', group='all'):
     """Saved drafts and launches; reading never creates or dispatches work."""
     from app import maintenance_reports, report_ids
     numbers = report_ids.ensure(db)
@@ -117,10 +117,12 @@ def tasks(db, user, offset=0, limit=50, *, q=''):
         visible.append(job)
     from app.pilot_task_search import order_and_filter
     visible = order_and_filter(db, visible, q, numbers)
+    from app.pilot_report_groups import partition, group as report_group
+    visible, group_counts = partition(visible, group)
     items=[]
     for job in visible[offset:offset+limit]:
         if job.kind == maintenance_reports.KIND:
-            items.append({**maintenance_reports.summary(job), 'report_id': numbers[job.id]})
+            items.append({**maintenance_reports.summary(job), 'report_id': numbers[job.id], 'group': report_group(job)})
             continue
         snapshot=launch.view(db,job)
         from app.pilot_internal_pages import snapshot as pages_snapshot, merge_row, plan_options
@@ -134,10 +136,10 @@ def tasks(db, user, offset=0, limit=50, *, q=''):
         visible_status = metadata['status']
         from app.report_status import metadata as status_metadata
         lifecycle = status_metadata(job, status=visible_status, finished_at=metadata['finished_at'])
-        items.append({'id':job.id,'report_id':numbers[job.id],'name':draft_name(job),'mode':'preview' if job.kind==launch.PREVIEW_KIND else 'execution','status':visible_status,'created_at':job.created_at,
+        items.append({'id':job.id,'group':report_group(job),'report_id':numbers[job.id],'name':draft_name(job),'mode':'preview' if job.kind==launch.PREVIEW_KIND else 'execution','status':visible_status,'created_at':job.created_at,
             'launched_at':job.payload.get('launched_at') or job.started_at or job.created_at,
             'finished_at':metadata['finished_at'],'total':len(snapshot['items']),'counts':snapshot['counts'],**lifecycle})
-    return {'items':items,'total':len(visible),'has_more':offset+limit<len(visible)}
+    return {'items':items,'total':len(visible),'has_more':offset+limit<len(visible),'group_counts':group_counts}
 
 
 def scope_sites(db, user):

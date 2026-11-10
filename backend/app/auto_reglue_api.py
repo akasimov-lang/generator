@@ -550,9 +550,9 @@ def latest_pilot(user: AuthUser, db: Session = Depends(get_db)):
 
 
 @router.get('/pilot/tasks')
-def pilot_tasks(user: AuthUser, offset: int = Query(0,ge=0), limit: int = Query(50,ge=1,le=100), q: str = Query('',max_length=200), refresh: bool = False, db: Session = Depends(get_db)):
+def pilot_tasks(user: AuthUser, offset: int = Query(0,ge=0), limit: int = Query(50,ge=1,le=100), q: str = Query('',max_length=200), group: str = Query('all', pattern='^(all|layout|showcases|reglues|brands|other)$'), refresh: bool = False, db: Session = Depends(get_db)):
     from app import pilot_task_cache
-    return pilot_task_cache.tasks(db,user,offset,limit,q=q,refresh=refresh)
+    return pilot_task_cache.tasks(db,user,offset,limit,q=q,group=group,refresh=refresh)
 
 
 @router.get('/maintenance-reports/{report_id}')

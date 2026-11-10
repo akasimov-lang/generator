@@ -1,5 +1,5 @@
 // Small per-tab snapshots. The authenticated user and current permission scope must match.
-const PREFIX = "pagepilot-plan-list-v1:";
+const PREFIX = "pagepilot-plan-list-v2:";
 const MAX_AGE = 15 * 60_000;
 type Store = Pick<Storage, "getItem" | "setItem" | "removeItem" | "key" | "length">;
 export function readPilotTasks<T>(scope:string,path:string,storage?:Store):T|null {
