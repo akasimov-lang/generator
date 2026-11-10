@@ -2,7 +2,7 @@
 import base64
 import binascii
 from io import BytesIO
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, unquote
 
 from fastapi import HTTPException
 from PIL import Image, UnidentifiedImageError
@@ -80,11 +80,21 @@ def url(project, record):
         for item in gallery.get('data', []):
             if logo_id is not None and str(item.get('id')) == str(logo_id):
                 src = item.get('src', '')
-                if isinstance(src, str) and src.startswith('/uploads/'):
-                    canon = (project.get('settings') or {}).get('canon', '')
-                    if canon:
-                        origin = canon if '://' in canon else 'https://' + canon
-                        return origin.rstrip('/') + src
+                if isinstance(src, str) and src.startswith('/'):
+                    # Legacy project logos also live in /casinos/, /images/ or
+                    # the project root. Resolve them against Main, not PagePilot.
+                    path = unquote(src)
+                    if path.startswith('//') or '\\' in path or '..' in path.split('/'):
+                        return None
+                    canon = (project.get('settings') or {}).get('canon')
+                    if not isinstance(canon, str) or not canon:
+                        return None
+                    try:
+                        origin = urlsplit(canon if '://' in canon else 'https://' + canon)
+                    except ValueError:
+                        return None
+                    if origin.scheme in {'http', 'https'} and origin.netloc and not origin.username:
+                        return f'{origin.scheme}://{origin.netloc}' + src
                 if isinstance(src, str) and urlsplit(src).scheme in {'https', 'http'}:
                     return src
     return None

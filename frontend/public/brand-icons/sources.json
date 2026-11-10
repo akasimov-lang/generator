@@ -2,233 +2,767 @@
   {
     "brand": "Bet365",
     "file": "bet365-favicon.png",
-    "source": "https://www.google.com/s2/favicons?domain=www.bet365.com&sz=128"
+    "source": "https://www.google.com/s2/favicons?domain=www.bet365.com&sz=128",
+    "sha256": "8afc84b7d915b41eae37f1bf7dcf72734e92250ae23084482676c2d519a7cc17"
   },
   {
     "brand": "1xBet",
     "file": "1xbet-favicon.png",
-    "source": "https://www.google.com/s2/favicons?domain=1xbet.com&sz=128"
+    "source": "https://www.google.com/s2/favicons?domain=1xbet.com&sz=128",
+    "sha256": "3ed9666f1fa02846b5360d2f8fdd36133e41372e0f470e36f9bdee666f841298"
   },
   {
     "brand": "1win",
     "file": "1win-favicon.png",
-    "source": "https://1win.com/resources/v1/plain/favicons/apple-touch-icon-v4.png"
+    "source": "https://1win.com/resources/v1/plain/favicons/apple-touch-icon-v4.png",
+    "sha256": "fbc8fd272a67540db573fa25499bae953e9adc158af7f6bfbd75bb868029ba19"
   },
   {
     "brand": "Betano",
     "file": "betano-favicon.png",
-    "source": "https://www.google.com/s2/favicons?domain=www.betano.com&sz=128"
+    "source": "https://www.google.com/s2/favicons?domain=www.betano.com&sz=128",
+    "sha256": "1f24bc8e23d657a7af99d41a81514b97652e6de91c5f00763581bfb424a05255"
   },
   {
     "brand": "888casino",
     "file": "888casino-favicon.png",
-    "source": "https://www.888slots.de/content/dam/holdings888/888casino/common/icons/Casino-favicon.ico"
+    "source": "https://www.888slots.de/content/dam/holdings888/888casino/common/icons/Casino-favicon.ico",
+    "sha256": "afb366d188aeeb4a81e758c314a024d792a1a01eb4c66f91ccdeb41579fcecc7"
   },
   {
     "brand": "Betfair",
     "file": "betfair-favicon.png",
-    "source": "https://www.google.com/s2/favicons?domain=www.betfair.com&sz=128"
+    "source": "https://www.google.com/s2/favicons?domain=www.betfair.com&sz=128",
+    "sha256": "de29244bbda47bc44eeb5f71e3d95f691184928c72c1d8c3b4240d73c77e2fcc"
   },
   {
     "brand": "Casumo",
     "file": "casumo-favicon.png",
-    "source": "https://www.google.com/s2/favicons?domain=www.casumo.com&sz=128"
+    "source": "https://www.google.com/s2/favicons?domain=www.casumo.com&sz=128",
+    "sha256": "a1c74ff2079a1bf301d977f79b91b7fb093b91c32949ada8d9a08ccbbdf14591"
   },
   {
     "brand": "Betsson",
     "file": "betsson-favicon.png",
-    "source": "https://www.google.com/s2/favicons?domain=www.betsson.com&sz=128"
+    "source": "https://www.google.com/s2/favicons?domain=www.betsson.com&sz=128",
+    "sha256": "baaa0650557927738cf2a8068d940414d666702c93bf25dd5271b394ce8af79e"
   },
   {
     "brand": "DraftKings",
     "file": "draftkings-favicon.png",
-    "source": "https://www.google.com/s2/favicons?domain=www.draftkings.com&sz=128"
+    "source": "https://www.google.com/s2/favicons?domain=www.draftkings.com&sz=128",
+    "sha256": "8efc7e36dd41cddf753f646003852c30e58763df21a22d7bc6fbc3b6dc7b5a2a"
   },
   {
     "brand": "Bwin",
     "file": "bwin-favicon.png",
-    "source": "https://www.google.com/s2/favicons?domain=www.bwin.com&sz=128"
+    "source": "https://www.google.com/s2/favicons?domain=www.bwin.com&sz=128",
+    "sha256": "205fa53d19b39349bbd0ae900ff2246b8f4ff46929bc722e1211d6ba51b0201d"
   },
   {
     "brand": "Dafabet",
     "file": "dafabet-favicon.png",
-    "source": "https://www.dafabet.com/en/dafa/images/favicon.ico"
+    "source": "https://www.dafabet.com/en/dafa/images/favicon.ico",
+    "sha256": "55ff83c6738e1e5bedc6b63b402e23c312d7988d1bf137cefa842264280b5fdf"
   },
   {
     "brand": "Fonbet",
     "file": "fonbet-favicon.png",
-    "source": "https://www.google.com/s2/favicons?domain=www.fonbet.ru&sz=128"
+    "source": "https://www.google.com/s2/favicons?domain=www.fonbet.ru&sz=128",
+    "sha256": "e7b3347936db912f427535516405f1b8aea1c89977fabe0028ef88640a9dc6ee"
   },
   {
     "brand": "Melbet",
     "file": "melbet-favicon.png",
-    "source": "https://www.google.com/s2/favicons?domain=melbet.com&sz=128"
+    "source": "https://www.google.com/s2/favicons?domain=melbet.com&sz=128",
+    "sha256": "9e0d691d683957abaa0024871383984d891dc858c9ae0b1407ece58e28ab6f46"
   },
   {
     "brand": "LeoVegas",
     "file": "leovegas-favicon.png",
-    "source": "https://cdn.leovegas.com/frontend/8.1.8/public/static/img/favicon.png"
+    "source": "https://cdn.leovegas.com/frontend/8.1.8/public/static/img/favicon.png",
+    "sha256": "17dd68ddc3a79ec20047b5444a8bf30f0ed774186c92f883b25b16ab82f53340"
   },
   {
     "brand": "FanDuel",
     "file": "fanduel-favicon.png",
-    "source": "https://iwa-assets.fanduel.com/fd-iwa-assets/graphics/fd-dfs-favicon.ico"
+    "source": "https://iwa-assets.fanduel.com/fd-iwa-assets/graphics/fd-dfs-favicon.ico",
+    "sha256": "c9f4abf82c7b83d64d5cc198807cb7afc42951edf88dab72cd3be94b84529796"
   },
   {
     "brand": "Mostbet",
     "file": "mostbet-favicon.png",
-    "source": "https://mostbet.com"
+    "source": "https://mostbet.com",
+    "sha256": "bc15ecdb1c7da250b3e36ef31044178c15cd7883a2a679ce05fa074dbe96c956"
   },
   {
     "brand": "22Bet",
     "file": "22bet-favicon.png",
-    "source": "https://www.google.com/s2/favicons?domain=22bet.com&sz=128"
+    "source": "https://www.google.com/s2/favicons?domain=22bet.com&sz=128",
+    "sha256": "97b6b88e31e1f181d08c951f87f870ba0ee8d95f3341356362fab150e8526e45"
   },
   {
     "brand": "Pinnacle",
     "file": "pinnacle-favicon.png",
-    "source": "https://www.google.com/s2/favicons?domain=www.pinnacle.com&sz=128"
+    "source": "https://www.google.com/s2/favicons?domain=www.pinnacle.com&sz=128",
+    "sha256": "e62b494da04b79fee860e843c104e61ba90e6769cae7270ccd574de19548344b"
   },
   {
     "brand": "Parimatch",
     "file": "parimatch-favicon.png",
-    "source": "https://parimatchde.net/content/uploads/icons/COM1/favicon.ico"
+    "source": "https://parimatchde.net/content/uploads/icons/COM1/favicon.ico",
+    "sha256": "520a0e4240e361d0766b8468d010a1ec02467ce8c5163f33a571569a4591e16d"
   },
   {
     "brand": "Pin-Up",
     "file": "pinup-favicon.png",
-    "source": "https://pinup-online-az.co.com/wp-content/uploads/2025/02/pin-up-favicon-150x150.png"
+    "source": "https://pinup-online-az.co.com/wp-content/uploads/2025/02/pin-up-favicon-150x150.png",
+    "sha256": "b3f24aa98fd3fc0753ca3577dfc786e39287f9ad91e1eb44b09f2cdb284b0c27"
   },
   {
     "brand": "Pinco",
     "file": "pinco-favicon.png",
-    "source": "https://thegarageboardshops.com/storage/favicon/KymWJHP0IZ1P25tjHYbQAVmgkwT5wj1tTLl4R2cK.png"
+    "source": "https://thegarageboardshops.com/storage/favicon/KymWJHP0IZ1P25tjHYbQAVmgkwT5wj1tTLl4R2cK.png",
+    "sha256": "99a758e509a60a9d35aa350c676d9680f58de4926622113310b5ebe5699f7563"
   },
   {
     "brand": "Stake",
     "file": "stake-favicon.png",
-    "source": "https://www.google.com/s2/favicons?domain=stake.com&sz=128"
+    "source": "https://www.google.com/s2/favicons?domain=stake.com&sz=128",
+    "sha256": "6e849ebcdbe39f7d6060bd8c9aa58232fbfef558d756a450401d5773f8bc3fa6"
   },
   {
     "brand": "Vavada",
     "file": "vavada-favicon.png",
-    "source": "https://www.google.com/s2/favicons?domain=vavada.com&sz=128"
+    "source": "https://www.google.com/s2/favicons?domain=vavada.com&sz=128",
+    "sha256": "81f1382a9c459d55b34a53348ae0c72d22f412f96e5bdf1d3dce9bef2bb27e05"
   },
   {
     "brand": "William Hill",
     "file": "williamhill-favicon.png",
-    "source": "https://www.williamhill.com/germany/images/favicon.ico"
+    "source": "https://www.williamhill.com/germany/images/favicon.ico",
+    "sha256": "e0b25518dd1550218b1647dcba4ce629de86695544acd2ac3d0332c2bd416e39"
   },
   {
     "brand": "PokerStars",
     "file": "pokerstars-favicon.png",
-    "source": "https://cms.rationalcdn.com/v3/assets/blteecf9626d9a38b03/blt224bf63c63ac22dd/6672a98851f656efd1b74d22/favicon.ico"
+    "source": "https://cms.rationalcdn.com/v3/assets/blteecf9626d9a38b03/blt224bf63c63ac22dd/6672a98851f656efd1b74d22/favicon.ico",
+    "sha256": "daa459a923ed810ef3c41baf178720fbe62262acc58ffaecf82c102fcfe8f8a1"
   },
   {
     "brand": "Unibet",
     "file": "unibet-favicon.png",
-    "source": "https://www.unibet.com/kwp-bundle-store/kwp-assets/0.12.0/assets/unibet/favicon.png"
+    "source": "https://www.unibet.com/kwp-bundle-store/kwp-assets/0.12.0/assets/unibet/favicon.png",
+    "sha256": "71c007dcb8c4977f8fcc6be3b9c609bbd501bfac250774467abcc61a151a1ac9"
   },
   {
     "brand": "Maxa",
     "file": "maxa.png",
-    "source": "https://maxa-casino.online/uploads/img/maxa casino fav.png"
+    "source": "https://maxa-casino.online/uploads/img/maxa casino fav.png",
+    "sha256": "aab318e863743a594e8c2d82b40ab15647fb87c658e63ea0aadf857bac580c6d"
   },
   {
     "brand": "Bankobet",
     "file": "bankobet.png",
-    "source": "https://primehill.com.tr/favicon-bankobet.png"
+    "source": "https://primehill.com.tr/favicon-bankobet.png",
+    "sha256": "0df23f99be0d5b8913d258cb5180f9a1ca0a4c13da0cdb1243d26a91bfd60efd"
   },
   {
     "brand": "Fontan",
     "file": "fontan.png",
-    "source": "https://fontancasinopl.com/uploads/img/fountain.png"
+    "source": "https://fontancasinopl.com/uploads/img/fountain.png",
+    "sha256": "c8b68645f15da832aac8a867af31080d016e3969fb34e659031161d0bf538d50"
   },
   {
     "brand": "SavaSpin",
     "file": "savaspin.png",
-    "source": "https://hotelxinzo.es/uploads/img/Group 325607.png"
+    "source": "https://hotelxinzo.es/uploads/img/Group 325607.png",
+    "sha256": "35c20f3386799cc1aceaa6f7628d88eb15c2405ac905d76b52d27b4615d43836"
   },
   {
     "brand": "MerkurXtip",
     "file": "merkurxtip.png",
-    "source": "https://valleybusinesscentre.com/uploads/img/fav-MerkurXtip.png"
+    "source": "https://valleybusinesscentre.com/uploads/img/fav-MerkurXtip.png",
+    "sha256": "84469e8274175c6ca0b9cd429546b9825f354129c283fa304f57527271d228dd"
   },
   {
     "brand": "Fairspin",
     "file": "fairspin.png",
-    "source": "https://fair-spin-bonus-hungarian.com/uploads/img/favicon.png"
+    "source": "https://fair-spin-bonus-hungarian.com/uploads/img/favicon.png",
+    "sha256": "aba00992d5150797e20ce9a9c5a94a03a59a0f4b1afa5c4cfffe72ea3efbfc78"
   },
   {
     "brand": "20Bet",
     "file": "20bet.png",
-    "source": "https://20bet-cas.com/favicon.png"
+    "source": "https://20bet-cas.com/favicon.png",
+    "sha256": "91a93a697bf25d60a84f87ce7140c4dedf0b57c34f4e53d5c237166d1fd2f7ac"
   },
   {
     "brand": "Realz",
     "file": "realz.png",
-    "source": "https://realzcasino0.de/uploads/img/Realz-Casino (2).png"
+    "source": "https://realzcasino0.de/uploads/img/Realz-Casino (2).png",
+    "sha256": "48af5110710e4a50548d7a2580e48b9fd199cd94fde77cac6b35e5a6e546789a"
   },
   {
     "brand": "Chance Casino",
     "file": "chancecasino.png",
-    "source": "https://chance-czech.online/uploads/img/fav-Chance.png"
+    "source": "https://chance-czech.online/uploads/img/fav-Chance.png",
+    "sha256": "6fef9527cb220b17e3265dddbd2aa8300adb5e8b049c32cf46185a7ea6fe62d7"
   },
   {
     "brand": "Vinder",
     "file": "vinder.png",
-    "source": "https://vinder-casino-dk.online/uploads/img/fav-vinder casino.png"
+    "source": "https://vinder-casino-dk.online/uploads/img/fav-vinder casino.png",
+    "sha256": "c46087255ba6263d3ae4723025af8c81150d16d7b8dff3ffa5a8117b7423f1f5"
   },
   {
     "brand": "N1 casino",
     "file": "n1casino.png",
-    "source": "https://n1casinosonline.com/favicon.png"
+    "source": "https://n1casinosonline.com/favicon.png",
+    "sha256": "948523774a420bad372f2d8c821b2063031c08a93d94bf158d29e4bf5d569a14"
   },
   {
     "brand": "Fair Go",
     "file": "fairgo.png",
-    "source": "https://au-fairgocasinos.com/favicon.png"
+    "source": "https://au-fairgocasinos.com/favicon.png",
+    "sha256": "86403ed60462a7ead1a40def24a33ead0508ad0c05c001a63e867343da25646d"
   },
   {
     "brand": "BBRBET",
     "file": "bbrbet.png",
-    "source": "https://bbrbet-colombia.com/favicon.svg"
+    "source": "https://bbrbet-colombia.com/favicon.svg",
+    "sha256": "d550623cfc9e6b75ed2fe52aaefdfcce26f5600870e1d061a3837bd4f0f66c26"
   },
   {
     "brand": "Bizzo",
     "file": "bizzo.png",
-    "source": "https://justinlincoln.com/favicon.svg"
+    "source": "https://justinlincoln.com/favicon.svg",
+    "sha256": "011dbcf29d3e23dadad057c2c40f5677f392c8045fe84c5152e0fbfc06734612"
   },
   {
     "brand": "Ozwin",
     "file": "ozwin.png",
-    "source": "https://rebelliousdata.com/logo-ozwin.svg"
+    "source": "https://rebelliousdata.com/logo-ozwin.svg",
+    "sha256": "6c0b69f9b8a732b33884eb00b98e11481ad01a7f05c2a7d093af214e12240eb5"
   },
   {
     "brand": "Verde Casino",
     "file": "verdecasino.png",
-    "source": "https://ideenkarussell-familienarbeit.de/uploads/img/fav-verde.png"
+    "source": "https://ideenkarussell-familienarbeit.de/uploads/img/fav-verde.png",
+    "sha256": "b4fc6e8ad4b9a6129e6da6994d56c509293178f57987dae652b88ad5fae5ced3"
   },
   {
     "brand": "Vulkan Vegas",
     "file": "vulkanvegas.png",
-    "source": "https://at-vulkan-spiele.com/uploads/img/webp/logo.webp"
+    "source": "https://at-vulkan-spiele.com/uploads/img/webp/logo.webp",
+    "sha256": "6f039ecfaa3f43efb4f5a341007337694fd72a2bd6c1ca341c8e0ab9df33e78a"
   },
   {
     "brand": "Lemon Casino",
     "file": "lemoncasino.png",
-    "source": "https://lemoncasino-login.pl/uploads/img/webp/lemon.webp"
+    "source": "https://lemoncasino-login.pl/uploads/img/webp/lemon.webp",
+    "sha256": "52633d0ed694f7bba4a850472501f0c37ec021cf6071b216d8a9b024f56a7f62"
   },
   {
     "brand": "Pelican",
     "file": "pelican.png",
-    "source": "https://d2anrf6jptfkek.cloudfront.net/41c8e8de-e63c-442a-92e7-69bd91801bd8-apple-icon-180x180.webp"
+    "source": "https://d2anrf6jptfkek.cloudfront.net/41c8e8de-e63c-442a-92e7-69bd91801bd8-apple-icon-180x180.webp",
+    "sha256": "f209935eb4eb25c44f39d4d56d448cef88ffb172669dbb6882eb93f0efc1d20f"
   },
   {
     "brand": "BetOnRed",
     "file": "betonred-favicon.png",
     "source": "https://icons.duckduckgo.com/ip3/betonred.com.ico",
     "official_site": "https://betonred.com/",
-    "retrieved_at": "2026-10-27"
+    "retrieved_at": "2026-10-27",
+    "sha256": "b177732369d0e2d8031af4de38ef11bc794d1fa7cfa0aae2246b6bd073efe31e"
+  },
+  {
+    "brand": "1xslots",
+    "file": "1xslots.png",
+    "source": "https://flyup.md/favicon.png",
+    "source_page": "https://flyup.md",
+    "source_kind": "existing_project_asset",
+    "sha256": "39b7169a03a12b41d393a0948db301cac5a2b2a61c1cf2a502963965909001dc",
+    "dimensions": [
+      48,
+      48
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "69games",
+    "file": "69games.webp",
+    "source": "https://the-lic.com/uploads/img/fav-69Games.png",
+    "source_page": "https://the-lic.com",
+    "source_kind": "existing_project_asset",
+    "sha256": "3872bb001593f61576e6b1acbf6ec3e226aac071c816da36f554acf51e9194a1",
+    "dimensions": [
+      32,
+      32
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Alev",
+    "file": "alev.png",
+    "source": "https://alevcasino.besthealthsupplementreviews.com/uploads/img/fav.png",
+    "source_page": "https://alevcasino.besthealthsupplementreviews.com",
+    "source_kind": "existing_project_asset",
+    "sha256": "c6ede4540b4a03d4cb867e0c286b31a780238d1446e16ce46ed92f262ac72583",
+    "dimensions": [
+      60,
+      60
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Aviator",
+    "file": "aviator.webp",
+    "source": "https://www.afocea.com/favicon.webp",
+    "source_page": "https://www.afocea.com",
+    "source_kind": "existing_project_asset",
+    "sha256": "920bbfdbda5e5c38b1b6ee7151b37066c264eb1233b376f9f4db03fea5a3d9e1",
+    "dimensions": [
+      128,
+      128
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "BetAlice",
+    "file": "betalice.webp",
+    "source": "https://betalice-de.site/uploads/img/webp/BetAlice.webp",
+    "source_page": "https://betalice-de.site",
+    "source_kind": "existing_project_asset",
+    "sha256": "6e4d786041678ca566bf2662d232ef0ba5ffb1953b6dfe71207f43dbd4d6dff4",
+    "dimensions": [
+      246,
+      80
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "CatCasino",
+    "file": "catcasino.svg",
+    "source": "https://xn--31-6kcinbba4db2btn0f.xn--p1ai/favicon.svg",
+    "source_page": "https://xn--31-6kcinbba4db2btn0f.xn--p1ai",
+    "source_kind": "existing_project_asset",
+    "sha256": "d1747928673cdfd694feeacbad1d9bf3c0f833e276403be6ce539f7a25916563",
+    "dimensions": null,
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Dragonia",
+    "file": "dragonia.webp",
+    "source": "https://legadanzafirenze.it/uploads/img/fav-dragonia.png",
+    "source_page": "https://legadanzafirenze.it",
+    "source_kind": "existing_project_asset",
+    "sha256": "b4b2f4981595a85cf0dc59c88ed69b00ace8a8eeb3ab502ee85b7e2747fc3e2b",
+    "dimensions": [
+      64,
+      64
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "FUGU",
+    "file": "fugu.webp",
+    "source": "https://fugu-casino-2.heggelbach-terrassenevent.de/uploads/img/fav-fugu casino.png",
+    "source_page": "https://fugu-casino-2.heggelbach-terrassenevent.de",
+    "source_kind": "existing_project_asset",
+    "sha256": "b8c57892917e8a7764f9ec1e024068b968397a713e27e83e1fab1035da0593c2",
+    "dimensions": [
+      60,
+      60
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Gama",
+    "file": "gama.svg",
+    "source": "https://adv1.ru/favicon.svg",
+    "source_page": "https://adv1.ru",
+    "source_kind": "existing_project_asset",
+    "sha256": "c3f7f184b83161acc829ccec81882dc576fed281cfee4459fa6dfb3cad230010",
+    "dimensions": null,
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Glory",
+    "file": "glory.png",
+    "source": "https://great-wallofchina.com/favicon.png",
+    "source_page": "https://great-wallofchina.com",
+    "source_kind": "existing_project_asset",
+    "sha256": "6e55d9cb00796a02da33d094a6bc5ea8708d8d278d0bd3835a3b752a9447c1ec",
+    "dimensions": [
+      32,
+      32
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Hugo Casino",
+    "file": "hugocasino.webp",
+    "source": "https://univerb.dk/uploads/img/fav-Hugo.png",
+    "source_page": "https://univerb.dk",
+    "source_kind": "existing_project_asset",
+    "sha256": "ebf8ac63322d8c25c4d8fc2c0b485acaf7fd0a419e1e06c071311c032578338b",
+    "dimensions": [
+      32,
+      32
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Ice Casino",
+    "file": "icecasino.webp",
+    "source": "https://all2betting.com/uploads/img/fav-ice casino.png",
+    "source_page": "https://all2betting.com",
+    "source_kind": "existing_project_asset",
+    "sha256": "8a5366558d2fe64cb4d3362c5950e4b3ee916b2ec6a6ad71a8b0e263ce7b6305",
+    "dimensions": [
+      60,
+      60
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Infinity",
+    "file": "infinity.webp",
+    "source": "https://www.forloveandlittles.com/uploads/img/favicon.png",
+    "source_page": "https://www.forloveandlittles.com",
+    "source_kind": "existing_project_asset",
+    "sha256": "e72806a28318fa77f0f85d2433f02b075126dcc0de85018459d0ac0578be5c5e",
+    "dimensions": [
+      60,
+      60
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Joe Fortune",
+    "file": "joefortune.webp",
+    "source": "https://joe-fortune-au.com/uploads/img/favicon.png",
+    "source_page": "https://joe-fortune-au.com",
+    "source_kind": "existing_project_asset",
+    "sha256": "ebd6f4da3d629c818d34998a17045e83964a345016fe9ae5198def6a8a239940",
+    "dimensions": [
+      55,
+      55
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Kajot Casino",
+    "file": "kajotcasino.png",
+    "source": "https://en.kajot.cz/wp-content/themes/kajot-template/images/kajot-logo.png",
+    "source_page": "https://en.kajot.cz/media/",
+    "source_kind": "official",
+    "sha256": "3d1cc8ee3474f394b47f4e61d41241d91d98c8ebb13566a2d58c4f6156b84e90",
+    "dimensions": [
+      274,
+      64
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Kometa",
+    "file": "kometa.svg",
+    "source": "https://ul-kvd.ru/favicon.svg",
+    "source_page": "https://ul-kvd.ru",
+    "source_kind": "existing_project_asset",
+    "sha256": "b6708c11d6a24698caf4d935510633bde731d25f1aa61242faeeeb09446f36c5",
+    "dimensions": null,
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Leon",
+    "file": "leon.svg",
+    "source": "https://leon-casino-slots.com/favicon.svg",
+    "source_page": "https://leon-casino-slots.com",
+    "source_kind": "existing_project_asset",
+    "sha256": "f814856bf85edb76d4e2aac9e0341c470f9435998dee8bf5cd048a9c3d4bb0c0",
+    "dimensions": null,
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Mr Bet",
+    "file": "mrbet.png",
+    "source": "https://pfarre-paudorf.com/mr-bet-favicon.png",
+    "source_page": "https://pfarre-paudorf.com",
+    "source_kind": "existing_project_asset",
+    "sha256": "4cb4dd6e7b31ddb69c5a3860ed641f5c7942b037f025030042a5b6009ff8466d",
+    "dimensions": [
+      26,
+      27
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Nine Casino",
+    "file": "ninecasino.webp",
+    "source": "https://oml-onomidnightlove.com/uploads/img/fav-nine.png",
+    "source_page": "https://oml-onomidnightlove.com",
+    "source_kind": "existing_project_asset",
+    "sha256": "13077452a65504c88b0c513567d82e5a9955bdee24467c1763286aa38c2d0e71",
+    "dimensions": [
+      64,
+      64
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Olymp",
+    "file": "olymp.png",
+    "source": "https://olymp.olympcasino-bangladesh.com/fav.png",
+    "source_page": "https://olymp.olympcasino-bangladesh.com",
+    "source_kind": "existing_project_asset",
+    "sha256": "7235df09f4477e04240a517bbcbeb28d849ea06a4822b63adafab0dfaca5123c",
+    "dimensions": [
+      60,
+      60
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Playfina",
+    "file": "playfina.webp",
+    "source": "https://playfina-casino-au.com/uploads/img/favicon.png",
+    "source_page": "https://playfina-casino-au.com",
+    "source_kind": "existing_project_asset",
+    "sha256": "9091106ed4c3e46a3f55d4bcd658212cdb217716887438cb33bcac9cfc7444f4",
+    "dimensions": [
+      60,
+      60
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Pokerdom",
+    "file": "pokerdom.png",
+    "source": "https://pokerdom.com/wp-content/uploads/2021/08/cropped-favicon-192x192.png",
+    "source_page": "https://pokerdom.com",
+    "source_kind": "official",
+    "sha256": "cd3a6a0edb38ae7ff1d73c960aa36973b87d7ae1f0cab627d100bfc12eb0f635",
+    "dimensions": [
+      192,
+      192
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Posido",
+    "file": "posido.png",
+    "source": "https://posido-casino-gr.com/uploads/img/fav.png",
+    "source_page": "https://posido-casino-gr.com",
+    "source_kind": "existing_project_asset",
+    "sha256": "8aa04ad06502320e0e2b5b3fcb75de522a49d926de469ff9cadee97bfc5bb70f",
+    "dimensions": [
+      60,
+      60
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Qizilbilet",
+    "file": "qizilbilet.svg",
+    "source": "https://ohiovalleyrivermuseum.org/favicon.svg",
+    "source_page": "https://ohiovalleyrivermuseum.org",
+    "source_kind": "existing_project_asset",
+    "sha256": "461a042d40732a9832644141db1a378cd263a309f45a5eea631083f1018c1404",
+    "dimensions": null,
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Rich Royal",
+    "file": "richroyal.webp",
+    "source": "https://richroyalcasino11.com.de/uploads/img/fav-rich royal casino.png",
+    "source_page": "https://richroyalcasino11.com.de",
+    "source_kind": "existing_project_asset",
+    "sha256": "dc438192bd5ee8f914559b1759bbd503780342ae4612d1659be7cc16cf6b9c62",
+    "dimensions": [
+      60,
+      60
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Ricky Casino",
+    "file": "rickycasino.png",
+    "source": "https://rickyscasino-slotgame.com/assets/img/brand-icon.png",
+    "source_page": "https://rickyscasino-slotgame.com",
+    "source_kind": "existing_project_asset",
+    "sha256": "9444297c8b8e68b175cb394c2bc1e85ac978dc48887a59635627c79effa7bc18",
+    "dimensions": [
+      128,
+      128
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Rizz Casino",
+    "file": "rizzcasino.png",
+    "source": "https://vendasonlinestore.com/favicon.png",
+    "source_page": "https://vendasonlinestore.com",
+    "source_kind": "existing_project_asset",
+    "sha256": "6a745681cc1e05fafa397624b2080eec1642f3592b3e027a9df86711ee00e729",
+    "dimensions": [
+      32,
+      32
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Slottica",
+    "file": "slottica.svg",
+    "source": "https://coderscamp.edu.pl/favicon.svg",
+    "source_page": "https://coderscamp.edu.pl",
+    "source_kind": "existing_project_asset",
+    "sha256": "6fc8c61762ec8173c287be827be49c760acafdda9469532ec51e12f538251dc5",
+    "dimensions": null,
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "SpinBetter",
+    "file": "spinbetter.webp",
+    "source": "https://softairbaron.de/uploads/img/image 335.png",
+    "source_page": "https://softairbaron.de",
+    "source_kind": "existing_project_asset",
+    "sha256": "4d906d71dbbc992a20b89280b89e8b52a9dabe2d8e53e4e49906d7fe166e558b",
+    "dimensions": [
+      53,
+      56
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "StoneVegas",
+    "file": "stonevegas.webp",
+    "source": "https://saciri.ch/fav.png",
+    "source_page": "https://saciri.ch",
+    "source_kind": "existing_project_asset",
+    "sha256": "b699e7ac19bbc3440e7f532d0a727a3d7b750205840615174555b9839560e15e",
+    "dimensions": [
+      54,
+      47
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Up X",
+    "file": "upx.webp",
+    "source": "https://up-x-2.upx-online-casino.com/uploads/img/favicon.png",
+    "source_page": "https://up-x-2.upx-online-casino.com",
+    "source_kind": "existing_project_asset",
+    "sha256": "412dabc2075ec17de967e19436d49d14f085f2b3a3c43828f0b9768ba9277f77",
+    "dimensions": [
+      48,
+      46
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Vegas Plus",
+    "file": "vegasplus.webp",
+    "source": "https://vegas-plus-fr.com/uploads/img/vegas-plus-fav.png",
+    "source_page": "https://vegas-plus-fr.com",
+    "source_kind": "existing_project_asset",
+    "sha256": "e4587bf319bed3128146078228acfa80d186b1590783e3365f267ec525bda893",
+    "dimensions": [
+      32,
+      32
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Vox Casino",
+    "file": "voxcasino.webp",
+    "source": "https://igpaffrath.de/uploads/img/fav (68).png",
+    "source_page": "https://igpaffrath.de",
+    "source_kind": "existing_project_asset",
+    "sha256": "f318f04c35f33c7cab0b6c6e931a2bbfc1246de4e8b0a8739443ab0bf1a1a63e",
+    "dimensions": [
+      60,
+      60
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Vulkan Spiele",
+    "file": "vulkanspiele.webp",
+    "source": "https://casino.germany-vulkan-spiele.com/uploads/img/favicon.png",
+    "source_page": "https://casino.germany-vulkan-spiele.com",
+    "source_kind": "existing_project_asset",
+    "sha256": "043e5198a40ebf9b958ef6f993c7f2c5791c121ae0b953dd90085721aacc5097",
+    "dimensions": [
+      60,
+      60
+    ],
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "HitnSpin",
+    "file": "hitnspin.png",
+    "source": "https://hitnspin.com/spa-assets/svg/logo.svg?format=webp",
+    "source_kind": "reviewed_showcase_library",
+    "sha256": "81a6ec5dd75897ec9a0f84f4879772ba79937362270f2d355c8d85e71ddd273d",
+    "surface": "dark",
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "NV Casino",
+    "file": "nvcasino.png",
+    "source": "https://nv.casino/spa-assets/svg/logo.svg?format=webp",
+    "source_kind": "reviewed_showcase_library",
+    "sha256": "c98284842ed7e8d95af2887c8e2c5572dc838d4bcc59145cd45161e55d435159",
+    "surface": "dark",
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog"
+  },
+  {
+    "brand": "Vulkan Vegas",
+    "file": "vulkanvegas-wordmark.webp",
+    "source": "https://ionickiss.pl/casinos/vulcan.webp",
+    "source_kind": "existing_project_asset",
+    "sha256": "cc9f9381c93691d08dc12e5327b8c526412efa69a642fcb47935b09fc12dfe8b",
+    "retrieved_at": "2026-11-10",
+    "usage": "panel_catalog",
+    "replaces": "vulkanvegas.png"
   }
 ]

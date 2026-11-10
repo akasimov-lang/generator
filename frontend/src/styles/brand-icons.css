@@ -1,0 +1,5 @@
+/* Shared dimensions in the catalog, project picker, network tables and tiles. */
+span.brandTableIcon.brandCatalogIcon{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;flex:0 0 34px;width:34px;height:28px;min-width:34px;padding:3px;border:1px solid var(--border);border-radius:6px;background:#fff;color:#44536a;vertical-align:middle;overflow:hidden}
+span.brandTableIcon.brandCatalogIcon--dark{background:#243343;border-color:#425166}
+span.brandTableIcon.brandCatalogIcon img{display:block;width:26px;height:22px;max-width:100%;max-height:100%;object-fit:contain;margin:0;padding:0;border:0;border-radius:0}
+span.brandTableIcon.brandCatalogIcon svg{flex:none}

@@ -41,7 +41,9 @@ with sync_playwright() as pw:
         expect(page.locator('.pilotTasks tbody tr')).to_have_count(min(counts[key],50))
     tabs.get_by_role('button',name=re.compile('^Витрины')).click()
     page.get_by_role('searchbox',name='Поиск заданий').fill('IonicKiss')
-    expect(page.locator('.pilotTasks tbody tr')).to_have_count(2)
+    with SessionLocal() as db: searched=pilot_task_cache.tasks(db,USER,q='IonicKiss',group='showcases')
+    assert searched['total']>0
+    expect(page.locator('.pilotTasks tbody tr')).to_have_count(searched['total'])
     page.get_by_role('searchbox',name='Поиск заданий').fill('missing-report-xyz')
     expect(page.get_by_text('По этому запросу заданий не найдено.')).to_be_visible()
     page.get_by_role('button',name='Очистить поиск заданий').click()
