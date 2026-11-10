@@ -1445,7 +1445,7 @@ function App() {
             }}><Upload size={13} />Загрузить HTML</button>
             </div> : activeView === "templateGenerator" ? <div className="workspaceTopbarEyebrow"><p className="eyebrow">Рабочая панель</p><span id="templateTopbarBack" /></div> : <p className="eyebrow">Рабочая панель</p>}
             <h1>{activeView === "workspace" ? <><span className="workspaceHeadingFull">{viewTitle(activeView, workspaceTab)}</span><span className="workspaceHeadingCompact">Рабочий экран проекта</span></> : viewTitle(activeView, workspaceTab)}</h1>
-            {activeView === "workspace" && <input className="workspaceHeadingSearch workspaceHeadingSearchCompact" type="search" value={domainQuery} onChange={event => setDomainQuery(event.target.value)} aria-label="Поиск по домену" placeholder="Домен проекта или домен в сетке" aria-controls="workspace-domain-results" />}
+            {activeView === "workspace" && <GlobalProjectSearchInput query={domainQuery} onChange={setDomainQuery} resultsId="workspace-domain-results" />}
             {activeView === "autoReglue" && <GlobalProjectSearchInput query={massSearchQuery} onChange={setMassSearchQuery} onSubmit={()=>{const first=matchingGlobalProjects(siteSnapshot,massSearchQuery)[0];if(first)openMassSearchProject(first.name);}}/>}
             {activeView === "sites" && <input className="workspaceHeadingSearch" type="search" value={sitesSearchQuery} onChange={event=>setSitesSearchQuery(event.target.value)} aria-label="Поиск по всем доменам" placeholder="Домен проекта или домен в сетке" aria-controls="sites-search-results"/>}
           </div>
@@ -2046,11 +2046,7 @@ function ProjectWorkspaceView({
   onTabChange: (tab: WorkspaceTab, projectName?: string) => void;
   onSiteChanged: (site: Site) => void;
 }) {
-  const normalizedDomainQuery = normalizeDomainQuery(domainQuery);
-  const domainResults = normalizedDomainQuery ? sites.filter(site =>
-    [site.name, site.cache_canon || "", ...(site.cache_domains || [])]
-      .some(domain => matchesProjectSearch(domain, normalizedDomainQuery))
-  ) : [];
+  const domainResults = React.useMemo(() => matchingGlobalProjects(sites, domainQuery), [sites, domainQuery]);
   const workspaceSiteStorageKey = `workspace_site_id:${currentUsername}`;
   const [selectedSiteId, setSelectedSiteId] = React.useState(() => {
     const name = workspaceProjectNameFromPath(window.location.pathname);
@@ -2831,7 +2827,7 @@ function ProjectWorkspaceView({
             <td><button type="button" className="secondary" onClick={event => { event.stopPropagation(); openDomainSearchResult(site.id); }}>{site.name}</button></td>
             <td><FiberyProjectName value={site.fibery_name} projectName={site.name} /></td><td>{site.cache_canon || "—"}</td><td>{site.domains_count}</td>
           </tr>)}</tbody>
-        </table></div> : <p>Проекты не найдены. Поиск выполняется по доступным проектам и доменам их сеток.</p>}
+        </table></div> : <p>Проекты не найдены. Поиск выполняется по доступным проектам, доменам их сеток, именам и номерам Fibery.</p>}
       </div> : null}
     </section>
     </WorkspaceAccordionContext.Provider>
@@ -8547,7 +8543,7 @@ function projectSearchOption(site: Site): SearchableSelectOption {
     value: site.id,
     label: site.name,
     leading: flag ? <span className="projectSelectFlag" aria-hidden="true">{flag}</span> : undefined,
-    keywords: projectSearchKeywords([site.name, site.cache_canon || "", site.base_url, ...networkDomains])
+    keywords: projectSearchKeywords([site.name, site.fibery_name || "", site.cache_canon || "", site.base_url, ...networkDomains])
   };
 }
 

@@ -41,7 +41,7 @@ export function GlobalProjectSearchInput({query,onChange,onSubmit,resultsId=RESU
  const input=React.useRef<HTMLInputElement>(null);
  return <div className="globalProjectSearchInput">
   <input ref={input} className="workspaceHeadingSearch workspaceHeadingSearchCompact" type="search" value={query}
-   aria-label="Поиск по всем сайтам" aria-controls={resultsId} placeholder="Домен проекта или домен в сетке"
+   aria-label="Поиск по всем сайтам" aria-controls={resultsId} placeholder="Домен, имя или № Fibery"
    onChange={event=>onChange(event.target.value)} onKeyDown={event=>{
     if(event.nativeEvent.isComposing)return;
     if(event.key==="Escape"){event.preventDefault();onChange("");}
@@ -73,7 +73,7 @@ export function GlobalProjectSearchResults({sites,query,onOpen,loading=false,id=
   <div className="globalProjectSearchSummary"><h2 aria-live="polite">Результаты поиска · {results.length}</h2>
    {loading&&<span className="muted" role="status">Обновляем список сайтов…</span>}
   </div>
-  <p className="muted">Поиск по всем доступным проектам и доменам их сеток.</p>
+  <p className="muted">Поиск по всем доступным проектам, доменам их сеток, именам и номерам Fibery.</p>
   {results.length?<>
    <div className="tableScroll"><table><thead><tr><th>Проект</th><th>Бренд / GEO</th><th>Main</th><th>Имя Fibery</th></tr></thead>
     <tbody>{visible.map(site=><tr key={site.id}>
