@@ -147,6 +147,9 @@ def prepare_image(raw, logo=None):
 
 
 async def generate_for_content(db, item, site, payload, fallback_provider=None):
+    from app.technical_pages import is_technical
+    if is_technical(item):
+        return payload
     config = configuration(db)
     if not config["enabled"] or not site or not str(item.slug or "").strip("/"):
         return payload

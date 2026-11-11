@@ -4,6 +4,7 @@ import json
 import re
 import unicodedata
 from contextlib import contextmanager
+from html.parser import HTMLParser
 
 from pydantic import BaseModel, Field, model_validator
 from slugify import slugify
@@ -218,6 +219,10 @@ Do not claim compliance or present this generated draft as legally certified.
 Aim for 500–600 words of public page content, averaging 550 words.
 Respect the page's full topic. Write clear sections and practical explanations relevant to the website.
 Do not add ratings, bonuses, unrelated SEO topics, FAQ or placeholders.
+Technical pages are text-only: never automatically add casino showcases, offer cards,
+images, illustrations, galleries, banners, image placeholders or shortcode/widget embeds.
+This applies to privacy, cookies, terms, contacts, about and other service/policy pages.
+Keep the shared website header, logo, navigation and footer outside the article unchanged.
 TITLE REQUIREMENT: use the exact homepage title below to understand the site's subject, brand and audience.
 Create a concise, distinct technical-page SEO Title that reflects this page's actual contents AND the
 homepage's subject. Identify the brand from the homepage title when unambiguous; otherwise use the
@@ -281,7 +286,47 @@ class TechnicalEditorCheckError(ValueError):
     pass
 
 
+class TechnicalPresentationError(ValueError):
+    pass
+
+
+def validate_presentation(payload: dict) -> None:
+    """Do not publish generated media or opaque showcase embeds in service text."""
+    class Markup(HTMLParser):
+        forbidden = False
+
+        def handle_starttag(self, tag, attrs):
+            classes = dict(attrs).get('class', '').casefold()
+            if tag in {'img', 'picture', 'iframe', 'object', 'embed', 'script'} or any(
+                marker in classes for marker in ('showcase', 'casino-card', 'sv-card', 'sv-offers')
+            ):
+                self.forbidden = True
+
+    def markup_values(value):
+        if isinstance(value, str):
+            yield value
+        elif isinstance(value, dict):
+            for child in value.values():
+                yield from markup_values(child)
+        elif isinstance(value, list):
+            for child in value:
+                yield from markup_values(child)
+
+    for page in payload.get('pages', []):
+        forbidden = bool(page.get('banners'))
+        for block in (page.get('content') or {}).get('blocks', []):
+            kind, data = block.get('type'), block.get('data') or {}
+            if kind in {'image', 'gallery', 'carousel', 'banner', 'showcase', 'casinos', 'shortcode'}:
+                forbidden = True
+            for markup in markup_values(data):
+                parser = Markup(); parser.feed(markup)
+                forbidden = forbidden or parser.forbidden or '{{>' in markup
+        if forbidden:
+            raise TechnicalPresentationError('Техническая страница должна содержать только текстовые блоки: автоматические изображения, витрины, баннеры и шорткоды запрещены.')
+
+
 def validate_and_record(db: Session, item: models.ContentItem, payload: dict, compare: bool = True) -> None:
+    validate_presentation(payload)
     body = page_text(payload)
     if len(body.split()) < 100:
         raise ValueError("Техническая страница слишком короткая: проверьте ответ провайдера")
@@ -312,6 +357,7 @@ async def generate_checked(db: Session, item: models.ContentItem, **kwargs) -> d
         raise ValueError("Для технических страниц требуется активный Gemini-провайдер")
     kwargs["include_toc"] = False
     kwargs["include_faq"] = False
+    kwargs["shortcode"] = None
     kwargs.pop("technical_revision", None)
     compare = True
     base_prompt = str(kwargs.get("prompt_template") or "") + "\n" + technical_prompt(db, item, compare=compare)
@@ -337,13 +383,17 @@ async def generate_checked(db: Session, item: models.ContentItem, **kwargs) -> d
             if error else ""
         )
         result = await build_ai_content(**kwargs)
+        # Article generation inherits site banners; technical text must not.
+        for page in result.get('pages', []):
+            if 'banners' in page:
+                page['banners'] = []
         try:
             validate_and_record(db, item, result, compare=compare)
             item.generation_context = {**item.generation_context, "technical_check": {
                 **item.generation_context["technical_check"], "automatic_revisions": attempt,
             }}
             return result
-        except TechnicalSimilarityError as exc:
+        except (TechnicalSimilarityError, TechnicalPresentationError) as exc:
             error = str(exc)
             editor_revision = False
             rejected_text = page_text(result)
@@ -355,10 +405,11 @@ async def generate_checked(db: Session, item: models.ContentItem, **kwargs) -> d
             error = str(exc)
             editor_revision = True
             rejected_text = page_text(result)
-    raise ValueError(f"Текст не прошёл проверку уникальности после двух автоматических доработок. {error}")
+    raise ValueError(f"Техническая страница не прошла проверку после двух автоматических доработок. {error}")
 
 
 def validate_publication(item: models.ContentItem) -> None:
+    validate_presentation(item.generated_json)
     check = (item.generation_context or {}).get("technical_check") or {}
     digest = hashlib.sha256(normalized(page_text(item.generated_json)).encode()).hexdigest()
     # Preserve checks produced before links were normalized, without accepting

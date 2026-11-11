@@ -168,3 +168,17 @@ def test_retry_endpoint_queues_only_one_job_and_rejects_published(setup):
         assert len(jobs) == 1 and jobs[0].kind == "article_image"
         item.status = "published"; db.commit()
         assert client.post(f"/article-images/content/{item.id}/retry").status_code == 409
+
+
+def test_technical_page_skips_image_provider_even_when_enabled(setup, monkeypatch):
+    db, site, item, provider = setup
+    item.generation_context = {'content_kind': 'technical_page', 'technical_page_key': 'cookies'}
+    payload = article()
+    payload['pages'][0]['content']['blocks'] = [b for b in payload['pages'][0]['content']['blocks'] if b['type'] != 'image']
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Technical pages must not request or attach generated images')
+    monkeypatch.setattr(images, 'provider_for', forbidden)
+    monkeypatch.setattr(images, 'attach', forbidden)
+    result = asyncio.run(images.generate_for_content(db, item, site, payload, provider))
+    assert result == payload
+    assert not db.scalars(select(models.ArticleImage)).all()

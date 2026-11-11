@@ -334,3 +334,61 @@ def test_legacy_fingerprint_of_existing_inline_link_remains_valid(db):
     fingerprint=hashlib.sha256(technical.normalized(technical.page_text(item.generated_json,strip_links=False)).encode()).hexdigest()
     item.generation_context={**item.generation_context,'technical_check':{'fingerprint':fingerprint}}
     technical.validate_publication(item)
+
+
+def test_technical_generation_ignores_inherited_banner_and_shortcode(db, monkeypatch):
+    site, provider, payload = setup(db)
+    item = technical.create_task(db, site, payload, None).items[0]
+    async def fake(**kwargs):
+        assert kwargs['shortcode'] is None
+        assert 'never automatically add casino showcases' in kwargs['prompt_template']
+        result = article('without-media')
+        result['pages'][0]['banners'] = [{'template': 'casino-promo'}]
+        return result
+    monkeypatch.setattr(services, 'build_ai_content', fake)
+    result = asyncio.run(technical.generate_checked(db, item, provider=provider, shortcode='casino-offers'))
+    assert result['pages'][0]['banners'] == []
+    item.generated_json = result
+    technical.validate_publication(item)
+
+
+def test_technical_generation_revises_unwanted_showcase(db, monkeypatch):
+    site, provider, payload = setup(db)
+    item = technical.create_task(db, site, payload, None).items[0]
+    calls = []
+    async def fake(**kwargs):
+        calls.append(kwargs['prompt_template'])
+        result = article('no-showcase')
+        if len(calls) == 1:
+            result['pages'][0]['content']['blocks'].append({'type':'shortcode','data':{'shortcode':'offers'}})
+        return result
+    monkeypatch.setattr(services, 'build_ai_content', fake)
+    result = asyncio.run(technical.generate_checked(db, item, provider=provider))
+    assert len(calls) == 2 and 'шорткоды запрещены' in calls[1]
+    assert not any(b['type']=='shortcode' for b in result['pages'][0]['content']['blocks'])
+
+
+@pytest.mark.parametrize('block', [
+    {'type':'image','data':{'file':{'url':'/photo.webp'}}},
+    {'type':'shortcode','data':{'shortcode':'custom-casino-list'}},
+    {'type':'raw','data':{'html':'<img src="/photo.webp">'}},
+    {'type':'code','data':{'code':'<section class="sv-showcase">Cards</section>'}},
+    {'type':'table','data':{'content':[['Logo','<img src="/logo.webp">']]}},
+])
+def test_technical_publication_rejects_media_added_after_text_check(db, block):
+    site, _, payload = setup(db)
+    item = technical.create_task(db, site, payload, None).items[0]
+    original = article('checked-text')
+    technical.validate_and_record(db, item, original)
+    item.generated_json = copy.deepcopy(original)
+    item.generated_json['pages'][0]['content']['blocks'].append(block)
+    with pytest.raises(technical.TechnicalPresentationError):
+        technical.validate_publication(item)
+
+
+def test_technical_presentation_keeps_breadcrumbs_and_text_table():
+    payload = {'pages':[{'content':{'blocks':[
+        {'type':'code','data':{'code':'<nav><a href="/">Home</a> › Contacts</nav>'}},
+        {'type':'table','data':{'content':[['Channel','Details'],['Email','info@example.test']]}},
+    ]}}]}
+    technical.validate_presentation(payload)
