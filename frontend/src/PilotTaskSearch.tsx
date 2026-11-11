@@ -12,6 +12,6 @@ export function PilotTaskSearch({value,onChange,total}:{value:string;onChange:(v
  return <div className="pilotTaskSearch">
   <label><Search size={18}/><input type="search" aria-label="Поиск заданий" placeholder="Бренд, GEO, домен или название задания" maxLength={200} value={value} onChange={event=>onChange(event.target.value)}/></label>
   {value&&<button type="button" className="button secondary compact" aria-label="Очистить поиск заданий" onClick={()=>onChange("")}><X size={16}/></button>}
-  <small role="status">{value.trim()?`Найдено: ${total??"…"}. Выполненные задания показаны первыми.`:"Выполненные задания — в конце списка."}</small>
+  <small role="status">{value.trim()?`Найдено: ${total??"…"}. `:""}По дате плана / запуска · новые сверху · МСК</small>
  </div>;
 }
