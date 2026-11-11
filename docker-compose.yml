@@ -66,7 +66,9 @@ services:
     cpu_shares: 256
     mem_limit: 4g
     stop_grace_period: 120s
-    command: celery -A app.worker.celery_app worker --loglevel=info --hostname=generation@%h --queues=generation,pilot_texts,celery --concurrency=${GENERATION_CONCURRENCY:-30}
+    # Each process retains research context and decoded article images. Keep the
+    # default within this container's 4 GiB budget; larger hosts may override it.
+    command: celery -A app.worker.celery_app worker --loglevel=info --hostname=generation@%h --queues=generation,pilot_texts,celery --concurrency=${GENERATION_CONCURRENCY:-6}
 
   menu_check_worker:
     image: generator-backend
