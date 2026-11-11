@@ -119,7 +119,7 @@ def process(db,id):
                     public_check(main,op.request_payload['urls'])
                     op.status='sitemap_done';op.message=f'Sitemap проверен: {len(urls)} страниц, только {main}.'
                     db.commit()
-            except (httpx.HTTPError,ValueError) as error:
+            except (httpx.HTTPError,ValueError,OSError) as error:
                 # A queued read may be retried; a submitted write is only rechecked.
                 from app.reglue_history import utc
                 expired=(datetime.now(timezone.utc)-utc(op.created_at)).total_seconds()>600

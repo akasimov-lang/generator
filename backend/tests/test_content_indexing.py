@@ -137,3 +137,15 @@ def test_indexing_failure_does_not_undo_publication() -> None:
         assert item.indexing_status == "failed"
         assert item.indexing_task_id is None
         assert "indexing unavailable" in (item.indexing_error or "")
+
+
+def test_provider_balance_error_preserves_publication_and_explains_failure():
+    import httpx
+    with make_session() as db:
+        site=models.Site(name='balance.test',base_url='https://balance.test',publication_endpoint='https://balance.test/api/content')
+        db.add(site);db.flush()
+        item=make_published_item(db,site,'/page/','balance-test')
+        with httpx.Client(transport=httpx.MockTransport(lambda _:httpx.Response(201,json={'google':{'icon':'error','text':'Недостаточно средств'}}))) as client:
+            assert submit_indexing_batch(db,site,[item],client=client) is None
+        assert item.status=='published' and item.indexing_status=='failed'
+        assert item.indexing_error=='Недостаточно средств'

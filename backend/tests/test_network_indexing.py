@@ -89,6 +89,23 @@ def test_indexing_unknown_keeps_actual_http_code(env):
     assert not receipt['task_id'] and not receipt['error_code']
 
 
+def test_provider_rejection_explained_and_never_automatically_replayed(env):
+    db, site, _ = env
+    op = indexing.queue_indexing(db, site, network.read_network(db, site), str(uuid4()), 'admin'); db.commit()
+    sent = []
+    message = 'Ошибка создания задачи (HTTP 400): Недостаточно средств'
+    def respond(request):
+        sent.append(request)
+        return httpx.Response(201, json={'google': {'icon': 'error', 'text': message}})
+    with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+        indexing.submit_network_indexing(db, op.id, client=client)
+        indexing.submit_network_indexing(db, op.id, client=client)
+    assert op.status == 'failed' and len(sent) == 1
+    assert message in op.message
+    assert op.request_payload['provider_response']['text'] == message
+    assert not op.request_payload.get('task_id')
+
+
 def test_failed_reglue_does_not_queue(env):
     db, site, remote = env
     before = network.read_network(db, site)

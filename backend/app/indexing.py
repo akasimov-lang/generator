@@ -51,6 +51,15 @@ def _indexing_task_id(payload: Any) -> str | None:
     return match.group(1) if match else None
 
 
+def indexing_provider_error(payload: Any) -> str | None:
+    """An explicit provider rejection is different from a lost receipt."""
+    google = payload.get("google") if isinstance(payload, dict) else None
+    if not isinstance(google, dict) or str(google.get("icon") or "").lower() != "error":
+        return None
+    message = google.get("text")
+    return str(message).strip()[:1000] if isinstance(message, str) and message.strip() else None
+
+
 def submit_indexing_batch(
     db: Session,
     site: models.Site,
@@ -88,7 +97,7 @@ def submit_indexing_batch(
         else:
             task_id = _indexing_task_id(response_body)
             if not task_id:
-                error_message = "Indexing endpoint did not return a successful Google task ID"
+                error_message = indexing_provider_error(response_body) or "Indexing endpoint did not return a successful Google task ID"
     except Exception as error:
         error_message = f"{type(error).__name__}: {error}"[:1000]
     finally:

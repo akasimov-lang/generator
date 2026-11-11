@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from app import models
 from app.core.config import get_settings
-from app.indexing import _indexing_task_id
+from app.indexing import _indexing_task_id, indexing_provider_error
 from app.network_state import domain_name, validate_markup
 
 
@@ -124,11 +124,18 @@ def submit_network_indexing(db, operation_id, *, client=None):
                 body = response.json()
             except ValueError:
                 body = None
+            google = body.get('google') if isinstance(body, dict) else None
+            if isinstance(google, dict):
+                op.request_payload = {**op.request_payload, 'provider_response': {
+                    key: str(google[key])[:2000] for key in ('icon', 'text') if key in google}}
             task_id = _indexing_task_id(body) if 200 <= response.status_code < 300 else None
             if task_id:
                 op.status = 'index_submitted'
                 op.request_payload = {**op.request_payload, 'task_id': task_id}
                 op.message = f'Задача индексации {task_id} создана. Домены: {len(payload["domains"])}. AMP исключены. Это подтверждение приёма задачи, а не завершения индексации.'
+            elif indexing_provider_error(body):
+                op.status = 'failed'
+                op.message = 'Сервис индексации отклонил запрос: ' + indexing_provider_error(body)
             else:
                 op.status = 'index_unknown'
                 op.message = f'Сервис не подтвердил номер задачи (HTTP {response.status_code}). Автоматическая повторная отправка отключена: проверьте результат в сервисе индексации.'

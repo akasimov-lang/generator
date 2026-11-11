@@ -43,3 +43,21 @@ def test_uncertain_write_only_rechecks(env,monkeypatch):
     op=sitemap.queue(db,site,uuid4(),'test');db.commit()
     sitemap.process(db,op.id);sitemap.process(db,op.id)
     assert op.status=='sitemap_verify' and len(writes)==1 and remote.data['sitemap']=='old'
+
+
+def test_old_dns_failure_becomes_terminal_without_rewriting(env, monkeypatch):
+    import socket
+    from datetime import datetime, timezone, timedelta
+    db,site,remote=env
+    remote.data.update(data={'pages':[{'slug':'/'}]},sitemap=sitemap.document(['https://main.test/']))
+    monkeypatch.setattr(network,'Remote',lambda *args:nullcontext(remote))
+    op=sitemap.queue(db,site,uuid4(),'test');db.commit()
+    op.status='sitemap_verify';op.created_at=datetime.now(timezone.utc)-timedelta(days=1)
+    op.request_payload={'main':'main.test','urls':['https://main.test/'],'after':remote.data['sitemap']}
+    db.commit()
+    def dns_error(*args):raise socket.gaierror(-2,'Name or service not known')
+    monkeypatch.setattr(sitemap,'public_check',dns_error)
+    sitemap.process(db,op.id)
+    assert op.status=='sitemap_failed'
+    assert 'Name or service not known' in op.message
+    assert not remote.calls
