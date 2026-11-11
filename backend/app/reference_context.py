@@ -7,7 +7,7 @@ import hashlib
 from html.parser import HTMLParser
 import json
 import re
-from urllib.parse import unquote, urlsplit
+from urllib.parse import parse_qsl, unquote, urlencode, urlsplit, urlunsplit
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import object_session
@@ -170,6 +170,73 @@ def collect(db, site=None, *, brand=None, geo=None):
 MAX_PROMPT_CHARS = 480_000
 
 
+def source_url(value):
+    """Stable source address; keep meaningful query parameters and path case."""
+    value = (value or '').strip()
+    for _ in range(3):
+        try:
+            parsed = urlsplit(value)
+            if parsed.scheme.lower() not in {'http', 'https'} or not parsed.hostname:
+                return value
+            host = parsed.hostname.lower()
+            query = parse_qsl(parsed.query, keep_blank_values=True)
+            if (re.fullmatch(r'(?:www\.)?google\.(?:com|[a-z]{2}|com\.[a-z]{2}|co\.[a-z]{2})', host)
+                    and parsed.path in {'/url', '/goto'}):
+                target = next((v for k, v in query if k in {'url', 'q'} and v.startswith(('http://', 'https://'))), '')
+                if target:
+                    value = target
+                    continue
+            port = parsed.port
+            netloc = '[' + host + ']' if ':' in host else host
+            if port and (parsed.scheme.lower(), port) not in {('http', 80), ('https', 443)}:
+                netloc += ':' + str(port)
+            query = sorted((k, v) for k, v in query if not k.lower().startswith('utm_')
+                           and k.lower() not in {'gclid', 'fbclid', 'msclkid'})
+            return urlunsplit((parsed.scheme.lower(), netloc, parsed.path or '/', urlencode(query), ''))
+        except ValueError:
+            return value
+    return value
+
+
+def unique_sources(context):
+    """One observation per address in generation/reports, without rewriting history.
+
+    Prefer fetched text over a snippet, then the latest dated snapshot. Raw stored
+    observations stay intact; different URLs with identical text remain attributed.
+    """
+    sources = context.get('sources', [])
+    candidates = []
+    for index, source in enumerate(sources):
+        for position, provenance in enumerate(source.get('provenance', [])):
+            url = source_url(provenance.get('url'))
+            if url:
+                rank = (provenance.get('kind') != 'competitor_result',
+                        str((source.get('details') or {}).get('fetched_at') or ''),
+                        len(source.get('text') or ''), -index, -position)
+                candidates.append((url, rank, index, position))
+    winners = {}
+    for url, rank, index, position in candidates:
+        if url not in winners or rank > winners[url][0]:
+            winners[url] = (rank, index, position)
+    entries = []
+    removed = 0
+    for index, source in enumerate(sources):
+        provenance = []
+        for position, observation in enumerate(source.get('provenance', [])):
+            url = source_url(observation.get('url'))
+            if url and winners[url][1:] != (index, position):
+                removed += 1
+                continue
+            provenance.append({**observation, 'url': url} if url else observation)
+        if provenance or not source.get('provenance'):
+            entries.append({**source, 'provenance': provenance})
+    if not removed and entries == sources:
+        return context
+    return {**context, 'sources': entries, 'source_deduplication': {
+        'unique_addresses': len(winners), 'duplicate_observations_removed': removed,
+        'note': 'One selected snapshot per source address; original observations retained in storage.'}}
+
+
 def _excerpts(text, budget):
     if len(text) <= budget:
         return text
@@ -186,6 +253,7 @@ def prompt_context(context):
     corpora contain duplicated text in tables/lists and can exceed Gemini's input
     limit even before adding the page. Never truncate the original page instead.
     """
+    context = unique_sources(context)
     raw = json.dumps(context, ensure_ascii=False)
     if len(raw) <= MAX_PROMPT_CHARS:
         return context
@@ -238,6 +306,8 @@ def for_site(site, *, geo=None, brand=None):
 
 
 def audit(context):
+    context = unique_sources(context)
     return {'version': VERSION, 'brand': context['brand'], 'geo': context['geo'],
             'source_count': len(context['sources']), 'excluded_research_sources': context['excluded_research_sources'],
+            'source_deduplication': context.get('source_deduplication', {}),
             'sources': [{'sha256': source['sha256'], 'provenance': source['provenance']} for source in context['sources']]}
