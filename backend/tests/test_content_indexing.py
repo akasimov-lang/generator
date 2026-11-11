@@ -149,3 +149,16 @@ def test_provider_balance_error_preserves_publication_and_explains_failure():
             assert submit_indexing_batch(db,site,[item],client=client) is None
         assert item.status=='published' and item.indexing_status=='failed'
         assert item.indexing_error=='Недостаточно средств'
+
+
+def test_disabled_content_indexing_neither_claims_nor_sends():
+    from app.indexing import SUBMISSION_POLICY_KEY,submit_pending_content_indexing
+    with make_session()as db:
+        site=models.Site(name='disabled.test',base_url='https://disabled.test',publication_endpoint='https://disabled.test/api/content')
+        db.add(site);db.flush();item=make_published_item(db,site,'/article/','disabled-content')
+        db.add(models.AutoReglueConfig(key=SUBMISSION_POLICY_KEY,value={'enabled':False}));db.commit()
+        assert submit_pending_content_indexing(db)=={'processed':0,'submitted':0,'failed':0}
+        client=FakeClient()
+        assert submit_indexing_batch(db,site,[item],client=client) is None
+        assert client.calls==[] and item.status=='published' and item.indexing_status=='disabled'
+        assert not db.scalar(select(models.PublicationLog))

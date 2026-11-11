@@ -93,3 +93,51 @@ def test_dispatch_does_not_repeat_a_delivery_still_waiting_in_broker(env):
     sent=[]
     dispatch_pending(db,lambda *args:sent.append(args),inflight_ids={old.id})
     assert sent==[(new.id,'planning')]
+
+
+def published_retry(db, site):
+    item=content(db,site);item.status='published';item.published_at=datetime.now(timezone.utc)
+    job=models.BackgroundJob(kind='generation_retry',status='running',payload={'content_id':item.id},
+        started_at=datetime.now(timezone.utc)-timedelta(hours=1))
+    db.add(job);db.commit()
+    return item,job
+
+
+def test_finished_text_reconciles_abandoned_retry_without_sending(env):
+    db,site,_=env;item,job=published_retry(db,site);sent=[]
+    dispatch_pending(db,lambda *args:sent.append(args),inflight_ids=set())
+    assert job.status=='cancelled' and job.finished_at and not sent
+    assert job.result['content_id']==item.id and item.status=='published'
+
+
+def test_published_retry_with_live_delivery_is_untouched(env):
+    db,site,_=env;_,job=published_retry(db,site)
+    dispatch_pending(db,lambda *args:None,inflight_ids={job.id})
+    assert job.status=='running'
+
+
+def test_retry_not_reconciled_without_broker_snapshot(env):
+    db,site,_=env;_,job=published_retry(db,site)
+    dispatch_pending(db,lambda *args:None)
+    assert job.status=='running'
+
+
+def test_old_publication_does_not_confirm_new_retry(env):
+    db,site,_=env;item,job=published_retry(db,site)
+    item.published_at=job.started_at-timedelta(hours=1);db.commit()
+    dispatch_pending(db,lambda *args:None,inflight_ids=set())
+    assert job.status=='running'
+
+
+def test_recent_retry_is_not_cancelled_during_delivery_transition(env):
+    db,site,_=env;_,job=published_retry(db,site)
+    job.started_at=datetime.now(timezone.utc)-timedelta(minutes=2);db.commit()
+    dispatch_pending(db,lambda *args:None,inflight_ids=set())
+    assert job.status=='running'
+
+
+def test_unpublished_text_does_not_confirm_retry_completion(env):
+    db,site,_=env;item,job=published_retry(db,site)
+    item.status='generating';db.commit()
+    dispatch_pending(db,lambda *args:None,inflight_ids=set())
+    assert job.status=='running'

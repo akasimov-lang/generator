@@ -19,6 +19,21 @@ def make_session() -> Session:
     return Session(engine)
 
 
+def test_publication_confirmation_respects_disabled_indexing():
+    from app.indexing import SUBMISSION_POLICY_KEY
+    from test_content_indexing import make_published_item
+    with make_session()as db:
+        site=models.Site(name='no-index.test',external_project_id='no-index',base_url='https://no-index.test',publication_endpoint='https://no-index.test/api/content')
+        db.add(site);db.flush()
+        item=make_published_item(db,site,'/article/','no-index-confirm')
+        item.status='publication_pending_confirmation';item.published_at=None
+        db.add(models.AutoReglueConfig(key=SUBMISSION_POLICY_KEY,value={'enabled':False}));db.commit()
+        result=sync_project_cache(db,[{'id':'no-index','name':site.name,'serverId':'camel','settings':{'canon':site.name},'data':{'menu':{'header':[],'footer':[]},'pages':[{'slug':'/article/'}]}}])
+        db.refresh(item)
+        assert result['confirmed_publications_count']==1 and item.status=='published'
+        assert item.indexing_status=='disabled' and item.indexing_task_id is None
+
+
 def test_server_refresh_recovers_project_omitted_from_aggregate_cache(monkeypatch) -> None:
     with make_session() as db:
         site = models.Site(

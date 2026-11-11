@@ -106,6 +106,48 @@ def test_provider_rejection_explained_and_never_automatically_replayed(env):
     assert not op.request_payload.get('task_id')
 
 
+def disable_indexing(db):
+    from app.indexing import SUBMISSION_POLICY_KEY
+    db.add(models.AutoReglueConfig(key=SUBMISSION_POLICY_KEY,value={'enabled':False}));db.commit()
+
+
+def test_disabled_manual_indexing_does_not_read_webdev_or_create_receipt(env,monkeypatch):
+    db,site,_=env;disable_indexing(db)
+    monkeypatch.setattr(network,'read_network',lambda *args:(_ for _ in ()).throw(AssertionError('Unexpected Webdev read')))
+    result=indexing.request_indexing(db,site,uuid4(),'admin')
+    assert result['submission_enabled'] is False and result['status']=='disabled'
+    assert not receipts(db)
+
+
+def test_disabled_automatic_indexing_still_queues_sitemap(env):
+    db,site,_=env;disable_indexing(db)
+    assert indexing.queue_indexing(db,site,{'canon':'main.test','domains':['main.test']},str(uuid4()),'admin') is None
+    assert not receipts(db)
+    assert db.scalar(select(models.NetworkOperation).where(models.NetworkOperation.action=='sitemap')).status=='sitemap_queued'
+
+
+def test_disabled_queued_indexing_never_sends_and_keeps_existing_history(env):
+    db,site,_=env
+    op=indexing.queue_indexing(db,site,{'domains':['main.test']},str(uuid4()),'admin');db.commit()
+    disable_indexing(db)
+    def unexpected(*args):raise AssertionError('Indexing must not be sent')
+    with httpx.Client(transport=httpx.MockTransport(unexpected))as client:indexing.submit_network_indexing(db,op.id,client=client)
+    assert op.status=='cancelled' and op.request_payload['domains']==['https://main.test/']
+    assert indexing.current_receipt(db,site)['submission_enabled'] is False
+
+
+def test_disabled_indexing_api_cannot_be_bypassed_by_manual_post(monkeypatch):
+    from test_api_serialization import make_client
+    client,sessions=make_client()
+    with sessions()as db:
+        site=db.scalar(select(models.Site));sid=site.id;disable_indexing(db)
+    monkeypatch.setattr(network,'read_network',lambda *args:(_ for _ in ()).throw(AssertionError('Unexpected Webdev read')))
+    assert client.get(f'/api/sites/{sid}/network/indexing').json()['submission_enabled'] is False
+    result=client.post(f'/api/sites/{sid}/network/indexing',json={'request_id':str(uuid4())})
+    assert result.status_code==200 and result.json()['submission_enabled'] is False
+    with sessions()as db:assert not receipts(db)
+
+
 def test_failed_reglue_does_not_queue(env):
     db, site, remote = env
     before = network.read_network(db, site)

@@ -1078,7 +1078,8 @@ def _confirm_published_content(db: Session, site: models.Site, project: dict[str
         item.published_at = now
         site.core_update_notice = now.isoformat().replace("+00:00", "") + ":" + item.id
         item.scheduled_at = None
-        item.indexing_status = "queued"
+        from app.indexing import submission_enabled
+        item.indexing_status = "queued" if submission_enabled(db) else "disabled"
         item.indexing_task_id = None
         item.indexing_requested_at = None
         item.indexing_error = None

@@ -692,7 +692,7 @@ def update_network_sitemap(site_id: str, payload: network_indexing.IndexNetworkR
 
 @router.get("/sites/{site_id}/network/indexing")
 def get_network_indexing(site_id: str, _: AuthUser, db: Session = Depends(get_db)):
-    return network_indexing.indexing_receipt(network_indexing.latest_indexing(db, _get_site_or_404(db, site_id)))
+    return network_indexing.current_receipt(db, _get_site_or_404(db, site_id))
 
 
 @router.post("/sites/{site_id}/network/indexing")

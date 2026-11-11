@@ -15,6 +15,13 @@ from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 INDEXING_TASK_ID_PATTERN = re.compile(r"ID\s+задачи\s*:\s*([^\s.!]+)", re.IGNORECASE)
+SUBMISSION_POLICY_KEY = 'indexing:submission-policy'
+
+
+def submission_enabled(db: Session) -> bool:
+    policy = db.scalar(select(models.AutoReglueConfig).where(
+        models.AutoReglueConfig.key == SUBMISSION_POLICY_KEY).execution_options(populate_existing=True))
+    return policy is None or (policy.value or {}).get('enabled') is True
 
 
 def _project_origin(site: models.Site) -> str:
@@ -68,6 +75,12 @@ def submit_indexing_batch(
     client: httpx.Client | None = None,
 ) -> str | None:
     if not items:
+        return None
+    if not submission_enabled(db):
+        for item in items:
+            if item.indexing_status == 'queued':
+                item.indexing_status = 'disabled'
+        db.commit()
         return None
     endpoint = get_settings().indexing_endpoint
     request_payload = {"domains": content_indexing_urls(site, items), "engines": ["google"]}
@@ -125,6 +138,8 @@ def submit_indexing_batch(
 
 
 def submit_pending_content_indexing(db: Session, limit: int = 100) -> dict[str, int]:
+    if not submission_enabled(db):
+        return {'processed': 0, 'submitted': 0, 'failed': 0}
     stale_before = datetime.now(timezone.utc) - timedelta(minutes=5)
     items = db.scalars(
         select(models.ContentItem)

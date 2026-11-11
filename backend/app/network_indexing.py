@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from app import models
 from app.core.config import get_settings
-from app.indexing import _indexing_task_id, indexing_provider_error
+from app.indexing import _indexing_task_id, indexing_provider_error, submission_enabled
 from app.network_state import domain_name, validate_markup
 
 
@@ -34,7 +34,17 @@ def latest_indexing(db, site):
         .order_by(models.NetworkOperation.created_at.desc()).limit(1))
 
 
+def current_receipt(db, site):
+    receipt = indexing_receipt(latest_indexing(db, site))
+    if submission_enabled(db):
+        return receipt
+    return {**(receipt or {'id': '', 'status': 'disabled', 'message': '', 'count': 0}),
+            'submission_enabled': False, 'submission_notice': 'Отправка на индексацию отключена.'}
+
+
 def request_indexing(db, site, request_id, initiator):
+    if not submission_enabled(db):
+        return current_receipt(db, site)
     from app.project_network import network_lock, read_network
     # Scope the idempotency key to the project, including clients retrying after a timeout.
     source_id = str(uuid5(UUID(site.id), str(request_id)))
@@ -74,6 +84,12 @@ def verified(state, expected):
 
 
 def queue_indexing(db, site, state, source_id, initiator):
+    if not submission_enabled(db):
+        # Sitemap is independent of paid indexing and must continue updating.
+        if state.get('canon'):
+            from app.network_sitemap import queue
+            queue(db, site, source_id, initiator)
+        return None
     receipt = str(uuid5(UUID(source_id), 'network-indexing'))
     existing = db.get(models.NetworkOperation, receipt)
     if existing:
@@ -111,6 +127,11 @@ def submit_network_indexing(db, operation_id, *, client=None):
     with network_lock(db, 'indexing:' + operation_id):
         op = db.get(models.NetworkOperation, operation_id)
         if not op or op.action != 'indexing' or op.status != 'index_queued':
+            return
+        if not submission_enabled(db):
+            op.status = 'cancelled'
+            op.message = 'Отправка на индексацию отключена пользователем до выполнения запроса.'
+            db.commit()
             return
         payload = {key: op.request_payload[key] for key in ('domains', 'engines')}
         op.status = 'index_submitting'

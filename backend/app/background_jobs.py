@@ -31,6 +31,26 @@ def dispatch_pending(db, send, inflight_ids=None):
     expire(db)
     recover_interrupted(db)
     now = datetime.now(timezone.utc)
+    # A worker can disappear after the text is published but before its retry
+    # receipt is saved. Reconcile only when the broker snapshot is available,
+    # the delivery is absent, and publication happened after this attempt began.
+    if inflight_ids is not None:
+        retries = db.scalars(select(models.BackgroundJob).where(
+            models.BackgroundJob.kind == 'generation_retry',
+            models.BackgroundJob.status == 'running',
+            models.BackgroundJob.started_at < now - timedelta(minutes=30),
+            models.BackgroundJob.id.not_in(inflight_ids),
+        ).with_for_update(skip_locked=True)).all()
+        from app.reglue_history import utc
+        for retry in retries:
+            item = db.get(models.ContentItem, retry.payload.get('content_id'))
+            if (item and item.status == 'published' and item.published_at
+                    and utc(item.published_at) >= utc(retry.started_at)):
+                retry.status = 'cancelled'
+                retry.finished_at = now
+                retry.result = {**(retry.result or {}), 'reason': 'Повтор больше не требуется: текст опубликован; активной доставки в очереди нет.',
+                                'reconciled_at': now.isoformat(), 'content_id': item.id,
+                                'published_at': item.published_at.isoformat()}
     jobs = db.scalars(select(models.BackgroundJob).where(
         models.BackgroundJob.status == "queued",
         or_(models.BackgroundJob.kind != 'fibery_reglue',
