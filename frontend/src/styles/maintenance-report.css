@@ -62,3 +62,16 @@
 @media(max-width:650px){.reportGenerations li{grid-template-columns:1fr 120px;gap:8px}.reportGenerations li>div:first-child{grid-column:1/-1}}
 
 .showcasePortfolioTable th:first-child{white-space:normal;min-width:230px}.showcasePortfolioTable th:first-child small{overflow-wrap:anywhere}.showcasePortfolioTable td:nth-child(2){min-width:200px}.showcasePortfolioTable td:nth-child(3),.showcasePortfolioTable td:nth-child(5){text-align:center;font-variant-numeric:tabular-nums}
+.showcaseGeoTiles{display:flex;flex-wrap:wrap;gap:6px;margin:16px 0 10px}
+.showcaseGeoTile{display:inline-flex;align-items:center;gap:7px;min-height:40px;padding:6px 10px;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--text);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.showcaseGeoTile:hover{border-color:var(--brand,#3557d6)}
+.showcaseGeoTile[aria-pressed="true"]{border-color:var(--brand,#3557d6);background:var(--surface-2);color:var(--brand,#3557d6);box-shadow:inset 0 0 0 1px var(--brand,#3557d6)}
+.showcaseGeoFlag{font-size:19px;line-height:1}
+.showcaseGeoCount{display:inline-block;min-width:22px;padding:2px 5px;border-radius:5px;background:var(--surface-2);color:var(--muted);font-size:11px;line-height:1.4;text-align:center;font-variant-numeric:tabular-nums}
+.showcaseGeoTile[aria-pressed="true"] .showcaseGeoCount{background:var(--brand,#3557d6);color:#fff}
+.showcasePortfolioTools{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;color:var(--muted);font-size:12px}
+.showcaseColumnSort{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:0;border:0;background:transparent;color:inherit;font:inherit;font-weight:600;text-align:left;cursor:pointer}
+.showcaseColumnSort:hover,.showcasePortfolioTable th[aria-sort="ascending"],.showcasePortfolioTable th[aria-sort="descending"]{color:var(--brand,#3557d6)}
+.showcaseGeoTile:focus-visible,.showcaseColumnSort:focus-visible{outline:2px solid var(--brand,#3557d6);outline-offset:3px}
+.showcasePortfolioTable .showcaseGeoGroup th{padding:8px 10px;background:var(--surface-2);color:var(--text);border-top:1px solid var(--border);font-weight:600}
+.showcaseGeoGroup .showcaseGeoCount{margin-left:6px;background:var(--surface)}
