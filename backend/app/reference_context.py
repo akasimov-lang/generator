@@ -197,7 +197,25 @@ def prompt_context(context):
     base['sources'] = entries
     room = MAX_PROMPT_CHARS - len(json.dumps(base, ensure_ascii=False)) - 1000
     if room < 256 * max(1, len(sources)):
-        raise ValueError('База источников слишком велика для одного запроса. Нужна тематическая выборка материалов.')
+        # Search proxy URLs and repeated observations can outweigh the source
+        # excerpts. Keep a traceable reference per distinct source in the prompt;
+        # collect()/audit() retain every original URL and observation unchanged.
+        entries = []
+        for source in sources:
+            provenance = source.get('provenance') or []
+            first = provenance[0] if provenance else {}
+            entries.append({'sha256': source['sha256'], 'provenance': [{
+                'kind': first.get('kind', ''), 'id': first.get('id', ''),
+                'title': str(first.get('title') or '')[:160],
+            }], 'provenance_count': len(provenance)})
+        base['sources'] = entries
+        base['reference_sampling']['compact_provenance'] = True
+        base['reference_sampling']['provenance_note'] = (
+            'One representative observation per source; full URLs and observations remain in the audit. '
+            'Source identities and all distinct source excerpts are retained.')
+        room = MAX_PROMPT_CHARS - len(json.dumps(base, ensure_ascii=False)) - 1000
+        if room < 256 * max(1, len(sources)):
+            raise ValueError('База источников слишком велика для одного запроса. Нужна тематическая выборка материалов.')
     budget = room // max(1, len(sources))
     while budget >= 128:
         base['sources'] = [{**entry, 'excerpts': _excerpts(json.dumps({k: v for k, v in source.items()
