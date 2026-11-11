@@ -1268,7 +1268,12 @@ async def build_gemini_content(
         base_payload["generation_meta"]["generation_context"] = generation_context
     brand = button_brand(site, generation_context)
     if brand and str(page.get("slug") or "").strip("/"):
-        label = await ensure_button_label(provider, article_parts["button_text"], brand=brand, topic=topic,
+        review_label = None
+        if (generation_context or {}).get('content_kind') == 'casino_review':
+            from app.casino_review_policy import login_label, validate_table
+            validate_table(page)
+            review_label = login_label(brand, language)
+        label = review_label or await ensure_button_label(provider, article_parts["button_text"], brand=brand, topic=topic,
                                           language=language, excerpt=article_parts["body"])
         base_payload["generation_meta"]["content_button"] = {"brand": brand, "text": label}
         base_payload = apply_brand_content_buttons(base_payload, site, generation_context)

@@ -50,6 +50,11 @@ def generation_instruction(site, context, language, topic):
     brand = button_brand(site, context)
     if not brand:
         return ""
+    if (context or {}).get('content_kind') == 'casino_review':
+        from app.casino_review_policy import INSTRUCTION, login_label
+        label = login_label(brand, language)
+        return INSTRUCTION + '\nReview brand and language (data): ' + json.dumps(
+            {'brand':brand,'language':language,'Button Text':label or 'Brand + translated login'},ensure_ascii=False)
     return (
         "\n\n=== INTERNAL PAGE BUTTON REQUIREMENT ===\n"
         "Generate one concise, topic-specific call to action for this internal page. "
@@ -125,9 +130,19 @@ def apply_brand_content_buttons(payload, site, context=None):
             # Keep the existing CTA's ID, position and any custom fields.
             button = existing[0]
             button["data"]["button"] = escape(label)
+            if (context or {}).get('content_kind') == 'casino_review':
+                from app.casino_review_policy import style_button
+                style_button(blocks, button)
             continue
-        index = insertion_index(blocks)
+        review = (context or {}).get('content_kind') == 'casino_review'
+        if review:
+            from app.casino_review_policy import review_index, style_button
+            index = review_index(blocks, context)
+        else:
+            index = insertion_index(blocks)
         if index is not None:
-            blocks.insert(index, {"id": "brand-cta-" + uuid4().hex[:12], "type": "button",
-                                  "data": {"button": escape(label)}})
+            button = {"id": "brand-cta-" + uuid4().hex[:12], "type": "button", "data": {"button": escape(label)}}
+            blocks.insert(index, button)
+            if review:
+                style_button(blocks, button)
     return result

@@ -50,7 +50,9 @@ def place_home_link(content, anchor, canon, path):
         if isinstance(value, dict): return {k: clean(v) for k, v in value.items()}
         return value
     for block in result.get('blocks', []):
-        if isinstance(block, dict) and block.get('type') != 'shortcode':
+        # One contextual homepage link applies to article prose. Navigation,
+        # breadcrumbs, buttons and raw template fragments are independent links.
+        if isinstance(block, dict) and block.get('type') in {'paragraph', 'list', 'table', 'quote'}:
             block['data'] = clean(block.get('data'))
     total = page_word_count({'content': result}) or 0
     pattern = brand_pattern(anchor)

@@ -78,7 +78,7 @@ def test_review_uses_its_casino_brand_instead_of_generic_project_brand():
     source = payload(block("paragraph", text="Intro"), brand="22Bet", label="22Bet Spiele entdecken")
     result = apply_brand_content_buttons(source, SimpleNamespace(brand="Общие ключи", site_type="general"),
         {"content_kind": "casino_review", "casino_brand": "22Bet"})
-    assert blocks(result)[1]["data"]["button"] == "22Bet Spiele entdecken"
+    assert next(b for b in blocks(result) if b['type']=='button')["data"]["button"] == "22Bet Spiele entdecken"
 
 
 def test_homepage_and_empty_or_malformed_documents_are_not_changed():
