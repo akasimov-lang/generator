@@ -73,3 +73,22 @@ def test_boolean_class_attribute_does_not_break_showcase_tree():
     tree=Tree(markup)
     assert next(tree.root.walk()).classes==set()
     assert html_rows(markup,'test')[0]['brand']=='Example Casino'
+
+
+def test_bonus_label_is_not_used_as_brand_when_card_has_logo():
+    from app.showcase_management import html_rows
+    from app.showcase_inventory import rendered_brands
+    markup='<div class="casino"><div class="casino_img"><img src="/Ritzo.webp" alt="Ritzo logo"></div><div class="bonus"><span class="title">Bonus powitalny</span><span class="text">225% do 12 345 zł + 300 FS</span></div><div class="rating"><span class="title">Ocena</span><span class="text">5.0 / 5</span></div></div>'
+    rows=html_rows(markup,'public')
+    assert rendered_brands(markup)==['Ritzo']
+    assert rows[0]['logo']=='/Ritzo.webp'
+    assert {f['key']:f['value'] for f in rows[0]['fields']}=={'bonus':'225% do 12 345 zł + 300 FS','rating':'5.0'}
+
+
+def test_loutfiber_cards_keep_unfilled_rating_and_distinguish_article_images():
+    from app.showcase_management import html_rows
+    from app.showcase_inventory import rendered_brands
+    markup='<article class="lf-card"><div class="lf-identity"><img src="/yukon.webp" alt="Yukon Gold Casino"><strong class="lf-brand">Yukon Gold Casino</strong></div><div class="lf-offer">150 Chances to win for $10</div><div class="lf-rating"><span class="lf-label">Rating</span><span class="lf-rating-value">—</span></div></article><article><img src="/author.webp" alt="James Sterling"></article>'
+    rows=html_rows(markup,'public')
+    assert rendered_brands(markup)==['Yukon Gold Casino']
+    assert {f['key']:f['value'] for f in rows[0]['fields']}=={'bonus':'150 Chances to win for $10'}

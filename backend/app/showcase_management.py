@@ -11,7 +11,7 @@ from uuid import NAMESPACE_URL, uuid5
 from app.showcase_brands import brand_name, plain
 
 VOID = {'img','br','hr','input','meta','link','source','wbr','area','base','embed','param','track','col'}
-CARD = {'casino','casino-card','columnItem','rowItem'}
+CARD = {'casino','casino-card','columnItem','rowItem','lf-card'}
 IGNORE = {'header','footer','menu','navigation','nav-menu'}
 PARTIAL = re.compile(r'{{>\s*["\']?([\w .-]+?)["\']?\s*}}')
 LABELS = {'bonus':'Бонус','rating':'Рейтинг','minDep':'Мин. депозит','wager':'Вейджер'}
@@ -60,17 +60,17 @@ def field_rows(brand, values, row_id, source_id, logo=None):
 def html_rows(markup, source_id):
     root=Tree(markup).root;result=[]
     for card in (n for n in root.walk() if n.classes & CARD):
-        title=card.first({'casino-brand','card-title','title','name'}, {'h3'})
+        title=card.first({'casino-brand','card-title','title','name','lf-brand'}, {'h3'})
         info=card.first({'casino-info'})
         rating_block=card.first({'rating-block'})
         if title is None and info:title=info.first(tags={'strong'})
         if title is None and rating_block:title=rating_block.first(tags={'p'})
         img=next((n for n in card.walk() if n.tag=='img' and not re.search(r'star|icon|license|licence|rating|hodnocen',str(n.attrs),re.I)),None)
-        brand=title.text() if title else (img.attrs.get('alt','') if img else '')
-        bonus=card.first({'bonus-value','bonusText','casinoBonus'})
+        brand=(brand_name(title.text()) if title else None) or (img.attrs.get('alt','') if img else '')
+        bonus=card.first({'bonus-value','bonusText','casinoBonus','lf-offer'})
         if bonus is None:
             box=card.first({'bonus'})
-            if box:bonus=box.first(tags={'p'}) or box
+            if box:bonus=box.first({'text'}, {'p'}) or box
         if bonus is None and info:bonus=info.first(tags={'span'})
         values={'bonus':bonus.text() if bonus else ''}
         # Preserve separately labelled offers instead of merging their amounts.
@@ -81,8 +81,8 @@ def html_rows(markup, source_id):
                 values[key]=value.text()
         rating=card.first({'casino-rating','rating-info','rating-row'})
         if rating is None:
-            rating=card.first({'rating'})
-            if rating:rating=rating.first(tags={'b','span'})
+            rating=card.first({'rating','lf-rating'})
+            if rating:rating=rating.first({'text','lf-rating-value'}) or rating.first(tags={'b','span'})
         if rating:
             match=re.search(r'\d+(?:[.,]\d+)?(?:\s*/\s*10)?',rating.text())
             if match:values['rating']=match.group()
