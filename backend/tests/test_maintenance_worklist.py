@@ -20,6 +20,17 @@ def test_confirmed_receipt_is_scoped_to_its_project():
  assert not work.describe(row,{('other','r')},verify_receipts=True)['done']
  assert work.describe(row,{('x','r')},verify_receipts=True)['done']==['Настроена витрина']
 
+def test_explicit_work_list_supports_large_keyword_reports_without_changing_inventory_default():
+ row={'site_id':'x','work_summary':{'done':['Добавлены ключи: online casino.'],'checks':['Сохранение подтверждено.']}}
+ j=job({'task_type':'project_keywords','presentation':'work_list'},[row]*73)
+ assert work.is_work_report(j)
+ assert work.enrich(j,[row])[0]['work_summary']['done']==['Добавлены ключи: online casino.']
+ assert not work.is_work_report(job({'task_type':'showcase_inventory'},[row]*73))
+
+def test_explicit_work_list_does_not_turn_a_plan_or_repeat_into_confirmed_work():
+ assert not work.is_work_report(job({'planning_only':True,'presentation':'work_list'}))
+ assert not work.is_work_report(job({'repeat':True,'presentation':'work_list'}))
+
 def test_partial_breadcrumbs_keep_routing_failures():
  row={'site_id':'x','breadcrumbs_result':{'status':'partial','receipt_ids':['r'],'configured_internal_pages':37,'public_verified_pages':7,'routing_failures':['404']*30}}
  result=work.describe(row,{('x','r')},verify_receipts=True)

@@ -14,6 +14,8 @@ def is_work_report(job):
     payload = job.payload or {}
     if payload.get('planning_only') or payload.get('repeat'):
         return False
+    if payload.get('presentation') == 'work_list':
+        return True
     if payload.get('task_type'):
         return payload['task_type'] == 'site_maintenance'
     entries = (job.result or {}).get('entries', [])
