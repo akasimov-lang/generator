@@ -167,6 +167,8 @@ def test_ai_jobs_are_durable_and_never_publish(setup,monkeypatch):
     provider=models.AiProvider(name='Gemini',provider_type='gemini',endpoint_url='https://ai.test',api_key='test')
     db.add(provider);db.commit()
     async def generate(*args,**kwargs):
+        if args[1].startswith('Review these rewritten paragraphs'):
+            return {'candidates':[{'content':{'parts':[{'text':json.dumps({'approved':True,'language_preserved':True,'issues':[]})}]}}]}
         return {'candidates':[{'content':{'parts':[{'text':json.dumps({'items':[{'id':0,'text':'Rewritten paragraph'}]})}]}}]}
     monkeypatch.setattr(services,'call_gemini',generate)
     response=client.post(path+'/ai',json={'action':'paragraphs','provider_id':provider.id,'content':payload['content']})

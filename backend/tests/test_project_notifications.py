@@ -137,3 +137,46 @@ def test_project_isolation_uses_request_scopes(setup):
     response=client.get(f'/sites/{other_id}/notifications')
     assert response.status_code==404
     db.info.clear()
+
+
+def test_successful_publication_resolves_older_retry_and_publication_jobs_but_keeps_history(setup):
+    from datetime import timedelta
+    db, site, _, client = setup
+    task = models.GenerationTask(title='Recovered', site_id=site.id, geo='PL', language='pl')
+    db.add(task); db.flush()
+    now = datetime.now(timezone.utc)
+    item = models.ContentItem(task_id=task.id, site_id=site.id, topic='Recovered', slug='/ok/',
+        generated_json={}, status='published', published_at=now, idempotency_key=str(uuid4()))
+    db.add(item); db.flush()
+    db.add_all([models.BackgroundJob(kind='generation_retry', status='failed', payload={'content_id': item.id}, error='Old generation failure', updated_at=now-timedelta(hours=1)),
+                models.BackgroundJob(kind='publication', status='failed', payload={'content_id': item.id}, error='Old publication failure', updated_at=now-timedelta(minutes=30))])
+    db.commit()
+    data = client.get(f'/sites/{site.id}/notifications').json()
+    assert data['active_count'] == 0
+    assert len([r for r in data['items'] if r['source'] == 'job' and r['status'] == 'failed']) == 2
+
+
+def test_failure_after_previous_publication_remains_active(setup):
+    from datetime import timedelta
+    db, site, _, client = setup
+    task = models.GenerationTask(title='New attempt', site_id=site.id, geo='PL', language='pl')
+    db.add(task); db.flush()
+    item = models.ContentItem(task_id=task.id, site_id=site.id, topic='New attempt', slug='/old/',
+        generated_json={}, status='published', published_at=datetime.now(timezone.utc)-timedelta(days=1), idempotency_key=str(uuid4()))
+    db.add(item); db.flush()
+    db.add(models.BackgroundJob(kind='publication', status='failed', payload={'content_id': item.id}, error='New failure'))
+    db.commit()
+    assert client.get(f'/sites/{site.id}/notifications').json()['active_count'] == 1
+
+
+def test_archived_generation_errors_remain_in_history_without_active_badge(setup):
+    db, site, _, client = setup
+    task = models.GenerationTask(title='Archived', site_id=site.id, geo='PL', language='pl', archived_at=datetime.now(timezone.utc))
+    db.add(task); db.flush()
+    item = models.ContentItem(task_id=task.id, site_id=site.id, topic='Archived', slug='/old/',
+        generated_json={}, status='generation_failed', generation_error='Old error', idempotency_key=str(uuid4()))
+    db.add(item); db.flush()
+    db.add(models.BackgroundJob(kind='generation_retry', status='failed', payload={'content_id': item.id}, error='Old retry'))
+    db.commit()
+    data = client.get(f'/sites/{site.id}/notifications').json()
+    assert data['active_count'] == 0 and data['total'] == 2

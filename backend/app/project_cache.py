@@ -840,6 +840,9 @@ def refresh_project_server_id(db: Session, site: models.Site) -> str:
     projects = external_projects(db, fetch_project_cache([site.name]))
     project = next((item for item in projects if str(item.get("name") or "").strip() == site.name), None)
     if not project:
+        if getattr(site, '_server_read_error', None):
+            raise ProjectCacheError(f"Webdev {site.cache_server_ip}: {site._server_read_error}. "
+                                    f"Проект '{site.name}' не получен; сохранённые данные не изменены.")
         raise ProjectCacheError(f"Project '{site.name}' was not found on its saved server or in cache")
     server_id = str(
         project.get("serverId")
@@ -858,6 +861,7 @@ def refresh_project_server_id(db: Session, site: models.Site) -> str:
 
 def _fetch_project_from_known_server(site: models.Site) -> dict[str, Any] | None:
     """Recover a project omitted by the aggregate cache from its last confirmed server."""
+    site._server_read_error = None
     if not site.cache_server_ip:
         return None
     settings = get_settings()
@@ -877,9 +881,11 @@ def _fetch_project_from_known_server(site: models.Site) -> dict[str, Any] | None
                 headers={"Authorization": f"Bearer {token}"},
             )
             if not response.is_success:
+                site._server_read_error = f"HTTP {response.status_code}"
                 return None
             project = response.json()
-    except (httpx.HTTPError, ValueError, TypeError):
+    except (httpx.HTTPError, ValueError, TypeError) as error:
+        site._server_read_error = type(error).__name__
         return None
     if not isinstance(project, dict):
         return None

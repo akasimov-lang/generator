@@ -137,3 +137,35 @@ def test_refresh_job_reads_current_source_and_persists_changes(monkeypatch):
         run_job(db, job.id)
         assert job.status == 'completed'
         assert cache.cached(db, s)['brands'] == ['New brand']
+
+
+def test_unavailable_server_is_not_requeued_by_every_cache_refresh():
+    with session() as db:
+        s = site(db); cache.enqueue(db, s); db.commit()
+        job = db.scalar(select(models.BackgroundJob).where(models.BackgroundJob.kind == cache.KIND))
+        job.status = 'failed'; job.error = 'HTTP 502'; job.finished_at = datetime.now(timezone.utc)
+        db.commit()
+        cache.enqueue(db, s); db.commit()
+        assert job.status == 'failed' and job.error == 'HTTP 502'
+
+
+def test_failed_refresh_can_retry_after_cooldown():
+    with session() as db:
+        s = site(db); cache.enqueue(db, s); db.commit()
+        job = db.scalar(select(models.BackgroundJob).where(models.BackgroundJob.kind == cache.KIND))
+        job.status = 'failed'; job.error = 'HTTP 502'; job.finished_at = datetime.now(timezone.utc)-timedelta(minutes=16)
+        db.commit()
+        cache.enqueue(db, s); db.commit()
+        assert job.status == 'queued' and job.error is None
+
+
+def test_empty_shortcode_placeholder_does_not_invalidate_connected_showcase():
+    p = project(('Alpha',))
+    p['data']['pages'][0]['content']['blocks'].append({'type':'shortcode','data':{'shortcode':''}})
+    assert cache.summary(p)['count'] == 1
+
+
+def test_named_missing_template_still_blocks_false_empty_count():
+    p = project(('Alpha',))
+    p['data']['pages'][0]['content']['blocks'].append({'type':'shortcode','data':{'shortcode':'missing-offers'}})
+    assert cache.summary(p) is None

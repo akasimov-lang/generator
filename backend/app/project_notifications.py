@@ -81,13 +81,16 @@ def collect(db, site):
     cls = models.ContentItem
     content_columns = [cls.id, cls.status, cls.slug, cls.updated_at, cls.published_at, cls.generation_error,
         cls.competitor_research_error, cls.indexing_error, cls.deletion_error]
-    published, content_status = {}, {}
-    for id, status, slug, at, published_at, *errors in db.execute(select(*content_columns).where(item_scope)):
+    archived_tasks = set(db.scalars(select(models.GenerationTask.id).where(models.GenerationTask.archived_at.is_not(None))))
+    published, content_status, archived_items = {}, {}, set()
+    for id, status, slug, at, published_at, *errors, task_id in db.execute(select(*content_columns, cls.task_id).where(item_scope)):
+        if task_id in archived_tasks:
+            archived_items.add(id)
         published[id] = published_at if status == 'published' else None
         content_status[id] = status
         for source, error in zip(('generation', 'competitors', 'indexing', 'deletion'), errors):
             if error:
-                active = status not in {'published', 'deleted'}
+                active = status not in {'published', 'deleted'} and id not in archived_items
                 add(source, id, 'failed' if active else 'resolved', error, at, active=active,
                     code=source.upper(), context=slug)
 
@@ -97,7 +100,7 @@ def collect(db, site):
     for id, item_id, status, error, at in db.execute(select(revision.id, revision.content_item_id,
             revision.status, revision.error_message, revision.updated_at)
             .where(revision.content_item_id.in_(item_ids)).order_by(revision.created_at.desc())):
-        active = status == 'failed' and content_status.get(item_id) == 'published' and item_id not in completed_revisions
+        active = status == 'failed' and content_status.get(item_id) == 'published' and item_id not in completed_revisions and item_id not in archived_items
         add('generation', id, status, error or 'Повторная генерация: ' + status, at,
             active=active, code='CONTENT_REVISION', context='Текст: ' + item_id)
         if status == 'completed':
@@ -121,7 +124,7 @@ def collect(db, site):
             .where(models.PublicationLog.content_item_id.in_(item_ids))):
         id, item_id, error, code, at, response_body = row
         failed = bool(error) or bool(code and code >= 400)
-        resolved = timestamp(published.get(item_id)) >= timestamp(at)
+        resolved = item_id in archived_items or timestamp(published.get(item_id)) >= timestamp(at)
         add('publication', id, 'failed' if failed else 'completed', error or f'Публикация: HTTP {code or "—"}',
             at, active=failed and not resolved, code=f'HTTP_{code}' if code else 'PUBLICATION',
             context=str(response_body) if failed and response_body else '')
@@ -139,9 +142,12 @@ def collect(db, site):
         job.payload['content_id'].as_string().in_(item_ids), job.payload['task_id'].as_string().in_(task_ids),
         job.payload['generation_id'].as_string().in_(select(models.AutoLbGeneration.id).where(models.AutoLbGeneration.site_id == site.id)),
         job.payload['draft_id'].as_string().in_(select(models.ProjectPageDraft.id).where(models.ProjectPageDraft.site_id == site.id)))
-    for id, kind, status, error, at in db.execute(select(job.id, job.kind, job.status, job.error, job.updated_at).where(scope, job.kind != FIBERY_KIND)):
+    for id, kind, status, error, at, content_id in db.execute(select(job.id, job.kind, job.status, job.error, job.updated_at,
+            job.payload['content_id'].as_string()).where(scope, job.kind != FIBERY_KIND)):
+        resolved = kind in {'generation_retry', 'publication'} and (
+            content_id in archived_items or bool(published.get(content_id) and timestamp(published[content_id]) >= timestamp(at)))
         add('job', id, status, error or f'{kind}: {status}', at,
-            active=status == 'failed' and kind not in {'auto_lb', 'project_page_ai', 'article_image'}, code=kind.upper())
+            active=status == 'failed' and not resolved and kind not in {'auto_lb', 'project_page_ai', 'article_image'}, code=kind.upper())
 
     entries.sort(key=lambda row: timestamp(row['created_at']), reverse=True)
     return entries

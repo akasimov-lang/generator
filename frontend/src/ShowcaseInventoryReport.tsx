@@ -1,17 +1,19 @@
 import React from "react";
+import {ShowcasePortfolioTable,type PortfolioEvidence} from "./ShowcasePortfolioTable";
 import {projectFromPilotFilter} from "./pilotFilterNavigation";
 type Page={slug:string;presence?:string;count?:number;brands?:string[];sources?:{kind?:string;storage?:string;location?:string}[];public?:{presence?:string;url?:string;http?:number;count?:number;brands?:string[];error?:string}};
 type Completeness={status:string;cards_count:number;source_cards_count?:number;filled_cards:number;fields:{key:string;label:string;present:number;total:number;placeholders?:number;note?:string;missing_brands?:string[]}[];issues?:string[];notes?:string[]};
-type Row={completeness?:Completeness;migration?:{status:string;before_count?:number|null;after_count?:number|null;added?:number|null;removed?:number|null;message?:string;public_checks?:{slug:string;url?:string;http?:number;verified:boolean;error?:string}[]};site_id:string;project:string;main?:string;geo?:string;status:string;error?:string;inventory?:{home?:Page;internal?:Page[];internal_total?:number;internal_present?:number;internal_missing?:number;internal_unknown?:number;checked_at?:string}};
-export type InventoryReportData={entries:Row[];excluded?:{project:string;reason:string}[];status:string;standardization?:boolean;monobrands?:{project:string;brand?:string;reason:string}[]};
+type Row={portfolio?:PortfolioEvidence;fibery_name?:string;completeness?:Completeness;migration?:{status:string;before_count?:number|null;after_count?:number|null;added?:number|null;removed?:number|null;message?:string;public_checks?:{slug:string;url?:string;http?:number;verified:boolean;error?:string}[]};site_id:string;project:string;main?:string;geo?:string;status:string;error?:string;inventory?:{home?:Page;internal?:Page[];internal_total?:number;internal_present?:number;internal_missing?:number;internal_unknown?:number;checked_at?:string}};
+export type InventoryReportData={view?:string;entries:Row[];excluded?:{project:string;reason:string}[];status:string;standardization?:boolean;monobrands?:{project:string;brand?:string;reason:string}[]};
 export function normalizeInventory(raw:unknown):InventoryReportData{
- const data=raw as {entries?:Row[];inventory_excluded?:InventoryReportData["excluded"];status?:string;task_type?:string;inventory_monobrands?:InventoryReportData["monobrands"]};
- return {monobrands:data.inventory_monobrands||[],standardization:data.task_type==="showcase_standardization",entries:Array.isArray(data.entries)?data.entries:[],excluded:data.inventory_excluded||[],status:data.status||"pending"};
+ const data=raw as {inventory_view?:string;entries?:Row[];inventory_excluded?:InventoryReportData["excluded"];status?:string;task_type?:string;inventory_monobrands?:InventoryReportData["monobrands"]};
+ return {view:data.inventory_view,monobrands:data.inventory_monobrands||[],standardization:data.task_type==="showcase_standardization",entries:Array.isArray(data.entries)?data.entries:[],excluded:data.inventory_excluded||[],status:data.status||"pending"};
 }
 const presence=(page?:Page)=>page?.public?.presence==="present"?"Есть":page?.public?.presence==="none"?"Не обнаружена":"Не подтверждено";
 const formats:Record<string,string>={native:"Карточки",page_code:"HTML",page_raw:"HTML",page_table:"Таблица",shortcode:"Шаблон",layout:"Шаблон",external:"Внешняя витрина"};
 function pageLink(page:Page){return page.public?.url&&/^https?:\/\//.test(page.public.url)?page.public.url:undefined;}
 export function ShowcaseInventoryReport({report}:{report:InventoryReportData}){
+ if(report.view==="project_summary")return <ShowcasePortfolioTable entries={report.entries}/>;
  const hasCompleteness=report.entries.some(row=>row.completeness);
  const checked=report.entries.filter(row=>row.inventory),homeCount=checked.filter(row=>row.inventory?.home?.public?.presence==="present").length;
  return <><p>Проектов: {report.entries.length} · Проверено: {checked.length} · Витрина найдена на главной: {homeCount}. {report.standardization?"Замена нестандартных витрин. План и подтверждённые результаты указаны отдельно.":"Проверка чтением Webdev и публичных страниц; изменения сайтов не выполнялись."}</p>

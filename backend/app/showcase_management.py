@@ -142,6 +142,7 @@ def inspect(project, native_rows=()):
         for name in PARTIAL.findall(markup):visit(name)
     def visit(name,kind='shortcode'):
         name=str(name).strip().removesuffix('.hbs')
+        if not name:return  # An empty editor placeholder does not reference a missing template.
         if name in visited or name in IGNORE:return
         visited.add(name)
         if name not in templates:missing.append(name);return

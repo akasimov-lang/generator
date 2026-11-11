@@ -112,3 +112,29 @@ def test_missing_page_list_is_not_reported_as_zero_pages():
     from app.showcase_inventory import project_pages_inventory
     with pytest.raises(ValueError, match='список страниц'):
         project_pages_inventory({'data': {}})
+
+
+def test_portfolio_report_keeps_requested_counts_without_exposing_raw_evidence():
+    now=datetime.now(timezone.utc)
+    portfolio={'domains_count':8,'brands_count':5,'internal_pages_count':12,'interlinking':{'present':True,'complete':False}}
+    job=SimpleNamespace(id='id',kind='maintenance_report',created_at=now,started_at=now,updated_at=now,finished_at=now,status='completed',payload={'task_type':'showcase_inventory','inventory_view':'project_summary','name':'Portfolio'},result={'entries':[{'site_id':'x','project':'project.test','fibery_name':'#10_Name_PL','main':'main.test','geo':'pl-PL','status':'completed','portfolio':portfolio,'evidence':{'project':{'large':'backup'},'public_html':'raw HTML'}}]})
+    report=view(job)
+    assert report['inventory_view']=='project_summary'
+    assert report['entries'][0]['portfolio']==portfolio
+    assert report['entries'][0]['fibery_name']=='#10_Name_PL'
+    assert report['entries'][0]['main']=='main.test'
+    assert 'evidence' not in report['entries'][0]
+    assert report['presentation'] is None
+
+
+def test_system_recovery_view_keeps_findings_but_omits_private_snapshots():
+    from types import SimpleNamespace
+    from datetime import datetime,timezone
+    from app.maintenance_reports import view
+    at=datetime.now(timezone.utc)
+    job=SimpleNamespace(id='repair',kind='maintenance_report',status='partial',payload={'name':'Repair','task_type':'system_recovery'},
+        result={'entries':[{'site_id':'site','project':'project.test','status':'partial','facts':[{'label':'Проверка','value':'HTTP 502'}],'evidence':{'private':'backup'}}]},created_at=at,updated_at=at,started_at=at,finished_at=at)
+    result=view(job)
+    assert result['entries'][0]['facts'][0]['value']=='HTTP 502'
+    assert 'evidence' not in result['entries'][0]
+    assert result['progress']['percent']==100 and result['status']=='partial'

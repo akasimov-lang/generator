@@ -60,3 +60,5 @@
 .reportGenerations small{display:block;font-size:.78rem;color:var(--text-secondary,#64748b);overflow-wrap:anywhere}
 .reportGenerationProgress{display:flex;align-items:center;gap:8px;font-size:.85rem}.reportGenerationProgress progress{width:100px;max-width:100%;height:8px}
 @media(max-width:650px){.reportGenerations li{grid-template-columns:1fr 120px;gap:8px}.reportGenerations li>div:first-child{grid-column:1/-1}}
+
+.showcasePortfolioTable th:first-child{white-space:normal;min-width:230px}.showcasePortfolioTable th:first-child small{overflow-wrap:anywhere}.showcasePortfolioTable td:nth-child(2){min-width:200px}.showcasePortfolioTable td:nth-child(3),.showcasePortfolioTable td:nth-child(5){text-align:center;font-variant-numeric:tabular-nums}

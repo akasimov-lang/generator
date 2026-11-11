@@ -1287,3 +1287,21 @@ def test_full_and_direct_webdev_snapshots_overwrite_fibery_independent_of_status
         project['settings']['webdevDuty']['fibery']=None
         sync_project_cache(db,[project]);db.refresh(site)
         assert site.fibery_name is None
+
+
+def test_unavailable_server_is_not_reported_as_deleted_project(monkeypatch):
+    settings = SimpleNamespace(project_cache_url='https://webdev.test',project_cache_username='user',
+        project_cache_password='secret',app_public_url='https://panel.test',alfan_url='servers.test')
+    monkeypatch.setattr(project_cache_module,'get_settings',lambda:settings)
+    monkeypatch.setattr(project_cache_module,'fetch_project_cache',lambda names:[])
+    def respond(request):
+        return httpx.Response(200,json={'token':'token'}) if request.url.path=='/auth/login' else httpx.Response(502)
+    real_client=httpx.Client
+    monkeypatch.setattr(project_cache_module.httpx,'Client',lambda **kw:real_client(transport=httpx.MockTransport(respond),**kw))
+    import pytest
+    with make_session() as db:
+        site=models.Site(name='existing.test',base_url='https://existing.test',publication_endpoint='/',cache_server_ip='deer',cache_canon='saved.test')
+        db.add(site);db.commit()
+        with pytest.raises(project_cache_module.ProjectCacheError,match='Webdev deer: HTTP 502'):
+            project_cache_module.refresh_project_server_id(db,site)
+        assert site.cache_canon=='saved.test'

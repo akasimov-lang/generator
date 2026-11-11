@@ -76,7 +76,7 @@ def summary(job, report_id=None, *, entries=None):
     repeat = bool(job.payload.get('repeat'))
     from app.maintenance_worklist import is_work_report
     work_list = is_work_report(job)
-    factual = work_list or job.payload.get('task_type') in {'toc_repair', 'showcase_audit', 'showcase_inventory', 'showcase_standardization', 'article_image_localization'}
+    factual = work_list or job.payload.get('task_type') in {'system_recovery', 'toc_repair', 'showcase_audit', 'showcase_inventory', 'showcase_standardization', 'article_image_localization'}
     done = sum(row['status'] in {'completed', 'partial', 'failed', 'skipped'} for row in entries)
     active = any(row['status'] in {'pending','running','waiting'} for row in entries)
     progress = [entry_progress(row, content_only=bool(job.payload.get('text_revision_20261027')),
@@ -174,10 +174,15 @@ def view(job, db=None):
     entries = deepcopy((job.result or {}).get('entries', []))
     from app.maintenance_worklist import is_work_report
     work_list = is_work_report(job)
-    factual = work_list or job.payload.get('task_type') in {'toc_repair', 'showcase_audit', 'showcase_inventory', 'showcase_standardization', 'article_image_localization'}
+    factual = work_list or job.payload.get('task_type') in {'system_recovery', 'toc_repair', 'showcase_audit', 'showcase_inventory', 'showcase_standardization', 'article_image_localization'}
     if work_list:
         from app import maintenance_worklist, report_ids
         compact = maintenance_worklist.enrich(job, entries, db)
+        return {**summary(job, report_ids.get(db, job) if db is not None else None, entries=compact),
+                'updated_at': job.updated_at, 'entries': compact}
+    if job.payload.get('task_type') == 'system_recovery':
+        from app import report_ids
+        compact = [{key: row[key] for key in ('site_id','project','status','facts','error','finished_at') if key in row} for row in entries]
         return {**summary(job, report_ids.get(db, job) if db is not None else None, entries=compact),
                 'updated_at': job.updated_at, 'entries': compact}
     if job.payload.get('task_type') == 'article_image_localization':
@@ -192,7 +197,7 @@ def view(job, db=None):
                 'updated_at': job.updated_at, 'entries': compact}
     if job.payload.get('task_type') in {'showcase_inventory', 'showcase_standardization'}:
         from app import report_ids
-        compact = [{key: row[key] for key in ('site_id','project','status','main','geo','inventory','error','migration','completeness') if key in row} for row in entries]
+        compact = [{key: row[key] for key in ('site_id','project','fibery_name','status','main','geo','inventory','portfolio','error','migration','completeness') if key in row} for row in entries]
         for row in compact:
             if isinstance(row.get('migration'),dict):
                 row['migration']={key:value for key,value in row['migration'].items() if key!='plan'}
@@ -202,6 +207,7 @@ def view(job, db=None):
                 'updated_at': job.updated_at, 'entries': compact,
                 'inventory_excluded': job.payload.get('scope', {}).get('excluded_today', []),
                 'inventory_monobrands': job.payload.get('audit_refresh', {}).get('confirmed_monobrands', []),
+                'inventory_view': job.payload.get('inventory_view'),
                 'audit_only': bool(job.payload.get('audit_only'))}
     if factual:
         from app.maintenance_evidence import enrich

@@ -1,6 +1,6 @@
 """Persist confirmed homepage showcase counts; list views never contact Webdev."""
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from uuid import NAMESPACE_URL, uuid5
 from sqlalchemy import select
 from app import models
@@ -56,6 +56,10 @@ def enqueue(db, site):
     job = db.get(models.BackgroundJob, job_id)
     if job and job.status in {'queued', 'running'}:
         return
+    if job and job.status == 'failed' and job.finished_at:
+        finished = job.finished_at.replace(tzinfo=job.finished_at.tzinfo or timezone.utc)
+        if datetime.now(timezone.utc) - finished < timedelta(minutes=15):
+            return  # Repeated cache/list refreshes must not hammer an unavailable server.
     if job is None:
         job = models.BackgroundJob(id=job_id, kind=KIND, payload={'site_id': site.id})
         db.add(job)
