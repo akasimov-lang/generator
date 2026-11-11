@@ -43,6 +43,8 @@ def receipt_ids(row):
 
 
 def enrich(job, entries, db=None):
+    from app.report_generations import for_entries
+    generations = for_entries(db, entries)
     confirmed = set()
     if db is not None:
         from sqlalchemy import select
@@ -67,6 +69,7 @@ def enrich(job, entries, db=None):
         output.append({k: row[k] for k in ('site_id', 'project', 'status', 'geo') if k in row} |
                       {'main': row.get('main') or next((d for d in domains if d), None),
                        'finished_at': max((t for t in times if isinstance(t, str)), default=None),
+                       'generations': generations.get(row.get('site_id'), []),
                        'work_summary': {k: list(dict.fromkeys(v)) for k, v in work.items()}})
     return output
 

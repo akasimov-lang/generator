@@ -53,3 +53,10 @@
 .showcaseInventoryTable details{margin:0;font-size:12px}.showcaseInventoryTable summary{cursor:pointer;white-space:nowrap}
 .showcaseInventoryTable details p{margin:6px 0;max-width:330px;overflow-wrap:anywhere}
 .showcaseInventoryError{max-width:230px;overflow-wrap:anywhere}
+.reportGenerations{margin:20px 0;padding:16px;border:1px solid var(--border-color,#ccd6e5);border-radius:12px}
+.reportGenerations p{font-size:.85rem;color:var(--text-secondary,#64748b)}
+.reportGenerations ul{list-style:none;padding:0;margin:12px 0 0;max-height:520px;overflow:auto}
+.reportGenerations li{display:grid;grid-template-columns:minmax(180px,1fr) minmax(150px,.5fr) 150px;gap:16px;padding:12px 4px;border-top:1px solid var(--border-color,#ccd6e5);align-items:center}
+.reportGenerations small{display:block;font-size:.78rem;color:var(--text-secondary,#64748b);overflow-wrap:anywhere}
+.reportGenerationProgress{display:flex;align-items:center;gap:8px;font-size:.85rem}.reportGenerationProgress progress{width:100px;max-width:100%;height:8px}
+@media(max-width:650px){.reportGenerations li{grid-template-columns:1fr 120px;gap:8px}.reportGenerations li>div:first-child{grid-column:1/-1}}
