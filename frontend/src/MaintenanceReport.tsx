@@ -63,8 +63,8 @@ function Changes({before,after,planned,contentOnly=false,brandTerm}:{before?:Val
  </tbody></table>;
 }
 
-export function MaintenanceReportBody({report,onExclude,excluding,api}:{report:MaintenanceReportData;api?:Api;onExclude?:(id:string)=>void;excluding?:string|null}) {
- if(report.sitemaps)return <SitemapReport report={report.sitemaps}/>;
+export function MaintenanceReportBody({report,onExclude,excluding,api,onReportChange}:{report:MaintenanceReportData;api?:Api;onReportChange?:(raw:unknown)=>void;onExclude?:(id:string)=>void;excluding?:string|null}) {
+ if(report.sitemaps)return <SitemapReport report={report.sitemaps} reportId={report.id} api={api} onReportChange={onReportChange}/>;
  if(report.brand_health)return <BrandHealthReport report={report.brand_health} api={api}/>;
  if(report.article_images)return <ArticleImageReport report={report.article_images}/>;
  if(report.presentation==="work_list")return <><p>Выполненные работы и проверки показаны отдельно от плана. Обновлено: {date(report.updated_at)} МСК.</p>{report.entries.map(entry=><article className="maintenanceEntry" key={entry.site_id}><header><h3><a href={`/project-network/${encodeURIComponent(entry.project)}/`}>{entry.project}</a></h3><strong>{labels[entry.status]||entry.status}</strong></header><ReportGenerations rows={entry.generations}/>{entry.work_summary?.done.length?<ul>{entry.work_summary.done.map((s,i)=><li key={i}>{s}</li>)}</ul>:<p>Подтверждённые выполненные работы пока не записаны.</p>}{!!entry.work_summary?.checks.length&&<><h4>Проверено</h4><ul>{entry.work_summary.checks.map((s,i)=><li key={i}>{s}</li>)}</ul></>}{!!entry.work_summary?.issues.length&&<><h4>Примечания и оставшиеся работы</h4><ul>{entry.work_summary.issues.map((s,i)=><li key={i}>{s}</li>)}</ul></>}{!!entry.work_summary?.plan.length&&<details><summary>Исходный план</summary><ul>{entry.work_summary.plan.map((s,i)=><li key={i}>{s}</li>)}</ul></details>}{entry.finished_at&&<small>Подтверждено: {date(entry.finished_at)} МСК</small>}</article>)}</>;
@@ -137,6 +137,12 @@ export function MaintenanceReport({api,id}:{api:Api;id:string}) {
  },[api,id]);
  React.useEffect(()=>{setReport(null);void load();return()=>{request.current++;};},[load]);
  React.useEffect(()=>{if(!maintenanceEntriesActive(report))return;const timer=setInterval(()=>void load(),5000);return()=>clearInterval(timer);},[load,report]);
+ function acceptReport(raw:unknown){
+  const next=normalizeMaintenanceReport(raw);
+  if(next.id!==id)return;
+  ++request.current;setLoading(false);
+  setReport(previous=>previous&&Date.parse(previous.updated_at)>Date.parse(next.updated_at)?previous:next);
+ }
  const ready=report?.presentation!=="work_list"&&!["sitemap_repair","brand_health_audit","structured_data","toc_repair","showcase_audit","showcase_inventory","showcase_standardization","article_image_localization","site_maintenance"].includes(report?.task_type||"")&&maintenanceCanRepeat(report);
  async function repeatGroup(){
   if(!ready||repeating||createdUrl)return;
@@ -150,6 +156,6 @@ export function MaintenanceReport({api,id}:{api:Api;id:string}) {
   {error&&<p role="alert">{error}</p>}{!report&&!error&&<p role="status">Загружаем отчёт…</p>}
   {report&&!report.planning_only&&report.presentation!=="work_list"&&!["sitemap_repair","brand_health_audit","structured_data","toc_repair","showcase_audit","showcase_inventory","showcase_standardization","article_image_localization","site_maintenance"].includes(report.task_type||"")&&<MaintenanceRepeatControls ready={ready} pending={repeating} uncertain={uncertain} allowReserve={allowReserve} createdUrl={createdUrl} onReserve={setAllowReserve} onRepeat={()=>void repeatGroup()}/>}
   {repeatError&&<p role="alert">{repeatError}</p>}
-  {report&&<MaintenanceReportBody report={report} api={api} onExclude={siteId=>void excludeProject(siteId)} excluding={excluding}/>}
+  {report&&<MaintenanceReportBody report={report} api={api} onReportChange={acceptReport} onExclude={siteId=>void excludeProject(siteId)} excluding={excluding}/>}
  </section>;
 }

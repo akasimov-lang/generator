@@ -581,6 +581,22 @@ def maintenance_report(report_id: UUID, user: AuthUser, db: Session = Depends(ge
         raise HTTPException(404, 'Отчёт не найден.') from error
 
 
+class SitemapRecheckRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    request_id: UUID
+
+
+@router.post('/maintenance-reports/{report_id}/projects/{site_id}/sitemap-recheck', status_code=202)
+def recheck_sitemap_row(report_id: UUID, site_id: UUID, payload: SitemapRecheckRequest, user: AuthUser, db: Session = Depends(get_db)):
+    from app import maintenance_reports, sitemap_row_recheck
+    try:
+        maintenance_reports.get(db, report_id, user)
+    except ValueError as error:
+        raise HTTPException(404, 'Отчёт не найден.') from error
+    job = call(sitemap_row_recheck.prepare, db, report_id, site_id, payload.request_id, user)
+    return maintenance_reports.view(job, db)
+
+
 class MaintenanceRepeatRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
     request_id: UUID

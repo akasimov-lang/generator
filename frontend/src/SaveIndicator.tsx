@@ -4,7 +4,7 @@ import { editActive, type NetworkEditItem } from "./networkEditQueue";
 import "./styles/save-indicator.css";
 
 export type SaveState = "idle" | "saving" | "saved" | "error";
-export function SaveIndicator({state, version = "", label = "Сохранение", error}: {state: SaveState; version?: string; label?: string; error?: string}) {
+export function SaveIndicator({state, version = "", label = "Сохранение", error, showText = true}: {state: SaveState; version?: string; label?: string; error?: string; showText?: boolean}) {
   const token = `${state}:${version}`;
   const previous = React.useRef(token);
   const [visible, setVisible] = React.useState(state === "saving" || state === "error");
@@ -23,14 +23,14 @@ export function SaveIndicator({state, version = "", label = "Сохранени�
   const text = `${label}: ${message}`;
   return <span className={`saveIndicator ${state}${visible ? " visible" : ""}`} title={visible ? text : undefined} role="status" aria-label={visible ? text : undefined} aria-hidden={!visible}>
     <Save size={14} strokeWidth={1.8} aria-hidden="true" />
-    {visible && <span className="saveIndicatorText">{message}</span>}
+    {visible && showText && <span className="saveIndicatorText">{message}</span>}
   </span>;
 }
 
-export function QueueSaveIndicator({items, label}: {items: NetworkEditItem[]; label: string}) {
+export function QueueSaveIndicator({items, label, showText = true}: {items: NetworkEditItem[]; label: string; showText?: boolean}) {
   const latest = [...items].sort((a,b) => (b.created_at || "").localeCompare(a.created_at || ""))[0];
   const pending = items.find(editActive);
   const item = pending || latest;
   const state: SaveState = !item ? "idle" : editActive(item) ? "saving" : item.status === "failed" ? "error" : "saved";
-  return <SaveIndicator state={state} version={item?.id || ""} label={label} error={item?.message} />;
+  return <SaveIndicator state={state} version={item?.id || ""} label={label} error={item?.message} showText={showText} />;
 }

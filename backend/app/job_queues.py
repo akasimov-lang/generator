@@ -17,6 +17,7 @@ def queue_for(db, job):
     if job.kind == 'maintenance_report' and job.payload.get('planning_only'):
         return 'planning'
     return {
+        'sitemap_row_recheck': 'maintenance',
         'fibery_reglue': 'maintenance',
         'fake_redirect_check': 'maintenance',
         'domain_placeholder_check': 'maintenance',

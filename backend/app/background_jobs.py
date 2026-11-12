@@ -30,6 +30,8 @@ def dispatch_pending(db, send, inflight_ids=None):
     from app.job_queues import queue_for
     expire(db)
     recover_interrupted(db)
+    from app.sitemap_row_recheck import recover as recover_sitemap_rechecks
+    recover_sitemap_rechecks(db, inflight_ids)
     now = datetime.now(timezone.utc)
     # A worker can disappear after the text is published but before its retry
     # receipt is saved. Reconcile only when the broker snapshot is available,
@@ -154,7 +156,10 @@ def run_job(db, job_id):
     job.started_at = datetime.now(timezone.utc)
     db.commit()  # Duplicated broker deliveries must never repeat remote mutations.
     try:
-        if job.kind == 'showcase_cache_refresh':
+        if job.kind == 'sitemap_row_recheck':
+            from app.sitemap_row_recheck import execute
+            result = execute(db, job)
+        elif job.kind == 'showcase_cache_refresh':
             from app.showcase_cache import execute
             result = execute(db, job)
         elif job.kind == 'generation_retry':

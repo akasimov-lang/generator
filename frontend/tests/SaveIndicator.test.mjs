@@ -20,3 +20,9 @@ test('old successful receipt does not announce a new save on page load',()=>{
  assert.doesNotMatch(html,/Сохранено успешно!/);
  assert.match(html,/aria-hidden="true"/);
 });
+test('compact reserve indicator shows only a diskette but keeps accessible error detail',()=>{
+ const html=renderToStaticMarkup(React.createElement(QueueSaveIndicator,{label:'Резерв',showText:false,items:[{id:'a',status:'failed',message:'Сетка занята',request:{action:'reserve'}}]}));
+ assert.doesNotMatch(html,/saveIndicatorText/);
+ assert.match(html,/aria-label="Резерв: Сетка занята"/);
+ assert.match(html,/<svg/);
+});

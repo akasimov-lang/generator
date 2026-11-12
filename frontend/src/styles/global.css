@@ -10567,7 +10567,11 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 /* Controls keep their geometry while captions appear and disappear. */
 .networkMainReserveRow { align-items: flex-start; min-height: 86px; }
 .networkReserveSave { position: relative; display: flex; align-items: flex-start; gap: 6px; height: 86px; flex: 0 0 190px; max-width: 100%; }
-.networkReserveSave.networkReglueSave { flex-basis: 132px; }
+.networkReserveSave.networkReglueSave { flex: 0 1 310px; height: auto; min-height: 86px; flex-wrap: wrap; }
+.networkReserveSave.networkReglueSave > .button { flex: 0 0 auto; }
+.networkReglueSave > .saveIndicator { flex: 1 1 150px; min-width: 140px; }
+.networkReglueSave .saveIndicatorText { overflow-wrap: break-word; word-break: normal; }
+.networkReglueSave > .networkButtonCaption { position: static; flex-basis: 100%; }
 .networkReserveSave > .saveIndicator { margin-top: 8px; }
 .networkReserveSave > .button { margin: 0; flex: 1 1 auto; height: 34px; min-height: 34px; white-space: nowrap; }
 .networkButtonCaption { position: absolute; top: 40px; left: 0; width: 100%; min-height: 32px; }

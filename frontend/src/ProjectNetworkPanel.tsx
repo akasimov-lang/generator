@@ -463,7 +463,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
           <fieldset className="networkReserveField networkReserveInline" disabled={editQueue.busy("reserve")}><TemplateCombobox label="Резервный домен" value={reserve} placeholder="Выберите резерв" onChange={value => { if (!editQueue.busy("reserve")) setReserve(value); }} options={[{ value: "", label: "Выберите резерв" }, ...data.domains.filter(domain => !ampDomains.has(domain) && domain !== data.canon).map(domain => ({ value: domain, label: domain }))]} /></fieldset>
           <div className="networkReserveSave">
             <button type="button" className="button secondary compact" disabled={editQueue.busy("reserve") || !reserveValid || reserve === data.reserve} onClick={() => enqueueEdit("reserve", {domain: reserve})}>Сохранить резерв</button>
-            <QueueSaveIndicator items={editQueue.items.filter(item => item.request.action === "reserve")} label="Резерв" />
+            <QueueSaveIndicator items={editQueue.items.filter(item => item.request.action === "reserve")} label="Резерв" showText={false} />
             <div className="networkButtonCaption"><NetworkEditStatus item={editQueue.latest("reserve")} retry={id => editQueue.retry(id)} /></div>
           </div>
           <div className="networkReserveSave networkReglueSave"><button type="button" className="button primary compact networkReglueButton" disabled={!!reglueBlockedReason} title={reglueBlockedReason || (dirty?"Сохранить разметку и запустить переклей на резерв":"Ручной переклей на резервный домен")} onClick={() => void startReglue()}>Переклей</button>

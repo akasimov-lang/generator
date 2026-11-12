@@ -176,7 +176,7 @@ def view(job, db=None):
         from app import report_ids
         compact = []
         for row in entries:
-            item = {key: row[key] for key in ('site_id','project','status','main','geo','brand','fibery_name','fibery_url','error','plan','finished_at','fibery_task','fibery_error') if key in row}
+            item = {key: row[key] for key in ('site_id','project','status','main','geo','brand','fibery_name','fibery_url','error','plan','finished_at','fibery_task','fibery_error','recheck') if key in row}
             evidence = row.get('sitemap') or {}
             item['sitemap'] = {key: evidence[key] for key in ('action','sitemap_url','expected_count','internal_pages','operation_status','webdev_verified','updated_urls') if key in evidence}
             for phase in ('before','after'):
