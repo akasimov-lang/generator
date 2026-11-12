@@ -81,6 +81,33 @@ def test_selected_trailing_slash_is_preserved_and_reverse_target_follows_it():
     assert f'HTTP 301 в обратном направлении: {URL} → {url}.' in description
 
 
+def test_task_describes_confirmed_slash_redirect_loop():
+    evidence={'url':URL,'chain':[{'url':URL,'status':301,'location':URL+'/'},
+        {'url':URL+'/','status':301,'location':URL}]}
+    _,description=feature.request_text(evidence)
+    assert f'Обнаружена петля редиректов: {URL} → HTTP 301 → {URL}/ → HTTP 301 → {URL}.' in description
+    assert f'{URL} должен возвращать HTTP 200 напрямую' in description
+
+
+def test_reglue_checks_preserved_path_on_new_main_from_legacy_snapshot(setup):
+    db,site,operation=setup
+    operation.action='reglue'
+    operation.request_payload={'reserve':'new.test','journal_before':{'main':'old.test',
+        'fake_path':'/contacts','fake_enabled':True},'confirmed_at':AT.isoformat()}
+    site.cache_canon='unrelated-cache.test';db.commit()
+    job=feature.ensure_job(db,operation)
+    assert job.status=='queued' and job.payload['url']=='https://new.test/contacts'
+
+
+def test_reglue_confirmation_checks_even_when_snapshot_url_is_unchanged(setup):
+    db,site,operation=setup
+    operation.action='reglue'
+    operation.request_payload={'fibery_before':{'main':'project.test','fake_path':'/contacts','fake_enabled':True},
+        'journal_after':{'main':'project.test','fake_path':'/contacts','fake_enabled':True},'confirmed_at':AT.isoformat()}
+    job=feature.ensure_job(db,operation)
+    assert job.status=='queued' and job.payload['url']==URL
+
+
 def test_healthy_url_does_not_create_task(setup):
     db,site,operation=setup;job=feature.ensure_job(db,operation);db.commit();client=Client()
     result=feature.execute(db,job.id,client=client,now=AT+timedelta(seconds=20),

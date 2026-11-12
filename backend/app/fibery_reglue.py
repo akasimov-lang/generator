@@ -54,6 +54,10 @@ def ensure_job(db, operation):
 
 
 def schedule_confirmed(db, operation):
+    # Queue the exact fake URL check in the same transaction as Main confirmation,
+    # including a reglue that keeps the current inner path unchanged.
+    from app.fake_redirect_check import ensure_job as ensure_url_check
+    ensure_url_check(db, operation)
     if get_settings().fibery_api_token.get_secret_value():
         return ensure_job(db, operation)
     return None

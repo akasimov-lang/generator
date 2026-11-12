@@ -207,6 +207,7 @@ def test_network_confirmation_atomically_queues_task_with_before_after_snapshots
     monkeypatch.setattr(feature,'get_settings',lambda:SimpleNamespace(fibery_api_token=SecretStr('test')))
     db,site,remote=env
     site.fibery_name='#626_Project';db.commit()
+    remote.data['settings']['alternate']['enableDynamicRoutes']=True
     before=network.read_network(db,site)
     after=change(env,'reglue',before['revision'],domain='reserve.test')
     job=db.scalar(select(models.BackgroundJob).where(models.BackgroundJob.kind==feature.KIND))
@@ -215,3 +216,10 @@ def test_network_confirmation_atomically_queues_task_with_before_after_snapshots
     assert op.request_payload['fibery_before']['main']=='main.test'
     assert op.request_payload['fibery_after']['main']=='reserve.test'
     assert feature.due(job,confirmed_at(op)+timedelta(seconds=179)) is False
+    from app.fake_redirect_check import KIND, due
+    check=db.scalar(select(models.BackgroundJob).where(models.BackgroundJob.kind==KIND))
+    assert check and check.status=='queued'
+    assert check.payload['operation_id']==op.id
+    assert before['fake_main_current']==after['fake_main_current']=='/cz/'
+    assert check.payload['url']=='https://reserve.test/cz/'
+    assert due(check,confirmed_at(op)+timedelta(seconds=15))

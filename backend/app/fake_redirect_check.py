@@ -49,15 +49,19 @@ def ensure_job(db, operation):
     if existing:
         return existing
     p = operation.request_payload or {}
-    before, after, alternate = p.get('fibery_before') or {}, p.get('fibery_after') or {}, p.get('alternate') or {}
+    before = p.get('fibery_before') or p.get('journal_before') or {}
+    after = p.get('fibery_after') or p.get('journal_after') or {}
+    alternate = p.get('alternate') or {}
     main = after.get('main') or (p.get('reserve') if operation.action == 'reglue' else before.get('main'))
-    path = after.get('fake_path', alternate.get('currentFakeMain'))
-    enabled = after.get('fake_enabled', alternate.get('enableDynamicRoutes', True))
+    # A Main change preserves the fake path unless the confirmed snapshot says otherwise.
+    preserved = before if operation.action == 'reglue' else {}
+    path = after.get('fake_path', alternate.get('currentFakeMain', preserved.get('fake_path')))
+    enabled = after.get('fake_enabled', alternate.get('enableDynamicRoutes', preserved.get('fake_enabled', True)))
     site = db.get(models.Site, operation.site_id)
     if not main and site:
         main = site.cache_canon
     url = exact_url(main, path) if enabled else None
-    unchanged = bool(url and url == exact_url(before.get('main'), before.get('fake_path')))
+    unchanged = bool(operation.action != 'reglue' and url and url == exact_url(before.get('main'), before.get('fake_path')))
     at = confirmed_at(operation)
     job = models.BackgroundJob(id=id_, kind=KIND,
         status='completed' if not url or unchanged else 'queued',
@@ -145,6 +149,12 @@ def request_text(evidence):
     lines = [f'- Проект: {parsed.scheme}://{parsed.netloc}/', f'- Выбранная внутренняя страница: {url}',
              f'- Сейчас: {url} → HTTP 301 → {target}.',
              f'- Исправить: {url} должен возвращать HTTP 200 напрямую. Удалить редирект с этого адреса на {target}.']
+    chain = evidence['chain']
+    if len(chain) > 1 and chain[-1].get('location') in {hop['url'] for hop in chain}:
+        steps = [chain[0]['url']]
+        for hop in chain:
+            steps.extend([f"HTTP {hop['status']}", hop.get('location') or hop['url']])
+        lines.insert(3, '- Обнаружена петля редиректов: ' + ' → '.join(steps) + '.')
     if (parsed.scheme == redirected.scheme and parsed.netloc == redirected.netloc
             and parsed.path.rstrip('/') == redirected.path.rstrip('/') and parsed.path != redirected.path
             and parsed.query == redirected.query and not redirected.fragment):
