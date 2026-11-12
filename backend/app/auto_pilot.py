@@ -307,6 +307,8 @@ def start(db, job_id, user):
                 for site in (target, source):
                     if site:
                         db.refresh(site)
+                    if site and not authorized(db, plan, site.id) and site.reglue_participation is False:
+                        raise NetworkConflict('Участвует в переклее: Нет. Обновите план перед запуском.')
                     if not site or not matches(site, filters, donor_only=authorized(db, plan, site.id)) or not scope.includes(scope_brand(site), site.cache_geo):
                         raise NetworkConflict('Бренд или GEO проекта изменились. Обновите план.')
                 if source.id != target.id:

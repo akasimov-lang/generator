@@ -173,9 +173,12 @@ def test_older_general_jobs_are_not_reinterpreted(env, monkeypatch):
         kind="anchors", context=ctx, prompt="original saved prompt")
     db.add(saved);db.commit()
     async def gemini(_provider, prompt):
-        assert prompt == "original saved prompt"
+        assert prompt.startswith("original saved prompt\n")
+        assert 'REFERENCE_CONTEXT=' in prompt and 'END_REFERENCE_CONTEXT' in prompt
+        assert 'required_keyword_profile' not in saved.context
         return response(["Original result"])
     monkeypatch.setattr("app.services.call_gemini", gemini)
     import asyncio
     asyncio.run(auto_lb.generate(db, saved))
     assert saved.result_text == "Original result"
+    assert saved.prompt == 'original saved prompt' and saved.context == ctx

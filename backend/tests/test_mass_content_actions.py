@@ -32,13 +32,20 @@ def test_mass_actions_are_idempotent_drafts_and_never_publish(setup,monkeypatch,
     home=state['project']['data']['pages'][1]
     home['content']['blocks'].insert(0,{'id':'h1','type':'header','data':{'text':'Overview 2026','level':1}})
     before=copy.deepcopy(home)
-    calls=[]
+    calls=[]; reviews=[]
     async def generate(_provider,prompt,**kwargs):
         assert not action.startswith('trim_')
         assert len(state['backup_requests']) == 1
         assert state['backups'][0]['data'] == {**before, '_shortcodes': state['project']['shortcodes']}
-        data=json.loads(prompt.split('\n',1)[1]);calls.append(data)
-        return {'candidates':[{'content':{'parts':[{'text':json.dumps({'items':[{'id':item['id'],'text':'Revised '+item['text']} for item in data['items']]})}]}}]}
+        if '\nPAIRS=' in prompt:
+            pairs=json.loads(prompt.rsplit('\nPAIRS=',1)[1]);reviews.append(pairs)
+            assert pairs and all(pair['original'] and pair['revised'] != pair['original'] for pair in pairs)
+            output={'approved':True,'language_preserved':True,'issues':[]}
+        else:
+            data=json.loads(prompt.rsplit('\nSOURCE_DATA=',1)[1] if '\nSOURCE_DATA=' in prompt else prompt.rsplit('\n',1)[1])
+            calls.append(data)
+            output={'items':[{'id':item['id'],'text':('Brand — Revised ' if item.get('meta')=='title' else 'Revised ')+item['text']} for item in data['items']]}
+        return {'candidates':[{'content':{'parts':[{'text':json.dumps(output)}]}}]}
     monkeypatch.setattr(services,'call_gemini',generate)
     body={'filter':{'brand':'Brand','geo':'PL'},'request_id':str(uuid4()),'site_ids':[site.id],'action':action,'provider_id':None if action.startswith('trim_') else provider.id}
     response=client.post('/auto-reglue/content-drafts',json=body)
@@ -48,16 +55,21 @@ def test_mass_actions_are_idempotent_drafts_and_never_publish(setup,monkeypatch,
     assert client.post('/auto-reglue/content-drafts',json=body).json()==response.json()
     assert db.scalar(select(func.count()).select_from(models.ProjectPageDraft))==1
     job=db.scalar(select(models.BackgroundJob).where(models.BackgroundJob.kind=='project_page_ai'))
-    assert background_jobs.run_job(db,job.id)['status']=='completed'
+    assert background_jobs.run_job(db,job.id)['status']=='completed', job.error
     status=client.get('/auto-reglue/content-drafts/'+body['request_id']).json()['results'][0]
     assert status['status']=='ready'
     draft=db.get(models.ProjectPageDraft,result['draft_id'])
     if action=='trim_99':assert len(draft.result_content['blocks'])==2
     if action=='meta_headings':
-        assert draft.result_metadata=={'title':'Revised Home','description':'Revised About brand'}
+        assert draft.result_metadata['title']=='Brand — Revised Home'
+        assert draft.result_metadata['description']=='Revised About brand'
         assert draft.result_content['blocks'][0]['data']['text']=='Revised Overview 2026'
         assert draft.result_content['blocks'][1:]==before['content']['blocks'][1:]
-    if action.startswith('trim_'):assert not calls and draft.provider_id is None
+    if action.startswith('trim_'):assert not calls and not reviews and draft.provider_id is None
+    else:
+        assert len(calls)==len(reviews)==1
+        assert draft.result_metadata['meaning_reviewed'] is True
+        assert draft.result_metadata['language_preserved'] is True
     assert not state['requests']
     assert home==before
     assert len(state['backup_requests']) == 1

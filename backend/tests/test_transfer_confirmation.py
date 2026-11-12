@@ -1,5 +1,6 @@
 from uuid import uuid4
 from datetime import datetime,timezone
+import pytest
 from app import models,auto_reglue as auto,mass_action_reports as reports,transfer_confirmation as confirmation
 from test_project_network import env
 from test_cross_reglue import setup
@@ -16,6 +17,20 @@ def test_manual_transfer_keeps_main_even_when_participation_is_disabled(pool):
     assert run.status=='completed',run.message
     assert remotes[target.id].data['settings']['canon']=='target.test'
     assert all(path!='/site-config/reglue' for remote in remotes.values() for path,_ in remote.calls)
+
+
+@pytest.mark.parametrize('field,value', [('brand','Other'), ('cache_geo','PL'),
+    ('site_type','general'), ('is_active',False), ('hidden_from_projects',True),
+    ('project_status','working')])
+def test_transfer_without_participation_still_rechecks_project_scope(pool,field,value):
+    db,source,target,remotes,add=pool
+    run=prepare(pool)
+    run.plan={**run.plan,'mass_filter':{'brand':'Pin-Up','geo':'AZ','site_type':'monobrand'}}
+    source.reglue_participation=target.reglue_participation=False
+    setattr(target,field,value);db.commit()
+    auto.execute(db,run.id)
+    assert run.status=='failed' and run.message
+    assert all(not remote.calls for remote in remotes.values())
 
 
 def test_actual_guard_error_is_not_replaced_by_confirmation_message(pool):
@@ -65,7 +80,8 @@ def test_preview_handles_unicode_editorial_urls_and_keeps_ascii_collision_guard(
     from app.fake_main import next_fake_path
     site=SimpleNamespace(cache_geo='AZ',cache_language='az',brand='Pin-Up')
     state={'content_page_paths':['/odənis-usulları/','/review.html/','/az/'],'fake_main_current':'/az1/'}
-    assert next_fake_path(site,state,SimpleNamespace(language='az'))=='/az2/'
+    assert next_fake_path(site,state,SimpleNamespace(language='az'))=='/az-az/'
+    assert state['content_page_paths']==['/odənis-usulları/','/review.html/','/az/']
 
 
 def test_one_invalid_scheme_does_not_fail_other_projects_in_preview(pool):

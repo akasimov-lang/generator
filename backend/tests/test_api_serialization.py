@@ -369,7 +369,7 @@ def test_regular_user_site_list_includes_all_project_statuses() -> None:
     }
 
 
-def test_inactive_sites_are_hidden_from_project_lists_and_lookup() -> None:
+def test_inactive_sites_stay_out_of_lists_but_cached_workspace_is_readable() -> None:
     client, TestingSession = make_client()
     with TestingSession() as db:
         inactive = models.Site(
@@ -386,8 +386,13 @@ def test_inactive_sites_are_hidden_from_project_lists_and_lookup() -> None:
     assert "retired.example" not in {
         site["name"] for site in client.get("/api/sites/cache/projects").json()
     }
-    assert client.get("/api/sites/lookup?name=retired.example").status_code == 404
-    assert client.get(f"/api/sites/lookup?site_id={inactive_id}").status_code == 404
+    by_name = client.get("/api/sites/lookup?name=retired.example")
+    by_id = client.get(f"/api/sites/lookup?site_id={inactive_id}")
+    assert by_name.status_code == by_id.status_code == 200
+    assert by_name.json()['id'] == by_id.json()['id'] == inactive_id
+    assert by_name.json()['is_active'] is by_id.json()['is_active'] is False
+    with TestingSession() as db:
+        assert db.get(models.Site, inactive_id).is_active is False
 
 
 def test_regular_user_can_delete_menu_item_with_unpublished_content() -> None:

@@ -32,12 +32,24 @@ def test_rewrite_backs_up_exact_unsaved_source_and_shortcodes_before_gemini(setu
         assert saved == {**original['data']['pages'][1], 'content': payload['content'],
                          'title': 'Unsaved title', '_shortcodes': original['shortcodes']}
         assert state['events'] == ['backupList', 'backup', 'backupList']
-    async def generate(*args, **kwargs):
+    reviews=[]
+    async def generate(_provider, prompt, **kwargs):
         verify_backup()
-        return {'candidates': [{'content': {'parts': [{'text': json.dumps({'items': [{'id': 0, 'text': 'Revised editor paragraph'}]})}]}}]}
+        if '\nPAIRS=' in prompt:
+            pairs=json.loads(prompt.rsplit('\nPAIRS=',1)[1]); reviews.append(pairs)
+            assert pairs==[{'id':0,'original':'Unsaved editor paragraph','revised':'Revised editor paragraph'}]
+            output={'approved':True,'language_preserved':True,'issues':[]}
+        else:
+            data=json.loads(prompt.rsplit('\nSOURCE_DATA=',1)[1])
+            assert data['items']==[{'id':0,'text':'Unsaved editor paragraph'}]
+            output={'items':[{'id':0,'text':'Revised editor paragraph'}]}
+        return {'candidates': [{'content': {'parts': [{'text': json.dumps(output)}]}}]}
     monkeypatch.setattr(services, 'call_gemini', generate)
     job = queue(client, db, site, path, payload['content'], title='Unsaved title')
-    assert background_jobs.run_job(db, job.id)['status'] == 'completed'
+    assert background_jobs.run_job(db, job.id)['status'] == 'completed', job.error
+    assert len(reviews)==1
+    row=db.get(models.ProjectPageDraft,job.payload['draft_id'])
+    assert row.result_metadata['meaning_reviewed'] is True
     verify_backup()
     assert state['project'] == original and not state['requests']
     assert job.result['backup']['name'] == state['backups'][0]['name']

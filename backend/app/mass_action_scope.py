@@ -36,12 +36,12 @@ class MassActionFilter(BaseModel):
         return value
 
 
-def matches(site, filters, *, donor_only=False):
+def matches(site, filters, *, donor_only=False, require_participation=True):
     general = site.site_type == 'general' or (site.site_type is None and brand_key(site.brand) in {'', brand_key('Общие ключи')})
     kind = 'general' if general else 'monobrand'
     brand_matches = brand_key('Общие ключи' if general else site.brand) == brand_key(filters.brand)
     return bool(site.is_active and not site.hidden_from_projects and site.project_status == 'mass_actions'
-                and (donor_only or getattr(site, 'reglue_participation', True) is not False)
+                and (not require_participation or donor_only or getattr(site, 'reglue_participation', True) is not False)
                 and geo_key(site.cache_geo) == filters.geo
                 and (brand_matches or filters.include_general and general)
                 and (filters.site_type is None or filters.site_type == kind))
@@ -94,5 +94,6 @@ def require_run_scope(db, run):
             db.refresh(site)
         if site and not donor_only and run.plan.get('execution_mode') != 'transfer_only' and getattr(site, 'reglue_participation', True) is False:
             raise ValueError('Участвует в переклее: Нет. Запуск остановлен.')
-        if not site or not matches(site, filters, donor_only=donor_only):
+        if not site or not matches(site, filters, donor_only=donor_only,
+                                  require_participation=run.plan.get('execution_mode') != 'transfer_only'):
             raise ValueError('Проект больше не соответствует бренду, GEO или типу сохранённого фильтра. Запуск остановлен.')

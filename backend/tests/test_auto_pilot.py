@@ -127,7 +127,7 @@ def test_update_labels_require_saved_fields_and_include_removed_alternates(pool)
     run.plan={**run.plan,'rewrite_title_h1':True,'enableAlternates':False,'alternateMarkup':'',
         'title_h1_preview':{'title_before':'Old title','title_after':'New title','h1_before':'Same heading','h1_after':'Same heading'}}
     db.commit()
-    assert pilot.confirmed_updates(db,run)=={'title':False,'h1':False,'alternates':False}
+    assert pilot.confirmed_updates(db,run)=={'title':False,'h1':False,'alternates':False,'paragraphs':False}
     edit=models.ProjectPageEdit(id=str(uuid5(UUID(run.id),'title-h1-save')),site_id=run.site_id,page_key='home',
         requested_by='test',fingerprint='test',before_page={},after_page={},status='pending')
     db.add(edit);db.commit()
@@ -135,10 +135,10 @@ def test_update_labels_require_saved_fields_and_include_removed_alternates(pool)
     edit.status='confirmed'
     run.plan={**run.plan,'verification':{'status':'confirmed','checks':[{'code':'ALTERNATES','ok':True},{'code':'TITLE_H1','ok':True}]}}
     db.commit()
-    assert pilot.confirmed_updates(db,run)=={'title':True,'h1':False,'alternates':True}
+    assert pilot.confirmed_updates(db,run)=={'title':True,'h1':False,'alternates':True,'paragraphs':False}
     run.plan={**run.plan,'verification':{'status':'mismatch','checks':[{'code':'ALTERNATES','ok':False},{'code':'TITLE_H1','ok':False}]}}
     db.commit()
-    assert pilot.confirmed_updates(db,run,True)=={'title':False,'h1':False,'alternates':False}
+    assert pilot.confirmed_updates(db,run,True)=={'title':False,'h1':False,'alternates':False,'paragraphs':False}
 
 
 def test_preview_settings_and_authorization_are_rechecked(pool):
@@ -174,9 +174,10 @@ def test_no_participation_and_weekly_limit_visible_in_preview(pool):
 def test_start_rechecks_participation_before_remote_writes(pool):
     db,source,target,remotes,add=pool
     job=preview(db);source.reglue_participation=False;db.commit()
-    pilot.start(db,job.id,USER)
-    launch.execute_step(db,job.id,lambda _:pytest.fail('Disabled project must not dispatch'))
-    assert pilot.view(db,job)['counts']['failed']==1
+    with pytest.raises(NetworkConflict, match='Участвует в переклее: Нет'):
+        pilot.start(db,job.id,USER)
+    assert job.kind == launch.PREVIEW_KIND and job.status == 'completed'
+    assert not list(db.scalars(select(models.AutoReglueRun)))
     assert all(not r.calls for r in remotes.values())
 
 
@@ -236,15 +237,16 @@ def test_domain_summary_counts_reserve_as_subset_of_drops(pool):
     assert view['domain_projects']['reserve_drops'] == view['domain_projects']['drops']
 
 
-def test_new_preview_cancels_only_own_unfinished_preview_and_retries_are_idempotent(pool):
+def test_new_preview_preserves_saved_plans_and_retries_are_idempotent(pool):
     db,source,target,remotes,add=pool
     previous=pilot.create(db,uuid4(),USER)
     other=pilot.create(db,uuid4(),{**USER,'username':'other'})
     request=uuid4();new=pilot.create(db,request,USER)
-    assert previous.status=='cancelled' and other.status=='queued'
-    assert db.get(models.AutoReglueConfig,launch.cancel_key(previous.id)).value['replacement']==new.id
+    assert previous.status == other.status == new.status == 'queued'
+    assert not db.get(models.AutoReglueConfig,launch.cancel_key(previous.id))
     assert pilot.create(db,request,USER).id==new.id and new.status=='queued'
-    launch.execute_step(db,previous.id,lambda _:pytest.fail('Cancelled preview must not run'))
+    assert pilot.get(db, previous.id, USER).id == previous.id
+    assert {row['id'] for row in pilot.tasks(db, USER)['items']} == {previous.id, new.id}
     assert not list(db.scalars(select(models.AutoReglueRun)))
 
 
@@ -257,22 +259,27 @@ def test_preview_failure_is_visible_and_allows_a_new_attempt(pool,monkeypatch):
     assert pilot.create(db,uuid4(),USER).id!=job.id
 
 
-def test_task_history_only_launches_with_access_pagination_and_no_side_effects(pool):
+def test_task_history_includes_saved_plans_with_access_pagination_and_no_launches(pool):
     db,source,target,remotes,add=pool
     first=preview(db)
-    assert pilot.tasks(db,USER)['total']==0
+    assert pilot.tasks(db,USER)['total']==1
+    assert pilot.tasks(db,USER)['items'][0]['mode']=='preview'
     pilot.start(db,first.id,USER)
     second=preview(db)
-    # History excludes previews and another user's launches.
+    # Both own plans and launches are listed; another user's launches stay private.
     from copy import deepcopy
     foreign=models.BackgroundJob(id=str(uuid4()),kind=launch.KIND,status='completed',payload={**first.payload,'actor':'other'},result=deepcopy(first.result))
     db.add(foreign);db.commit()
     history=pilot.tasks(db,USER,0,1)
-    assert history['total']==1 and not history['has_more']
-    assert history['items'][0]['id']==first.id
-    assert history['items'][0]['launched_at']==first.payload['launched_at']
+    assert history['total']==2 and history['has_more']
+    next_page=pilot.tasks(db,USER,1,1)
+    assert not next_page['has_more']
+    rows={row['id']:row for row in history['items']+next_page['items']}
+    assert set(rows)=={first.id,second.id}
+    assert rows[first.id]['mode']=='execution' and rows[second.id]['mode']=='preview'
+    assert rows[first.id]['launched_at']==first.payload['launched_at']
     assert pilot.tasks(db,{**USER,'allowed_site_ids':[]})['total']==0
-    assert pilot.tasks(db,USER,1,1)['items']==[]
+    assert pilot.tasks(db,USER,2,1)['items']==[]
     assert not list(db.scalars(select(models.AutoReglueRun)))
     assert all(not remote.calls for remote in remotes.values())
 
