@@ -1,0 +1,9 @@
+.siteMenuDragHandle { display:inline-flex; align-items:center; justify-content:center; flex:0 0 24px; width:24px; height:32px; border:0; padding:0; background:transparent; color:var(--muted); cursor:grab; touch-action:none; user-select:none; border-radius:5px; }
+.siteMenuDragHandle:hover,.siteMenuDragHandle:focus-visible { color:var(--primary); background:var(--blue-soft); }
+.siteMenuDragHandle:active { cursor:grabbing; }
+.siteMenuDragHandle:disabled { cursor:default; opacity:.35; }
+.siteMenuTreeRow.menuDragging { opacity:.55; background:var(--blue-soft); }
+.siteMenuTreeRow.menuDropBefore { box-shadow:inset 0 3px var(--primary); }
+.siteMenuTreeRow.menuDropAfter { box-shadow:inset 0 -3px var(--primary); }
+.menuReorderLive { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+.menuReorderSaving { font-size:12px; color:var(--muted); margin:4px 0; }

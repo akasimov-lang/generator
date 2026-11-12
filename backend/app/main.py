@@ -19,6 +19,7 @@ from app.db import init_db
 from app.project_state_reports import router as project_reports_router
 from app.weekly_digests import router as weekly_digests_router
 from app.project_gsc import router as project_gsc_router
+from app.menu_reorder import router as menu_reorder_router
 
 
 settings = get_settings()
@@ -58,3 +59,4 @@ app.include_router(dashboard_activity_router, prefix="/api")
 app.include_router(project_reports_router, prefix="/api")
 app.include_router(weekly_digests_router, prefix="/api")
 app.include_router(project_gsc_router, prefix="/api")
+app.include_router(menu_reorder_router, prefix="/api")

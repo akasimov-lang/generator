@@ -22,7 +22,7 @@ TASK = 'brand_health_audit'
 BRANDS = ('Pelican', 'Fontan', 'BetOnRed', 'Lemon Casino')
 PLACEHOLDERS = ('welcome to my website', 'welcome to nginx', 'apache2 ubuntu default page',
     'default web site page', 'default website page', 'this domain is parked', 'domain is for sale',
-    'website coming soon', 'site under construction', 'website is under construction',
+    'website coming soon', 'website is coming soon', 'site under construction', 'website is under construction',
     'site not installed', 'domain not configured', 'домен не привязан', 'сайт не настроен')
 
 

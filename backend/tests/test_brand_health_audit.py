@@ -17,6 +17,11 @@ def test_placeholder_phrase_inside_a_full_article_is_not_enough():
     assert audit.classify(html, 200, 'Pelican')['outcome'] == 'healthy'
 
 
+def test_fresh_website_coming_soon_is_a_placeholder():
+    html = '<title>A fresh website is coming soon</title><h1>A fresh website is coming soon</h1>'
+    assert audit.classify(html, 200, 'Lemon Casino')['outcome'] == 'placeholder'
+
+
 def test_http_500_is_never_reported_healthy_even_with_brand_content():
     assert audit.classify('<title>BetOnRed</title>' + 'casino ' * 200, 500, 'BetOnRed')['outcome'] == 'http_error'
 

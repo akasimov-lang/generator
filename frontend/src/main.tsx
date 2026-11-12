@@ -1,5 +1,8 @@
 import {ProjectFiberyTasks} from "./ProjectFiberyTasks";
 import {ProjectGscField} from "./ProjectGscField";
+import {useMenuDrag} from "./useMenuDrag";
+import type {MenuMove, MenuMoveItem} from "./menuReorder";
+import {GripVertical} from "lucide-react";
 import {isProjectGscRequest} from "./projectGscState";
 import {clearPilotTasks} from "./pilotTaskCache";
 import { ProjectStateReports } from "./ProjectStateReports";
@@ -5102,6 +5105,8 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
   const [deletingNestedPageId, setDeletingNestedPageId] = React.useState<string | null>(null);
   const [retryingNestedPageId, setRetryingNestedPageId] = React.useState<string | null>(null);
   const [transliteratingMenuType, setTransliteratingMenuType] = React.useState<"header" | "footer" | null>(null);
+  const [reorderingMenu, setReorderingMenu] = React.useState(false);
+  const reorderInFlight = React.useRef(false);
   const [identityEditor, setIdentityEditor] = React.useState<{item:MenuPreviewItem;section?:Section;menuType:"header"|"footer"}|null>(null);
   const [menuGeneratorOpen, setMenuGeneratorOpen] = React.useState(false);
   type MenuJob = {id:string;status:string;error?:string;created_at:string;preview?:GeneratedMenuStructurePreview;expires_at?:string;operation:"append"|"replace";create_pages:boolean;settings:{menu_type:"header"|"footer";levels:number;top_level_count:number;mode:GeneratedMenuMode;parent_paths:string[];nested_count:number;include_top_level:boolean};applied?:{page_task_error?:string};pages:{id:string;topic:string;slug:string;status:string}[]};
@@ -5458,6 +5463,27 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
     } finally { setDeletingSectionId(null); }
   }
 
+  async function reorderMenu(menuType: "header" | "footer", move: MenuMove) {
+    if (reorderInFlight.current) return;
+    reorderInFlight.current = true;
+    setReorderingMenu(true);
+    setMenuNestingNotice("");
+    try {
+      await api(`/sites/${site.id}/menu/${menuType}/reorder`, { method: "POST", body: JSON.stringify({
+        ...move, expected_menu: menuType === "header" ? cachedHeader : cachedFooter,
+      }) });
+      await onChanged();
+      setMenuNestingNotice(`Порядок ${menuType === "header" ? "Header" : "Footer"} сохранён.`);
+    } catch (error) {
+      setMenuNestingNotice(error instanceof Error ? error.message : "Не удалось сохранить порядок меню");
+      await onChanged();
+      throw error;
+    } finally {
+      reorderInFlight.current = false;
+      setReorderingMenu(false);
+    }
+  }
+
   async function deleteSection(section: Section) {
     const requiresProjectSync = section.sync_status === "synced";
     if (requiresProjectSync && !window.confirm(`Удалить пункт меню «${section.name}» из проекта? Связанные неопубликованные тексты сохранятся без назначения пункта меню.`)) return;
@@ -5748,11 +5774,12 @@ function ProjectMenuPanel({ api, site, sections, content, logs, menuCapabilities
           </button>
           <span>Предпросмотр структуры перед добавлением на сайт</span>
         </div>
-        <div className="projectMenuStructureGrid">
-          <SiteMenuPreviewSection key={`${site.id}:header`} site={site} title="Меню Header" icon={<HeaderMenuIcon />} headerAction={<button className="button compact secondary siteMenuTransliterateButton" type="button" onClick={() => void transliterateMenuSlugs("header")} disabled={!cachedHeader.length || transliteratingMenuType !== null}>{transliteratingMenuType === "header" ? <LoaderCircle size={14} /> : <Sparkles size={14} />} {transliteratingMenuType === "header" ? "Обновляем…" : "Транслитерация"}</button>} items={cachedHeader} sections={sections.filter((section) => section.menu_type === "header" && section.sync_status !== "external_deleted")} content={content} publicationLogs={logs} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "header" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} editingTreeKey={editingTreeKey} openingEditKey={openingTreeEditKey} editName={editingSectionName} editPath={editingSectionPath} savingEdit={savingSectionEdit} editError={formError} deletingNestedPageId={deletingNestedPageId} retryingNestedPageId={retryingNestedPageId} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onEditItem={(item, section, treeKey) => item.path ? setIdentityEditor({item,section,menuType:"header"}) : void openTreeSectionEdit("header",item,section,treeKey)} onEditNameChange={setEditingSectionName} onEditPathChange={setEditingSectionPath} onSaveEdit={() => { if (editingTreeSection) void saveSectionEdit(editingTreeSection, true); }} onCancelEdit={cancelSectionEdit} onEditPage={(page) => { const menuType = sections.find(section=>section.id===page.section_id)?.menu_type === "footer" ? "footer" : "header"; const find = (nodes:MenuTreeNode[]):MenuTreeNode|undefined => {for(const node of nodes){if(normalizedTreePath(node.item.path)===normalizedTreePath(page.slug))return node;const nested=find(node.children);if(nested)return nested;}return undefined;};const node=find(buildMenuTree(menuType === "header" ? cachedHeader : cachedFooter,sections.filter(section=>section.menu_type===menuType)));if(node)setIdentityEditor({item:node.item,section:node.section,menuType});else setMenuNestingNotice("Эта страница ещё не включена в меню. Сначала добавьте пункт со ссылкой на неё."); }} onDeletePage={(item) => void deleteNestedPage(item)} onRetryPage={(item) => void retryNestedPagePublication(item)} onAddContent={(item, section) => void addContentToMenuItem("header", item, section)} onToggleReview={(item, section) => void toggleMenuReview("header", item, section)} reviewSaving={reviewSaving} onDeleteMenuItem={(item) => void deleteMenuBranch("header", item)} deletingMenuItem={Boolean(deletingSectionId)} onAddChild={(item, section, treeKey) => openChildForm("header", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("header")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Header</button>}>
+        {reorderingMenu ? <p className="menuReorderSaving" role="status">Сохраняем порядок меню…</p> : null}
+        <div className="projectMenuStructureGrid" inert={reorderingMenu || undefined}>
+          <SiteMenuPreviewSection key={`${site.id}:header`} site={site} title="Меню Header" icon={<HeaderMenuIcon />} headerAction={<button className="button compact secondary siteMenuTransliterateButton" type="button" onClick={() => void transliterateMenuSlugs("header")} disabled={!cachedHeader.length || transliteratingMenuType !== null}>{transliteratingMenuType === "header" ? <LoaderCircle size={14} /> : <Sparkles size={14} />} {transliteratingMenuType === "header" ? "Обновляем…" : "Транслитерация"}</button>} items={cachedHeader} onReorder={(move) => reorderMenu("header", move)} reorderDisabled={reorderingMenu || savingSectionEdit || reviewSaving || Boolean(deletingSectionId || sendingSectionId || adoptingParentKey || addingMenuItemId || identityEditor || transliteratingMenuType || editingTreeKey)} sections={sections.filter((section) => section.menu_type === "header" && section.sync_status !== "external_deleted")} content={content} publicationLogs={logs} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "header" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} editingTreeKey={editingTreeKey} openingEditKey={openingTreeEditKey} editName={editingSectionName} editPath={editingSectionPath} savingEdit={savingSectionEdit} editError={formError} deletingNestedPageId={deletingNestedPageId} retryingNestedPageId={retryingNestedPageId} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onEditItem={(item, section, treeKey) => item.path ? setIdentityEditor({item,section,menuType:"header"}) : void openTreeSectionEdit("header",item,section,treeKey)} onEditNameChange={setEditingSectionName} onEditPathChange={setEditingSectionPath} onSaveEdit={() => { if (editingTreeSection) void saveSectionEdit(editingTreeSection, true); }} onCancelEdit={cancelSectionEdit} onEditPage={(page) => { const menuType = sections.find(section=>section.id===page.section_id)?.menu_type === "footer" ? "footer" : "header"; const find = (nodes:MenuTreeNode[]):MenuTreeNode|undefined => {for(const node of nodes){if(normalizedTreePath(node.item.path)===normalizedTreePath(page.slug))return node;const nested=find(node.children);if(nested)return nested;}return undefined;};const node=find(buildMenuTree(menuType === "header" ? cachedHeader : cachedFooter,sections.filter(section=>section.menu_type===menuType)));if(node)setIdentityEditor({item:node.item,section:node.section,menuType});else setMenuNestingNotice("Эта страница ещё не включена в меню. Сначала добавьте пункт со ссылкой на неё."); }} onDeletePage={(item) => void deleteNestedPage(item)} onRetryPage={(item) => void retryNestedPagePublication(item)} onAddContent={(item, section) => void addContentToMenuItem("header", item, section)} onToggleReview={(item, section) => void toggleMenuReview("header", item, section)} reviewSaving={reviewSaving} onDeleteMenuItem={(item) => void deleteMenuBranch("header", item)} deletingMenuItem={Boolean(deletingSectionId)} onAddChild={(item, section, treeKey) => openChildForm("header", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("header")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Header</button>}>
             {inlineMenuType === "header" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "header")}>{menuFields("header")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
           </SiteMenuPreviewSection>
-          <SiteMenuPreviewSection key={`${site.id}:footer`} site={site} title="Меню Footer" icon={<FooterMenuIcon />} headerAction={<button className="button compact secondary siteMenuTransliterateButton" type="button" onClick={() => void transliterateMenuSlugs("footer")} disabled={!cachedFooter.length || transliteratingMenuType !== null}>{transliteratingMenuType === "footer" ? <LoaderCircle size={14} /> : <Sparkles size={14} />} {transliteratingMenuType === "footer" ? "Обновляем…" : "Транслитерация"}</button>} items={cachedFooter} sections={sections.filter((section) => section.menu_type === "footer" && section.sync_status !== "external_deleted")} content={content} publicationLogs={logs} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "footer" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} editingTreeKey={editingTreeKey} openingEditKey={openingTreeEditKey} editName={editingSectionName} editPath={editingSectionPath} savingEdit={savingSectionEdit} editError={formError} deletingNestedPageId={deletingNestedPageId} retryingNestedPageId={retryingNestedPageId} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onEditItem={(item, section, treeKey) => setIdentityEditor({item,section,menuType:"footer"})} onEditNameChange={setEditingSectionName} onEditPathChange={setEditingSectionPath} onSaveEdit={() => { if (editingTreeSection) void saveSectionEdit(editingTreeSection, true); }} onCancelEdit={cancelSectionEdit} onEditPage={(page) => { const menuType = sections.find(section=>section.id===page.section_id)?.menu_type === "footer" ? "footer" : "header"; const find = (nodes:MenuTreeNode[]):MenuTreeNode|undefined => {for(const node of nodes){if(normalizedTreePath(node.item.path)===normalizedTreePath(page.slug))return node;const nested=find(node.children);if(nested)return nested;}return undefined;};const node=find(buildMenuTree(menuType === "header" ? cachedHeader : cachedFooter,sections.filter(section=>section.menu_type===menuType)));if(node)setIdentityEditor({item:node.item,section:node.section,menuType});else setMenuNestingNotice("Эта страница ещё не включена в меню. Сначала добавьте пункт со ссылкой на неё."); }} onDeletePage={(item) => void deleteNestedPage(item)} onRetryPage={(item) => void retryNestedPagePublication(item)} onAddContent={(item, section) => void addContentToMenuItem("footer", item, section)} onToggleReview={(item, section) => void toggleMenuReview("footer", item, section)} reviewSaving={reviewSaving} onDeleteMenuItem={(item) => void deleteMenuBranch("footer", item)} deletingMenuItem={Boolean(deletingSectionId)} onAddChild={(item, section, treeKey) => openChildForm("footer", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("footer")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Footer</button>}>
+          <SiteMenuPreviewSection key={`${site.id}:footer`} site={site} title="Меню Footer" icon={<FooterMenuIcon />} headerAction={<button className="button compact secondary siteMenuTransliterateButton" type="button" onClick={() => void transliterateMenuSlugs("footer")} disabled={!cachedFooter.length || transliteratingMenuType !== null}>{transliteratingMenuType === "footer" ? <LoaderCircle size={14} /> : <Sparkles size={14} />} {transliteratingMenuType === "footer" ? "Обновляем…" : "Транслитерация"}</button>} items={cachedFooter} onReorder={(move) => reorderMenu("footer", move)} reorderDisabled={reorderingMenu || savingSectionEdit || reviewSaving || Boolean(deletingSectionId || sendingSectionId || adoptingParentKey || addingMenuItemId || identityEditor || transliteratingMenuType || editingTreeKey)} sections={sections.filter((section) => section.menu_type === "footer" && section.sync_status !== "external_deleted")} content={content} publicationLogs={logs} adoptingParentKey={adoptingParentKey} activeParentTreeKey={inlineMenuType === "footer" ? parentTreeKey : ""} pagePreviewLoadingKey={pagePreviewLoadingKey} editingTreeKey={editingTreeKey} openingEditKey={openingTreeEditKey} editName={editingSectionName} editPath={editingSectionPath} savingEdit={savingSectionEdit} editError={formError} deletingNestedPageId={deletingNestedPageId} retryingNestedPageId={retryingNestedPageId} onPreviewPage={(item, treeKey) => void openPagePreview(item, treeKey)} onEditItem={(item, section, treeKey) => setIdentityEditor({item,section,menuType:"footer"})} onEditNameChange={setEditingSectionName} onEditPathChange={setEditingSectionPath} onSaveEdit={() => { if (editingTreeSection) void saveSectionEdit(editingTreeSection, true); }} onCancelEdit={cancelSectionEdit} onEditPage={(page) => { const menuType = sections.find(section=>section.id===page.section_id)?.menu_type === "footer" ? "footer" : "header"; const find = (nodes:MenuTreeNode[]):MenuTreeNode|undefined => {for(const node of nodes){if(normalizedTreePath(node.item.path)===normalizedTreePath(page.slug))return node;const nested=find(node.children);if(nested)return nested;}return undefined;};const node=find(buildMenuTree(menuType === "header" ? cachedHeader : cachedFooter,sections.filter(section=>section.menu_type===menuType)));if(node)setIdentityEditor({item:node.item,section:node.section,menuType});else setMenuNestingNotice("Эта страница ещё не включена в меню. Сначала добавьте пункт со ссылкой на неё."); }} onDeletePage={(item) => void deleteNestedPage(item)} onRetryPage={(item) => void retryNestedPagePublication(item)} onAddContent={(item, section) => void addContentToMenuItem("footer", item, section)} onToggleReview={(item, section) => void toggleMenuReview("footer", item, section)} reviewSaving={reviewSaving} onDeleteMenuItem={(item) => void deleteMenuBranch("footer", item)} deletingMenuItem={Boolean(deletingSectionId)} onAddChild={(item, section, treeKey) => openChildForm("footer", item, section, treeKey)} action={<button className="siteMenuInlineAddButton" type="button" onClick={() => openInlineForm("footer")}><span className="buttonPlusIcon"><Plus size={15} /></span> Добавить пункт в Footer</button>}>
             {inlineMenuType === "footer" ? <form className="siteMenuInlineForm" onSubmit={(event) => createSection(event, "footer")}>{menuFields("footer")}{formError ? <span className="formError">{formError}</span> : null}</form> : null}
           </SiteMenuPreviewSection>
         </div>
@@ -9654,7 +9681,7 @@ function SiteTitleTooltip({ name, title }: { name: string; title: string }) {
 }
 
 type MenuPreviewItem = { title: string; path: string; externalId: string };
-type MenuTreeNode = { key: string; item: MenuPreviewItem; section?: Section; children: MenuTreeNode[] };
+type MenuTreeNode = { key: string; item: MenuPreviewItem; section?: Section; children: MenuTreeNode[]; menuAddress?: number[] };
 
 function menuPreviewItem(item: unknown, index: number): MenuPreviewItem {
     if (typeof item === "string") return { title: item, path: "", externalId: slugFromText(item) };
@@ -9695,13 +9722,17 @@ function nestedPreviewItems(item: unknown): unknown[] {
 function buildMenuTree(items: unknown[], sections: Section[]): MenuTreeNode[] {
   type FlatNode = MenuTreeNode & { explicitParentKey?: string; order: number };
   const flat: FlatNode[] = [];
-  let sequence = 0;
-  const visit = (rawItems: unknown[], explicitParentKey?: string) => {
+  const occurrences = new Map<string, number>();
+  const visit = (rawItems: unknown[], explicitParentKey?: string, address: number[] = []) => {
     rawItems.forEach((rawItem, index) => {
       const item = menuPreviewItem(rawItem, index);
-      const key = `cached:${sequence++}:${item.externalId}:${normalizedTreePath(item.path)}`;
-      flat.push({ key, item, children: [], explicitParentKey, order: flat.length });
-      visit(nestedPreviewItems(rawItem), key);
+      const identity = JSON.stringify([item.externalId, normalizedTreePath(item.path)]);
+      const occurrence = occurrences.get(identity) || 0;
+      occurrences.set(identity, occurrence + 1);
+      const key = `cached:${identity}:${occurrence}`;
+      const menuAddress = [...address, index];
+      flat.push({ key, item, children: [], explicitParentKey, order: flat.length, menuAddress });
+      visit(nestedPreviewItems(rawItem), key, menuAddress);
     });
   };
   visit(items);
@@ -9847,12 +9878,24 @@ type SiteMenuPreviewSectionProps = {
   reviewSaving?: boolean;
   onDeleteMenuItem?: (item: MenuPreviewItem) => void;
   deletingMenuItem?: boolean;
+  onReorder?: (move: MenuMove) => Promise<void>;
+  reorderDisabled?: boolean;
   onAddChild?: (item: MenuPreviewItem, section: Section | undefined, treeKey: string) => void;
 };
 
-function SiteMenuPreviewSection({ title, items, site, sections = [], content = [], publicationLogs = [], icon, headerAction, action, children, adoptingParentKey, activeParentTreeKey, pagePreviewLoadingKey, editingTreeKey, openingEditKey, editName = "", editPath = "", savingEdit = false, editError = "", deletingNestedPageId, retryingNestedPageId, onPreviewPage, onEditItem, onEditNameChange, onEditPathChange, onSaveEdit, onCancelEdit, onEditPage, onDeletePage, onRetryPage, onAddContent, onAddChild, onDeleteMenuItem, deletingMenuItem = false, onToggleReview, reviewSaving = false }: SiteMenuPreviewSectionProps) {
+function SiteMenuPreviewSection({ title, items, site, sections = [], content = [], publicationLogs = [], icon, headerAction, action, children, adoptingParentKey, activeParentTreeKey, pagePreviewLoadingKey, editingTreeKey, openingEditKey, editName = "", editPath = "", savingEdit = false, editError = "", deletingNestedPageId, retryingNestedPageId, onPreviewPage, onEditItem, onEditNameChange, onEditPathChange, onSaveEdit, onCancelEdit, onEditPage, onDeletePage, onRetryPage, onAddContent, onAddChild, onDeleteMenuItem, deletingMenuItem = false, onToggleReview, reviewSaving = false, onReorder, reorderDisabled = false }: SiteMenuPreviewSectionProps) {
   const menuType = title.includes("Footer") ? "footer" : "header";
   const tree = React.useMemo(() => buildMenuTree(items, sections), [items, sections]);
+  const dragItems = React.useMemo(() => {
+    const result: MenuMoveItem[] = [];
+    const visit = (nodes: MenuTreeNode[], group: string) => nodes.forEach(node => {
+      result.push({key:node.key, title:node.item.title, address:node.menuAddress, group});
+      visit(node.children,node.key);
+    });
+    visit(tree,menuType);
+    return result;
+  }, [tree,menuType]);
+  const drag = useMenuDrag(dragItems, items, reorderDisabled, onReorder);
   const [collapsedKeys, setCollapsedKeys] = React.useState<Set<string>>(() => collapsibleMenuKeys(tree));
   const [collapsedPageKeys, setCollapsedPageKeys] = React.useState<Set<string>>(() => new Set());
   const itemCount = countMenuTree(tree);
@@ -9910,8 +9953,8 @@ function SiteMenuPreviewSection({ title, items, site, sections = [], content = [
           : undefined;
         return (
           <li className="siteMenuTreeNode" key={node.key} role="treeitem" aria-expanded={hasChildren ? !collapsed : undefined}>
-            <div className="siteMenuTreeRow">
-              {hasChildren ? <span className="siteMenuTreeBranchSpacer" /> : <button className="siteMenuTreeToggle" type="button" disabled><span /></button>}
+            <div data-menu-reorder-key={node.key} className={`siteMenuTreeRow${drag.hint?.source === node.key ? " menuDragging" : ""}${drag.hint?.target === node.key ? drag.hint.position === "before" ? " menuDropBefore" : " menuDropAfter" : ""}`}>
+              {onReorder ? <button type="button" className="siteMenuDragHandle" {...drag.handle(dragItems.find(item => item.key === node.key)!)}><GripVertical size={16}/></button> : hasChildren ? <span className="siteMenuTreeBranchSpacer" /> : <button className="siteMenuTreeToggle" type="button" disabled><span /></button>}
               {editing ? (
                 <div className="siteMenuInlineItemEdit">
                   <input className="name" autoFocus value={editName} onChange={(event) => onEditNameChange?.(event.target.value)} onKeyDown={handleEditKeyDown} aria-label="Название пункта меню" disabled={savingEdit} />
@@ -9971,6 +10014,7 @@ function SiteMenuPreviewSection({ title, items, site, sections = [], content = [
   return (
     <section className="siteMenuPreviewSection">
       <h3><span className="siteMenuPreviewTitle">{icon}{title} <span>{itemCount}</span></span>{headerAction}</h3>
+      <span className="menuReorderLive" role="status" aria-live="polite">{drag.message}</span>
       {itemCount ? (
         <div className="siteMenuTreeViewport">{renderNodes(tree)}</div>
       ) : <div className="siteMenuPreviewEmpty">Пунктов нет</div>}

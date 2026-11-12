@@ -23,6 +23,7 @@ test('placeholder filter includes only Main placeholders, not healthy roots with
   const healthy={...row,site_id:'three',brand:'Fontan',health:{main:{outcome:'healthy'},inner:{outcome:'healthy'}}};
   assert.deepEqual(healthRows([healthy,innerProblem,row],'','placeholder').map(r=>r.site_id),['one']);
   assert.deepEqual(healthRows([healthy,innerProblem,row],'','problems').map(r=>r.site_id),['one','two']);
+  assert.deepEqual(healthRows([healthy,innerProblem,row]).map(r=>r.site_id),['one','two','three']);
   assert.deepEqual(healthRows([healthy,innerProblem,row],'Fontan').map(r=>r.site_id),['three']);
 });
 test('malicious stored links never become clickable',()=>{
