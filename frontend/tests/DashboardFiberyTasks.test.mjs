@@ -29,3 +29,9 @@ test('arbitrary external task links are never rendered',()=>{
  assert.doesNotMatch(render({...task,url:'javascript:alert(1)'}),/javascript:/);
  assert.doesNotMatch(render({...task,url:'https://untrusted.test/task'}),/untrusted/);
 });
+
+test('Webdev request has a working task link and its own label',()=>{
+ const html=render({...task,kind:'webdev',url:'https://hzhz.fibery.io/favorites/Alfasearch_Config/Webdev_Tasks/20274'});
+ assert.match(html,/href="https:\/\/hzhz.fibery.io\/favorites\/Alfasearch_Config\/Webdev_Tasks\/20274"/);
+ assert.match(html,/>Webdev</);
+});

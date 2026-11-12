@@ -12,7 +12,7 @@ from app import models
 from app.project_notifications import safe_text
 from app.reglue_history import utc
 
-TASK_URL = re.compile(r'https://hzhz\.fibery\.io/favorites/Alfasearch_Config/SEO_Tasks/(\d+)')
+TASK_URL = re.compile(r'https://hzhz\.fibery\.io/favorites/Alfasearch_Config/(?:SEO|Webdev)_Tasks/(\d+)')
 INDEX_KEY = 'fibery-task-index'
 RECEIPT_PREFIX = 'fibery-task-receipt:'
 
@@ -105,14 +105,16 @@ def feed(db, user, *, query='', before=None, limit=50, site_id=None):
             return
         at = utc(task.get('verified_at')) or utc(at)
         created_at = utc(task.get('created_at') or task.get('fibery/creation-date'))
-        row = {'id': number, 'number': number, 'title': safe_text(task.get('title') or
+        webdev = '/Webdev_Tasks/' in match.group(0)
+        key = 'webdev:' + number if webdev else number
+        row = {'id': key, 'number': number, 'title': safe_text(task.get('title') or
             task.get('Alfasearch Config/Name') or 'SEO-задача #' + number),
             'url': match.group(0), 'at': at.isoformat(), 'verified_at': at.isoformat(),
             'created_at': created_at.isoformat() if created_at else None,
-            'kind': kind, 'status': 'created', 'projects': [project(s) for s in projects],
+            'kind': 'webdev' if webdev else kind, 'status': 'created', 'projects': [project(s) for s in projects],
             'fibery_project_url': 'https://hzhz.fibery.io/favorites/Alfasearch_Config/SEO_Projects/' + number_project if number_project.isdigit() else None,
             'project_number': number_project}
-        existing = tasks.get(number)
+        existing = tasks.get(key)
         if existing:
             # Several work reports may update one task. Keep its latest title,
             # earliest confirmation date and one row in the collection.
@@ -122,22 +124,22 @@ def feed(db, user, *, query='', before=None, limit=50, site_id=None):
                 row = existing
             row['at'] = first
             row['created_at'] = created
-        tasks[number] = row
+        tasks[key] = row
 
     project_filter = site_id
     job = models.BackgroundJob
-    jobs_query = select(job.id, job.status, job.error, job.created_at, job.finished_at,
+    jobs_query = select(job.id, job.kind, job.status, job.error, job.created_at, job.finished_at,
         job.payload['site_id'].as_string().label('site_id'),
         job.payload['title'].as_string().label('title'),
         job.payload['due_at'].as_string().label('due_at'),
         job.result['task'].label('task'), job.result['verified_at'].as_string().label('verified_at')
-    ).where(job.kind == 'fibery_reglue')
+    ).where(job.kind.in_(['fibery_reglue', 'fake_redirect_check']))
     if allowed is not None or project_filter is not None:
         jobs_query = jobs_query.where(job.payload['site_id'].as_string().in_(sites))
     for row in db.execute(jobs_query).mappings():
         if row['task']:
             add(row['task'], row['verified_at'] or row['finished_at'] or row['created_at'], site_id=row['site_id'], kind='reglue')
-        elif row['status'] != 'completed':
+        elif row['status'] not in {'completed', 'cancelled'}:
             site = sites.get(row['site_id'])
             pending.append({'id': row['id'], 'title': safe_text(row['title'] or 'Переклей'),
                 'status': 'error' if row['error'] or row['status'] == 'failed' else 'running' if row['status'] == 'running' else 'collecting',

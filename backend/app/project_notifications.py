@@ -138,12 +138,17 @@ def collect(db, site):
         entry = fibery_notice(row)
         entry['active'] = row.status != 'completed' or index == 0
         entries.append(entry)
+    from app.fake_redirect_check import KIND as REDIRECT_KIND, notice as redirect_notice
+    for row in db.scalars(select(job).where(job.kind == REDIRECT_KIND,
+            job.payload['site_id'].as_string() == site.id).order_by(job.created_at.desc())):
+        if (row.result or {}).get('task') or row.error:
+            entries.append(redirect_notice(row))
     scope = or_(job.payload['site_id'].as_string() == site.id,
         job.payload['content_id'].as_string().in_(item_ids), job.payload['task_id'].as_string().in_(task_ids),
         job.payload['generation_id'].as_string().in_(select(models.AutoLbGeneration.id).where(models.AutoLbGeneration.site_id == site.id)),
         job.payload['draft_id'].as_string().in_(select(models.ProjectPageDraft.id).where(models.ProjectPageDraft.site_id == site.id)))
     for id, kind, status, error, at, content_id in db.execute(select(job.id, job.kind, job.status, job.error, job.updated_at,
-            job.payload['content_id'].as_string()).where(scope, job.kind != FIBERY_KIND)):
+            job.payload['content_id'].as_string()).where(scope, job.kind.not_in([FIBERY_KIND, REDIRECT_KIND]))):
         resolved = kind in {'generation_retry', 'publication'} and (
             content_id in archived_items or bool(published.get(content_id) and timestamp(published[content_id]) >= timestamp(at)))
         add('job', id, status, error or f'{kind}: {status}', at,

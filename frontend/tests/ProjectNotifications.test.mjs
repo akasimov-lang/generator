@@ -27,3 +27,9 @@ test('notes never turn an arbitrary stored URL into an external task link',()=>{
  assert.doesNotMatch(render({...item,task_url:'https://other.example/SEO_Tasks/33303'}),/<a /);
  assert.doesNotMatch(render({...item,task_url:'javascript:alert(1)'}),/<a /);
 });
+
+test('notes link to the exact Webdev redirect request',()=>{
+ const html=render({...item,code:'FIBERY_WEBDEV_REDIRECT',task_url:'https://hzhz.fibery.io/favorites/Alfasearch_Config/Webdev_Tasks/20274',task_title:'project.test — исправить /contacts'});
+ assert.match(html,/href="https:\/\/hzhz.fibery.io\/favorites\/Alfasearch_Config\/Webdev_Tasks\/20274"/);
+ assert.match(html,/project.test — исправить \/contacts/);
+});

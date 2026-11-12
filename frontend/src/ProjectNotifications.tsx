@@ -98,6 +98,6 @@ export function ProjectLogs({siteId,project,api,onBack}:{siteId:string;project:s
 }
 
 export function LogEntry({item}:{item:Entry}) {
-  const taskUrl=item.task_url&&/^https:\/\/hzhz\.fibery\.io\/favorites\/Alfasearch_Config\/SEO_Tasks\/\d+$/.test(item.task_url)?item.task_url:null;
+  const taskUrl=item.task_url&&/^https:\/\/hzhz\.fibery\.io\/favorites\/Alfasearch_Config\/(?:SEO|Webdev)_Tasks\/\d+$/.test(item.task_url)?item.task_url:null;
   return <details className={`projectLogEntry ${item.active?item.severity:"resolved"}`}><summary><span>{date(item.created_at)}</span><b>{item.code||names[item.source]||item.source}</b><span className="projectLogSummary">{item.message.slice(0,200)}</span><small>{item.active?states[item.status]||"Актуально":item.status==="failed"?"Ошибка в истории":states[item.status]||item.status}</small></summary><div><p>{names[item.source]||item.source} · {states[item.status]||item.status} · {item.active?(item.severity==="info"?"Примечание":"Требует внимания"):"История"}</p>{taskUrl&&<p><a href={taskUrl} target="_blank" rel="noopener noreferrer">Открыть SEO-задачу в Fibery: {item.task_title||item.message}</a></p>}<pre>{item.message}</pre>{item.context&&<pre>{item.context}</pre>}<small>Запись: {item.id}{item.occurrences>1?` · Повторений: ${item.occurrences}`:""}{item.resolved_at?` · Устранено: ${date(item.resolved_at)}`:""}</small></div></details>;
 }

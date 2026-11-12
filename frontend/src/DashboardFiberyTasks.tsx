@@ -10,7 +10,7 @@ type Task = Pending & { number: string; url: string; verified_at: string; kind: 
 type Feed = { total: number; items: Task[]; pending: Pending[]; next_before: string | null };
 const date = new Intl.DateTimeFormat("ru-RU", { timeZone: "Europe/Moscow", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 const formatDate = (value: string) => date.format(new Date(value));
-const taskUrl = (value: string) => /^https:\/\/hzhz\.fibery\.io\/favorites\/Alfasearch_Config\/SEO_Tasks\/\d+$/.test(value);
+const taskUrl = (value: string) => /^https:\/\/hzhz\.fibery\.io\/favorites\/Alfasearch_Config\/(?:SEO|Webdev)_Tasks\/\d+$/.test(value);
 const projectUrl = (value: string) => /^https:\/\/hzhz\.fibery\.io\/favorites\/Alfasearch_Config\/SEO_Projects\/\d+$/.test(value);
 
 function Projects({ projects }: { projects: Project[] }) {
@@ -23,7 +23,7 @@ function Projects({ projects }: { projects: Project[] }) {
 
 export function FiberyTaskRow({ task }: { task: Task }) {
   return <li className="dashboardFiberyTask">
-    <div className="dashboardFiberyDate"><time dateTime={task.at}>{formatDate(task.at)}</time><small>{task.kind === "reglue" ? "Переклей" : "SEO-работы"}</small></div>
+    <div className="dashboardFiberyDate"><time dateTime={task.at}>{formatDate(task.at)}</time><small>{task.kind === "reglue" ? "Переклей" : task.kind === "webdev" ? "Webdev" : "SEO-работы"}</small></div>
     <div className="dashboardFiberyDetails"><strong>{task.title}</strong><Projects projects={task.projects} />
       {!task.projects.length && task.fibery_project_url && projectUrl(task.fibery_project_url) && <a href={task.fibery_project_url} target="_blank" rel="noopener noreferrer">Проект Fibery #{task.project_number}</a>}
     </div>
@@ -67,7 +67,7 @@ export function DashboardFiberyTasks({ api }: { api: Api }) {
     {data && <>
       {!!data.pending.length && <details className="dashboardFiberyPending" open><summary>Подготовка и ошибки · {data.pending.length}</summary>
         <ul>{data.pending.map(task => <li key={task.id}><strong>{task.title}</strong><Projects projects={task.projects} />
-          <span>{task.status === "error" ? "Не удалось подтвердить создание" : task.status === "running" ? "Создаём задачу" : "Собираем работы после переклея"}</span>
+          <span>{task.status === "error" ? "Не удалось подтвердить создание" : task.status === "running" ? "Создаём задачу" : "Подготавливаем задачу"}</span>
           {task.error && <small className="formError">{task.error}</small>}
           {task.due_at && <small>Создание не ранее {formatDate(task.due_at)} МСК</small>}
         </li>)}</ul></details>}
