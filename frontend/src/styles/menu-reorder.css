@@ -1,9 +1,17 @@
 .siteMenuDragHandle { display:inline-flex; align-items:center; justify-content:center; flex:0 0 24px; width:24px; height:32px; border:0; padding:0; background:transparent; color:var(--muted); cursor:grab; touch-action:none; user-select:none; border-radius:5px; }
-.siteMenuDragHandle:hover,.siteMenuDragHandle:focus-visible { color:var(--primary); background:var(--blue-soft); }
+.siteMenuDragHandle:hover,.siteMenuDragHandle:focus-visible { color:var(--primary); background:var(--primary-soft); }
 .siteMenuDragHandle:active { cursor:grabbing; }
 .siteMenuDragHandle:disabled { cursor:default; opacity:.35; }
-.siteMenuTreeRow.menuDragging { opacity:.55; background:var(--blue-soft); }
-.siteMenuTreeRow.menuDropBefore { box-shadow:inset 0 3px var(--primary); }
-.siteMenuTreeRow.menuDropAfter { box-shadow:inset 0 -3px var(--primary); }
+.menuDragActive,.menuDragActive * { cursor:grabbing!important; user-select:none!important; }
+.siteMenuTreeNode.menuDragSibling { transition:transform 160ms ease; will-change:transform; }
+.siteMenuTreeNode.menuDragPlaceholder { opacity:.24; outline:1px dashed var(--primary); border-radius:8px; background:var(--primary-soft); }
+.siteMenuTreeRow.menuDragOverlay { position:fixed; top:0; left:0; z-index:10000; box-sizing:border-box; margin:0; padding:7px; display:flex; flex-wrap:wrap; align-items:center; gap:7px; min-height:54px; border:1px solid var(--primary); border-radius:9px; color:var(--text); background:var(--surface); box-shadow:0 8px 24px #182d5230; pointer-events:none; will-change:transform; }
 .menuReorderLive { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
-.menuReorderSaving { font-size:12px; color:var(--muted); margin:4px 0; }
+.menuStructureHeading { display:flex; align-items:center; flex-wrap:wrap; gap:8px 16px; }
+.menuReorderStatus { display:inline-flex; align-items:center; gap:6px; max-width:100%; font-size:12px; font-weight:400; line-height:1.5; color:var(--muted); }
+.menuReorderStatus svg { flex:none; }
+.menuReorderStatus.saving svg { color:var(--primary); animation:menuSavePulse 1.2s ease-in-out infinite; }
+.menuReorderStatus.saved { color:var(--primary); }
+.menuReorderStatus.error { color:var(--danger); }
+@keyframes menuSavePulse { 0%,100% { opacity:1; } 50% { opacity:.3; } }
+@media(prefers-reduced-motion:reduce) { .siteMenuTreeNode.menuDragSibling { transition:none; } .menuReorderStatus.saving svg { animation:none; } }

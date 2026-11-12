@@ -1,4 +1,5 @@
 export type ProjectNotice = { siteId: string; key: string; code: string; message: string; context?: string; severity: "info" | "warning" | "error"; active: boolean; persist?: boolean; synced?: boolean; created_at?: string };
+import {isMenuReorderRequest} from "./menuReorder";
 import {isProjectGscRequest} from "./projectGscState";
 export const NOTICE_EVENT = "pagepilot-project-notice";
 export const PROJECT_CHANGED_EVENT = "pagepilot-project-changed";
@@ -23,8 +24,8 @@ export function projectNotice(notice: ProjectNotice) {
   window.dispatchEvent(new CustomEvent(NOTICE_EVENT, { detail: value }));
 }
 export function projectApiResult(path: string, method: string, error?: unknown) {
-  // Private GSC edits have their own inline status and must not trigger project sync.
-  if (isProjectGscRequest(path)) return;
+  // These edits update their own view and show inline feedback, without workspace reloads.
+  if (isProjectGscRequest(path) || isMenuReorderRequest(path)) return;
   if (path.includes("/notifications")) return;
   const siteId = path.match(/^\/sites\/([\w-]{36})(?:\/|$|\?)/)?.[1] || activeSite;
   if (!siteId) return;
