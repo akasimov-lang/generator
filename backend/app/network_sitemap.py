@@ -98,11 +98,11 @@ def process(db,id):
                 with Remote(db,site) as remote:
                     project=remote.project();main,urls=expected(project)
                     if op.status=='sitemap_queued':
-                        if not isinstance(project.get('sitemap'),str):raise ValueError('Webdev не вернул исходный sitemap для резервной копии.')
+                        if project.get('sitemap') is not None and not isinstance(project['sitemap'],str):raise ValueError('Webdev вернул некорректный исходный sitemap.')
                         xml=document(urls)
                         # Persist the complete previous template before any write.
-                        op.request_payload={'main':main,'urls':urls,'before':project['sitemap'],'after':xml}
-                        if project['sitemap']!=xml:
+                        op.request_payload={'main':main,'urls':urls,'before':project.get('sitemap'),'before_present':'sitemap' in project,'after':xml}
+                        if project.get('sitemap')!=xml:
                             op.status='sitemap_writing';op.message='Сохраняем sitemap в Webdev.';db.commit()
                             try:
                                 code,_=remote.request('POST','/projects/update-sitemap',{'project':site.name,'filename':'sitemap',

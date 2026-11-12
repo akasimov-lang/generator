@@ -76,7 +76,7 @@ def summary(job, report_id=None, *, entries=None):
     repeat = bool(job.payload.get('repeat'))
     from app.maintenance_worklist import is_work_report
     work_list = is_work_report(job)
-    factual = work_list or job.payload.get('task_type') in {'brand_health_audit', 'system_recovery', 'toc_repair', 'showcase_audit', 'showcase_inventory', 'showcase_standardization', 'article_image_localization'}
+    factual = work_list or job.payload.get('task_type') in {'sitemap_repair', 'brand_health_audit', 'system_recovery', 'toc_repair', 'showcase_audit', 'showcase_inventory', 'showcase_standardization', 'article_image_localization'}
     done = sum(row['status'] in {'completed', 'partial', 'failed', 'skipped'} for row in entries)
     active = any(row['status'] in {'pending','running','waiting'} for row in entries)
     progress = [entry_progress(row, content_only=bool(job.payload.get('text_revision_20261027')),
@@ -172,6 +172,21 @@ def paragraph_metrics(page):
 
 def view(job, db=None):
     entries = deepcopy((job.result or {}).get('entries', []))
+    if job.payload.get('task_type') == 'sitemap_repair':
+        from app import report_ids
+        compact = []
+        for row in entries:
+            item = {key: row[key] for key in ('site_id','project','status','main','geo','brand','fibery_name','fibery_url','error','plan','finished_at','fibery_task','fibery_error') if key in row}
+            evidence = row.get('sitemap') or {}
+            item['sitemap'] = {key: evidence[key] for key in ('action','sitemap_url','expected_count','internal_pages','operation_status','webdev_verified','updated_urls') if key in evidence}
+            for phase in ('before','after'):
+                value = evidence.get(phase) or {}
+                if phase == 'before':
+                    value = {**value, **value.get('public',{})}
+                item['sitemap'][phase] = {key: value[key] for key in ('status','valid','count','missing','extra','duplicates','error','location','checked_at') if key in value}
+            compact.append(item)
+        return {**summary(job, report_ids.get(db,job) if db is not None else None, entries=compact),
+            'updated_at':job.updated_at,'entries':compact,'scope':job.payload.get('scope'),'parameters':job.payload.get('parameters')}
     if job.payload.get('task_type') == 'brand_health_audit':
         from app import report_ids
         keys = ('site_id', 'project', 'status', 'brand', 'geo', 'main', 'main_url', 'inner_url',
@@ -182,7 +197,7 @@ def view(job, db=None):
                 'scope': job.payload.get('scope'), 'parameters': job.payload.get('parameters')}
     from app.maintenance_worklist import is_work_report
     work_list = is_work_report(job)
-    factual = work_list or job.payload.get('task_type') in {'system_recovery', 'toc_repair', 'showcase_audit', 'showcase_inventory', 'showcase_standardization', 'article_image_localization'}
+    factual = work_list or job.payload.get('task_type') in {'sitemap_repair', 'system_recovery', 'toc_repair', 'showcase_audit', 'showcase_inventory', 'showcase_standardization', 'article_image_localization'}
     if work_list:
         from app import maintenance_worklist, report_ids
         compact = maintenance_worklist.enrich(job, entries, db)

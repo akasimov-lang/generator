@@ -44,7 +44,7 @@ def is_repeat(job):
 
 def create(db, report_id, request_id, user, allow_reserve=False):
     parent = reports.get(db, report_id, user)
-    if parent.payload.get('task_type') == 'brand_health_audit':
+    if parent.payload.get('task_type') in {'brand_health_audit','sitemap_repair'}:
         raise ValueError('Это отчёт проверки доступности. Переклей и рерайт из него не запускаются.')
     request_id = str(UUID(str(request_id)))
     with network.network_lock(db, 'maintenance-repeat:' + request_id):

@@ -61,3 +61,26 @@ def test_old_dns_failure_becomes_terminal_without_rewriting(env, monkeypatch):
     assert op.status=='sitemap_failed'
     assert 'Name or service not known' in op.message
     assert not remote.calls
+
+
+@pytest.mark.parametrize('present',[False,True])
+def test_creates_missing_sitemap_preserving_original_absence(env,monkeypatch,present):
+    db,site,remote=env
+    remote.data['data']={'pages':[{'slug':'/'}]}
+    if present:remote.data['sitemap']=None
+    else:remote.data.pop('sitemap',None)
+    def request(method,path,payload):
+        remote.data['sitemap']=unquote(payload['contents']);return 201,{}
+    remote.request=request
+    monkeypatch.setattr(sitemap,'public_check',lambda *args:None)
+    op=sitemap.queue(db,site,uuid4(),'test');db.commit();sitemap.process(db,op.id)
+    assert op.status=='sitemap_done'
+    assert op.request_payload['before'] is None and op.request_payload['before_present'] is present
+    assert sitemap.locations(remote.data['sitemap'])==['https://main.test/']
+
+
+def test_rejects_unexpected_sitemap_object_without_overwriting(env):
+    db,site,remote=env
+    remote.data.update(data={'pages':[{'slug':'/'}]},sitemap={'unexpected':'value'})
+    op=sitemap.queue(db,site,uuid4(),'test');db.commit();sitemap.process(db,op.id)
+    assert op.status=='sitemap_failed' and not remote.calls
