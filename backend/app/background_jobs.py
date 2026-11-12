@@ -53,7 +53,7 @@ def dispatch_pending(db, send, inflight_ids=None):
                                 'published_at': item.published_at.isoformat()}
     jobs = db.scalars(select(models.BackgroundJob).where(
         models.BackgroundJob.status == "queued",
-        or_(models.BackgroundJob.kind.not_in(['fibery_reglue', 'fake_redirect_check']),
+        or_(models.BackgroundJob.kind.not_in(['fibery_reglue', 'fake_redirect_check', 'domain_placeholder_check']),
             (models.BackgroundJob.payload['due_at'].as_string() <= now.isoformat()) &
             or_(models.BackgroundJob.result['next_attempt_at'].as_string().is_(None),
                 models.BackgroundJob.result['next_attempt_at'].as_string() <= now.isoformat())),
@@ -70,6 +70,10 @@ def dispatch_pending(db, send, inflight_ids=None):
                 continue
         if job.kind == 'fake_redirect_check':
             from app.fake_redirect_check import due
+            if not due(job):
+                continue
+        if job.kind == 'domain_placeholder_check':
+            from app.domain_placeholder_check import due
             if not due(job):
                 continue
         if job.kind == 'generation_retry':
@@ -92,6 +96,9 @@ def dispatch_pending(db, send, inflight_ids=None):
 
 def run_job(db, job_id):
     candidate = db.get(models.BackgroundJob, job_id)
+    if candidate and candidate.kind == 'domain_placeholder_check':
+        from app.domain_placeholder_check import execute
+        return execute(db, job_id)
     if candidate and candidate.kind == 'fake_redirect_check':
         from app.fake_redirect_check import execute
         return execute(db, job_id)

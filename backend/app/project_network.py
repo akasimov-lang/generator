@@ -717,7 +717,10 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
                     operation.status = "unknown"
                     operation.message = "Webdev не вернул номер задачи. Повторная отправка заблокирована; обновите сетку."
                 else:
-                    operation.request_payload = {**operation.request_payload, "job_id": str(response["jobId"])}
+                    from datetime import datetime, timezone
+                    operation.request_payload = {**operation.request_payload, "job_id": str(response["jobId"]),
+                        **({'domain_added_at': datetime.now(timezone.utc).isoformat()}
+                           if payload.action in {'create_domains', 'create_subdomains'} else {})}
                     operation.message = (f"Задача удаления {response['jobId']} запущена. Ожидаем удаления домена из сетки."
                         if payload.action == "delete_domain" else f"Задача создания {response['jobId']} запущена. Ожидаем появления доменов в сетке.")
                     if response.get("skipped"):

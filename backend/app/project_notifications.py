@@ -139,6 +139,11 @@ def collect(db, site):
         entry['active'] = row.status != 'completed' or index == 0
         entries.append(entry)
     from app.fake_redirect_check import KIND as REDIRECT_KIND, notice as redirect_notice
+    from app.domain_placeholder_check import KIND as PLACEHOLDER_KIND, notice as placeholder_notice
+    for row in db.scalars(select(job).where(job.kind == PLACEHOLDER_KIND,
+            job.payload['site_id'].as_string() == site.id).order_by(job.created_at.desc())):
+        if (row.result or {}).get('task') or row.error:
+            entries.append(placeholder_notice(row))
     for row in db.scalars(select(job).where(job.kind == REDIRECT_KIND,
             job.payload['site_id'].as_string() == site.id).order_by(job.created_at.desc())):
         if (row.result or {}).get('task') or row.error:
@@ -148,7 +153,7 @@ def collect(db, site):
         job.payload['generation_id'].as_string().in_(select(models.AutoLbGeneration.id).where(models.AutoLbGeneration.site_id == site.id)),
         job.payload['draft_id'].as_string().in_(select(models.ProjectPageDraft.id).where(models.ProjectPageDraft.site_id == site.id)))
     for id, kind, status, error, at, content_id in db.execute(select(job.id, job.kind, job.status, job.error, job.updated_at,
-            job.payload['content_id'].as_string()).where(scope, job.kind.not_in([FIBERY_KIND, REDIRECT_KIND]))):
+            job.payload['content_id'].as_string()).where(scope, job.kind.not_in([FIBERY_KIND, REDIRECT_KIND, PLACEHOLDER_KIND]))):
         resolved = kind in {'generation_retry', 'publication'} and (
             content_id in archived_items or bool(published.get(content_id) and timestamp(published[content_id]) >= timestamp(at)))
         add('job', id, status, error or f'{kind}: {status}', at,

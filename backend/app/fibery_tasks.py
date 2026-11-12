@@ -133,7 +133,7 @@ def feed(db, user, *, query='', before=None, limit=50, site_id=None):
         job.payload['title'].as_string().label('title'),
         job.payload['due_at'].as_string().label('due_at'),
         job.result['task'].label('task'), job.result['verified_at'].as_string().label('verified_at')
-    ).where(job.kind.in_(['fibery_reglue', 'fake_redirect_check']))
+    ).where(job.kind.in_(['fibery_reglue', 'fake_redirect_check', 'domain_placeholder_check']))
     if allowed is not None or project_filter is not None:
         jobs_query = jobs_query.where(job.payload['site_id'].as_string().in_(sites))
     for row in db.execute(jobs_query).mappings():

@@ -81,9 +81,10 @@ celery_app.conf.beat_schedule = {
 def schedule_fibery_reglue_job():
     from app.fibery_reglue import tick
     from app.fake_redirect_check import tick as redirect_tick
+    from app.domain_placeholder_check import tick as placeholder_tick
     with SessionLocal() as db:
         result = tick(db)
-        return {**result, 'fake_redirects': redirect_tick(db)}
+        return {**result, 'fake_redirects': redirect_tick(db), 'domain_placeholders': placeholder_tick(db)}
 
 
 @celery_app.task(name="app.worker.refresh_weekly_digests", soft_time_limit=240, time_limit=270)

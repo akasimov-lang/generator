@@ -20,13 +20,15 @@ def remote(monkeypatch):
         if kind=='fibery.entity/query':
             type_=args['query']['q/from']
             if type_=='Alfasearch Config/SEO Projects':result=[{'fibery/id':'project','fibery/public-id':'1715'}]
+            elif type_=='Alfasearch Config/Priority_WebDev/Webdev Tasks':result=[{'fibery/id':'medium','enum/name':'Medium'}]
             elif type_.startswith('workflow/'):result=[{'fibery/id':'new','enum/name':'New'}]
             else:result=[deepcopy(state['task'])] if state['task'] else []
         elif kind=='fibery.entity/create':
             assert args['type']==TASK_TYPE and args['entity']['workflow/state']['fibery/id']=='new'
             assert state['task'] is None
             state['creates']+=1;state['task']={**args['entity'],'fibery/public-id':'20274',
-                'workflow/state':{'enum/name':'New'},'Alfasearch Config/Description':{'Collaboration~Documents/secret':'secret'}}
+                'workflow/state':{'enum/name':'New'},'Alfasearch Config/SEO Project':{'fibery/id':'project','fibery/public-id':'1715'},
+                'Alfasearch Config/Description':{'Collaboration~Documents/secret':'secret'}}
             result=state['task']
             if state['timeout']:
                 state['timeout']=False;raise httpx.ReadTimeout('PRIVATE')
@@ -69,3 +71,36 @@ def test_wrong_url_or_project_cannot_be_overwritten(remote):
     state['task']['Alfasearch Config/Page URL']='https://other.test/'
     with pytest.raises(FiberyConflict):create(client)
     assert not state['updates']
+
+
+def test_placeholder_task_sets_medium_priority(remote):
+    client,state=remote
+    result=client.ensure_webdev_task(task_id='fixed',project_number='1715',title='project.test не добавился в сетку',
+        description='https://project.test/ — проверить и добавить домен',page_url='https://project.test/',priority='Medium')
+    assert result['description_verified'] and result['state']=='New'
+    assert state['task']['Alfasearch Config/Priority']=={'fibery/id':'medium'}
+
+
+def test_manual_placeholder_task_is_read_without_overwriting_its_description(remote):
+    client,state=remote;create(client)
+    state['task']['Alfasearch Config/Name']='project.test не добавился в сетку'
+    state['task']['Alfasearch Config/Page URL']=None
+    original=state['content']='https://project.test/ — домен не добавился в сетку\nПроверить и добавить домен.'
+    result=client.existing_domain_task(project_number='1715',domain='project.test')
+    assert result['existing'] and result['description_read']
+    assert state['content']==original and state['creates']==1 and not state['updates']
+
+
+def test_closed_or_unrelated_webdev_tasks_do_not_block_new_domain_issue(remote):
+    client,state=remote;create(client)
+    assert client.existing_domain_task(project_number='1715',domain='project.test') is None
+    state['task']['Alfasearch Config/Name']='project.test не добавился в сетку'
+    state['task']['workflow/state']={'enum/name':'Closed'}
+    assert client.existing_domain_task(project_number='1715',domain='project.test') is None
+
+
+def test_manual_task_with_changed_project_relation_is_not_reused(remote):
+    client,state=remote;create(client)
+    state['task']['Alfasearch Config/Name']='project.test не добавился в сетку'
+    state['task']['Alfasearch Config/SEO Project']={'fibery/public-id':'other'}
+    with pytest.raises(FiberyConflict):client.existing_domain_task(project_number='1715',domain='project.test')

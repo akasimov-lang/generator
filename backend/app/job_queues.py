@@ -19,6 +19,7 @@ def queue_for(db, job):
     return {
         'fibery_reglue': 'maintenance',
         'fake_redirect_check': 'maintenance',
+        'domain_placeholder_check': 'maintenance',
         'menu_generation': 'short_generation', 'generation_retry': 'generation',
         'maintenance_report': 'automation', 'mass_reglue_list': 'automation',
         'pilot_internal_pages': 'short_generation', 'template_knowledge': 'maintenance',
