@@ -104,3 +104,12 @@ def test_manual_task_with_changed_project_relation_is_not_reused(remote):
     state['task']['Alfasearch Config/Name']='project.test не добавился в сетку'
     state['task']['Alfasearch Config/SEO Project']={'fibery/public-id':'other'}
     with pytest.raises(FiberyConflict):client.existing_domain_task(project_number='1715',domain='project.test')
+
+
+def test_manual_title_mismatch_task_is_reused_without_overwriting(remote):
+    client,state=remote;create(client)
+    state['task']['Alfasearch Config/Name']='project.test — Title не совпадает с проектом'
+    original=state['content']='Ожидаемый Title: Casino; фактический: Yoga.'
+    result=client.existing_domain_task(project_number='1715',domain='project.test')
+    assert result['existing'] and state['content']==original
+    assert state['creates']==1 and not state['updates']

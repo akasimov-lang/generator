@@ -1,5 +1,6 @@
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from html import escape
 from uuid import uuid4
 
 import pytest
@@ -12,15 +13,19 @@ from app.fibery_client import FiberyError
 
 AT = datetime(2026, 11, 12, 12, tzinfo=timezone.utc)
 URL = 'https://added.test/'
+TITLE = 'Casino projektu 2026 | Bonus a hry'
+READ_PROJECT_TITLE = feature.project_title
 
 
 @pytest.fixture
-def setup():
+def setup(monkeypatch):
     engine = create_engine('sqlite://')
     Base.metadata.create_all(engine)
     with Session(engine) as db:
         site = models.Site(name='project.test', base_url='https://project.test', publication_endpoint='/',
-            fibery_name='#2069_Project_CZ', network_state={'domains': ['project.test']})
+            fibery_name='#2069_Project_CZ', homepage_title=TITLE,
+            network_state={'domains': ['project.test']})
+        monkeypatch.setattr(feature, 'project_title', lambda db, site: site.homepage_title)
         db.add(site); db.flush()
         op = models.NetworkOperation(id=str(uuid4()), site_id=site.id, action='create_domains',
             status='pending', initiator='anton', created_at=AT, updated_at=AT,
@@ -48,6 +53,13 @@ class Client:
 
 def placeholder(url):
     row = {'url': url, 'final_url': url, 'http_status': 200, 'outcome': 'placeholder'}
+    return {**row, 'previous_attempt': row.copy()}
+
+
+def page(url, title=TITLE):
+    from app.brand_health_audit import classify
+    row = {'url': url, 'final_url': url, 'http_status': 200,
+           **classify('<title>' + escape(title) + '</title><p>' + 'Article content. ' * 150 + '</p>', 200, '')}
     return {**row, 'previous_attempt': row.copy()}
 
 
@@ -99,7 +111,8 @@ def test_recovered_worker_preserves_job_identity(setup):
 
 def test_normal_site_does_not_create_a_task(setup):
     db, site, op=setup;job=prepare(db,op);client=Client()
-    assert run(db,job,client,probe=lambda url:{'url':url,'outcome':'review'})['outcome']=='no_placeholder'
+    assert run(db,job,client,probe=page)['outcome']=='title_matches'
+    assert job.result['expected_title']==TITLE and job.result['title_matches'] is True
     assert not client.calls
 
 
@@ -166,3 +179,115 @@ def test_verified_receipt_is_visible_in_project_feed_and_notifications(setup):
     assert result['total']==1 and result['items'][0]['number']=='20280'
     notices=collect(db,site)
     assert any(n.get('task_url','').endswith('/Webdev_Tasks/20280') for n in notices)
+
+
+def test_other_site_with_http_200_creates_title_issue_with_both_titles(setup):
+    db,site,op=setup;job=prepare(db,op);client=Client()
+    assert run(db,job,client,probe=lambda url:page(url,'Yoga studio'))['outcome']=='task_created'
+    request=client.calls[0]
+    assert request['title']=='added.test — Title не совпадает с проектом'
+    assert TITLE in request['description'] and 'Yoga studio' in request['description']
+    assert URL in request['description'] and 'project-network/project.test/' in request['description']
+    assert request['page_url']==URL and request['priority']=='Medium'
+    assert job.result['issue_type']=='title_mismatch' and job.result['title_matches'] is False
+
+
+def test_matching_brand_name_does_not_override_different_project_title(setup):
+    db,site,op=setup;site.brand='Casino';job=prepare(db,op);client=Client()
+    assert run(db,job,client,probe=lambda url:page(url,'Casino other project'))['outcome']=='task_created'
+
+
+def test_case_whitespace_and_html_entities_are_not_title_mismatches(setup):
+    db,site,op=setup;site.homepage_title='Casino & bonus 2026';job=prepare(db,op);client=Client()
+    assert run(db,job,client,probe=lambda url:page(url,'  CASINO & BONUS\n 2026  '))['outcome']=='title_matches'
+    assert not client.calls
+
+
+def test_long_titles_with_same_visible_prefix_are_compared_in_full(setup):
+    db,site,op=setup;site.homepage_title='Casino ' * 60+'expected';job=prepare(db,op);client=Client()
+    assert run(db,job,client,probe=lambda url:page(url,'Casino ' * 60+'wrong'))['outcome']=='task_created'
+    assert 'Casino ' * 60+'wrong' in client.calls[0]['description']
+
+
+def test_equal_long_title_is_not_compared_to_truncated_display_evidence(setup):
+    db,site,op=setup;site.homepage_title='Casino ' * 60+'expected';job=prepare(db,op);client=Client()
+    assert run(db,job,client,probe=lambda url:page(url,site.homepage_title))['outcome']=='title_matches'
+    assert not client.calls
+
+
+def test_missing_public_title_is_reported_after_two_responses(setup):
+    db,site,op=setup;job=prepare(db,op);client=Client()
+    assert run(db,job,client,probe=lambda url:page(url,''))['outcome']=='task_created'
+    assert '(Title отсутствует)' in client.calls[0]['description']
+
+
+def test_public_title_recovers_on_second_request_without_task(setup):
+    db,site,op=setup;job=prepare(db,op);client=Client()
+    evidence=page(URL);evidence['previous_attempt']=page(URL,'Old restored site')
+    assert run(db,job,client,probe=lambda _:evidence)['outcome']=='title_matches'
+    assert not client.calls
+
+
+def test_one_wrong_response_after_challenge_is_not_confirmation(setup):
+    db,site,op=setup;job=prepare(db,op);client=Client()
+    evidence=page(URL,'Other site');evidence['previous_attempt']={'url':URL,'outcome':'blocked','http_status':200}
+    assert run(db,job,client,probe=lambda _:evidence)['status']=='queued'
+    assert not client.calls
+
+
+def test_changing_wrong_titles_are_retried_before_task_creation(setup):
+    db,site,op=setup;job=prepare(db,op);client=Client()
+    evidence=page(URL,'Other site');evidence['previous_attempt']=page(URL,'Different response')
+    assert run(db,job,client,probe=lambda _:evidence)['status']=='queued'
+    assert not client.calls
+
+
+def test_redirect_to_foreign_content_records_final_url(setup):
+    db,site,op=setup;job=prepare(db,op);client=Client()
+    evidence=page(URL,'Foreign site')
+    evidence['final_url']=evidence['previous_attempt']['final_url']='https://foreign.test/index.html'
+    assert run(db,job,client,probe=lambda _:evidence)['outcome']=='task_created'
+    assert 'https://foreign.test/index.html' in client.calls[0]['description']
+
+
+def test_missing_webdev_title_retries_without_guessing_from_public_content(setup,monkeypatch):
+    db,site,op=setup;job=prepare(db,op);client=Client()
+    def unavailable(*args):raise FiberyError('Актуальный Title не получен')
+    monkeypatch.setattr(feature,'project_title',unavailable)
+    assert run(db,job,client,probe=lambda url:page(url,'Other site'))['status']=='queued'
+    assert not client.calls and 'Title' in job.error
+
+
+def test_fresh_webdev_title_is_used_instead_of_cached_title(setup,monkeypatch):
+    from app import project_network
+    db,site,op=setup;job=prepare(db,op);client=Client()
+    class Remote:
+        def __init__(self,db,site):pass
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+        def project(self):return {'data':{'pages':[{'slug':'/','title':'Updated project title'}]}}
+    monkeypatch.setattr(project_network,'Remote',Remote)
+    monkeypatch.setattr(feature,'project_title',READ_PROJECT_TITLE)
+    assert run(db,job,client,probe=lambda url:page(url,'Updated project title'))['outcome']=='title_matches'
+    assert job.result['expected_title']=='Updated project title'
+    assert not client.calls and site.homepage_title==TITLE
+
+
+def test_empty_title_in_fresh_webdev_settings_blocks_comparison(setup,monkeypatch):
+    from app import project_network
+    db,site,op=setup
+    class Remote:
+        def __init__(self,db,site):pass
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+        def project(self):return {'data':{'pages':[{'slug':'/','title':''}]}}
+    monkeypatch.setattr(project_network,'Remote',Remote)
+    with pytest.raises(FiberyError,match='Title'):
+        READ_PROJECT_TITLE(db,site)
+
+
+def test_title_mismatch_retry_recovers_same_fibery_task_identity(setup):
+    db,site,op=setup;job=prepare(db,op);client=Client();client.timeout=True
+    assert run(db,job,client,probe=lambda url:page(url,'Other site'))['status']=='queued'
+    assert run(db,job,client,now=AT+timedelta(seconds=181),probe=lambda url:page(url,'Other site'))['outcome']=='task_created'
+    assert len(client.tasks)==1 and client.calls[0]['task_id']==client.calls[1]['task_id']

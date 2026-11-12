@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 import hashlib
 import re
+import unicodedata
 from urllib.parse import urljoin, urlsplit, quote
 
 import httpx
@@ -30,13 +31,21 @@ def now():
     return datetime.now(timezone.utc).isoformat()
 
 
+def title_fingerprint(value):
+    """Compare the full Title while keeping public evidence compact."""
+    text = unicodedata.normalize('NFC', normalized(value)).casefold()
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
 def classify(html, status, brand, expected_title='', samples=()):
     title_match = re.search(r'<title\b[^>]*>(.*?)</title\s*>', html, re.I | re.S)
     title = normalized(readable(title_match[1])) if title_match else ''
     text = normalized(readable(html))
     lower = text.casefold()
     words = len(text.split())
-    evidence = {'title': title[:350], 'words': words, 'excerpt': text[:550],
+    evidence = {'title': title[:350], 'title_full': title[:2000], 'title_truncated': len(title) > 2000,
+                'title_fingerprint': title_fingerprint(title),
+                'words': words, 'excerpt': text[:550],
                 'sha256': hashlib.sha256(html.encode()).hexdigest()}
     def result(outcome, reason):
         return {**evidence, 'outcome': outcome, 'reason': reason}

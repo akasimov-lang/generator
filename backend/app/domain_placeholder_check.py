@@ -1,4 +1,4 @@
-"""Delayed, durable Webdev requests for placeholders after domain provisioning."""
+"""Delayed Webdev requests for placeholders or wrong content after provisioning."""
 import asyncio
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
@@ -19,6 +19,7 @@ from app.reglue_history import utc
 KIND = 'domain_placeholder_check'
 START_KEY = 'domain-placeholder:enabled-at'
 ACTIONS = ('create_domains', 'create_subdomains')
+UNCERTAIN = {'unreachable', 'blocked', 'http_error', 'redirect_loop', 'not_configured'}
 
 
 def identity(value):
@@ -45,7 +46,7 @@ def ensure_jobs(db, operation):
             job = models.BackgroundJob(id=id_, kind=KIND, status='queued', payload={
                 'site_id': operation.site_id, 'operation_id': operation.id,
                 'domain': domain, 'url': 'https://' + domain + '/',
-                'title': f'{domain} не добавился в сетку',
+                'title': f'{domain} — проверка подключения',
                 'added_at': at.isoformat(), 'due_at': (at + timedelta(minutes=2)).isoformat()})
             db.add(job)
         jobs.append(job)
@@ -111,7 +112,56 @@ def confirmed_placeholder(evidence, url):
                for row in (previous, evidence))
 
 
-def request_text(site, domain):
+def project_title(db, site):
+    # Never mistake a stale PagePilot cache for the current published settings.
+    from app.project_network import Remote
+    from app.project_pages import pages, is_home
+    from app.provisioning_readiness import normalized
+    with Remote(db, site) as remote:
+        homes = [page for page in pages(remote.project()) if is_home(page)]
+    if len(homes) != 1 or not normalized(homes[0].get('title')):
+        raise FiberyError('Актуальный Title проекта не получен из Webdev; проверка будет повторена.')
+    return normalized(homes[0]['title'])
+
+
+def title_matches(row, expected):
+    from app.brand_health_audit import title_fingerprint
+    if (not expected or row.get('http_status') != 200 or row.get('outcome') in UNCERTAIN
+            or not isinstance(row.get('title'), str)):
+        return None
+    actual = row.get('title_fingerprint') or title_fingerprint(row['title'])
+    return actual == title_fingerprint(expected)
+
+
+def confirmed_title_mismatch(evidence, url, expected):
+    from app.brand_health_audit import title_fingerprint
+    previous = evidence.get('previous_attempt') or {}
+    rows = (previous, evidence)
+    # Preserve the redirect destination as evidence, including a foreign host.
+    if not all(row.get('url') == url and row.get('final_url')
+               and title_matches(row, expected) is False for row in rows):
+        return False
+    return (previous['final_url'] == evidence['final_url']
+            and (previous.get('title_fingerprint') or title_fingerprint(previous['title']))
+            == (evidence.get('title_fingerprint') or title_fingerprint(evidence['title'])))
+
+
+def request_text(site, domain, *, issue_type='placeholder', evidence=None, expected_title=''):
+    if issue_type == 'title_mismatch':
+        evidence = evidence or {}
+        # Quote remote strings as text, not Markdown links or formatting.
+        def literal(value):
+            return '    ' + str(value).replace('\r', ' ').replace('\n', ' ')
+        return (f'{domain} — Title не совпадает с проектом',
+            f'https://{domain}/ — спустя 2 минуты после добавления два запроса подтвердили несовпадение Title. '
+            'Возможно, домен отдаёт контент другого сайта.\n\n'
+            f'https://ai-seo-content-panel.site/project-network/{quote(site.name, safe="")}/\n\n'
+            'Ожидаемый Title проекта (Webdev):\n\n' + literal(expected_title) + '\n\n'
+            'Фактический Title страницы:\n\n' + literal(evidence.get('title_full') or evidence.get('title') or '(Title отсутствует)') + '\n\n'
+            + ('Показаны первые 2000 символов; сравнение выполнено по полному Title.\n\n' if evidence.get('title_truncated') else '') +
+            'Конечный URL после переходов:\n\n' + literal(evidence.get('final_url') or '') + '\n\n'
+            'Проверить привязку домена к проекту и выдачу правильного сайта. '
+            'Title страницы должен соответствовать Title проекта.')
     return (f'{domain} не добавился в сетку',
         f'https://{domain}/ — домен не добавился в сетку, спустя 2 минуты после добавления отдаёт заглушку.\n\n'
         f'https://ai-seo-content-panel.site/project-network/{quote(site.name, safe="")}/\n\n'
@@ -135,11 +185,25 @@ def execute(db, job_id, *, client=None, probe=None, now=None):
             evidence = (probe or inspect_domain)(job.payload['url'])
             job.result = {**job.result, 'evidence': evidence}
             db.commit()
-            uncertain = {'unreachable', 'blocked', 'http_error', 'redirect_loop'}
-            if evidence.get('outcome') in uncertain:
-                raise FiberyError('Публичный ответ не подтверждён; заглушка не установлена. Проверка будет повторена.')
-            outcome = 'no_placeholder'
+            if evidence.get('outcome') in UNCERTAIN:
+                raise FiberyError('Публичный ответ не подтверждён; содержимое не проверено. Проверка будет повторена.')
+            issue_type, expected_title = None, ''
             if confirmed_placeholder(evidence, job.payload['url']):
+                issue_type = 'placeholder'
+            else:
+                expected_title = project_title(db, site)
+                job.result = {**job.result, 'expected_title': expected_title, 'title_source': 'webdev',
+                              'title_matches': title_matches(evidence, expected_title)}
+                db.commit()
+                if confirmed_title_mismatch(evidence, job.payload['url'], expected_title):
+                    issue_type = 'title_mismatch'
+                elif title_matches(evidence, expected_title) and evidence.get('outcome') != 'placeholder':
+                    outcome = 'title_matches'
+                else:
+                    raise FiberyError('Содержимое и Title не подтверждены двумя ответами; проверка будет повторена.')
+            if issue_type:
+                job.result = {**job.result, 'issue_type': issue_type}
+                db.commit()
                 number = project_number(site.fibery_name)
                 if not number:
                     raise FiberyError('У проекта не указан номер Fibery; создание задачи ожидает привязки.')
@@ -164,7 +228,8 @@ def execute(db, job_id, *, client=None, probe=None, now=None):
                         task = None if value else client.existing_domain_task(project_number=number, domain=job.payload['domain'])
                         if not task:
                             if not value:
-                                title, description = request_text(site, job.payload['domain'])
+                                title, description = request_text(site, job.payload['domain'],
+                                    issue_type=issue_type, evidence=evidence, expected_title=expected_title)
                                 value = {'task_id': identity('task:' + job.id), 'title': title,
                                          'description': description, 'project_number': number}
                             if not issue:
@@ -176,10 +241,9 @@ def execute(db, job_id, *, client=None, probe=None, now=None):
                             task = client.ensure_webdev_task(task_id=value['task_id'], project_number=number,
                                 title=value['title'], description=value['description'], page_url=job.payload['url'], priority='Medium')
                             issue.value = {**value, 'task': task}
+                        job.payload = {**job.payload, 'title': task['title']}
                         job.result = {**job.result, 'task': task, 'verified_at': now.isoformat()}
                         outcome = 'task_reused' if task.get('existing') else 'task_created'
-            elif evidence.get('outcome') == 'placeholder':
-                raise FiberyError('Заглушка не подтверждена двумя ответами этого домена; проверка будет повторена.')
         job.status, job.error, job.finished_at = 'completed', None, datetime.now(timezone.utc)
         job.result = {**job.result, 'outcome': outcome, 'next_attempt_at': None}
         db.commit()

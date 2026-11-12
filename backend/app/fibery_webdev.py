@@ -16,9 +16,10 @@ class WebdevClient(FiberyClient):
             {'$project': str(project_number)}, limit=1000)
         if len(rows) >= 1000:
             raise FiberyError('Список Webdev-задач неполон; создание дубля заблокировано.')
-        expected = f'{domain} не добавился в сетку'.casefold()
+        expected = {f'{domain} не добавился в сетку'.casefold(),
+                    f'{domain} — Title не совпадает с проектом'.casefold()}
         for row in rows:
-            if ((row.get('Alfasearch Config/Name') or '').strip().casefold() != expected
+            if ((row.get('Alfasearch Config/Name') or '').strip().casefold() not in expected
                     or (row.get('workflow/state') or {}).get('enum/name') in CLOSED):
                 continue
             task = self.task(row['fibery/id'])
