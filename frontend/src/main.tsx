@@ -42,6 +42,7 @@ import { GenerationAnchors } from "./GenerationAnchors";
 import { MenuGenerationTasks } from "./MenuGenerationTasks";
 import { ProjectNotificationCenter, ProjectLogs } from "./ProjectNotifications";
 import { projectApiResult, projectNotice } from "./projectNotificationEvents";
+import { isProjectExchangeRequest } from "./projectExchange";
 import { AutoReglueGuide } from "./AutoReglueGuide";
 const UserGuideView = React.lazy(() => import("./UserGuide"));
 import { AutoPilotPage } from "./AutoPilot";
@@ -2071,7 +2072,7 @@ function ProjectWorkspaceView({
   const exchangeApi = React.useCallback(async <T,>(path: string, options?: RequestInit): Promise<T> => {
     const siteId = path.match(/^\/sites\/([^/?]+)(?:\/|$)/)?.[1]
       || (/^\/(sections|content)\//.test(path) ? selectedSiteIdRef.current : "");
-    if (!siteId) return sourceApi<T>(path, options);
+    if (!siteId || !isProjectExchangeRequest(path, options?.method)) return sourceApi<T>(path, options);
     setExchangeCounts(current => ({ ...current, [siteId]: (current[siteId] || 0) + 1 }));
     try { return await sourceApi<T>(path, options); }
     finally { setExchangeCounts(current => ({ ...current, [siteId]: Math.max(0, (current[siteId] || 0) - 1) })); }

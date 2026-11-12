@@ -1,4 +1,5 @@
 import { SaveIndicator, QueueSaveIndicator } from "./SaveIndicator";
+import { fakeSaveFeedback } from "./fakeSaveFeedback";
 import { saveMarkupWithRetry } from "./networkMarkupSave";
 import { mergeMarkupDraft, mergeCanonicalDraft } from "./networkDrafts";
 import { useNetworkEditQueue } from "./useNetworkEditQueue";
@@ -100,6 +101,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
   const [error, setError] = React.useState("");
   const [message, setMessage] = React.useState("");
   const [savedMarkup, setSavedMarkup] = React.useState<Partial<Record<MarkupSection, string>>>({});
+  const [markupErrors, setMarkupErrors] = React.useState<Partial<Record<MarkupSection, string>>>({});
   const [pendingMarkupSections, setPendingMarkupSections] = React.useState<MarkupSection[]>([]);
   const pendingMarkupSave = React.useRef<{ id: string; sections: MarkupSection[] } | null>(null);
   const [fakeMainInput, setFakeMainInput] = React.useState("");
@@ -154,6 +156,8 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
     const receipt = pendingMarkupSave.current;
     const operation = receipt && next.operations.find(op => op.id === receipt.id);
     if (receipt && operation && ["confirmed", "failed"].includes(operation.status)) {
+      setMarkupErrors(current => ({ ...current, ...Object.fromEntries(receipt.sections.map(section =>
+        [section, operation.status === "failed" ? operation.message || "Webdev сообщил об ошибке." : ""])) }));
       if (operation.status === "confirmed") {
         const signatures = markupSignatures(next);
         setSavedMarkup(current => ({ ...current, ...Object.fromEntries(receipt.sections.map(section => [section, signatures[section]])) }));
@@ -273,7 +277,10 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
       ...(canonicalDirty || settings?.enable_canonical !== undefined ? ["canonical" as const] : []),
       ...(markupDraft.markup !== data.alternateMarkup || markupDraft.enabled !== data.enableAlternates ? ["alternates" as const] : []),
     ] : action === "create_fake_main" || action === "select_fake_main" ? ["dynamic"] : [];
-    if (sections.length) { pendingMarkupSave.current = { id: requestId, sections }; setPendingMarkupSections(sections); }
+    if (sections.length) {
+      pendingMarkupSave.current = { id: requestId, sections }; setPendingMarkupSections(sections);
+      setMarkupErrors(current => ({...current, ...Object.fromEntries(sections.map(section => [section, ""]))}));
+    }
     try {
       const submit = async () => {
         if (action === "alternates") {
@@ -311,6 +318,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
     } catch (err) {
       if (mounted.current) {
         setError(`${errorText(err)} Обновите данные перед повторной отправкой.`);
+        setMarkupErrors(current => ({...current, ...Object.fromEntries(sections.map(section => [section, errorText(err)]))}));
         const statusCode = (err as { statusCode?: number })?.statusCode;
         if (statusCode && statusCode < 500) { pendingMarkupSave.current = null; setPendingMarkupSections([]); }
       }
@@ -433,11 +441,12 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
     const path = normalizedFakePath(fakeMainInput);
     const edited = section === "canonical" ? canonicalDirty : section === "alternates" ? alternatesDirty
       : !!fakeMainInput.trim() && !data.fake_main_paths?.includes(path);
-    const fake = section === "dynamic" ? [...fakeQueue.items].sort((a,b) => (b.created_at || "").localeCompare(a.created_at || ""))[0] : undefined;
-    const saving = pendingMarkupSections.includes(section) || section === "dynamic" && fakeQueue.count > 0;
-    const saved = !edited && savedMarkup[section] === current || fake?.status === "completed";
-    return <SaveIndicator state={saving ? "saving" : fake?.status === "failed" ? "error" : saved ? "saved" : "idle"}
-      version={fake?.id || savedMarkup[section] || ""} label={section === "canonical" ? "Каноникл" : section === "alternates" ? "Альтернейты" : "Динамические страницы"} />;
+    const fake = section === "dynamic" ? fakeSaveFeedback(fakeQueue.items, data) : undefined;
+    const saving = pendingMarkupSections.includes(section) || fake?.state === "saving";
+    const saved = !edited && savedMarkup[section] === current || fake?.state === "saved";
+    const problem = markupErrors[section] || (fake?.state === "error" ? fake.error : "");
+    return <SaveIndicator state={problem || fake?.state === "error" ? "error" : saving ? "saving" : saved ? "saved" : "idle"} error={problem}
+      version={fake?.version || savedMarkup[section] || ""} label={section === "canonical" ? "Каноникл" : section === "alternates" ? "Альтернейты" : "Динамические страницы"} />;
   }
   const removeDomains = [...new Set(removeDomainInput.toLowerCase().split(/[\s,;]+/).map(value => value.trim().replace(/\.$/, "")).filter(Boolean))];
   const protectedDomains = [data?.canon, data?.reserve, site.name, data?.amp, ...(data?.amp_domains || [])].filter(Boolean).map(value => value!.replace(/^www\./, ""));

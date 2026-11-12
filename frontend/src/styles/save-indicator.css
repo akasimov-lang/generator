@@ -1,9 +1,9 @@
-.saveIndicator { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex: 0 0 18px; opacity: 0; color: var(--muted, #64748b); transition: opacity .35s ease; vertical-align: middle; pointer-events: none; }
+.saveIndicator { display: inline-flex; align-items: center; gap: 6px; min-width: 18px; min-height: 18px; max-width: 100%; flex: 0 1 auto; opacity: 0; color: var(--muted, #64748b); vertical-align: middle; pointer-events: none; }
+.saveIndicator svg { flex: 0 0 14px; }
+.saveIndicatorText { font-size: 12px; font-weight: 500; line-height: 1.4; overflow-wrap: anywhere; }
 .saveIndicator.visible { opacity: 1; pointer-events: auto; }
 .saveIndicator.saving svg { animation: saveIndicatorPulse 1.5s ease-in-out infinite; }
 .saveIndicator.saved { color: #16a064; }
-.saveIndicator.saved.visible { animation: saveIndicatorDone 2.2s ease forwards; }
 .saveIndicator.error { color: #c43838; }
 @keyframes saveIndicatorPulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
-@keyframes saveIndicatorDone { 0%, 65% { opacity: 1; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .saveIndicator { transition: none; } .saveIndicator.saving svg, .saveIndicator.saved.visible { animation: none; } }
