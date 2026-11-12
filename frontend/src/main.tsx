@@ -1,4 +1,6 @@
 import {ProjectFiberyTasks} from "./ProjectFiberyTasks";
+import {ProjectGscField} from "./ProjectGscField";
+import {isProjectGscRequest} from "./projectGscState";
 import {clearPilotTasks} from "./pilotTaskCache";
 import { ProjectStateReports } from "./ProjectStateReports";
 import { MenuPageIdentityEditor } from "./MenuPageIdentityEditor";
@@ -1052,7 +1054,7 @@ function App() {
         throw requestError;
       }
       const data = await response.json();
-      if(method!=="GET")clearPilotTasks();
+      if(method!=="GET" && !isProjectGscRequest(path))clearPilotTasks();
       projectApiResult(path, method);
       return data;
       } catch (error) { projectApiResult(path, method, error); throw error; }
@@ -2690,6 +2692,7 @@ function ProjectWorkspaceView({
             <ProjectInterlinking key={`${selectedSite.id}:${generalNetworksOnly}`} siteId={selectedSite.id} api={sourceApi} refreshToken={networkRefreshToken} generalSite={generalNetworksOnly} onStatus={updateProjectContentStatus} onShowcaseClick={() => { openPublicationSection("pages"); onTabChange("content", selectedSite.name); }} />
             <NetworkIndexingButton key={selectedSite.id} siteId={selectedSite.id} api={sourceApi} />
             <NetworkSitemapButton key={`sitemap-${selectedSite.id}`} siteId={selectedSite.id} api={sourceApi} />
+            <ProjectGscField key={`gsc-${selectedSite.id}`} siteId={selectedSite.id} api={sourceApi} />
           </div>
         ) : null}
 
