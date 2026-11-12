@@ -92,10 +92,11 @@ def repair(report_id, row):
                 raise ValueError('Main или страницы изменились во время проверки; нужен повтор с актуальным состоянием.')
             if not public['valid'] or op.status != 'sitemap_done':
                 public = public_snapshot(main, urls)
-            # A successful second read can finish a pending verification; it never retries the write.
-            if public.get('valid') and op.status == 'sitemap_verify':
-                sitemap.process(db, operation_id)
-                db.refresh(op)
+            # Late read-back can recover an expired verification, without repeating the write.
+            if public.get('valid') and webdev_verified and op.status in ('sitemap_verify', 'sitemap_failed'):
+                op.status = 'sitemap_done'
+                op.message = f'Sitemap подтверждён повторной проверкой: {len(urls)} страниц, только {main}.'
+                db.commit()
             status, action, error = outcome(op, public, webdev_verified)
             evidence.update(after=public, operation_id=operation_id, operation_status=op.status, action=action,
                 webdev_verified=webdev_verified,
@@ -129,53 +130,8 @@ def run(report_id):
             maintenance_reports.upsert(db, report_id, name, actor, ids, status=status)
 
 
-def record_tasks(report_id):
-    """Create one read-back verified SEO receipt per changed, publicly confirmed project."""
-    from uuid import UUID, uuid5
-    from app.core.config import get_settings
-    from app.fibery_client import FiberyClient
-    from app.fibery_tasks import project_number, refresh_legacy_receipts
-    with SessionLocal() as db, network_lock(db, 'sitemap-fibery:'+report_id):
-        job = db.get(models.BackgroundJob, report_id)
-        if not job or job.kind != maintenance_reports.KIND or job.payload.get('maintenance_kind') != TASK:
-            raise ValueError('Нужен отчёт sitemap.')
-        client = FiberyClient(get_settings().fibery_api_token.get_secret_value())
-        try:
-            for row in list(job.result['entries']):
-                evidence = row.get('sitemap') or {}
-                if row['status'] != 'completed' or evidence.get('action') != 'updated' or row.get('fibery_task'):
-                    continue
-                site = db.get(models.Site, row['site_id'])
-                key = 'sitemap-fibery:'+report_id+':'+site.id
-                ledger = db.get(models.AutoReglueConfig, key)
-                if not ledger:
-                    number = project_number(site.fibery_name)
-                    if not number:
-                        row['fibery_error'] = 'У проекта нет привязки Fibery.'
-                        maintenance_reports.upsert(db,report_id,job.payload['name'],job.payload['actor'],job.payload['site_ids'],[row],status=job.status)
-                        continue
-                    ledger = models.AutoReglueConfig(key=key,value={
-                        'task_id':str(uuid5(UUID(report_id),'sitemap:'+site.id)), 'project_number':number,
-                        'title':row['main']+' — обновление sitemap',
-                        'description':f"- Обновлён sitemap: https://{row['main']}/sitemap.xml\n- Включены главная и {evidence['internal_pages']} внутренних страниц; всего {evidence['expected_count']} URL на текущем Main.\n- Проверены сохранение в Webdev и публичный XML (HTTP 200), полный список адресов без дублей.",
-                        'site_id':site.id, 'report_id':report_id})
-                    db.add(ledger);db.commit()
-                try:
-                    receipt=client.ensure_task(**{k:ledger.value[k] for k in ('task_id','project_number','title','description')})
-                    receipt['verified_at']=stamp()
-                    ledger.value={**ledger.value,'fibery_task':receipt}
-                    row['fibery_task']=receipt;row.pop('fibery_error',None)
-                    maintenance_reports.upsert(db,report_id,job.payload['name'],job.payload['actor'],job.payload['site_ids'],[row],status=job.status)
-                    print('FIBERY',site.name,receipt['url'],flush=True)
-                except Exception as error:
-                    db.rollback();row['fibery_error']=str(error)[:500]
-                    maintenance_reports.upsert(db,report_id,job.payload['name'],job.payload['actor'],job.payload['site_ids'],[row],status=job.status)
-                    print('FIBERY ERROR',site.name,row['fibery_error'],flush=True)
-            refresh_legacy_receipts(db,force=True)
-        finally:
-            client.close()
-
-
 if __name__ == '__main__':
-    import sys
-    (record_tasks if '--fibery' in sys.argv else run)(sys.argv[1])
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('report_id')
+    run(parser.parse_args().report_id)

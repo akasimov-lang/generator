@@ -84,31 +84,6 @@ def test_report_view_excludes_full_xml_but_keeps_counts_and_result(env):
     assert job.result['entries'][0]['sitemap']['before']['template']=='SECRET XML'
 
 
-def test_fibery_receipt_is_idempotent_and_excludes_unchanged_projects(env,monkeypatch):
-    from app import fibery_client, fibery_tasks
-    from app.core import config
-    db,site,remote=env;site.fibery_name='#123_Project';db.commit()
-    rid=str(uuid4())
-    job=maintenance_reports.upsert(db,rid,'Sitemap','anton',[site.id],[{'site_id':site.id,'status':'completed','main':'main.test','sitemap':{'action':'updated','expected_count':3,'internal_pages':2}}],status='completed')
-    job.payload={**job.payload,'maintenance_kind':audit.TASK};db.commit()
-    monkeypatch.setattr(audit,'SessionLocal',lambda:nullcontext(db))
-    monkeypatch.setattr(config,'get_settings',lambda:SimpleNamespace(fibery_api_token=SimpleNamespace(get_secret_value=lambda:'test')))
-    calls=[]
-    class Client:
-        def __init__(self,*args):pass
-        def close(self):pass
-        def ensure_task(self,**kwargs):
-            calls.append(kwargs)
-            return {'url':'https://hzhz.fibery.io/favorites/Alfasearch_Config/SEO_Tasks/1','description_verified':True}
-    monkeypatch.setattr(fibery_client,'FiberyClient',Client)
-    monkeypatch.setattr(fibery_tasks,'refresh_legacy_receipts',lambda *args,**kwargs:None)
-    audit.record_tasks(rid);audit.record_tasks(rid)
-    assert len(calls)==1 and calls[0]['project_number']=='123'
-    assert '2 внутренних' in calls[0]['description'] and 'sitemap.xml' in calls[0]['description']
-    assert job.result['entries'][0]['fibery_task']['description_verified']
-    assert job.status=='completed'
-
-
 def test_sitemap_report_cannot_trigger_reglue_repeat(env):
     import pytest
     from app import maintenance_repeat
@@ -117,3 +92,14 @@ def test_sitemap_report_cannot_trigger_reglue_repeat(env):
     job.payload={**job.payload,'task_type':audit.TASK};db.commit()
     with pytest.raises(ValueError,match='Переклей и рерайт'):
         maintenance_repeat.create(db,job.id,str(uuid4()),{'username':'anton','allowed_site_ids':None})
+
+
+def test_late_public_confirmation_recovers_expired_operation_without_write(env,monkeypatch):
+    db,site,remote=setup_repair(env,monkeypatch)
+    rid=str(uuid4());xml=sitemap.document(sitemap.expected(remote.data)[1]);remote.data['sitemap']=xml
+    op=sitemap.queue(db,site,rid,'test');op.status='sitemap_failed'
+    op.request_payload={'main':'main.test','urls':sitemap.expected(remote.data)[1],'before':'old','after':xml};db.commit()
+    monkeypatch.setattr(audit,'public_snapshot',lambda *args:{'valid':True,'status':200,'count':2})
+    result=audit.repair(rid,{'site_id':site.id,'project':site.name})
+    assert result['status']=='completed' and result['sitemap']['action']=='updated'
+    assert op.status=='sitemap_done' and not remote.calls
