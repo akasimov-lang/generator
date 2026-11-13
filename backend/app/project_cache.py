@@ -1154,15 +1154,23 @@ def _project_domains(project: dict[str, Any]) -> list[str]:
     return normalized_domains
 
 
-def _deduplicate_cache_projects(projects: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+def _deduplicate_cache_projects(
+    projects: list[dict[str, Any]], preferred_servers: dict[str, str] | None = None,
+) -> tuple[list[dict[str, Any]], int]:
     unique_projects: list[dict[str, Any]] = []
-    seen_names: set[str] = set()
+    positions: dict[str, int] = {}
     for project in projects:
         name = str(project.get("name") or "").strip().casefold()
-        if name and name in seen_names:
+        if name and name in positions:
+            # Migration copies can remain in Webdev's aggregate inventory. Its
+            # order must not switch publishing away from the saved server.
+            preferred = (preferred_servers or {}).get(name)
+            index = positions[name]
+            if preferred and _server_id(project) == preferred and _server_id(unique_projects[index]) != preferred:
+                unique_projects[index] = project
             continue
         if name:
-            seen_names.add(name)
+            positions[name] = len(unique_projects)
         unique_projects.append(project)
     return unique_projects, len(projects) - len(unique_projects)
 
@@ -1414,7 +1422,14 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
     from app.project_inventory_cleanup import excluded_project_names
     excluded_names = excluded_project_names(db)
     projects = [p for p in projects if str(p.get('name') or '').strip().lower().rstrip('.') not in excluded_names]
-    projects, skipped_duplicate_count = _deduplicate_cache_projects(projects)
+    existing_sites = db.scalars(select(models.Site).where(models.Site.external_project_id.is_not(None))).all()
+    saved_servers: dict[str, set[str]] = {}
+    for site in existing_sites:
+        if site.name and site.cache_server_ip:
+            saved_servers.setdefault(site.name.strip().casefold(), set()).add(
+                _server_id({"serverId": site.cache_server_ip}))
+    preferred_servers = {name: next(iter(servers)) for name, servers in saved_servers.items() if len(servers) == 1}
+    projects, skipped_duplicate_count = _deduplicate_cache_projects(projects, preferred_servers)
     default_prompt = db.scalar(
         select(models.PromptTemplate)
         .where(models.PromptTemplate.name.in_(("Промпт рабочий", "Промт рабочий", "Промпт тест 1 v6")))
@@ -1422,7 +1437,6 @@ def sync_project_cache(db: Session, projects: list[dict[str, Any]]) -> dict[str,
         .limit(1)
     )
     working_canons = _working_project_canons()
-    existing_sites = db.scalars(select(models.Site).where(models.Site.external_project_id.is_not(None))).all()
     previous_domain_owners = _domain_owners(existing_sites)
     sites_by_external_id = {site.external_project_id: site for site in existing_sites if site.external_project_id}
     now = datetime.now(timezone.utc)

@@ -1114,6 +1114,59 @@ def test_sync_excludes_identical_repeated_cache_projects() -> None:
         assert [site.external_project_id for site in sites] == ["duplicate.example"]
 
 
+def test_sync_keeps_saved_publishing_server_when_migration_copy_is_first() -> None:
+    with make_session() as db:
+        site = models.Site(name="live.example", external_project_id="live.example",
+                           base_url="https://main.example", publication_endpoint="https://main.example/api/content",
+                           cache_server_ip="croco", project_status="mass_actions")
+        db.add(site)
+        db.commit()
+        site_id = site.id
+        stale = {"name": site.name, "serverIp": "goose", "settings": {"canon": "old.example"},
+                 "data": {"menu": {}, "pages": []}}
+        live = {"name": site.name, "serverIp": "croco", "settings": {"canon": "main.example"},
+                "data": {"menu": {"header": [{"title": "Live", "slug": "/live/"}]}, "pages": []}}
+
+        result = sync_project_cache(db, [stale, live])
+        db.refresh(site)
+
+        assert result["created_count"] == 0
+        assert result["skipped_duplicate_count"] == 1
+        assert site.id == site_id and site.cache_server_ip == "croco"
+        assert site.cache_canon == "main.example"
+        assert site.default_menu["header"][0]["title"] == "Live"
+        assert site.project_status == "mass_actions"
+
+
+def test_sync_accepts_new_server_when_saved_copy_disappears() -> None:
+    with make_session() as db:
+        site = models.Site(name="moved.example", external_project_id="moved.example",
+                           base_url="https://moved.example", publication_endpoint="https://moved.example/api/content",
+                           cache_server_ip="croco")
+        db.add(site)
+        db.commit()
+
+        result = sync_project_cache(db, [{"name": site.name, "serverIp": "goose",
+                                         "settings": {"canon": "new.example"}, "data": {"menu": {}, "pages": []}}])
+        db.refresh(site)
+
+        assert result["created_count"] == 0
+        assert site.cache_server_ip == "goose"
+        assert site.cache_canon == "new.example"
+
+
+def test_cache_duplicate_selection_preserves_order_and_other_projects() -> None:
+    old = {"name": "Example.test", "serverIp": "goose"}
+    other = {"name": "other.test", "serverId": "bear"}
+    live = {"name": "Example.test", "serverId": "croco.slf-hostesting.com"}
+
+    selected, skipped = project_cache_module._deduplicate_cache_projects(
+        [old, other, live], {"example.test": "croco"})
+
+    assert selected == [live, other]
+    assert skipped == 1
+
+
 def test_sync_removes_existing_unlinked_duplicate_rows() -> None:
     with make_session() as db:
         db.add_all([
