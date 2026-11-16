@@ -8947,6 +8947,16 @@ a {
   min-height: 48px;
 }
 
+.loginRecoveryActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.loginRecoveryActions .button {
+  flex: 1 1 150px;
+}
+
 .loginLoadingBar {
   height: 5px;
   overflow: hidden;

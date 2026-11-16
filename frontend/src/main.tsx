@@ -25,6 +25,7 @@ import { PageEditor, ProjectPages, type PageRow } from "./ProjectPages";
 import { TemplateGenerator } from "./TemplateGenerator";
 import { previewNodes, previewDepth, editPreviewItem, movePreviewItem, type GeneratedMenuStructureItem } from "./generatedMenuPreview";
 import { readProjectSnapshot, writeProjectSnapshot, removeLegacyProjectSnapshot } from "./projectSnapshot";
+import { withAuthDeadline } from "./authSession";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { createPortal } from "react-dom";
@@ -966,6 +967,8 @@ function App() {
   const [currentUser, setCurrentUser] = React.useState<User | null>(null);
   const [message, setMessage] = React.useState("");
   const [authNotice, setAuthNotice] = React.useState("");
+  const [sessionError, setSessionError] = React.useState("");
+  const [sessionAttempt, setSessionAttempt] = React.useState(0);
   const [notificationPromptVisible, setNotificationPromptVisible] = React.useState(false);
   const [workspaceContentOpenRequest, setWorkspaceContentOpenRequest] = React.useState(0);
   const isAdmin = Boolean(currentUser);
@@ -1014,14 +1017,17 @@ function App() {
   const api = React.useCallback(
     async <T,>(path: string, options: RequestInit = {}): Promise<T> => {
       const method = (options.method || "GET").toUpperCase();
+      const checkingSession = path === "/auth/me";
+      const request = async (signal?: AbortSignal | null): Promise<T> => {
       try {
-      const attempts = method === "GET" ? 7 : 1;
+      const attempts = method === "GET" && !checkingSession ? 7 : 1;
       let response: Response | null = null;
       let networkError: unknown = null;
       for (let attempt = 0; attempt < attempts; attempt += 1) {
         try {
           response = await fetch(`${API_BASE}${path}`, {
             ...options,
+            signal,
             headers: {
               "Content-Type": "application/json",
               ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -1035,6 +1041,7 @@ function App() {
         }
         await new Promise((resolve) => window.setTimeout(resolve, Math.min(250 * 2 ** attempt, 4000)));
       }
+      signal?.throwIfAborted();
       if (activeTokenRef.current !== token) throw new Error("Сессия изменилась.");
       if (!response) throw networkError instanceof Error ? networkError : new Error("Failed to fetch");
       if (response.status === 401) {
@@ -1058,10 +1065,13 @@ function App() {
         throw requestError;
       }
       const data = await response.json();
+      signal?.throwIfAborted();
       if(method!=="GET" && !isProjectGscRequest(path))clearPilotTasks();
       projectApiResult(path, method);
       return data;
       } catch (error) { projectApiResult(path, method, error); throw error; }
+      };
+      return checkingSession ? withAuthDeadline(request, options.signal) : request(options.signal);
     },
     [token]
   );
@@ -1185,6 +1195,8 @@ function App() {
 
   React.useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
+    setSessionError("");
     setDashboard(null); setTasks([]); setArchivedTasks([]); setContent([]); setProviders([]);
     snapshotRef.current = []; snapshotTimeRef.current = null;
     refreshFlight.current = null; initialSitesFlight.current = null;
@@ -1197,8 +1209,8 @@ function App() {
     setCatalogLoaded(false);setCatalogError("");
     setMassSearchQuery("");
     void (async () => {
-      const user = await api<User>("/auth/me");
-      await removeLegacyProjectSnapshot().catch(() => {});
+      const user = await api<User>("/auth/me", { signal: controller.signal });
+      void removeLegacyProjectSnapshot().catch(() => {});
       const saved = await readProjectSnapshot<Site>(`webdev-projects-v2:${user.id}`).catch(() => ({ projects: [], updatedAt: null }));
       if (!user.is_admin) saved.projects = saved.projects.filter(site => user.allowed_site_ids?.includes(site.id));
       if (cancelled) return;
@@ -1211,9 +1223,9 @@ function App() {
       selectedProjectRef.current = "";
       providersLoadedRef.current = false;
       setCurrentUser(user);
-    })().catch(error => { if (!cancelled) setMessage(error instanceof Error ? error.message : "Не удалось загрузить данные"); });
-    return () => { cancelled = true; userRef.current = null; };
-  }, [api, token]);
+    })().catch(error => { if (!cancelled) setSessionError(error instanceof Error ? error.message : "Не удалось проверить сессию. Повторите попытку."); });
+    return () => { cancelled = true; controller.abort(); userRef.current = null; };
+  }, [api, token, sessionAttempt]);
 
   React.useEffect(() => {
     if (!currentUser) return;
@@ -1334,9 +1346,14 @@ function App() {
             <div className="brandMark large logoMark loginBrandLogo"><BrandLogo /></div>
             <LoginBrandName />
           </div>
-          <h2>Загрузка панели</h2>
-          <p>{message || "Проверяем сессию и права пользователя."}</p>
-          <div className="loginLoadingBar" aria-hidden="true"><span /></div>
+          <h2>{sessionError ? "Не удалось проверить сессию" : "Загрузка панели"}</h2>
+          <p role={sessionError ? "alert" : "status"}>{sessionError || "Проверяем сессию и права пользователя."}</p>
+          {sessionError ? <div className="loginRecoveryActions">
+            <button className="button primary" onClick={() => { setSessionError(""); setSessionAttempt(value => value + 1); }}>Повторить проверку</button>
+            <button className="button secondary" onClick={() => {
+              localStorage.removeItem("admin_token"); clearPilotTasks(); setToken(""); setAuthNotice("");
+            }}>Войти заново</button>
+          </div> : <div className="loginLoadingBar" aria-hidden="true"><span /></div>}
         </div>
       </AuthScreen>
     );
