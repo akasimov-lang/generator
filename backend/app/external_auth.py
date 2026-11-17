@@ -1,12 +1,13 @@
 """Webdev is the sole identity and project-assignment authority."""
 import hashlib
+import logging
 import threading
 import time
 from collections import OrderedDict
 
 import httpx
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app import models
@@ -16,6 +17,7 @@ from app.webdev import webdev_origin_headers
 _cache = OrderedDict()
 _cache_lock = threading.Lock()
 CACHE_SECONDS = 30
+logger = logging.getLogger(__name__)
 
 
 class ExternalLoginResponse(Exception):
@@ -48,6 +50,7 @@ def login_external(username, password):
             response = client.post(settings.project_cache_url.rstrip('/') + '/auth/login',
                                    json={"username": username.strip(), "pass": password})
             if not response.is_success:
+                logger.warning("Webdev login rejected username=%r status=%s", username.strip()[:80], response.status_code)
                 raise ExternalLoginResponse(response)
             data = _json(response)
         token = data.get('token') if isinstance(data, dict) else None
@@ -65,6 +68,8 @@ def authenticate(username, password):
         try:
             return token, identity(token, fresh=True)
         except HTTPException as error:
+            logger.warning("Webdev token verification failed username=%r status=%s attempt=%s",
+                           username.strip()[:80], error.status_code, attempt + 1)
             forget(token)
             if error.status_code != 401:
                 raise
@@ -109,6 +114,16 @@ def local_profile(db, identity):
     """Keep identity references/favorites, never local credentials or local role grants."""
     username = identity['username']
     user = db.scalar(select(models.User).where(models.User.username == username))
+    if user is None:
+        # Reuse only an unambiguous, retired local profile after Webdev verified
+        # the identity. Never merge active Webdev accounts by spelling alone.
+        legacy = db.scalars(select(models.User).where(
+            func.lower(func.trim(models.User.username)) == username.strip().lower(),
+            models.User.is_active.is_(False),
+        ).limit(2).with_for_update()).all()
+        if len(legacy) == 1:
+            user = legacy[0]
+            user.username = username
     if user is None:
         if db.bind.dialect.name == 'postgresql':
             db.execute(pg_insert(models.User).values(username=username, password_hash='', is_admin=identity['is_admin'], is_active=True)
