@@ -9470,6 +9470,8 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .networkPanelHeading { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
 .networkPanelHeading h2 { margin: 0; }
 .networkPanelHeading .networkViewSwitch { margin: 0; }
+.networkPanelHeading > .networkActions { align-items: center; }
+.networkPanelHeading > .networkActions .checkboxRow { margin: 0; }
 .networkMarkupStatus { font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 999px; }
 .networkMarkupStatus.current { color: #1d6b3d; background: #e7f6ec; }
 .networkMarkupStatus.pending { color: #8a5700; background: #fff4d6; }

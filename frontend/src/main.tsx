@@ -2599,7 +2599,7 @@ function ProjectWorkspaceView({
           ) : null}
           {selectedSite ? (
             <span className="workspaceFiberyName">
-              <small>Name Fibery</small>
+              <small>Fibery</small>
               <FiberyProjectName value={selectedSite.fibery_name} projectName={selectedSite.name} emptyText="Не задано" />
             </span>
           ) : null}
@@ -8529,7 +8529,7 @@ const SITE_COLUMN_LABELS: Record<SiteTableColumn, string> = {
   newregCount: "NewReg",
   menuType: "Тип меню",
   menuCount: "Пункты меню",
-  fiberyName: "Name Fibery",
+  fiberyName: "Fibery",
   subdomainsCount: "Витрина",
   pagesCount: "Pages",
   domainsCount: "Domains"

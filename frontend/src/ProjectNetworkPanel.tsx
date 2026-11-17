@@ -519,13 +519,15 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
             {!editQueue.latest("reglue") && reglueBlockedReason && <small className="networkEditStatus" title={reglueBlockedReason}>{reglueBlockedReason}</small>}</div>
           </div>
         </div>}
-        <MassReglueParticipationControl enabled={participationEnabled} {...participationStatus} onChange={enabled => void updateParticipation(enabled)} />
+        {mode !== "network" && <MassReglueParticipationControl enabled={participationEnabled} {...participationStatus} onChange={enabled => void updateParticipation(enabled)} />}
         </div>);
   return <section className="dataPanel projectNetworkPanel">
     <div className="panelHeader"><div className="networkPanelHeading"><h2>{mode === "network" ? "Сетка проекта" : "Переклей"}</h2>        {data && mode === "network" && <div className="networkViewSwitch" role="group" aria-label="Вид сетки">
           <button type="button" aria-pressed={networkView === "main"} onClick={() => setNetworkView("main")}>Основная сетка</button>
           <button type="button" aria-pressed={networkView === "amp"} onClick={() => setNetworkView("amp")}>Ампы</button>
-        </div>}</div>
+        </div>}
+        {data && mode === "network" && <MassReglueParticipationControl enabled={participationEnabled} {...participationStatus} onChange={enabled => void updateParticipation(enabled)} />}
+      </div>
       <div className="networkRefreshStatus"><button type="button" className="button secondary compact" disabled={Boolean(busy)} onClick={() => void load(true, true)}>{busy === "refresh" ? "Обновляем…" : "Обновить данные"}</button>{message && message !== "Ручной переклей: подтверждено." && <small role="status">{message}</small>}
         {mode !== "network" && <LastReglueSummary last={data?.last_reglue} recent={data?.recent_network_changes} observedAt={data?.last_reglue_at} />}
       </div>
