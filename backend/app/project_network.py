@@ -101,6 +101,38 @@ def network_lock(db, site_id):
 
 
 
+def site_config_create_payload(payload):
+    """Translate exact requested hosts to Webdev's base-domain/www switch.
+
+    Keep receipts in exact-host form: confirmation, HTTPS checks and histories
+    must continue to target the host the user requested, including www.
+    """
+    domains = []
+    for item in payload["domains"]:
+        domain = item["domain"]
+        if domain.startswith("www.www."):
+            raise ValueError("Повторный префикс www недопустим: " + domain)
+        domains.append({**item, "domain": domain.removeprefix("www."),
+                        "wwwPrimary": domain.startswith("www.") or bool(item.get("wwwPrimary"))})
+    return {**payload, "domains": domains}
+
+
+def site_config_job_hosts(event):
+    """Use exact hosts in SSE results, as in PagePilot's operation receipts."""
+    def domains(items):
+        return [{**item, "domain": "www." + item["domain"]}
+                if isinstance(item, dict) and item.get("wwwPrimary") is True
+                and isinstance(item.get("domain"), str) and not item["domain"].startswith("www.")
+                else item for item in items]
+
+    event = dict(event)
+    if isinstance(event.get("domains"), list):
+        event["domains"] = domains(event["domains"])
+    if isinstance(event.get("result"), dict) and isinstance(event["result"].get("domains"), list):
+        event["result"] = {**event["result"], "domains": domains(event["result"]["domains"])}
+    return event
+
+
 class Remote:
     def __init__(self, db, site):
         self.site = site
@@ -147,12 +179,14 @@ class Remote:
                 if line.startswith("data:"):
                     event = json.loads(line[5:].strip())
                     if isinstance(event, dict) and event.get("type") != "heartbeat":
-                        return event
+                        return site_config_job_hosts(event)
         return None
 
     def request(self, method, path, payload):
         # No retries for mutations: a timeout does not mean the operation failed.
         url = get_settings().project_cache_url.rstrip("/") + path if path in {"/site-config/create", "/site-config/delete"} else project_server_url(self.site, path)
+        if path == "/site-config/create":
+            payload = site_config_create_payload(payload)
         response = self.client.request(method, url, json=payload)
         response.raise_for_status()
         try:
@@ -393,6 +427,7 @@ def validate_subdomains(values, cached_domains, require_parent=True):
         raise ValueError("В базе нет сохранённой сетки. Сначала загрузите кэш проекта.")
     parents = {value.removeprefix("www.") for value in known}
     domains = []
+    variants = {}
     for value in values:
         raw = value.strip().lower().rstrip(".")
         try:
@@ -401,8 +436,14 @@ def validate_subdomains(values, cached_domains, require_parent=True):
             raise ValueError("Некорректное имя поддомена.") from None
         if "." not in domain or len(domain) > 253 or not all(re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label) for label in domain.split(".")):
             raise ValueError("Укажите имена поддоменов без протокола, пути и wildcard.")
-        if domain in known:
+        if domain.startswith("www.www."):
+            raise ValueError("Повторный префикс www недопустим: " + domain)
+        bare = domain.removeprefix("www.")
+        if domain in known or bare in parents:
             raise ValueError(f"Поддомен {domain} уже есть в сетке.")
+        if bare in variants and variants[bare] != domain:
+            raise ValueError(f"Укажите один вариант домена {bare}: с www или без www.")
+        variants[bare] = domain
         if require_parent and not any(domain.endswith("." + parent) and domain != "www." + parent for parent in parents):
             raise ValueError(f"Родительский домен для {domain} отсутствует в сохранённой сетке проекта.")
         if domain not in domains:
