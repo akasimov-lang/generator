@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import { Download, Monitor, Smartphone, Plus, ArrowLeft, Loader2, CheckCircle2, AlertCircle, RefreshCcw, Sparkles, Search, ChevronRight, Upload } from "lucide-react";
 import "./styles/template-generator.css";
 import { backFromDetail } from "./detailNavigation";
+import { hasStoredDraftScope, normalizeDraftGeo, normalizeDraftLanguage, readDraftScope, recoverDraftLocale, saveDraftScope } from "./templateDraftScope";
 
 type Api = <T>(path: string, options?: RequestInit) => Promise<T>;
 type Provider = { id: string; name: string; provider_type: string; is_active: boolean };
@@ -42,18 +43,27 @@ export function TemplateGenerator({ api, projects = [] }: { api: Api; projects?:
   const [search, setSearch] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [message, setMessage] = React.useState("");
-  const [form, setForm] = React.useState({ brand: entry.get("brand") || "Онлайн казино", geo: entry.get("geo") || "", language: entry.get("language") || languageForGeo(entry.get("geo") || ""), ai_provider_id: "", uniqueness_scope: "brand_geo", collect_competitors: false, keywords: "", competitors: "", brand_url: "", facts: "" });
+  const [form, setForm] = React.useState({ brand: entry.get("brand") || "Онлайн казино", geo: normalizeDraftGeo(entry.get("geo") || ""), language: normalizeDraftLanguage(entry.get("language") || "") || languageForGeo(normalizeDraftGeo(entry.get("geo") || "")), ai_provider_id: "", uniqueness_scope: "brand_geo", collect_competitors: false, keywords: "", competitors: "", brand_url: "", facts: "" });
   const [sourceDrafts, setSourceDrafts] = React.useState<SourceDraftReference[]>([]);
   const [sourcesSaving, setSourcesSaving] = React.useState(true);
   const brandEdited = React.useRef(!!entry.get("brand"));
+  const localeEdited = React.useRef({geo: !!normalizeDraftGeo(entry.get("geo") || ""), language: !!normalizeDraftLanguage(entry.get("language") || "")});
+  const scopeStorage = React.useMemo(() => { try { return window.localStorage; } catch { return null; } }, []);
   const draftChanged = React.useCallback(() => {}, []);
   const draftsSaved = React.useCallback((sources: SourceDraftReference[]) => {
     setSourceDrafts(sources);
-    if (!brandEdited.current) {
-      const first = sources.find(source => source.hasHtml);
-      setForm(current => ({ ...current, brand: first?.suggestedBrand || "Онлайн казино" }));
-    }
-  }, []);
+    const saved = readDraftScope(sources, scopeStorage);
+    const hintSources = !saved && hasStoredDraftScope(sources, scopeStorage) ? [] : sources;
+    const edited = {...localeEdited.current};
+    const useSavedBrand = !brandEdited.current && saved?.brandEdited;
+    const preserveBrand = brandEdited.current;
+    if (useSavedBrand) brandEdited.current = true;
+    setForm(current => ({ ...current, ...recoverDraftLocale(current, hintSources, saved, edited),
+      brand: preserveBrand ? current.brand : useSavedBrand ? saved!.brand : sources.find(source => source.hasHtml)?.suggestedBrand || "Онлайн казино" }));
+  }, [scopeStorage]);
+  React.useEffect(() => {
+    saveDraftScope(sourceDrafts, {brand: form.brand, geo: form.geo, language: form.language, brandEdited: brandEdited.current}, scopeStorage);
+  }, [sourceDrafts, form.brand, form.geo, form.language, scopeStorage]);
   const requestSequence = React.useRef(0);
   const loadList = React.useCallback(async () => {
     const data = await api<Summary[]>("/site-templates");
@@ -100,6 +110,7 @@ export function TemplateGenerator({ api, projects = [] }: { api: Api; projects?:
   function openCreate(mode: "standard" | "html" = "standard") {
     setCreationMode(mode);
     setError(""); setMessage(""); setSourcesSaving(true); setSourceDrafts([]); brandEdited.current = false;
+    localeEdited.current = {geo: false, language: false};
     setForm(f => ({ ...f, brand: "Онлайн казино", geo: "", language: "", collect_competitors: mode === "standard", keywords: "", competitors: "" }));
     setScreen("new");
   }
@@ -154,9 +165,9 @@ export function TemplateGenerator({ api, projects = [] }: { api: Api; projects?:
     {screen === "new" && <>
       <div className="tg-create-topbar">{backTarget && createPortal(<button className="button secondary compact workspaceHtmlUpload" onClick={() => directUpload ? backFromDetail("/template-generator") : setScreen("list")}><ArrowLeft size={13} />Назад</button>,backTarget)}
         <div className="tg-create-selection" role="group" aria-label="GEO, бренд и язык">
-          <TemplateCombobox label="ГЕО" value={form.geo} options={TEMPLATE_GEOS} onChange={geo => setForm(f => ({ ...f, geo, language: languageForGeo(geo), brand: templateBrandOptions(projects,knowledgeScopes,geo).some(o=>o.value===f.brand)?f.brand:"Онлайн казино" }))} />
+          <TemplateCombobox label="ГЕО" value={form.geo} options={TEMPLATE_GEOS} onChange={geo => { localeEdited.current = {geo: true, language: true}; setForm(f => ({ ...f, geo, language: languageForGeo(geo), brand: templateBrandOptions(projects,knowledgeScopes,geo).some(o=>o.value===f.brand)?f.brand:"Онлайн казино" })); }} />
           <TemplateCombobox label="Бренд" value={form.brand} options={brandOptions} allowCustom placeholder="Введите название бренда" onChange={brand => { brandEdited.current = true; setForm(f => ({ ...f, brand })); }} />
-          <TemplateCombobox label="Язык" value={form.language} options={TEMPLATE_LANGUAGES} onChange={language => setForm(f => ({ ...f, language }))} />
+          <TemplateCombobox label="Язык" value={form.language} options={TEMPLATE_LANGUAGES} onChange={language => { localeEdited.current.language = true; setForm(f => ({ ...f, language })); }} />
         </div>
       </div>
       <div className="tg-create-layout"><form className="tg-card" onSubmit={create}>

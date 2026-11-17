@@ -25,6 +25,7 @@ type AlternatesSnapshot = { markup: string; enabled: boolean };
 type NetworkOperation = { id: string; action: "reserve" | "reglue" | "alternates" | "create_domains" | "create_subdomains" | "delete_domain" | "create_fake_main" | "select_fake_main" | "domain_redirect" | "domain_redirects_main" | "page_redirect" | "reglue_redirects" | "indexing" | "structured_data"; page_redirects_before?:PageRedirectGroup[]; page_redirects_after?:PageRedirectGroup[]; redirects_before?: DomainRedirect[]; redirects_after?: DomainRedirect[]; task_id?: string; domains?: string[]; status: string; message: string | null; domain: string | null; source_domain?: string | null; alternates_before?: AlternatesSnapshot | null; alternates_after?: AlternatesSnapshot | null; initiator: string; created_at: string };
 type DomainClassification = { is_subdomain: boolean; parent_domain: string | null; parent_type: "drop" | "newreg" | null; unused_as_main: boolean };
 type Network = {
+  reglue_participation?: boolean;
   last_reglue_at?: string | null;
   last_reglue?: LastReglue | null;
   recent_network_changes?: RecentNetworkChange[];
@@ -52,7 +53,7 @@ type Network = {
 type BrandNetwork = { id: string; name: string; main: string; domainCount: number; geoLabel: string };
 type Props = {
   networks?: BrandNetwork[]; brand?: string; onSelectNetwork?: (name: string) => void;
-  site: { id: string; name: string; added_to_system_at?: string | null; fibery_name?: string | null; cache_language?: string | null; cache_geo?: string | null }; mode: "network" | "redirects"; username: string;
+  site: { id: string; name: string; reglue_participation?: boolean; added_to_system_at?: string | null; fibery_name?: string | null; cache_language?: string | null; cache_geo?: string | null }; mode: "network" | "redirects"; username: string;
   api: <T>(path: string, options?: RequestInit) => Promise<T>; onChanged: () => void; refreshToken?: number;
 };
 type MarkupSection = "canonical" | "alternates" | "dynamic";
@@ -62,6 +63,21 @@ const sameMarkup = (a: string, b: string) => a.trim().replace(/>\s+</g, "><") ==
 const actionLabels = { structured_data: "Микроразметка", domain_redirects_main: "Все доменные редиректы на текущий Main", page_redirect: "Постраничные редиректы", reglue_redirects: "Цели редиректов после переклея", domain_redirect: "Доменные редиректы", create_domains: "Добавление доменов", select_fake_main: "Настройки фейковых страниц", indexing: "Индексация проекта", create_fake_main: "Создание фейковой главной", delete_domain: "Удаление домена", create_subdomains: "Создание поддоменов", reserve: "Сохранение резерва", reglue: "Ручной переклей", alternates: "Альтернейты" };
 const statusLabels: Record<string, string> = { index_queued: "В очереди", index_submitting: "Отправляется", index_submitted: "Задача создана", index_unknown: "Отправка не подтверждена", confirmed: "Подтверждено", pending: "Ожидает подтверждения", unknown: "Результат пока неизвестен", failed: "Ошибка" };
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Не удалось выполнить запрос";
+
+export async function saveReglueParticipation(api: Props["api"], siteId: string, enabled: boolean): Promise<boolean> {
+  const saved = await api<{id: string; reglue_participation: boolean}>(`/auto-reglue/projects/${encodeURIComponent(siteId)}/participation`, {
+    method: "PATCH", body: JSON.stringify({enabled}),
+  });
+  if (!saved || saved.id !== siteId || saved.reglue_participation !== enabled) throw new Error("Сервер не подтвердил изменение участия. Обновите данные проекта.");
+  return saved.reglue_participation;
+}
+
+export function MassReglueParticipationControl({enabled, saving, saved, error, onChange}: {enabled: boolean; saving: boolean; saved: boolean; error: string; onChange: (enabled: boolean) => void}) {
+  return <div className="networkActions" aria-busy={saving}>
+    <label className="checkboxRow"><input type="checkbox" checked={!enabled} disabled={saving} onChange={event => onChange(!event.currentTarget.checked)} />Не участвует в массовом переклее</label>
+    <SaveIndicator state={error ? "error" : saving ? "saving" : saved ? "saved" : "idle"} label="Участие в массовом переклее" error={error} version={String(enabled)} />
+  </div>;
+}
 
 export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refreshToken = 0, networks = [], brand, onSelectNetwork }: Props) {
   const [structuredDataRevision, setStructuredDataRevision] = React.useState(0);
@@ -100,6 +116,16 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
   const loadController = React.useRef<AbortController | null>(null);
   const [error, setError] = React.useState("");
   const [message, setMessage] = React.useState("");
+  const [participationEnabled, setParticipationEnabled] = React.useState(site.reglue_participation !== false);
+  const [participationStatus, setParticipationStatus] = React.useState<{saving: boolean; saved: boolean; error: string}>({saving: false, saved: false, error: ""});
+  const participationSaving = React.useRef(false);
+  const participationVersion = React.useRef(0);
+  React.useEffect(() => {
+    if (participationSaving.current) return;
+    participationVersion.current++;
+    setParticipationEnabled(site.reglue_participation !== false);
+    if ((site.reglue_participation !== false) !== participationEnabled) setParticipationStatus({saving: false, saved: false, error: ""});
+  }, [site.id, site.reglue_participation]);
   const [savedMarkup, setSavedMarkup] = React.useState<Partial<Record<MarkupSection, string>>>({});
   const [markupErrors, setMarkupErrors] = React.useState<Partial<Record<MarkupSection, string>>>({});
   const [pendingMarkupSections, setPendingMarkupSections] = React.useState<MarkupSection[]>([]);
@@ -173,6 +199,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
     if (busyRef.current) return;
     busyRef.current = true; setBusy("refresh"); setError("");
     const controller = new AbortController();
+    const participationReadVersion = participationVersion.current;
     loadController.current = controller;
     try {
       const next = await readNetworkWithRetry(
@@ -182,6 +209,10 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
       if (controller.signal.aborted) return;
       const previous = dataRef.current;
       accept(next, replaceReserve);
+      if (participationReadVersion === participationVersion.current && !participationSaving.current && typeof next.reglue_participation === "boolean") {
+        setParticipationEnabled(next.reglue_participation);
+        setParticipationStatus({saving: false, saved: false, error: ""});
+      }
       if (mounted.current) setStructuredDataRevision(value => value + 1);
       const fiberyChanged = next.fibery_name !== undefined && next.fibery_name !== fiberyNameRef.current;
       if (mounted.current && (fiberyChanged || previous && (previous.revision !== next.revision || JSON.stringify(previous.operations) !== JSON.stringify(next.operations)))) onChanged();
@@ -193,6 +224,22 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
         if (mounted.current) { setBusy(""); setMessage(current => current.startsWith("Сетка занята другим запросом.") ? "" : current); }
       }
     }
+  }
+  async function updateParticipation(enabled: boolean) {
+    if (participationSaving.current) return;
+    const siteId = site.id;
+    participationSaving.current = true; participationVersion.current++;
+    setParticipationStatus({saving: true, saved: false, error: ""});
+    try {
+      const confirmed = await saveReglueParticipation(api, siteId, enabled);
+      if (!mounted.current || historySite.current !== siteId) return;
+      setParticipationEnabled(confirmed);
+      setParticipationStatus({saving: false, saved: true, error: ""});
+      if (dataRef.current) { dataRef.current = {...dataRef.current, reglue_participation: confirmed}; setData(dataRef.current); }
+      onChanged();
+    } catch (err) {
+      if (mounted.current && historySite.current === siteId) setParticipationStatus({saving: false, saved: false, error: errorText(err)});
+    } finally { participationSaving.current = false; participationVersion.current++; }
   }
   React.useEffect(() => {
     mounted.current = true;
@@ -472,6 +519,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
             {!editQueue.latest("reglue") && reglueBlockedReason && <small className="networkEditStatus" title={reglueBlockedReason}>{reglueBlockedReason}</small>}</div>
           </div>
         </div>}
+        <MassReglueParticipationControl enabled={participationEnabled} {...participationStatus} onChange={enabled => void updateParticipation(enabled)} />
         </div>);
   return <section className="dataPanel projectNetworkPanel">
     <div className="panelHeader"><div className="networkPanelHeading"><h2>{mode === "network" ? "Сетка проекта" : "Переклей"}</h2>        {data && mode === "network" && <div className="networkViewSwitch" role="group" aria-label="Вид сетки">

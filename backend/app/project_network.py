@@ -340,6 +340,7 @@ def result(db, site, state):
         "fibery_name": site.fibery_name,
         "domain_bans": banned_domains(db, site, list(dict.fromkeys([*state["domains"], *state.get("amp_domains", []), *(site.main_domain_history or []), *(site.alternate_domain_history or []), *(site.x_default_history or []), *state.get("history_overrides", {}), *state.get("domain_added_at", {}), *state.get("domain_removed_at", {}), *(period["domain"] for period in state.get("domain_membership_history", []))]))),
         **state, "domain_classification": classify_domains(state["domains"], site.domain_types or {}, site.main_domain_history or [], state["canon"]), "domain_types": site.domain_types or {}, "revision": state_revision(state), "main_history": site.main_domain_history or [],
+        "reglue_participation": site.reglue_participation is not False,
         "x_default_history": site.x_default_history or [],
         "alternate_history": site.alternate_domain_history or [],
         "alternates": alternate_links(state["alternateMarkup"]),

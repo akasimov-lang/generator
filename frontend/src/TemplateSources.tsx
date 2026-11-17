@@ -1,16 +1,24 @@
 import React from "react";
 import { Copy, Download, Plus, Globe2, Upload, Trash2, ExternalLink, ChevronDown } from "lucide-react";
+import { sourceLocaleHint } from "./templateDraftScope";
 type Api = <T>(path: string, init?: RequestInit) => Promise<T>;
-export type SourceDraftReference = { id: string; revision: number; hasHtml: boolean; suggestedBrand?: string };
+export type SourceDraftReference = { id: string; revision: number; hasHtml: boolean; suggestedBrand?: string; suggestedGeo?: string; suggestedLanguage?: string };
 type Source = { title?: string; display_url?: string; created_at?: string; updated_at?: string; id: string; url: string; html: string; revision: number; suggested_brand?: string; capture: { status?: string; source?: string; error?: string } };
 const blank = (): Source => ({ id: "", url: "", html: "", revision: 0, capture: {} });
+
+function draftReference(row: Source): SourceDraftReference {
+  const doc = new DOMParser().parseFromString(row.html, "text/html");
+  const url = row.display_url || row.url || doc.querySelector('link[rel="canonical"]')?.getAttribute("href") || doc.querySelector('meta[property="og:url"]')?.getAttribute("content") || "";
+  return { id: row.id, revision: row.revision, hasHtml: !!row.html.trim(), suggestedBrand: row.suggested_brand,
+    ...sourceLocaleHint(url, doc.documentElement.lang, doc.querySelector('meta[property="og:locale"]')?.getAttribute("content") || "") };
+}
 
 export function TemplateSources({ templateId, api, pending, onChanged, onBusy, onDraftSources }: { templateId?: string; api: Api; pending: boolean; onChanged: () => void; onBusy: (busy: boolean) => void; onDraftSources?: (sources: SourceDraftReference[]) => void }) {
   const endpoint = templateId ? `/site-templates/${templateId}/sources` : "/site-templates/source-drafts";
   const rowKeys = React.useRef<string[]>([]);
   const references = React.useRef(new Map<string, SourceDraftReference>());
   const reportSaved = React.useCallback((key: string, row: Source) => {
-    references.current.set(key, { id: row.id, revision: row.revision, hasHtml: !!row.html.trim(), suggestedBrand: row.suggested_brand });
+    references.current.set(key, draftReference(row));
     onDraftSources?.(rowKeys.current.flatMap(key => { const ref = references.current.get(key); return ref ? [ref] : []; }));
   }, [onDraftSources]);
   const [rows, setRows] = React.useState<Array<Source & { key: string }>>([]);
@@ -29,7 +37,7 @@ export function TemplateSources({ templateId, api, pending, onChanged, onBusy, o
         if (live) {
           rowKeys.current = next.map(row => row.id);
           setRows(next.length ? next.map(row => ({ ...row, key: row.id })) : [{ ...blank(), key: "first" }]);
-          references.current = new Map(next.map(row => [row.id, { id: row.id, revision: row.revision, hasHtml: !!row.html.trim(), suggestedBrand: row.suggested_brand }]));
+          references.current = new Map(next.map(row => [row.id, draftReference(row)]));
           onDraftSources?.(rowKeys.current.flatMap(key => { const ref = references.current.get(key); return ref ? [ref] : []; }));
           setLoading(false); onBusy(dirtyKeys.current.size > 0);
         }
