@@ -52,3 +52,23 @@ test('completed deletion does not resurrect the deleted row from queue history',
  assert.match(html,/Доменных редиректов нет/);
  assert.doesNotMatch(html,/one.test/);
 });
+
+test('failed unsaved domain redirect exposes a labelled delete action',()=>{
+ const source='chimeraprime.com/careers/regular-hubspot-developer';
+ const queue=new NetworkEditQueue('site',async()=>new Promise(()=>{}));
+ queue.server.items=[{id:'failed',status:'failed',message:'Откуда: укажите домен без пути, параметров и якоря.',request:{action:'domain_redirect',revision:'r',expected:{rows:[]},redirect_source:source,redirect_original_source:'',redirect_target:'22betpolska.com'}}];
+ const html=renderToStaticMarkup(React.createElement(DomainRedirects,{redirects:[],canon:'22betpolska.com',revision:'r',available:true,disabled:false,queue,onSave:async()=>true,onRetargetMain:async()=>true}));
+ const button=html.match(/<button[^>]*aria-label="Удалить редирект chimeraprime.com\/careers\/regular-hubspot-developer"[^>]*>/)[0];
+ assert.doesNotMatch(button,/disabled/);
+ assert.match(html,/Откуда: укажите домен без пути/);
+});
+
+test('discarding failed draft removes its row but preserves saved same-host redirect',async()=>{
+ const source='chimeraprime.com/careers/regular-hubspot-developer';
+ const queue=new NetworkEditQueue('site',async()=>({items:[],limit:30,network:null}));
+ queue.server.items=[{id:'failed',status:'failed',message:'Invalid source',request:{action:'domain_redirect',revision:'r',expected:{rows:[]},redirect_source:source,redirect_original_source:'',redirect_target:'22betpolska.com'}}];
+ assert.equal(await queue.dismiss('failed'),true);
+ const html=renderToStaticMarkup(React.createElement(DomainRedirects,{redirects:[{url:'chimeraprime.com',value:'22betpolska.com'}],canon:'22betpolska.com',revision:'r',available:true,disabled:false,queue,onSave:async()=>true,onRetargetMain:async()=>true}));
+ assert.doesNotMatch(html,/regular-hubspot-developer/);
+ assert.match(html,/aria-label="Удалить редирект chimeraprime.com"/);
+});

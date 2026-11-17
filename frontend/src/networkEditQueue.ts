@@ -20,13 +20,15 @@ export class NetworkEditQueue<T> {
   private reading = false;
   private epoch = 0;
   private networkBusy = false;
+  private dismissing = new Set<string>();
+  private dismissedIds = new Set<string>();
   private outbox: string[] = [];
   private siteId: string;
   private api: Api;
   constructor(siteId: string, api: Api) { this.siteId = siteId; this.api = api; }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   private emit() { for (const listener of this.listeners) listener(); }
-  get items() { return [...this.pending.values(), ...this.server.items.filter(item => !this.pending.has(item.id))]; }
+  get items() { return [...this.pending.values(), ...this.server.items.filter(item => !this.pending.has(item.id))].filter(item => !this.dismissedIds.has(item.id)); }
   latest(key: string) { return this.items.filter(item => editKey(item.request) === key).sort((a,b) => (b.created_at || "").localeCompare(a.created_at || ""))[0]; }
   busy(key: string) { return this.items.some(item => editKey(item.request) === key && editActive(item)); }
   get count() { return this.items.filter(editActive).length; }
@@ -34,12 +36,12 @@ export class NetworkEditQueue<T> {
     if (busy !== this.networkBusy) { this.epoch++; this.networkBusy = busy; this.server = { ...this.server, network: null }; }
   }
   private accept(snapshot: NetworkEditSnapshot<T>) {
-    this.server = this.networkBusy ? { ...snapshot, network: null } : snapshot;
+    this.server = { ...snapshot, items: snapshot.items.filter(item => !this.dismissedIds.has(item.id)), network: this.networkBusy ? null : snapshot.network };
     for (const item of snapshot.items) this.pending.delete(item.id);
     this.emit();
   }
   async refresh() {
-    if (this.reading || this.sending) return;
+    if (this.reading || this.sending || this.dismissing.size) return;
     this.reading = true; const epoch = this.epoch;
     try {
       const snapshot = await this.api<NetworkEditSnapshot<T>>(`/sites/${this.siteId}/network/edit-queue`);
@@ -60,6 +62,33 @@ export class NetworkEditQueue<T> {
     if (!item || item.status !== "unconfirmed") return;
     this.pending.set(id, { ...item, status: "submitting", message: "Проверяем отправку…" });
     this.outbox.unshift(id); this.epoch++; this.emit(); void this.send();
+  }
+  async dismiss(id: string): Promise<boolean> {
+    const item = this.items.find(candidate => candidate.id === id);
+    if (!item || item.status !== "failed" || item.request.action !== "domain_redirect") return false;
+    const key = editKey(item.request);
+    if (this.busy(key) || this.dismissing.has(key)) return false;
+    const olderFailure = (candidate: NetworkEditItem) => candidate.status === "failed" && editKey(candidate.request) === key &&
+      (candidate.id === id || !!candidate.created_at && !!item.created_at && Date.parse(candidate.created_at) <= Date.parse(item.created_at));
+    const discarded = this.items.filter(olderFailure).map(candidate => candidate.id);
+    // A rejected local enqueue may overlay an earlier persisted failure. Dismiss
+    // that server history too, so a reload cannot bring the same draft back.
+    const saved = this.server.items.filter(olderFailure).sort((a,b) => (b.created_at || "").localeCompare(a.created_at || ""))[0];
+    this.dismissing.add(key); const epoch = ++this.epoch;
+    try {
+      const snapshot = saved ? await this.api<NetworkEditSnapshot<T>>(`/sites/${this.siteId}/network/edit-queue/${encodeURIComponent(saved.id)}`, { method: "DELETE" }) : null;
+      const current = epoch === this.epoch;
+      this.epoch++;
+      for (const discardedId of discarded) { this.dismissedIds.add(discardedId); this.pending.delete(discardedId); }
+      this.outbox = this.outbox.filter(queuedId => !this.dismissedIds.has(queuedId));
+      this.error = "";
+      if (snapshot) this.accept(current ? snapshot : { ...snapshot, network: null }); else this.emit();
+      return true;
+    } catch (error) {
+      this.error = error instanceof Error ? error.message : "Не удалось удалить ошибочную строку. Повторите удаление.";
+      this.emit();
+      throw error;
+    } finally { this.dismissing.delete(key); }
   }
   private async send() {
     if (this.sending || [...this.pending.values()].some(item => item.status === "unconfirmed")) return;
@@ -87,4 +116,4 @@ export class NetworkEditQueue<T> {
   }
 }
 
-export type NetworkEditQueueView = Pick<NetworkEditQueue<unknown>, "items" | "latest" | "busy" | "retry">;
+export type NetworkEditQueueView = Pick<NetworkEditQueue<unknown>, "items" | "latest" | "busy" | "retry" | "dismiss">;

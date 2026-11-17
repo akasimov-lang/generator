@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from typing import Literal
 
 import httpx
+from fastapi import HTTPException
 from pydantic import Field
 from sqlalchemy import select
 
@@ -53,10 +54,38 @@ def item(job):
 
 def snapshot(db, site):
     recent = list(db.scalars(query(site.id).where(models.BackgroundJob.status.in_(TERMINAL))
+        .where(models.BackgroundJob.result['dismissed_at'].as_string().is_(None))
         .order_by(models.BackgroundJob.created_at.desc(), models.BackgroundJob.id.desc()).limit(30)))
     state = site.network_state or {}
     return {'items': [item(job) for job in [*active(db, site.id), *recent]], 'limit': LIMIT,
             'network': network.result(db, site, state) if state.get('has_head') and 'domains' in state else None}
+
+
+def dismiss(db, site, job_id, actor):
+    """Hide a rejected redirect draft, retaining its request/error for history."""
+    db.execute(select(models.Site.id).where(models.Site.id == site.id).with_for_update()).scalar_one()
+    job = db.scalar(query(site.id).where(models.BackgroundJob.id == str(job_id)))
+    if not job:
+        raise HTTPException(404, 'Изменение не найдено в очереди проекта.')
+    request = job.payload['request']
+    if job.status != 'failed' or request['action'] != 'domain_redirect':
+        raise network.NetworkConflict('Можно удалить только ошибочную попытку изменения доменного редиректа.')
+    if (job.result or {}).get('dismissed_at'):
+        return snapshot(db, site)
+    source = request.get('redirect_original_source') or request.get('redirect_source')
+    older = db.scalars(query(site.id).where(
+        models.BackgroundJob.status == 'failed',
+        models.BackgroundJob.payload['sequence'].as_integer() <= job.payload['sequence'],
+    )).all()
+    dismissed_at = datetime.now(timezone.utc).isoformat()
+    for previous in older:
+        previous_request = previous.payload['request']
+        if (previous_request['action'] == 'domain_redirect'
+                and (previous_request.get('redirect_original_source') or previous_request.get('redirect_source')) == source
+                and not (previous.result or {}).get('dismissed_at')):
+            previous.result = {**(previous.result or {}), 'dismissed_at': dismissed_at, 'dismissed_by': actor}
+    db.commit()
+    return snapshot(db, site)
 
 
 def enqueue(db, site, request, actor):

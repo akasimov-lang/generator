@@ -63,3 +63,114 @@ test('reload restores server queue and completion unlocks only completed row',as
 test('page redirect keys separate matching paths on different domains',()=>{
   assert.notEqual(editKey({action:'page_redirect',page_redirect_domain:'one.test',page_redirect_source:'/old/'}),editKey({action:'page_redirect',page_redirect_domain:'two.test',page_redirect_source:'/old/'}));
 });
+
+const invalidSource='chimeraprime.com/careers/regular-hubspot-developer';
+const failed=(id,source=invalidSource,created_at='2026-11-17T14:00:00Z')=>({id,request:{...request(source),redirect_original_source:'',expected:{rows:[]}},status:'failed',message:'Укажите домен без пути.',created_at});
+
+test('discard local rejected draft and older failures without another API request',async()=>{
+  let calls=0;
+  const queue=new NetworkEditQueue('site',async()=>{calls++;throw Object.assign(new Error('Invalid source'),{statusCode:400});});
+  queue.enqueue(failed('draft').request);await tick();
+  const latest=queue.items[0];latest.created_at='2026-11-17T14:00:00Z';
+  queue.pending.set('older',failed('older',invalidSource,'2026-11-17T13:00:00Z'));
+  queue.pending.set('other',failed('other','other.test/path'));
+  assert.equal(await queue.dismiss(latest.id),true);
+  assert.equal(calls,1);
+  assert.equal(queue.latest(`domain:${invalidSource}`),undefined);
+  assert.equal(queue.items.length,1);
+  assert.equal(queue.items[0].id,'other');
+});
+
+test('discard persisted failure keeps unrelated rows and remains gone after reload',async()=>{
+  let stored=[failed('old',invalidSource,'2026-11-17T13:00:00Z'),failed('latest'),failed('other','other.test/path')];
+  const calls=[];
+  const api=async(path,options)=>{
+    calls.push([path,options?.method]);
+    if(options?.method==='DELETE')stored=stored.filter(item=>item.request.redirect_source!==invalidSource);
+    return snapshot(stored);
+  };
+  const queue=new NetworkEditQueue('site',api);await queue.refresh();
+  assert.equal(await queue.dismiss('latest'),true);
+  assert.deepEqual(queue.items.map(item=>item.id),['other']);
+  await queue.refresh();
+  assert.deepEqual(queue.items.map(item=>item.id),['other']);
+  const reloaded=new NetworkEditQueue('site',api);await reloaded.refresh();
+  assert.deepEqual(reloaded.items.map(item=>item.id),['other']);
+  assert.deepEqual(calls.find(([,method])=>method==='DELETE'),['/sites/site/network/edit-queue/latest','DELETE']);
+});
+
+test('local failure overlay also dismisses older persisted failure',async()=>{
+  const calls=[];
+  const queue=new NetworkEditQueue('site',async(path,options)=>{calls.push([path,options.method]);return snapshot();});
+  queue.server=snapshot([failed('server',invalidSource,'2026-11-17T13:00:00Z')]);
+  queue.pending.set('local',failed('local'));
+  assert.equal(await queue.dismiss('local'),true);
+  assert.deepEqual(calls,[['/sites/site/network/edit-queue/server','DELETE']]);
+  assert.deepEqual(queue.items,[]);
+});
+
+test('failed discard leaves row and diagnostic visible',async()=>{
+  const queue=new NetworkEditQueue('site',async()=>{throw new Error('Server unavailable');});
+  queue.server=snapshot([failed('server')]);
+  await assert.rejects(queue.dismiss('server'),/Server unavailable/);
+  assert.equal(queue.latest(`domain:${invalidSource}`).id,'server');
+  assert.equal(queue.error,'Server unavailable');
+});
+
+test('active request cannot be discarded',async()=>{
+  let calls=0;
+  const queue=new NetworkEditQueue('site',async()=>{calls++;return snapshot();});
+  queue.server=snapshot([{...failed('active'),status:'processing'}]);
+  assert.equal(await queue.dismiss('active'),false);
+  assert.equal(calls,0);
+  assert.equal(queue.items.length,1);
+});
+
+test('ambiguous submission cannot be discarded',async()=>{
+  let calls=0;
+  const queue=new NetworkEditQueue('site',async()=>{calls++;return snapshot();});
+  queue.pending.set('ambiguous',{...failed('ambiguous'),status:'unconfirmed'});
+  assert.equal(await queue.dismiss('ambiguous'),false);
+  assert.equal(calls,0);
+  assert.equal(queue.items.length,1);
+});
+
+test('refresh started before discard cannot restore failed row',async()=>{
+  let release;
+  const stale=snapshot([failed('server')]);
+  const queue=new NetworkEditQueue('site',async(path,options)=>options?.method==='DELETE'?snapshot():new Promise(resolve=>release=()=>resolve(stale)));
+  queue.server=stale;
+  const reading=queue.refresh();
+  assert.equal(await queue.dismiss('server'),true);
+  release();await reading;
+  assert.deepEqual(queue.items,[]);
+});
+
+test('late unrelated enqueue snapshot cannot resurrect discarded failure',async()=>{
+  let release;
+  const queue=new NetworkEditQueue('site',async(path,options)=>{
+    if(options.method==='DELETE')return snapshot();
+    const body=JSON.parse(options.body);
+    return new Promise(resolve=>release=()=>resolve(snapshot([failed('server'),{id:body.request_id,request:body,status:'queued',message:'queued'}])));
+  });
+  queue.server=snapshot([failed('server')]);
+  queue.enqueue(request('other.test'));
+  assert.equal(await queue.dismiss('server'),true);
+  release();await tick();
+  assert.equal(queue.latest(`domain:${invalidSource}`),undefined);
+  assert.equal(queue.latest('domain:other.test').status,'queued');
+});
+
+test('discard response cannot replace network after concurrent edit',async()=>{
+  let release;
+  const queue=new NetworkEditQueue('site',async(path,options)=>{
+    if(options.method==='DELETE')return new Promise(resolve=>release=()=>resolve({...snapshot(),network:{revision:'stale'}}));
+    return new Promise(()=>{});
+  });
+  queue.server=snapshot([failed('server')]);
+  const deleting=queue.dismiss('server');
+  queue.enqueue(request('other.test'));
+  release();await deleting;
+  assert.equal(queue.server.network,null);
+  assert.equal(queue.latest('domain:other.test').status,'submitting');
+});

@@ -657,6 +657,11 @@ def enqueue_network_edit(site_id: str, payload: network_edit_queue.Request, user
     return _network_call(network_edit_queue.enqueue, db, _get_site_or_404(db, site_id), payload, _request_username(user) or "user")
 
 
+@router.delete("/sites/{site_id}/network/edit-queue/{job_id}")
+def dismiss_network_edit(site_id: str, job_id: str, user: AuthUser, db: Session = Depends(get_db)):
+    return _network_call(network_edit_queue.dismiss, db, _get_site_or_404(db, site_id), job_id, _request_username(user) or "user")
+
+
 @router.get("/sites/{site_id}/network/fake-main-queue")
 def get_fake_main_queue(site_id: str, _: AuthUser, db: Session = Depends(get_db)):
     return fake_main_queue.snapshot(db, _get_site_or_404(db, site_id))
