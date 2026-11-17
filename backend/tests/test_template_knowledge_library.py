@@ -72,11 +72,47 @@ def test_invalid_upload_never_saved(db,change):
     assert not db.scalar(select(models.TemplateKnowledgeExample.id))
 
 
-def test_generic_requires_main_url_and_plain_text_supported(db):
+def test_generic_requires_source_url_and_plain_text_supported(db):
     user,_,_=setup_template(db);api=client(db,user)
     result=api.post('/site-templates/knowledge',json={'brand':'Общие ключи','html':HTML})
     assert result.status_code==422
     assert api.post('/site-templates/knowledge',json={'brand':'Other','geo':'CZ','html':'Useful content. '*30,'filename':'source.txt'}).status_code==201
+
+
+def test_generic_internal_url_is_preserved_and_relative_links_use_its_path(db):
+    user,_,_=setup_template(db);api=client(db,user)
+    url='https://example.test/pl/casino/'
+    html=HTML.replace('<head>','<head><link rel="canonical" href="https://other.test/">')
+    html=html.replace('href="/bonus/"','href="bonus/"')
+    payload={'brand':'Общие ключи','geo':'PL','html':html,'url':url}
+    response=api.post('/site-templates/knowledge',json=payload)
+    assert response.status_code==201,response.text
+    source=response.json()['source']
+    assert source['url']==url
+    assert [page['url'] for page in source['structure']['pages']]==[url,url+'bonus/']
+    row=db.get(models.TemplateKnowledgeExample,source['id'])
+    assert row.url==url and row.html==html
+    assert api.post('/site-templates/knowledge',json=payload).json()['source']['duplicate']
+    assert len(db.scalars(select(models.TemplateKnowledgeExample)).all())==1
+    assert len(db.scalars(select(models.BackgroundJob)).all())==1
+
+
+def test_generic_source_url_with_query_is_not_rewritten_to_domain_root(db):
+    user,_,_=setup_template(db);api=client(db,user)
+    url='https://example.test/index.php?page=casino&lang=pl'
+    result=api.post('/site-templates/knowledge',json={'brand':'Общие ключи','html':HTML,'url':url})
+    assert result.status_code==201,result.text
+    assert result.json()['source']['url']==url
+    assert result.json()['source']['structure']['pages'][0]['url']==url
+
+
+@pytest.mark.parametrize('url',['javascript:alert(1)','ftp://example.test/casino/','https://user:pass@example.test/casino/'])
+def test_generic_internal_sources_still_require_http_without_credentials(db,url):
+    user,_,_=setup_template(db);api=client(db,user)
+    result=api.post('/site-templates/knowledge',json={'brand':'Общие ключи','html':HTML,'url':url})
+    assert result.status_code==422
+    assert not db.scalar(select(models.TemplateKnowledgeExample))
+    assert not db.scalar(select(models.BackgroundJob))
 
 
 def test_parser_uses_home_and_sitemap_without_cross_domain_or_query_traps(monkeypatch):

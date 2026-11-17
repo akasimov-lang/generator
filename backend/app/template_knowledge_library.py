@@ -116,9 +116,11 @@ def save(db, brand, geo, content, url, filename, actor_id, *, commit=True, allow
     if url:
         parsed = urlsplit(url)
         if parsed.scheme not in {'https','http'} or not parsed.hostname or parsed.username or parsed.password:
-            raise ValueError('Укажите HTTP(S) адрес главной страницы без логина и пароля.')
-    if key == 'general' and ((not url and not allow_missing_general_url) or url and (urlsplit(url).path not in {'','/'} or urlsplit(url).query)):
-        raise ValueError('Для общих ключей укажите URL главной страницы домена, например https://example.com/.')
+            raise ValueError('Укажите HTTP(S) адрес страницы конкурента без логина и пароля.')
+    # A competitor's actual landing page may live at a nested or localized URL.
+    # Preserve that source address for provenance and relative-link discovery.
+    if key == 'general' and not url and not allow_missing_general_url:
+        raise ValueError('Для общих ключей укажите URL страницы конкурента, например https://example.com/casino/.')
     digest = hashlib.sha256(html.encode('utf-8')).hexdigest()
     with knowledge_lock(db,key,country):
         existing = entries(db,name,country)
@@ -161,8 +163,8 @@ def remember_source(db, template, source):
             if url and (parsed.scheme not in {'http','https'} or not parsed.hostname or parsed.username or parsed.password):url=''
         except ValueError:
             url='';parsed=urlsplit('')
-        # Historical uploads without a homepage URL remain useful as HTML evidence.
-        can_parse = key=='general' and parsed.scheme in {'http','https'} and parsed.hostname and parsed.path in {'','/'} and not parsed.query and not parsed.username and not parsed.password
+        # Historical uploads without a source URL remain useful as HTML evidence.
+        can_parse = key=='general' and parsed.scheme in {'http','https'} and parsed.hostname and not parsed.username and not parsed.password
         row = models.TemplateKnowledgeExample(brand=name,brand_key=key,geo=country,url=url,
             title=evidence['title'] or 'Пример из предыдущей задачи',
             filename=f'Задача {template.id[:8]} · {source.id[:8]}.html',html=html,sha256=digest,

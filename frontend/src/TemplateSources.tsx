@@ -45,8 +45,8 @@ export function TemplateSources({ templateId, api, pending, onChanged, onBusy, o
     window.addEventListener("message", extensionSaved);
     return () => { live = false; clearInterval(timer); window.removeEventListener("message", extensionSaved); };
   }, [api, endpoint, templateId, pending, onChanged, onBusy, onDraftSources, reload]);
-  return <section className="tg-card tg-source-editor"><div className="tg-source-title"><h3>Главные страницы конкурентов <small>{rows.length} / 10</small></h3></div>
-    <p>Добавьте до десяти главных страниц: загрузите файл HTML, TXT, DOC или DOCX или вставьте код. Каждый конкурент сохраняется отдельно и автоматически.</p>
+  return <section className="tg-card tg-source-editor"><div className="tg-source-title"><h3>Страницы конкурентов <small>{rows.length} / 10</small></h3></div>
+    <p>Добавьте до десяти главных или внутренних страниц: загрузите файл HTML, TXT, DOC или DOCX или вставьте код. Каждый конкурент сохраняется отдельно и автоматически.</p>
     {pending && <p className="tg-help">Сейчас выполняется задача. Поля станут доступны для изменений после завершения этапа.</p>}
     {error && <p role="alert">{error}<button type="button" className="button secondary" onClick={() => setReload(value => value + 1)}>Повторить загрузку</button></p>}{loading && <p>Загрузка источников…</p>}
     {rows.map((row, index) => <SourceEditor key={row.key} initial={row} number={index + 1} templateId={templateId} api={api} endpoint={endpoint} disabled={pending || loading} onChanged={onChanged} rowKey={row.key} onDirty={trackDirty} onSaved={reportSaved} onRemoved={() => {
@@ -124,7 +124,7 @@ function SourceEditor({ initial, number, templateId, api, endpoint, disabled, on
             method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file,
           })).html
         : await file.text();
-      if (!html.trim()) throw new Error("Файл пуст. Выберите HTML главной страницы.");
+      if (!html.trim()) throw new Error("Файл пуст. Выберите HTML страницы конкурента.");
       if (new TextEncoder().encode(html).length > 2_000_000) throw new Error("HTML превышает 2 МБ.");
       change({ ...latest.current, html }); setFilename(file.name);
     } catch (e) { setError(e instanceof Error ? e.message : "Не удалось прочитать файл"); onDirty(rowKey, dirty.current); }
@@ -166,7 +166,7 @@ function SourceEditor({ initial, number, templateId, api, endpoint, disabled, on
     <details className="tg-source-extra"><summary>Адрес и получение HTML через Google</summary><label>Адрес конкурента <span className="tg-muted">(для запуска проверки)</span><input aria-label={`Адрес конкурента ${number}`} value={draft.url} disabled={disabled || reading || removing} placeholder="https://example.com" onChange={e => change({ ...draft, url: e.target.value })} onBlur={() => { if (dirty.current) void flush().catch(() => undefined); }} /></label>
     </details>
     <textarea aria-label={`HTML конкурента ${number}`} rows={9} disabled={disabled || reading || removing} spellCheck={false} value={draft.html}
-      placeholder="Или вставьте сюда HTML главной страницы конкурента…" onChange={e => change({ ...draft, html: e.target.value })} onBlur={() => { if (dirty.current) void flush().catch(() => undefined); }} />
+      placeholder="Или вставьте сюда HTML страницы конкурента…" onChange={e => change({ ...draft, html: e.target.value })} onBlur={() => { if (dirty.current) void flush().catch(() => undefined); }} />
     <details className="tg-source-extra"><summary>Действия с HTML</summary><div className="tg-downloads">{templateId && <button type="button" className="button secondary" disabled={disabled || !draft.url.trim()} onClick={() => void extension().catch(() => undefined)}><Globe2 size={16} />Получить через Chrome</button>}
       <button type="button" className="button secondary" disabled={!draft.html} onClick={download}><Download size={16} />TXT</button>
       <button type="button" className="button secondary" disabled={!draft.html} onClick={() => void navigator.clipboard.writeText(draft.html).then(() => setStatus("Скопировано")).catch(() => setError("Выделите HTML и скопируйте вручную."))}><Copy size={16} />Скопировать</button></div></details>

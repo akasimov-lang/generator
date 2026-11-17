@@ -67,7 +67,7 @@ with sync_playwright() as p:
     expect(page.locator('.tg-source-field [role=status]').first).to_have_text('Сохранено')
     expect(brand).to_have_value('Мой бренд')
     upload.set_input_files({'name': 'empty.html', 'mimeType': 'text/html', 'buffer': b''})
-    expect(page.get_by_text('Файл пуст. Выберите HTML главной страницы.')).to_be_visible()
+    expect(page.get_by_text('Файл пуст. Выберите HTML страницы конкурента.')).to_be_visible()
     expect(page.get_by_role('textbox', name='HTML конкурента 1', exact=True)).to_have_value(html + 'Updated')
     upload.set_input_files({'name': 'large.html', 'mimeType': 'text/html', 'buffer': b'x' * 2_000_001})
     expect(page.get_by_text('HTML превышает 2 МБ. Выберите файл меньшего размера.')).to_be_visible()

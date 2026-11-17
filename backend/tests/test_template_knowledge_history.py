@@ -53,6 +53,20 @@ def test_generic_old_html_without_url_is_shared_across_geo_and_never_parsed_with
     assert 'knowledge_id' not in source.capture
 
 
+def test_generic_historical_internal_source_keeps_url_and_queues_structure(db):
+    user,_,_=setup_template(db)
+    template,source=previous(db,user,brand='Общие ключи')
+    source.url='https://example.test/pl/casino/'
+    assert remember_template_sources(db,template)[0]['status']=='imported'
+    db.commit()
+    row=db.scalar(select(models.TemplateKnowledgeExample))
+    assert row.url==source.url and row.html==HTML
+    assert row.structure['status']=='queued'
+    assert row.structure['pages'][0]['url']==source.url
+    job=db.scalar(select(models.BackgroundJob))
+    assert job.kind=='template_knowledge' and job.payload['example_id']==row.id
+
+
 def test_task_enqueue_remembers_upload_without_duplicating_manual_source_or_self_learning(db):
     user,_,_=setup_template(db)
     template,source=previous(db,user,brand='BetOnRed',geo='CZ')

@@ -210,7 +210,7 @@ def save_competitor_drafts(payload:SaveCompetitorsRequest,user:AuthUser,db:Sessi
         if source.capture.get('revision',0)!=ref.revision:
             raise HTTPException(409,'HTML конкурента изменился. Обновите форму перед сохранением.')
         if source.capture.get('status')!='google_ready' or not (source.google_html or '').strip():
-            raise HTTPException(422,'Добавьте корректный HTML главной страницы конкурента.')
+            raise HTTPException(422,'Добавьте корректный HTML страницы конкурента.')
         drafts.append(source)
     try:
         name,_,country=scope(payload.brand,payload.geo)

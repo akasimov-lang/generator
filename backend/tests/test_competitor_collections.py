@@ -65,6 +65,31 @@ def test_generic_html_without_domain_is_preserved_without_starting_parser(db):
     assert not db.scalars(select(models.BackgroundJob)).all()
 
 
+def test_save_generic_uploaded_draft_accepts_internal_canonical_from_html(db):
+    user,_,_=setup_template(db);api=client(db,user)
+    url='https://www.empatyczny-ai.pl/o-projekcie/'
+    html=HTML.replace('https://competitor.test/',url)
+    uploaded=api.post('/site-templates/source-drafts',json={'html':html})
+    assert uploaded.status_code==201,uploaded.text
+    source=uploaded.json()
+    assert source['capture']['status']=='google_ready'
+    assert source['url']=='' and source['display_url']==url
+    result=api.post('/site-templates/knowledge/save-drafts',json={
+        'brand':'Онлайн казино','geo':'PL','language':'pl',
+        'source_drafts':[{'id':source['id'],'revision':source['revision']}]})
+    assert result.status_code==201,result.text
+    saved=result.json()
+    assert saved['saved']==1 and saved['collection']['status']=='sources_ready'
+    assert saved['sources'][0]['url']==url
+    example=db.get(models.TemplateKnowledgeExample,saved['sources'][0]['id'])
+    assert example.url==url and example.html==html
+    assert example.structure['pages'][0]['url']==url
+    stored=db.scalar(select(models.TemplateSource).where(models.TemplateSource.template_id==saved['collection']['id']))
+    assert stored.url==url and stored.google_html==html
+    assert not db.get(models.TemplateSourceDraft,source['id'])
+    assert [job.kind for job in db.scalars(select(models.BackgroundJob))]==['template_knowledge']
+
+
 def test_list_separates_actual_generated_html_and_reports_saved_source_title(db):
     user,provider,_=setup_template(db);api=client(db,user)
     row=models.SiteTemplate(created_by_user_id=user.id,brand='Ready',geo='DE',language='de',status='ready',

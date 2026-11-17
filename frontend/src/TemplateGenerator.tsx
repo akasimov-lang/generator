@@ -106,7 +106,7 @@ export function TemplateGenerator({ api, projects = [] }: { api: Api; projects?:
   async function create(event: React.FormEvent) {
     event.preventDefault();
     if (sourcesSaving) { setError("Дождитесь сохранения HTML конкурентов."); return; }
-    if (creationMode === "html" && !sourceDrafts.some(source => source.hasHtml)) { setError("Добавьте HTML хотя бы одной главной страницы конкурента."); return; }
+    if (creationMode === "html" && !sourceDrafts.some(source => source.hasHtml)) { setError("Добавьте HTML хотя бы одной страницы конкурента."); return; }
     if (sourceDrafts.length > 10) { setError("Оставьте не более десяти HTML конкурентов."); return; }
     if (!form.geo || !form.language) { setError("Выберите ГЕО и язык."); return; }
     setBusy(true); setError("");
@@ -160,7 +160,7 @@ export function TemplateGenerator({ api, projects = [] }: { api: Api; projects?:
         </div>
       </div>
       <div className="tg-create-layout"><form className="tg-card" onSubmit={create}>
-        <h2>{creationMode === "html" ? "Сохранить HTML конкурентов" : "Новый шаблон"}</h2><p>{creationMode === "html" ? "Выберите ГЕО и бренд, добавьте до десяти главных страниц. Кнопка сохранит HTML в базу конкурентов. Генерацию шаблона можно запустить отдельно позже." : "Укажите бренд, ГЕО и настройки поиска конкурентов для генерации шаблона."}</p>
+        <h2>{creationMode === "html" ? "Сохранить HTML конкурентов" : "Новый шаблон"}</h2><p>{creationMode === "html" ? "Выберите ГЕО и бренд, добавьте до десяти страниц конкурентов — главных или внутренних. Кнопка сохранит HTML в базу конкурентов. Генерацию шаблона можно запустить отдельно позже." : "Укажите бренд, ГЕО и настройки поиска конкурентов для генерации шаблона."}</p>
         <p className="tg-help">База знаний: {knowledgeCount} примеров подключатся автоматически.</p>
         <p className="tg-help">Для сайтов с общими ключами — «Онлайн казино». Бренд определяется по первому HTML; можно указать вручную.</p>
         {creationMode === "standard" && <details className="tg-options" key={creationMode} open><summary>Настройки генерации</summary>
