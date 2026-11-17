@@ -20,6 +20,8 @@ from app.project_state_reports import router as project_reports_router
 from app.weekly_digests import router as weekly_digests_router
 from app.project_gsc import router as project_gsc_router
 from app.menu_reorder import router as menu_reorder_router
+from app.personas import router as personas_router, seed_catalog
+from app.db import SessionLocal
 
 
 settings = get_settings()
@@ -40,6 +42,9 @@ app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
 def on_startup() -> None:
     if not settings.app_skip_db_init:
         init_db()
+    # Production initializes the schema before starting its API workers.
+    with SessionLocal() as db:
+        seed_catalog(db)
 
 
 app.include_router(router, prefix="/api")
@@ -60,3 +65,5 @@ app.include_router(project_reports_router, prefix="/api")
 app.include_router(weekly_digests_router, prefix="/api")
 app.include_router(project_gsc_router, prefix="/api")
 app.include_router(menu_reorder_router, prefix="/api")
+
+app.include_router(personas_router, prefix="/api")

@@ -45,6 +45,7 @@ import { ProjectNotificationCenter, ProjectLogs } from "./ProjectNotifications";
 import { projectApiResult, projectNotice } from "./projectNotificationEvents";
 import { isProjectExchangeRequest } from "./projectExchange";
 import { AutoReglueGuide } from "./AutoReglueGuide";
+const PersonasView = React.lazy(() => import("./Personas"));
 const UserGuideView = React.lazy(() => import("./UserGuide"));
 import { AutoPilotPage } from "./AutoPilot";
 import { AutoReglueView, ProjectAutoReglue } from "./AutoRegluePanel";
@@ -616,7 +617,7 @@ type PublicationCampaignQueue = {
 
 type ThemeMode = "light" | "dark";
 type InputStyle = "balanced" | "classic" | "soft" | "inset" | "underline" | "emerald" | "graphite" | "rounded" | "contrast" | "glass";
-type AppView = "weeklyReports" | "reglueJournal" | "autoPilotReport" | "autoPilot" | "autoPilotLogs" | "reglueReserves" | "pagePreview" | "contentPreview" | "pageEditor" | "templateGenerator" | "autoReglueGuide" | "autoReglue" | "published" | "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "massActionReport" | "favorites" | "guide" | "settings";
+type AppView = "personas" | "weeklyReports" | "reglueJournal" | "autoPilotReport" | "autoPilot" | "autoPilotLogs" | "reglueReserves" | "pagePreview" | "contentPreview" | "pageEditor" | "templateGenerator" | "autoReglueGuide" | "autoReglue" | "published" | "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "massActionReport" | "favorites" | "guide" | "settings";
 type WorkspaceTab = "overview" | "topics" | "content" | "publication" | "menu" | "network" | "redirects" | "autoReglue" | "autoLb" | "logs";
 
 type WorkspaceAccordionContextValue = {
@@ -714,6 +715,7 @@ async function copyTextToClipboard(text: string) {
 }
 
 const MAIN_VIEW_PATHS: Record<Exclude<AppView, "workspace">, string> = {
+  personas: "/personas",
   pagePreview: "/page-preview",
   contentPreview: "/content-preview",
   pageEditor: "/page-editor",
@@ -756,6 +758,7 @@ const WORKSPACE_TAB_PATHS: Record<WorkspaceTab, string> = {
 
 function routeFromPath(pathname: string): AppRoute {
   const path = pathname.replace(/\/+$/, "") || "/";
+  if (path.startsWith("/personas/")) return { view: "personas", workspaceTab: DEFAULT_WORKSPACE_TAB };
   if (path.startsWith("/page-preview/")) return { view: "pagePreview", workspaceTab: DEFAULT_WORKSPACE_TAB };
   if (path.startsWith("/content-preview/")) return { view: "contentPreview", workspaceTab: DEFAULT_WORKSPACE_TAB };
   if (path.startsWith("/page-editor/")) return { view: "pageEditor", workspaceTab: DEFAULT_WORKSPACE_TAB };
@@ -1327,6 +1330,7 @@ function App() {
     }
     const projectName = activeView === "workspace" ? workspaceProjectNameFromPath(window.location.pathname) : null;
     if (["contentPreview", "pageEditor", "pagePreview"].includes(activeView)) return;
+    if (activeView === "personas" && window.location.pathname.startsWith("/personas/")) return;
     if (activeView === "guide" && window.location.pathname.startsWith("/guide/")) return;
     const nextPath = pathForRoute(activeView, activeView === "workspace" ? workspaceTab : DEFAULT_WORKSPACE_TAB, projectName);
     if (window.location.pathname !== nextPath) {
@@ -1447,6 +1451,7 @@ function App() {
               <NavButton href={pathForRoute("favorites")} icon={<Star className="favoriteNavIcon" fill="currentColor" />} label="Избранное" active={activeView === "favorites"} onClick={() => navigateTo("favorites")} />
             </>
           )}
+          <NavButton href={pathForRoute("personas")} icon={<Users />} label="Персоны" active={activeView === "personas"} onClick={() => navigateTo("personas")} />
           <NavButton href={pathForRoute("templateGenerator")} icon={<FilePlus2 />} label="Генератор шаблона" active={activeView === "templateGenerator"} onClick={() => navigateTo("templateGenerator")} />
           <NavButton href={pathForRoute("autoReglue")} icon={<RefreshCcw />} label="Массовые действия" active={activeView === "autoReglue" || activeView === "reglueReserves"} onClick={() => navigateTo("autoReglue")} />
           <NavButton href={pathForRoute("settings")} icon={<Settings />} label="Настройки" active={activeView === "settings"} onClick={() => navigateTo("settings")} />
@@ -1514,6 +1519,7 @@ function App() {
         </section>}
         {activeView === "favorites" && <SitesView api={api} sites={siteSnapshot} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} favoritesOnly readOnly={!isAdmin} onChanged={loadAll} />}
         {activeView === "templateGenerator" && <TemplateGenerator api={api} projects={siteSnapshot} />}
+        {activeView === "personas" && <React.Suspense fallback={<p>Загрузка базы авторов…</p>}><PersonasView api={api} canEdit={isAdmin} navigationLocation={window.location.pathname + window.location.search} /></React.Suspense>}
         {activeView === "guide" && <React.Suspense fallback={<p>Загрузка инструкции…</p>}><UserGuideView /></React.Suspense>}
         {activeView === "autoReglue" && <><GlobalProjectSearchResults sites={siteSnapshot} query={massSearchQuery} onOpen={openMassSearchProject} loading={!catalogLoaded&&!catalogError}/><div style={{display:globalMassQuery?"none":undefined}}><AutoReglueView refreshToken={massRefreshToken} api={api} onNetworksChanged={loadAll} renderReport={(onScopeChange, selectionIds, onSelection, moveActions, headerContainer) => <MassActionStatistics massOnly refreshToken={massRefreshToken} catalogReady={catalogLoaded} catalogError={catalogError} onInventoryChanged={loadAll} headerContainer={headerContainer} api={api} onScopeChange={onScopeChange} renderProjects={(ids, refresh, scopeLabel) => <SitesView projectScopeLabel={scopeLabel} embedded massActions api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={updates => { mergeSites(updates); refresh(); }} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll} selectionIds={selectionIds} onSelectionChange={onSelection} headerActions={moveActions} />} />} /></div></>}
         {activeView === "reglueReserves" && <ReglueReservesPage api={api} />}
@@ -11287,6 +11293,7 @@ function viewTitle(view: AppView, _workspaceTab: WorkspaceTab) {
   }
 
   const titles: Record<Exclude<AppView, "workspace">, string> = {
+    personas: "Персоны",
     pagePreview: "Просмотр страницы",
     contentPreview: "Просмотр текста",
     pageEditor: "Редактор страницы",
