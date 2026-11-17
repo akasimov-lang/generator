@@ -71,3 +71,18 @@ test("header input exposes the search scope, associated results and explicit cle
  assert.match(html,/Поиск по всем сайтам/);assert.match(html,/Домен, имя или № Fibery/);
  assert.match(html,/Очистить поиск по всем сайтам/);
 });
+
+test("global search displays the page count and keeps missing counts unknown",()=>{
+ const html=render({sites:[{id:"one",name:"one.test",internal_pages_count:8},{id:"two",name:"two.test"}],query:"test"});
+ assert.match(html,/>Pages<\/th>/);
+ assert.match(html,/<td>9<\/td>/);
+ assert.match(html,/<td>—<\/td>/);
+});
+
+test("catalog errors offer retry without presenting failed loading as no matches",()=>{
+ const html=render({sites:[],query:"test",error:"Не удалось загрузить проекты",onRetry:()=>{}});
+ assert.match(html,/role="alert"/);
+ assert.match(html,/Не удалось загрузить проекты/);
+ assert.match(html,/Повторить/);
+ assert.doesNotMatch(html,/Проекты не найдены/);
+});

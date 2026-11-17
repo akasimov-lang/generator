@@ -2,7 +2,7 @@ import React from "react";
 import { ArrowLeft, ArrowUpRight, Award, BookOpen, Check, Edit3, Plus, Save, Search, Users, X } from "lucide-react";
 import { TemplateCombobox } from "./TemplateCombobox";
 import { openDetailPage, backFromDetail } from "./detailNavigation";
-import { filterPersonas, personaId, personaWords, type Persona, type PersonaCatalog, type PersonaCountry } from "./personaCatalog";
+import { filterPersonas, personaId, personaWords, type Persona, type PersonaCatalog, type PersonaCountry, type PersonaProject } from "./personaCatalog";
 import "./styles/personas.css";
 
 type Api = <T>(path: string, options?: RequestInit) => Promise<T>;
@@ -12,6 +12,10 @@ function ProfileLink({ person, children }: { person: Persona; children: React.Re
   const href = `/personas/${person.id}/`;
   return <a href={href} onClick={event => { if (plainClick(event)) { event.preventDefault(); openDetailPage(href); } }}>{children}</a>;
 }
+export function PersonaProjects({ projects }: { projects: PersonaProject[] }) {
+  return projects.length ? <ul className="personaProjects">{projects.map(project => <li key={project.id}><a href={`/project-overview/${encodeURIComponent(project.name)}/`} onClick={event => { if (plainClick(event)) { event.preventDefault(); openDetailPage(event.currentTarget.getAttribute("href")!); } }} title={project.fibery_name || project.name}>{project.name}<ArrowUpRight size={13} /></a>{project.main_domain && project.main_domain !== project.name && <small>{project.main_domain}</small>}</li>)}</ul> : <span className="personaNote">Нет проектов</span>;
+}
+
 function Portrait({ person, large = false }: { person: Pick<Persona, "portrait_url" | "first_name" | "last_name">; large?: boolean }) {
   const [failed, setFailed] = React.useState(false);
   return <div className={`personaPortrait${large ? " large" : ""}`}>
@@ -61,18 +65,18 @@ export default function Personas({ api, canEdit, navigationLocation }: { api: Ap
       </div>
       <div className="personaSearch"><Search size={19} /><input aria-label="Поиск авторов" placeholder="Имя, фамилия или специализация" value={query} onChange={event => filters({ q: event.target.value })} />{query && <button aria-label="Очистить поиск" onClick={() => filters({ q: "" })}><X size={16} /></button>}<span>{items.length} авторов</span></div>
       {error ? <div className="personaError" role="alert">{error}<button className="button secondary compact" onClick={() => setRetry(v => v + 1)}>Повторить</button></div> : !catalog ? <p role="status">Загрузка базы авторов…</p> : <div className="personaTableWrap"><table className="personaTable">
-        <thead><tr><th scope="col">GEO</th><th scope="col">Имя</th><th scope="col">Фамилия</th><th scope="col">Специализация</th><th scope="col">Биография</th><th scope="col">Награды</th><th scope="col"><span className="personaSrOnly">Профиль</span></th></tr></thead>
+        <thead><tr><th scope="col">GEO</th><th scope="col">Имя</th><th scope="col">Фамилия</th><th scope="col">Специализация</th><th scope="col">Проекты</th><th scope="col">Награды</th><th scope="col"><span className="personaSrOnly">Профиль</span></th></tr></thead>
         <tbody>{items.map(person => <tr key={person.id}>
           <td><span className="personaGeo" title={person.country}><span aria-hidden="true">{person.flag}</span> {person.geo}</span></td>
           <td><div className="personaNameCell"><ProfileLink person={person}><Portrait person={person} /></ProfileLink><ProfileLink person={person}>{person.first_name}</ProfileLink></div></td>
           <td><ProfileLink person={person}>{person.last_name}</ProfileLink></td>
           <td lang={person.language}><strong>{person.specialization}</strong><small>{person.specializations.length} специализаций</small></td>
-          <td><p lang={person.language} className="personaExcerpt">{person.biography_excerpt || person.biography}</p><small>{person.word_count} слов · <ProfileLink person={person}>Читать полностью</ProfileLink></small></td>
+          <td><PersonaProjects projects={person.projects} /></td>
           <td><span className="personaAwardCount"><Award size={17} />{person.awards.length}</span></td>
           <td><ProfileLink person={person}><span className="personaOpen">Профиль <ArrowUpRight size={16} /></span></ProfileLink></td>
         </tr>)}</tbody>
       </table>{!items.length && <div className="personaEmpty">По этим условиям авторов нет.<button className="button secondary compact" onClick={() => filters({ geo: "", q: "" })}>Сбросить фильтры</button></div>}</div>}
-      <p className="personaNote">Редакционные персоны с AI-портретами. Награды — вымышленные внутренние редакционные отличия.</p>
+      <p className="personaNote">Редакционные персоны с AI-портретами.</p>
     </>}
   </section>;
 }
@@ -97,14 +101,25 @@ function PersonaProfile({ id, api, canEdit, countries, onSaved }: { id: string; 
   }
   return <>
     <div className="personaProfileBar"><a href="/personas" onClick={e => { if (plainClick(e)) { e.preventDefault(); backFromDetail("/personas"); } }}><ArrowLeft size={17} /> Все персоны</a><span role="status">{success && <><Check size={16} /> Сохранено успешно!</>}</span>{person && canEdit && !editing && <button className="button secondary compact" onClick={() => setEditing(true)}><Edit3 size={16} /> Редактировать</button>}</div>
-    {error ? <div className="personaError" role="alert">{error}<button className="button secondary compact" onClick={() => setRetry(v => v + 1)}>Повторить</button></div> : editing && canEdit && (person || id === "new") ? <PersonaEditor person={person} countries={countries} onSave={save} onCancel={() => id === "new" ? backFromDetail("/personas") : setEditing(false)} /> : id === "new" && !canEdit ? <p>Добавлять авторов может администратор.</p> : !person ? <p role="status">Загрузка профиля…</p> : <>
-      <header className="personaHero"><Portrait person={person} large /><div><div className="personaEyebrow"><span aria-hidden="true">{person.flag}</span> {person.country} · {person.geo}</div><h2 lang={person.language}>{person.first_name} {person.last_name}</h2><p className="personaRole" lang={person.language}>{person.specialization}</p><div className="personaStats"><span><BookOpen size={16} /> {person.word_count} слов</span><span>{person.specializations.length} специализаций</span><span><Award size={16} /> {person.awards.length} наград</span></div><small>Редакционная персона · AI-портрет</small></div></header>
-      <div className="personaProfileGrid"><article className="personaBiography"><h3>Биография</h3><div lang={person.language}>{person.biography.split(/\n\s*\n/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div></article><aside className="personaSidebar"><section><h3>Специализации</h3><ul className="personaTags" lang={person.language}>{person.specializations.map(tag => <li key={tag}>{tag}</li>)}</ul></section><section><h3><Award size={20} /> Редакционные награды</h3><p className="personaNote">Вымышленные внутренние отличия персоны.</p><ul className="personaAwards" lang={person.language}>{person.awards.map((award, index) => <li key={`${award.title}-${index}`}><span>{award.title}</span><time>{award.year}</time></li>)}</ul></section></aside></div>
+    {error ? <div className="personaError" role="alert">{error}<button className="button secondary compact" onClick={() => setRetry(v => v + 1)}>Повторить</button></div> : editing && canEdit && (person || id === "new") ? <PersonaEditor api={api} person={person} countries={countries} onSave={save} onCancel={() => id === "new" ? backFromDetail("/personas") : setEditing(false)} /> : id === "new" && !canEdit ? <p>Добавлять авторов может администратор.</p> : !person ? <p role="status">Загрузка профиля…</p> : <>
+      <header className="personaHero"><Portrait person={person} large /><div><div className="personaEyebrow"><span aria-hidden="true">{person.flag}</span> {person.country} · {person.geo}</div><h2 lang={person.language}>{person.first_name} {person.last_name}</h2><p className="personaRole" lang={person.language}>{person.specialization}</p><div className="personaStats"><span><BookOpen size={16} /> {person.word_count} слов</span><span>{person.specializations.length} специализаций</span><span><Award size={16} /> {person.awards.length} наград</span><span>Возраст: {person.age ?? "—"}</span></div><small>Редакционная персона · AI-портрет</small></div></header>
+      <div className="personaProfileGrid"><article className="personaBiography"><h3>Биография</h3><div lang={person.language}>{person.biography.split(/\n\s*\n/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div></article><aside className="personaSidebar"><section><h3>Проекты</h3><PersonaProjects projects={person.projects} /></section><section><h3>Специализации</h3><ul className="personaTags" lang={person.language}>{person.specializations.map(tag => <li key={tag}>{tag}</li>)}</ul></section><section><h3><Award size={20} /> Редакционные награды</h3><ul className="personaAwards" lang={person.language}>{person.awards.map((award, index) => <li key={`${award.title}-${index}`}><span>{award.title}</span><time>{award.year}</time></li>)}</ul></section></aside></div>
     </>}
   </>;
 }
 
-function PersonaEditor({ person, countries, onSave, onCancel }: { person: Persona | null; countries: PersonaCountry[]; onSave: (data: Partial<Persona>) => Promise<void>; onCancel: () => void }) {
+function PersonaEditor({ api, person, countries, onSave, onCancel }: { api: Api; person: Persona | null; countries: PersonaCountry[]; onSave: (data: Partial<Persona>) => Promise<void>; onCancel: () => void }) {
+  const [age, setAge] = React.useState(person?.age?.toString() ?? "");
+  const [projectIds, setProjectIds] = React.useState(person?.project_ids || []);
+  const [projects, setProjects] = React.useState<PersonaProject[]>(person?.projects || []);
+  const [projectsError, setProjectsError] = React.useState("");
+  const [projectsReady, setProjectsReady] = React.useState(false);
+  const [projectsRetry, setProjectsRetry] = React.useState(0);
+  React.useEffect(() => {
+    const abort = new AbortController(); setProjectsError("");
+    api<{ items: PersonaProject[] }>("/personas/projects", { signal: abort.signal }).then(result => { setProjects(result.items); setProjectsReady(true); }).catch(e => { if (!abort.signal.aborted) setProjectsError(message(e)); });
+    return () => abort.abort();
+  }, [api, projectsRetry]);
   const [firstName, setFirstName] = React.useState(person?.first_name || "");
   const [lastName, setLastName] = React.useState(person?.last_name || "");
   const [geo, setGeo] = React.useState(person?.geo || "PL");
@@ -121,16 +136,21 @@ function PersonaEditor({ person, countries, onSave, onCancel }: { person: Person
     if (count < 400) { setError("Биография должна содержать минимум 400 слов."); return; }
     if (specializations.length < 4 || specializations.length > 9) { setError("Добавьте от 4 до 9 специализаций, каждую с новой строки."); return; }
     setSaving(true); setError("");
-    try { await onSave({ first_name: firstName, last_name: lastName, geo, specialization: role, biography, specializations, awards, portrait_url: person?.portrait_url || "", ...(person ? { revision: person.revision } : {}) }); }
+    try { await onSave({ first_name: firstName, last_name: lastName, geo, specialization: role, biography, specializations, awards, portrait_url: person?.portrait_url || "", age: age === "" ? null : Number(age), project_ids: projectIds, ...(person ? { revision: person.revision } : {}) }); }
     catch (e) { setError(message(e)); } finally { setSaving(false); }
   }
   return <form className="personaEditor" onSubmit={submit}><h2>{person ? "Редактирование профиля" : "Новая персона"}</h2><fieldset disabled={saving}>
     <div className="personaFields"><label>Имя<input value={firstName} required maxLength={80} onChange={e => setFirstName(e.target.value)} /></label><label>Фамилия<input value={lastName} required maxLength={80} onChange={e => setLastName(e.target.value)} /></label><TemplateCombobox label="GEO" value={geo} onChange={setGeo} options={countries.map(c => ({ value: c.code, label: `${c.flag} ${c.code} · ${c.name}` }))} /></div>
+    <label className="personaAgeField">Возраст<input type="number" min={0} max={120} step={1} placeholder="Не указан" value={age} onChange={e => setAge(e.target.value)} /></label>
+    <div className="personaProjectEditor"><TemplateCombobox label="Проекты автора" value="" placeholder="Домен или имя Fibery" options={projects.map(project => ({ value: project.id, label: `${project.name}${projectIds.includes(project.id) ? " · добавлен" : ""}`, keywords: `${project.main_domain} ${project.fibery_name}` }))} onChange={id => setProjectIds(current => current.includes(id) ? current : [...current, id])} />
+      {projectsError ? <p className="personaError" role="alert">{projectsError}<button type="button" className="button secondary compact" onClick={() => setProjectsRetry(v => v + 1)}>Повторить</button></p> : !projectsReady && <p role="status" className="personaNote">Загрузка проектов…</p>}
+      <ul className="personaSelectedProjects">{projectIds.map(id => <li key={id}><span>{projects.find(project => project.id === id)?.name || person?.projects.find(project => project.id === id)?.name || "Удалённый проект"}</span><button type="button" aria-label={`Убрать проект ${projects.find(project => project.id === id)?.name || id}`} onClick={() => setProjectIds(current => current.filter(value => value !== id))}><X size={14} /></button></li>)}</ul>
+    </div>
     <label>Основная специализация<input value={role} required minLength={3} maxLength={180} onChange={e => setRole(e.target.value)} /></label>
     <label>Биография <small className={count < 400 ? "personaIncomplete" : ""}>{count} / минимум 400 слов</small><textarea value={biography} rows={16} required maxLength={50000} onChange={e => setBiography(e.target.value)} /></label>
     <label>Специализации <small>От 4 до 9, каждая с новой строки</small><textarea value={tags} required rows={7} onChange={e => setTags(e.target.value)} /></label>
     <div className="personaEditorAwards"><h3>Редакционные награды <small>От 4 до 9</small></h3>{awards.map((award, index) => <div className="personaAwardFields" key={index}><label>Название {index + 1}<input value={award.title} required minLength={3} maxLength={200} onChange={e => setAwards(values => values.map((v, i) => i === index ? { ...v, title: e.target.value } : v))} /></label><label>Год<input type="number" min={1900} max={2100} required value={award.year} onChange={e => setAwards(values => values.map((v, i) => i === index ? { ...v, year: Number(e.target.value) } : v))} /></label><button className="button secondary compact" type="button" disabled={awards.length <= 4} aria-label={`Удалить награду ${index + 1}`} onClick={() => setAwards(values => values.filter((_, i) => i !== index))}><X size={16} /></button></div>)}<button className="button secondary compact" type="button" disabled={awards.length >= 9} onClick={() => setAwards(values => [...values, { title: "", year: new Date().getFullYear() }])}><Plus size={16} /> Добавить награду</button></div>
-    <p className="personaNote">Профиль сохраняется как редакционная персона с вымышленными внутренними наградами.</p>
+    <p className="personaNote">Профиль сохраняется как редакционная персона.</p>
     {error && <p className="personaError" role="alert">{error}</p>}<div className="personaEditorActions"><button className="button" type="submit"><Save size={17} />{saving ? "Сохраняем…" : "Сохранить профиль"}</button><button className="button secondary" type="button" onClick={onCancel}>Отмена</button></div>
   </fieldset></form>;
 }

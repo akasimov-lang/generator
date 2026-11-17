@@ -3,11 +3,12 @@ import { X } from "lucide-react";
 import { isExactNetworkDomainSearch, normalizeDomainQuery, normalizeProjectSearch, projectSearchKeywords } from "./projectSearch";
 import { siteGeoFilterCode } from "./siteGeoFilter";
 import "./styles/global-project-search.css";
+import { projectPagesCount } from "./projectPageCounts";
 
 export type GlobalSearchProject = {
  id:string;name:string;cache_canon?:string|null;base_url?:string;
  cache_domains?:string[];fibery_name?:string|null;brand?:string|null;
- cache_geo?:string|null;is_active?:boolean;
+ cache_geo?:string|null;is_active?:boolean;internal_pages_count?:number|null;
 };
 type IndexedProject<T extends GlobalSearchProject> = {site:T;values:string[];keywords:string};
 const RESULTS_ID="mass-global-search-results";
@@ -58,8 +59,8 @@ function Geo({value}:{value?:string|null}) {
  return <span className="globalProjectSearchGeo">{flag&&<span aria-hidden="true">{flag}</span>}{code||"GEO не указано"}</span>;
 }
 
-export function GlobalProjectSearchResults({sites,query,onOpen,loading=false,id=RESULTS_ID}:{
- sites:readonly GlobalSearchProject[];query:string;onOpen:(name:string)=>void;loading?:boolean;id?:string;
+export function GlobalProjectSearchResults({sites,query,onOpen,loading=false,error="",onRetry,id=RESULTS_ID}:{
+ sites:readonly GlobalSearchProject[];query:string;onOpen:(name:string)=>void;loading?:boolean;error?:string;onRetry?:()=>void;id?:string;
 }) {
  const normalized=normalizeDomainQuery(query);
  const index=React.useMemo(()=>indexProjects(sites),[sites]);
@@ -74,15 +75,16 @@ export function GlobalProjectSearchResults({sites,query,onOpen,loading=false,id=
    {loading&&<span className="muted" role="status">Обновляем список сайтов…</span>}
   </div>
   <p className="muted">Поиск по всем доступным проектам, доменам их сеток, именам и номерам Fibery.</p>
+  {error&&<p role="alert">{error} {onRetry&&<button className="button secondary compact" type="button" onClick={onRetry}>Повторить загрузку</button>}</p>}
   {results.length?<>
-   <div className="tableScroll"><table><thead><tr><th>Проект</th><th>Бренд / GEO</th><th>Main</th><th>Имя Fibery</th></tr></thead>
+   <div className="tableScroll"><table><thead><tr><th>Проект</th><th>Бренд / GEO</th><th>Main</th><th>Pages</th><th>Имя Fibery</th></tr></thead>
     <tbody>{visible.map(site=><tr key={site.id}>
      <td><a href={`/project-network/${encodeURIComponent(site.name)}/`} onClick={event=>{
       if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
       event.preventDefault();onOpen(site.name);
      }}>{site.name}</a></td>
      <td><span>{site.brand||"Общие ключи"}</span><Geo value={site.cache_geo}/></td>
-     <td>{site.cache_canon||site.base_url||"—"}</td><td>{site.fibery_name||"—"}</td>
+     <td>{site.cache_canon||site.base_url||"—"}</td><td>{projectPagesCount(site)??"—"}</td><td>{site.fibery_name||"—"}</td>
     </tr>)}</tbody>
    </table></div>
    {results.length>PAGE_SIZE&&<nav className="globalProjectSearchPagination" aria-label="Страницы результатов поиска">
@@ -90,6 +92,6 @@ export function GlobalProjectSearchResults({sites,query,onOpen,loading=false,id=
     <span>{from+1}–{Math.min(from+PAGE_SIZE,results.length)} из {results.length}</span>
     <button className="button secondary compact" type="button" disabled={from+PAGE_SIZE>=results.length} onClick={()=>setPageState({query:normalized,page:page+1})}>Далее</button>
    </nav>}
-  </>:<p role="status">{loading?"Загружаем список сайтов…":"Проекты не найдены."}</p>}
+  </>:error?null:<p role="status">{loading?"Загружаем список сайтов…":"Проекты не найдены."}</p>}
  </section>;
 }

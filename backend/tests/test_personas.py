@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
-from app.models import AutoReglueConfig
+from app.models import AutoReglueConfig, Site
 from app.personas import PREFIX, SEED, PersonaInput, router, seed_catalog, word_count
 from app.security import require_auth
 
@@ -45,7 +45,9 @@ def test_seed_has_five_authors_per_geo_complete_bios_awards_and_local_portraits(
         parsed = PersonaInput.model_validate({k: record[k] for k in PersonaInput.model_fields})
         assert word_count(parsed.biography) >= 400
         assert len(parsed.biography.split('\n\n')) >= 6
-        assert record['fictional'] is True
+        assert 'fictional' not in record
+        assert parsed.age is None
+        assert parsed.project_ids == []
         portrait = frontend / parsed.portrait_url.lstrip('/')
         assert portrait.is_file()
         assert portrait.read_bytes()[8:12] == b'WEBP'
@@ -78,6 +80,7 @@ def test_authenticated_editor_can_read_summaries_and_full_profiles(setup):
 
 @pytest.mark.parametrize('method,path,payload', [
     ('get', '/api/personas', None), ('get', '/api/personas/ondrej-vacek', None),
+    ('get', '/api/personas/projects', None),
     ('post', '/api/personas', body()), ('put', '/api/personas/ondrej-vacek', {**body(), 'revision': 1}),
 ])
 def test_unauthenticated_requests_are_rejected(setup, method, path, payload):
@@ -126,6 +129,7 @@ def test_concurrent_stale_edit_cannot_overwrite_newer_revision(setup):
     {'biography': 'Only a short biography'}, {'geo': 'ZZ'}, {'specializations': ['one']},
     {'specializations': ['one', 'One', 'two', 'three']}, {'awards': []},
     {'portrait_url': 'https://example.test/photo.jpg'}, {'fictional': False},
+    {'age': -1}, {'age': 121}, {'age': 30.5}, {'age': True}, {'age': '40'},
 ])
 def test_invalid_edits_are_rejected_without_mutating_record(setup, change):
     db, client, user = setup
@@ -152,3 +156,117 @@ def test_real_app_registers_routes_and_seeds_when_schema_init_is_skipped(monkeyp
     assert calls == ['seed']
     paths = {route.path for route in main.app.routes}
     assert '/api/personas' in paths and '/api/personas/{persona_id}' in paths
+
+
+def add_project(db, name):
+    project = Site(name=name, base_url='https://' + name, publication_endpoint='/publish')
+    db.add(project); db.commit()
+    return project
+
+
+def test_metadata_migration_preserves_manually_added_profiles_and_edits(setup):
+    db, client, user = setup
+    original = db.get(AutoReglueConfig, PREFIX + 'ondrej-vacek').value
+    value = {**original, 'id': 'manual-author', 'first_name': 'Edited', 'fictional': True,
+             'age': 45, 'project_ids': ['kept-id'], 'revision': 7}
+    db.add(AutoReglueConfig(key=PREFIX + 'manual-author', value=value)); db.commit()
+    seed_catalog(db)
+    stored = db.get(AutoReglueConfig, PREFIX + 'manual-author').value
+    assert stored == {key: item for key, item in value.items() if key != 'fictional'}
+    seed_catalog(db)
+    assert db.get(AutoReglueConfig, PREFIX + 'manual-author').value == stored
+
+
+def test_legacy_metadata_migration_defaults_age_and_projects_to_empty(setup):
+    db, client, user = setup
+    row = db.get(AutoReglueConfig, PREFIX + 'ondrej-vacek')
+    value = {key: item for key, item in row.value.items() if key not in ('age', 'project_ids')}
+    row.value = {**value, 'fictional': True}; db.commit()
+    seed_catalog(db)
+    assert row.value == {**value, 'age': None, 'project_ids': []}
+
+
+def test_age_is_optional_and_can_be_saved_and_cleared(setup):
+    db, client, user = setup
+    assert client.get('/api/personas/ondrej-vacek').json()['age'] is None
+    changed = client.put('/api/personas/ondrej-vacek', json={**body(), 'revision': 1, 'age': 39})
+    assert changed.status_code == 200
+    with Session(db.bind) as fresh:
+        assert fresh.get(AutoReglueConfig, PREFIX + 'ondrej-vacek').value['age'] == 39
+    cleared = client.put('/api/personas/ondrej-vacek', json={**body(), 'revision': 2, 'age': None})
+    assert cleared.status_code == 200 and cleared.json()['age'] is None
+
+
+def test_author_project_links_persist_deduplicate_and_follow_current_project_data(setup):
+    db, client, user = setup
+    project = add_project(db, 'project.test')
+    project.cache_canon = 'main.test'; project.fibery_name = '#254 Example'; db.commit()
+    payload = {**body(), 'project_ids': [project.id, project.id]}
+    created = client.post('/api/personas', json=payload)
+    assert created.status_code == 201
+    author = created.json()
+    assert author['project_ids'] == [project.id]
+    assert author['projects'] == [{'id': project.id, 'name': 'project.test', 'main_domain': 'main.test', 'fibery_name': '#254 Example'}]
+    with Session(db.bind) as fresh:
+        assert fresh.get(AutoReglueConfig, PREFIX + author['id']).value['project_ids'] == [project.id]
+    project.cache_canon = 'new-main.test'; db.commit()
+    listed = next(p for p in client.get('/api/personas').json()['items'] if p['id'] == author['id'])
+    assert listed['projects'][0]['main_domain'] == 'new-main.test'
+    assert 'biography' not in listed and 'biography_excerpt' not in listed
+    detail = client.get('/api/personas/' + author['id']).json()
+    assert detail['projects'] == listed['projects'] and detail['word_count'] >= 400
+    removed = client.put('/api/personas/' + author['id'], json={**body(), 'revision': 1, 'project_ids': []})
+    assert removed.status_code == 200 and removed.json()['projects'] == []
+
+
+def test_unknown_project_rejected_without_changing_author(setup):
+    db, client, user = setup
+    before = client.get('/api/personas/ondrej-vacek').json()
+    result = client.put('/api/personas/ondrej-vacek', json={**body(), 'revision': 1, 'project_ids': ['missing']})
+    assert result.status_code == 422
+    assert client.get('/api/personas/ondrej-vacek').json() == before
+
+
+def test_project_choices_and_author_links_respect_user_access(setup):
+    db, client, user = setup
+    allowed = add_project(db, 'allowed.test')
+    hidden = add_project(db, 'hidden.test')
+    changed = client.put('/api/personas/ondrej-vacek', json={**body(), 'revision': 1, 'project_ids': [hidden.id, allowed.id]})
+    assert changed.status_code == 200
+    assert len(client.get('/api/personas/projects').json()['items']) == 2
+    user.update(is_admin=False, allowed_site_ids=[allowed.id])
+    choices = client.get('/api/personas/projects')
+    assert choices.headers['cache-control'] == 'no-store'
+    assert [p['id'] for p in choices.json()['items']] == [allowed.id]
+    detail = client.get('/api/personas/ondrej-vacek').json()
+    assert detail['project_ids'] == [allowed.id]
+    assert hidden.id not in json.dumps(detail) and hidden.name not in json.dumps(detail)
+    listed = next(p for p in client.get('/api/personas').json()['items'] if p['id'] == 'ondrej-vacek')
+    assert listed['projects'] == detail['projects']
+    user['allowed_site_ids'] = []
+    assert client.get('/api/personas/ondrej-vacek').json()['projects'] == []
+    assert client.get('/api/personas/projects').json()['items'] == []
+
+
+def test_old_editor_payload_preserves_new_metadata(setup):
+    db, client, user = setup
+    project = add_project(db, 'kept.test')
+    payload = {**body(), 'revision': 1, 'age': 38, 'project_ids': [project.id]}
+    assert client.put('/api/personas/ondrej-vacek', json=payload).status_code == 200
+    old_payload = {key: value for key, value in body().items() if key not in ('age', 'project_ids')}
+    changed = client.put('/api/personas/ondrej-vacek', json={**old_payload, 'revision': 2, 'first_name': 'Updated'})
+    assert changed.status_code == 200
+    assert changed.json()['age'] == 38 and changed.json()['project_ids'] == [project.id]
+
+
+def test_hidden_project_is_omitted_and_cannot_be_assigned(setup):
+    db, client, user = setup
+    project = add_project(db, 'removed.test')
+    assert client.put('/api/personas/ondrej-vacek', json={**body(), 'revision': 1, 'project_ids': [project.id]}).status_code == 200
+    project.hidden_from_projects = True; db.commit()
+    assert client.get('/api/personas/projects').json()['items'] == []
+    assert client.get('/api/personas/ondrej-vacek').json()['projects'] == []
+    listed = next(p for p in client.get('/api/personas').json()['items'] if p['id'] == 'ondrej-vacek')
+    assert listed['project_ids'] == []
+    result = client.post('/api/personas', json={**body(), 'project_ids': [project.id]})
+    assert result.status_code == 422

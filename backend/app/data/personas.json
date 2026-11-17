@@ -39,7 +39,8 @@
         "year": 2026
       }
     ],
-    "fictional": true,
+    "age": null,
+    "project_ids": [],
     "portrait_url": "/personas-images/ondrej-vacek.webp"
   },
   {
@@ -87,7 +88,8 @@
         "year": 2026
       }
     ],
-    "fictional": true,
+    "age": null,
+    "project_ids": [],
     "portrait_url": "/personas-images/david-mares.webp"
   },
   {
@@ -140,7 +142,8 @@
         "year": 2026
       }
     ],
-    "fictional": true,
+    "age": null,
+    "project_ids": [],
     "portrait_url": "/personas-images/eliska-nemcova.webp"
   },
   {
@@ -198,7 +201,8 @@
         "year": 2026
       }
     ],
-    "fictional": true,
+    "age": null,
+    "project_ids": [],
     "portrait_url": "/personas-images/pavel-simek.webp"
   },
   {
@@ -237,7 +241,8 @@
         "year": 2026
       }
     ],
-    "fictional": true,
+    "age": null,
+    "project_ids": [],
     "portrait_url": "/personas-images/tereza-benesova.webp"
   },
   {
@@ -281,7 +286,8 @@
         "year": 2026
       }
     ],
-    "fictional": true,
+    "age": null,
+    "project_ids": [],
     "portrait_url": "/personas-images/michal-wrona.webp"
   },
   {
@@ -324,7 +330,8 @@
         "year": 2026
       }
     ],
-    "fictional": true,
+    "age": null,
+    "project_ids": [],
     "portrait_url": "/personas-images/tomasz-bielski.webp"
   },
   {
@@ -372,7 +379,8 @@
         "year": 2026
       }
     ],
-    "fictional": true,
+    "age": null,
+    "project_ids": [],
     "portrait_url": "/personas-images/katarzyna-lis.webp"
   },
   {
@@ -425,7 +433,8 @@
         "year": 2026
       }
     ],
-    "fictional": true,
+    "age": null,
+    "project_ids": [],
     "portrait_url": "/personas-images/piotr-zalewski.webp"
   },
   {
@@ -483,7 +492,8 @@
         "year": 2026
       }
     ],
-    "fictional": true,
+    "age": null,
+    "project_ids": [],
     "portrait_url": "/personas-images/natalia-krawiec.webp"
   },
   {
@@ -522,7 +532,8 @@
         "year": 2026
       }
     ],
-    "fictional": true,
+    "age": null,
+    "project_ids": [],
     "portrait_url": "/personas-images/mikkel-sorensen.webp"
   },
   {
@@ -566,7 +577,8 @@
         "year": 2026
       }
     ],
-    "fictional": true,
+    "age": null,
+    "project_ids": [],
     "portrait_url": "/personas-images/freja-madsen.webp"
   },
   {
@@ -609,7 +621,8 @@
         "year": 2026
       }
     ],
-    "fictional": true,
+    "age": null,
+    "project_ids": [],
     "portrait_url": "/personas-images/jonas-lindholm.webp"
   },
   {
@@ -657,7 +670,8 @@
         "year": 2026
       }
     ],
-    "fictional": true,
+    "age": null,
+    "project_ids": [],
     "portrait_url": "/personas-images/sofie-berg.webp"
   },
   {
@@ -710,7 +724,8 @@
         "year": 2026
       }
     ],
-    "fictional": true,
+    "age": null,
+    "project_ids": [],
     "portrait_url": "/personas-images/emil-vestergaard.webp"
   },
   {
@@ -768,7 +783,8 @@
         "year": 2026
       }
     ],
-    "fictional": true,
+    "age": null,
+    "project_ids": [],
     "portrait_url": "/personas-images/oliver-bennett.webp"
   },
   {
@@ -807,7 +823,8 @@
         "year": 2026
       }
     ],
-    "fictional": true,
+    "age": null,
+    "project_ids": [],
     "portrait_url": "/personas-images/amelie-gagnon.webp"
   },
   {
@@ -851,7 +868,8 @@
         "year": 2026
       }
     ],
-    "fictional": true,
+    "age": null,
+    "project_ids": [],
     "portrait_url": "/personas-images/maya-desai.webp"
   },
   {
@@ -894,7 +912,8 @@
         "year": 2026
       }
     ],
-    "fictional": true,
+    "age": null,
+    "project_ids": [],
     "portrait_url": "/personas-images/noah-campbell.webp"
   },
   {
@@ -942,7 +961,8 @@
         "year": 2026
       }
     ],
-    "fictional": true,
+    "age": null,
+    "project_ids": [],
     "portrait_url": "/personas-images/claire-beaumont.webp"
   },
   {
@@ -995,7 +1015,8 @@
         "year": 2026
       }
     ],
-    "fictional": true,
+    "age": null,
+    "project_ids": [],
     "portrait_url": "/personas-images/jack-fletcher.webp"
   },
   {
@@ -1053,7 +1074,8 @@
         "year": 2026
       }
     ],
-    "fictional": true,
+    "age": null,
+    "project_ids": [],
     "portrait_url": "/personas-images/emily-hart.webp"
   },
   {
@@ -1092,7 +1114,8 @@
         "year": 2026
       }
     ],
-    "fictional": true,
+    "age": null,
+    "project_ids": [],
     "portrait_url": "/personas-images/lachlan-reed.webp"
   },
   {
@@ -1136,7 +1159,8 @@
         "year": 2026
       }
     ],
-    "fictional": true,
+    "age": null,
+    "project_ids": [],
     "portrait_url": "/personas-images/sophie-nguyen.webp"
   },
   {
@@ -1179,7 +1203,8 @@
         "year": 2026
       }
     ],
-    "fictional": true,
+    "age": null,
+    "project_ids": [],
     "portrait_url": "/personas-images/daniel-brooks.webp"
   }
 ]

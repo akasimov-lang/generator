@@ -16,7 +16,7 @@ from sqlalchemy import select, text, update
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import AutoReglueConfig
+from app.models import AutoReglueConfig, Site
 from app.security import AuthUser, AdminUser
 
 router = APIRouter(prefix='/personas', tags=['Personas'])
@@ -51,6 +51,15 @@ class PersonaInput(BaseModel):
     specializations: list[str] = Field(min_length=4, max_length=9)
     awards: list[Award] = Field(min_length=4, max_length=9)
     portrait_url: str = ''
+    age: int | None = Field(default=None, ge=0, le=120, strict=True)
+    project_ids: list[str] = Field(default_factory=list, max_length=500)
+
+    @field_validator('project_ids')
+    @classmethod
+    def distinct_projects(cls, values):
+        if any(not value or len(value) > 36 for value in values):
+            raise ValueError('Выберите проекты из списка.')
+        return list(dict.fromkeys(values))
 
     @field_validator('geo')
     @classmethod
@@ -98,28 +107,60 @@ class PersonaEdit(PersonaInput):
 
 def seed_catalog(db: Session):
     records = json.loads(SEED.read_text(encoding='utf-8'))
-    # Serialize concurrent application starts without altering existing records.
+    # Serialize startup seeding and metadata migration across application workers.
     if db.bind.dialect.name == 'postgresql':
         db.execute(text('SELECT pg_advisory_xact_lock(642588200)'))
     now = datetime.now(timezone.utc).isoformat()
+    # Apply additive metadata migration to every profile, including manually added ones.
+    for row in db.scalars(select(AutoReglueConfig).where(AutoReglueConfig.key.startswith(PREFIX))).all():
+        value = dict(row.value)
+        value.pop('fictional', None)
+        value.setdefault('age', None)
+        value.setdefault('project_ids', [])
+        if value != row.value:
+            row.value = value
     for original in records:
         key = PREFIX + original['id']
         if db.get(AutoReglueConfig, key) is not None:
             continue
         body = PersonaInput.model_validate({k: original[k] for k in PersonaInput.model_fields if k in original}).model_dump()
-        body.update(id=original['id'], language=COUNTRIES[body['geo']]['language'], fictional=True,
+        body.update(id=original['id'], language=COUNTRIES[body['geo']]['language'],
                     revision=1, created_at=now, updated_at=now)
         db.add(AutoReglueConfig(key=key, value=body))
     db.commit()
 
 
-def public_record(value, *, summary=False):
+def project_records(db, user, ids=None):
+    statement = select(Site.id, Site.name, Site.cache_canon, Site.fibery_name).where(Site.hidden_from_projects.is_(False))
+    if ids is not None:
+        if not ids:
+            return {}
+        statement = statement.where(Site.id.in_(ids))
+    if not user.get('is_admin'):
+        statement = statement.where(Site.id.in_(user.get('allowed_site_ids') or []))
+    return {row.id: {'id': row.id, 'name': row.name, 'main_domain': row.cache_canon or '',
+                     'fibery_name': row.fibery_name or ''}
+            for row in db.execute(statement.order_by(Site.name))}
+
+
+def validate_projects(db, user, ids):
+    projects = project_records(db, user, ids)
+    if set(ids) != set(projects):
+        raise HTTPException(422, 'Один из выбранных проектов удалён или недоступен. Обновите список проектов.')
+    return projects
+
+
+def public_record(value, *, summary=False, projects=None):
     result = dict(value)
+    result.pop('fictional', None)
+    result.setdefault('age', None)
+    result['projects'] = [(projects or {})[key] for key in result.get('project_ids', []) if key in (projects or {})]
+    result['project_ids'] = [project['id'] for project in result['projects']]
     result['word_count'] = word_count(result['biography'])
     result['country'] = COUNTRIES[result['geo']]['name']
     result['flag'] = COUNTRIES[result['geo']]['flag']
     if summary:
-        result['biography_excerpt'] = result.pop('biography')[:200].rsplit(' ', 1)[0] + '…'
+        result.pop('biography')
     return result
 
 
@@ -136,38 +177,55 @@ def lookup(db, persona_id):
 def list_personas(user: AuthUser, response: Response, db: Session = Depends(get_db)):
     response.headers['Cache-Control'] = 'no-store'
     rows = db.scalars(select(AutoReglueConfig).where(AutoReglueConfig.key.startswith(PREFIX))).all()
-    items = sorted([public_record(r.value, summary=True) for r in rows],
+    project_ids = {key for row in rows for key in row.value.get('project_ids', [])}
+    projects = project_records(db, user, project_ids)
+    items = sorted([public_record(r.value, summary=True, projects=projects) for r in rows],
                    key=lambda p: (list(COUNTRIES).index(p['geo']), p['last_name'], p['first_name']))
     return {'items': items, 'total': len(items), 'countries': [
         {'code': code, **data, 'count': sum(p['geo'] == code for p in items)}
         for code, data in COUNTRIES.items()]}
 
 
+@router.get('/projects')
+def list_projects(user: AuthUser, response: Response, db: Session = Depends(get_db)):
+    response.headers['Cache-Control'] = 'no-store'
+    return {'items': list(project_records(db, user).values())}
+
+
 @router.get('/{persona_id}')
 def read_persona(persona_id: str, user: AuthUser, response: Response, db: Session = Depends(get_db)):
     response.headers['Cache-Control'] = 'no-store'
-    return public_record(lookup(db, persona_id).value)
+    value = lookup(db, persona_id).value
+    return public_record(value, projects=project_records(db, user, value.get('project_ids', [])))
 
 
 @router.post('', status_code=201)
 def create_persona(payload: PersonaInput, user: AdminUser, db: Session = Depends(get_db)):
+    projects = validate_projects(db, user, payload.project_ids)
     base = unicodedata.normalize('NFKD', payload.first_name + '-' + payload.last_name).encode('ascii', 'ignore').decode().lower()
     base = re.sub(r'[^a-z0-9]+', '-', base).strip('-')[:40] or 'author'
     persona_id = base + '-' + uuid4().hex[:8]
     now = datetime.now(timezone.utc).isoformat()
     value = payload.model_dump()
-    value.update(id=persona_id, language=COUNTRIES[value['geo']]['language'], fictional=True,
+    value.update(id=persona_id, language=COUNTRIES[value['geo']]['language'],
                  revision=1, created_at=now, updated_at=now)
     db.add(AutoReglueConfig(key=PREFIX + persona_id, value=value)); db.commit()
-    return public_record(value)
+    return public_record(value, projects=projects)
 
 
 @router.put('/{persona_id}')
 def edit_persona(persona_id: str, payload: PersonaEdit, user: AdminUser, db: Session = Depends(get_db)):
     row = lookup(db, persona_id)
-    value = {**row.value, **payload.model_dump(exclude={'revision'}),
+    changes = payload.model_dump(exclude={'revision'})
+    # Older open tabs must not clear metadata they do not yet send.
+    for field in ('age', 'project_ids'):
+        if field not in payload.model_fields_set:
+            changes.pop(field, None)
+    projects = validate_projects(db, user, changes.get('project_ids', row.value.get('project_ids', [])))
+    value = {**row.value, **changes,
              'language': COUNTRIES[payload.geo]['language'], 'revision': payload.revision + 1,
              'updated_at': datetime.now(timezone.utc).isoformat()}
+    value.pop('fictional', None)
     result = db.execute(update(AutoReglueConfig).where(
         AutoReglueConfig.key == row.key,
         AutoReglueConfig.value['revision'].as_integer() == payload.revision
@@ -176,4 +234,4 @@ def edit_persona(persona_id: str, payload: PersonaEdit, user: AdminUser, db: Ses
         db.rollback()
         raise HTTPException(409, 'Профиль уже изменён. Откройте его заново перед сохранением.')
     db.commit()
-    return public_record(value)
+    return public_record(value, projects=projects)

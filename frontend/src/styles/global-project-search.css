@@ -19,3 +19,5 @@
 .massActionsTopbar .workspaceTopbarTitle{flex:1 1 480px}
 .massActionsTopbar .topbarActions{flex-wrap:wrap}
 @media(max-width:640px){.massActionsTopbar .workspaceTopbarTitle{flex:0 0 auto;width:100%}}
+
+.workspaceTopbarTitle > .eyebrow{grid-column:1 / -1}

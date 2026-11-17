@@ -20,6 +20,7 @@ import { ArticleImageSettings } from "./ArticleImageSettings";
 import { ShortcodeSidebar, type ShortcodeInfo } from "./ShortcodeSidebar";
 import { MassScopePicker } from "./MassScopePicker";
 import { GlobalProjectSearchInput, GlobalProjectSearchResults, matchingGlobalProjects } from "./GlobalProjectSearch";
+import { projectPagesCount, addPagesColumn } from "./projectPageCounts";
 import { createCoalescedLoader, createVisiblePoll } from "./visiblePoll";
 import { PageEditor, ProjectPages, type PageRow } from "./ProjectPages";
 import { TemplateGenerator } from "./TemplateGenerator";
@@ -916,6 +917,7 @@ function App() {
   const [domainQuery, setDomainQuery] = React.useState("");
   const [sitesSearchQuery,setSitesSearchQuery]=React.useState("");
   const [massSearchQuery,setMassSearchQuery]=React.useState("");
+  const [globalSearchQuery,setGlobalSearchQuery]=React.useState("");
   const [massRefreshToken,setMassRefreshToken]=React.useState(0);
   const { designVersion, setDesignVersion } = useDesign();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
@@ -980,7 +982,10 @@ function App() {
   const projectListBackPath = projectListReturnPath(listParams.get("from"));
   const globalSitesQuery=normalizeDomainQuery(sitesSearchQuery);
   const globalMassQuery=normalizeDomainQuery(massSearchQuery);
-  const projectListSites = globalSitesQuery ? siteSnapshot.filter(site=>[site.name,site.cache_canon||"",site.base_url,...(site.cache_domains||[])].some(value=>matchesProjectSearch(value,globalSitesQuery))) : projectListFilters ? siteSnapshot.filter(site => (projectListFilters.geo === "ALL" || (siteGeoFilterCode(site.cache_geo) || "UNKNOWN") === projectListFilters.geo) && (!projectListFilters.brand || (site.brand?.trim() || "Общие ключи").toLowerCase() === projectListFilters.brand.toLowerCase())) : siteSnapshot;
+  const projectListSites = globalSitesQuery ? matchingGlobalProjects(siteSnapshot, sitesSearchQuery) : projectListFilters ? siteSnapshot.filter(site => (projectListFilters.geo === "ALL" || (siteGeoFilterCode(site.cache_geo) || "UNKNOWN") === projectListFilters.geo) && (!projectListFilters.brand || (site.brand?.trim() || "Общие ключи").toLowerCase() === projectListFilters.brand.toLowerCase())) : siteSnapshot;
+  const usesGlobalResults = !["workspace", "sites", "autoReglue"].includes(activeView);
+  const headerSearchQuery = activeView === "workspace" ? domainQuery : activeView === "sites" ? sitesSearchQuery : activeView === "autoReglue" ? massSearchQuery : globalSearchQuery;
+  const setHeaderSearchQuery = activeView === "workspace" ? setDomainQuery : activeView === "sites" ? setSitesSearchQuery : activeView === "autoReglue" ? setMassSearchQuery : setGlobalSearchQuery;
   const projectListGeoLabel = projectListFilters?.geo === "ALL" ? "Все GEO" : projectListFilters?.geo;
 
   const navigateTo = React.useCallback((view: AppView, nextWorkspaceTab: WorkspaceTab = workspaceTab, replace = false, projectName?: string | null) => {
@@ -990,6 +995,7 @@ function App() {
       nextPath = projectFromPilotFilter(nextPath, new URLSearchParams(window.location.search).get("pilotReturn"));
     }
     setMobileMenuOpen(false);
+    setGlobalSearchQuery("");
     setActiveView(view);
     if (view === "sites" && activeView !== "sites") setSitesSearchQuery("");
     if (view === "workspace") {
@@ -1003,7 +1009,7 @@ function App() {
   }, [workspaceTab, activeView]);
 
   const openMassSearchProject = (name:string) => {
-    setMassSearchQuery("");setDomainQuery("");navigateTo("workspace","network",false,name);
+    setGlobalSearchQuery("");setSitesSearchQuery("");setMassSearchQuery("");setDomainQuery("");navigateTo("workspace","network",false,name);
   };
 
   const openWorkspaceContent = React.useCallback(() => {
@@ -1079,6 +1085,29 @@ function App() {
     [token]
   );
 
+  const loadProjectCatalog = React.useCallback((): Promise<void> => {
+    const user = userRef.current;
+    if (!token || !user) return Promise.resolve();
+    if (initialSitesFlight.current) return initialSitesFlight.current;
+    setCatalogError("");
+    const isCurrent = () => activeTokenRef.current === token && userRef.current?.id === user.id;
+    const flight = api<Site[]>("/sites?include_grouped_inactive=true")
+      .then(result => { if (isCurrent()) mergeSites(result, true); })
+      .catch(error => {
+        if (isCurrent()) setCatalogError(error instanceof Error ? error.message : "Не удалось загрузить список сайтов.");
+        throw error;
+      })
+      .finally(() => { if (initialSitesFlight.current === flight) initialSitesFlight.current = null; });
+    initialSitesFlight.current = flight;
+    return flight;
+  }, [api, token, mergeSites]);
+
+  React.useEffect(() => {
+    if (currentUser && headerSearchQuery.trim() && !catalogLoaded && !catalogError) {
+      void loadProjectCatalog().catch(() => {});
+    }
+  }, [currentUser?.id, headerSearchQuery, catalogLoaded, catalogError, loadProjectCatalog]);
+
   const loadAll = React.useCallback(async () => {
     const user = userRef.current;
     if (!token || !user) return;
@@ -1089,14 +1118,7 @@ function App() {
     if (refreshFlight.current?.key === key) return refreshFlight.current.promise;
     const promise = (async () => {
       if (["sites", "favorites", "massActionReport", "autoReglue", "templateGenerator", "autoPilot", "autoPilotLogs", "autoPilotReport"].includes(view) || (view === "workspace" && !snapshotTimeRef.current)) {
-        if (!initialSitesFlight.current) {
-          setCatalogError("");
-          initialSitesFlight.current = api<Site[]>(["sites", "favorites", "massActionReport", "autoReglue", "templateGenerator", "autoPilot", "autoPilotLogs", "autoPilotReport"].includes(view) ? "/sites?include_grouped_inactive=true" : "/sites")
-            .then(result => { if (userRef.current?.id === user.id) mergeSites(result, true); })
-            .catch(error=>{if(userRef.current?.id===user.id)setCatalogError(error instanceof Error?error.message:"Не удалось загрузить список сайтов. Нажмите «Обновить».");throw error;})
-            .finally(() => { initialSitesFlight.current = null; });
-        }
-        await initialSitesFlight.current;
+        await loadProjectCatalog();
       }
       if (view === "workspace") {
         if (name || savedId) {
@@ -1126,7 +1148,7 @@ function App() {
     try { await promise; } finally {
       if (refreshFlight.current?.promise === promise) refreshFlight.current = null;
     }
-  }, [api, token, mergeSites]);
+  }, [api, token, mergeSites, loadProjectCatalog]);
 
   const refreshWebdevCache = React.useCallback(async (resumeId?: string) => {
     const user = userRef.current;
@@ -1210,7 +1232,7 @@ function App() {
     setSites([]);
     setSiteSnapshot([]);
     setCatalogLoaded(false);setCatalogError("");
-    setMassSearchQuery("");
+    setMassSearchQuery("");setGlobalSearchQuery("");setSitesSearchQuery("");setDomainQuery("");
     void (async () => {
       const user = await api<User>("/auth/me", { signal: controller.signal });
       void removeLegacyProjectSnapshot().catch(() => {});
@@ -1290,6 +1312,7 @@ function App() {
   React.useEffect(() => {
     const handlePopState = () => {
       setMobileMenuOpen(false);
+      setGlobalSearchQuery("");
       const nextRoute = routeFromPath(window.location.pathname);
       setActiveView(nextRoute.view);
       setWorkspaceTab(nextRoute.workspaceTab);
@@ -1463,8 +1486,8 @@ function App() {
       </aside>
 
       <main className="main">
-        <header className={`topbar${activeView === "autoReglue" ? " massActionsTopbar" : ""}`}>
-          <div className={activeView === "workspace" || activeView === "sites" || activeView === "autoReglue" ? "workspaceTopbarTitle" : undefined}>
+        <header className="topbar massActionsTopbar">
+          <div className="workspaceTopbarTitle">
             {activeView === "workspace" ? <div className="workspaceTopbarEyebrow"><p className="eyebrow">Рабочая панель</p>
               <button className="button secondary compact workspaceHtmlUpload" type="button" onClick={() => {
               const name = workspaceProjectNameFromPath(window.location.pathname);
@@ -1474,15 +1497,19 @@ function App() {
             }}><Upload size={13} />Загрузить HTML</button>
             </div> : activeView === "templateGenerator" ? <div className="workspaceTopbarEyebrow"><p className="eyebrow">Рабочая панель</p><span id="templateTopbarBack" /></div> : <p className="eyebrow">Рабочая панель</p>}
             <h1>{activeView === "workspace" ? <><span className="workspaceHeadingFull">{viewTitle(activeView, workspaceTab)}</span><span className="workspaceHeadingCompact">Рабочий экран проекта</span></> : viewTitle(activeView, workspaceTab)}</h1>
-            {activeView === "workspace" && <GlobalProjectSearchInput query={domainQuery} onChange={setDomainQuery} resultsId="workspace-domain-results" />}
-            {activeView === "autoReglue" && <GlobalProjectSearchInput query={massSearchQuery} onChange={setMassSearchQuery} onSubmit={()=>{const first=matchingGlobalProjects(siteSnapshot,massSearchQuery)[0];if(first)openMassSearchProject(first.name);}}/>}
-            {activeView === "sites" && <input className="workspaceHeadingSearch" type="search" value={sitesSearchQuery} onChange={event=>setSitesSearchQuery(event.target.value)} aria-label="Поиск по всем доменам" placeholder="Домен проекта или домен в сетке" aria-controls="sites-search-results"/>}
+            <GlobalProjectSearchInput query={headerSearchQuery} onChange={setHeaderSearchQuery}
+              resultsId={activeView === "workspace" ? "workspace-domain-results" : activeView === "sites" ? "sites-search-results" : "mass-global-search-results"}
+              onSubmit={() => { const first = matchingGlobalProjects(siteSnapshot, headerSearchQuery)[0]; if (first) openMassSearchProject(first.name); }} />
           </div>
           {!compactNavigation && accountActions}
         </header>
 
         {message ? <div className="notice">{message}</div> : null}
 
+        {usesGlobalResults && <GlobalProjectSearchResults sites={siteSnapshot} query={globalSearchQuery}
+          onOpen={openMassSearchProject} loading={!catalogLoaded && !catalogError} error={catalogError}
+          onRetry={() => void loadProjectCatalog().catch(() => {})} />}
+        <div style={{display: usesGlobalResults && globalSearchQuery.trim() ? "none" : "contents"}}>
         {activeView === "workspace" && <ProjectWorkspaceView domainQuery={domainQuery} onDomainQueryChange={setDomainQuery} canManageAutomation api={api} sites={siteSnapshot} providers={providers} currentUsername={currentUser.username} activeTab={workspaceTab} contentOpenRequest={workspaceContentOpenRequest} onTabChange={(tab, projectName) => navigateTo("workspace", tab, false, projectName)} onSiteChanged={site => mergeSites([site])} onChanged={loadAll} />}
         {activeView === "prompts" && <PromptsView api={api} sites={sites} isAdmin={isAdmin} onChanged={loadAll} />}
         {isAdmin && activeView === "dashboard" && dashboard && <DashboardView api={api} dashboard={dashboard} tasks={tasks} content={content} sites={sites} onOpenTask={(task) => {
@@ -1519,9 +1546,9 @@ function App() {
         </section>}
         {activeView === "favorites" && <SitesView api={api} sites={siteSnapshot} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} favoritesOnly readOnly={!isAdmin} onChanged={loadAll} />}
         {activeView === "templateGenerator" && <TemplateGenerator api={api} projects={siteSnapshot} />}
-        {activeView === "personas" && <React.Suspense fallback={<p>Загрузка базы авторов…</p>}><PersonasView api={api} canEdit={isAdmin} navigationLocation={window.location.pathname + window.location.search} /></React.Suspense>}
+        {activeView === "personas" && <React.Suspense fallback={<p>Загрузка базы авторов…</p>}><PersonasView api={api} canEdit={Boolean(currentUser.is_admin)} navigationLocation={window.location.pathname + window.location.search} /></React.Suspense>}
         {activeView === "guide" && <React.Suspense fallback={<p>Загрузка инструкции…</p>}><UserGuideView /></React.Suspense>}
-        {activeView === "autoReglue" && <><GlobalProjectSearchResults sites={siteSnapshot} query={massSearchQuery} onOpen={openMassSearchProject} loading={!catalogLoaded&&!catalogError}/><div style={{display:globalMassQuery?"none":undefined}}><AutoReglueView refreshToken={massRefreshToken} api={api} onNetworksChanged={loadAll} renderReport={(onScopeChange, selectionIds, onSelection, moveActions, headerContainer) => <MassActionStatistics massOnly refreshToken={massRefreshToken} catalogReady={catalogLoaded} catalogError={catalogError} onInventoryChanged={loadAll} headerContainer={headerContainer} api={api} onScopeChange={onScopeChange} renderProjects={(ids, refresh, scopeLabel) => <SitesView projectScopeLabel={scopeLabel} embedded massActions api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={updates => { mergeSites(updates); refresh(); }} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll} selectionIds={selectionIds} onSelectionChange={onSelection} headerActions={moveActions} />} />} /></div></>}
+        {activeView === "autoReglue" && <><GlobalProjectSearchResults sites={siteSnapshot} query={massSearchQuery} onOpen={openMassSearchProject} loading={!catalogLoaded&&!catalogError} error={catalogError} onRetry={() => void loadProjectCatalog().catch(() => {})}/><div style={{display:globalMassQuery?"none":undefined}}><AutoReglueView refreshToken={massRefreshToken} api={api} onNetworksChanged={loadAll} renderReport={(onScopeChange, selectionIds, onSelection, moveActions, headerContainer) => <MassActionStatistics massOnly refreshToken={massRefreshToken} catalogReady={catalogLoaded} catalogError={catalogError} onInventoryChanged={loadAll} headerContainer={headerContainer} api={api} onScopeChange={onScopeChange} renderProjects={(ids, refresh, scopeLabel) => <SitesView projectScopeLabel={scopeLabel} embedded massActions api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={updates => { mergeSites(updates); refresh(); }} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll} selectionIds={selectionIds} onSelectionChange={onSelection} headerActions={moveActions} />} />} /></div></>}
         {activeView === "reglueReserves" && <ReglueReservesPage api={api} />}
         {activeView === "autoPilot" && <AutoPilotPage key={JSON.stringify([currentUser.username,currentUser.is_admin,currentUser.allowed_site_ids])} cacheScope={JSON.stringify([currentUser.username,currentUser.is_admin,currentUser.allowed_site_ids])} api={api} renderProjects={(ids, label) => catalogError ? <p role="alert">{catalogError}</p> : !catalogLoaded ? <p role="status">Загружаем проекты…</p> : <SitesView key={label} embedded showProjectTypeFilters api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} projectScopeLabel={label} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/>}/>}
         {activeView === "autoPilotLogs" && <AutoPilotPage key={JSON.stringify([currentUser.username,currentUser.is_admin,currentUser.allowed_site_ids])} cacheScope={JSON.stringify([currentUser.username,currentUser.is_admin,currentUser.allowed_site_ids])} api={api} logs renderProjects={(ids, label) => catalogError ? <p role="alert">{catalogError}</p> : !catalogLoaded ? <p role="status">Загружаем проекты…</p> : <SitesView key={label} embedded showProjectTypeFilters api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} projectScopeLabel={label} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/>}/>}
@@ -1529,6 +1556,7 @@ function App() {
         {(activeView === "autoPilotReport" || activeView === "massActionReport") && <AutoPilotPage key={JSON.stringify([currentUser.username,currentUser.is_admin,currentUser.allowed_site_ids])} cacheScope={JSON.stringify([currentUser.username,currentUser.is_admin,currentUser.allowed_site_ids])} api={api} reports renderProjects={(ids, label) => catalogError ? <p role="alert">{catalogError}</p> : !catalogLoaded ? <p role="status">Загружаем проекты…</p> : <SitesView key={label} embedded showProjectTypeFilters api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} projectScopeLabel={label} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll}/>}/>}
         {activeView === "autoReglueGuide" && <><a className="button secondary" href="/guide" onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateTo("guide"); } }}>Все инструкции</a><AutoReglueGuide backLabel="Вернуться к автопереклею" onBack={() => navigateTo("autoReglue")} /></>}
         {activeView === "settings" && <SettingsView api={api} currentUser={currentUser} designVersion={designVersion} onDesignVersionChange={setDesignVersion} inputStyle={inputStyle} onInputStyleChange={setInputStyle} onChanged={loadAll} />}
+        </div>
       </main>
       {notificationPromptVisible ? (
         <div className="permissionOverlay" role="dialog" aria-modal="true" aria-labelledby="popup-permission-title">
@@ -2859,10 +2887,10 @@ function ProjectWorkspaceView({
       {domainQuery.trim() ? <div id="workspace-domain-results" className="panel workspaceDomainResults">
         <h2 aria-live="polite">Результаты поиска · {domainResults.length}</h2>
         {domainResults.length ? <div className="tableScroll"><table>
-          <thead><tr><th>Проект</th><th>Имя проекта</th><th>Главный домен</th><th>Доменов в сетке</th></tr></thead>
+          <thead><tr><th>Проект</th><th>Имя проекта</th><th>Главный домен</th><th>Доменов в сетке</th><th>Pages</th></tr></thead>
           <tbody>{domainResults.map(site => <tr key={site.id} className="workspaceDomainResultRow" onClick={() => openDomainSearchResult(site.id)}>
             <td><button type="button" className="secondary" onClick={event => { event.stopPropagation(); openDomainSearchResult(site.id); }}>{site.name}</button></td>
-            <td><FiberyProjectName value={site.fibery_name} projectName={site.name} /></td><td>{site.cache_canon || "—"}</td><td>{site.domains_count}</td>
+            <td><FiberyProjectName value={site.fibery_name} projectName={site.name} /></td><td>{site.cache_canon || "—"}</td><td>{site.domains_count}</td><td>{projectPagesCount(site) ?? "—"}</td>
           </tr>)}</tbody>
         </table></div> : <p>Проекты не найдены. Поиск выполняется по доступным проектам, доменам их сеток, именам и номерам Fibery.</p>}
       </div> : null}
@@ -8484,10 +8512,10 @@ function ProvidersView({ api, providers, onChanged }: ViewProps & { providers: A
   );
 }
 
-type SiteTableColumn = "brand" | "rowNumber" | "select" | "name" | "title" | "canon" | "language" | "status" | "dropsCount" | "newregCount" | "menuType" | "menuCount" | "domainsCount" | "subdomainsCount" | "fiberyName";
+type SiteTableColumn = "brand" | "rowNumber" | "select" | "name" | "title" | "canon" | "language" | "status" | "dropsCount" | "newregCount" | "menuType" | "menuCount" | "domainsCount" | "subdomainsCount" | "pagesCount" | "fiberyName";
 type SiteSummaryFilter = "projects" | "working" | "menu" | "mass_actions" | "vitalina" | "hands_only" | "geo_ru" | "geo_kz" | "inactive" | "duplicate" | "all";
 
-const DEFAULT_SITE_COLUMN_ORDER: SiteTableColumn[] = ["rowNumber", "select", "name", "brand", "title", "canon", "language", "status", "menuType", "menuCount", "domainsCount", "dropsCount", "newregCount", "subdomainsCount", "fiberyName"];
+const DEFAULT_SITE_COLUMN_ORDER: SiteTableColumn[] = ["rowNumber", "select", "name", "brand", "title", "canon", "language", "status", "menuType", "menuCount", "domainsCount", "dropsCount", "newregCount", "subdomainsCount", "pagesCount", "fiberyName"];
 const SITE_COLUMN_LABELS: Record<SiteTableColumn, string> = {
   brand: "Бренд",
   rowNumber: "№",
@@ -8503,6 +8531,7 @@ const SITE_COLUMN_LABELS: Record<SiteTableColumn, string> = {
   menuCount: "Пункты меню",
   fiberyName: "Name Fibery",
   subdomainsCount: "Витрина",
+  pagesCount: "Pages",
   domainsCount: "Domains"
 };
 const SITE_COLUMN_SORT_KEYS: Record<SiteTableColumn, string | null> = {
@@ -8520,6 +8549,7 @@ const SITE_COLUMN_SORT_KEYS: Record<SiteTableColumn, string | null> = {
   menuCount: "menuCount",
   fiberyName: "fiberyName",
   subdomainsCount: "subdomainsCount",
+  pagesCount: "pagesCount",
   domainsCount: "domainsCount"
 };
 
@@ -8893,7 +8923,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       ? withCounts.flatMap(column => column === "name" ? [column, "brand" as SiteTableColumn] : [column])
       : withCounts;
     return Array.isArray(stored) && stored.every((column) => DEFAULT_SITE_COLUMN_ORDER.includes(column))
-      ? [...new Set([...stored, ...DEFAULT_SITE_COLUMN_ORDER])]
+      ? [...new Set([...addPagesColumn(stored), ...DEFAULT_SITE_COLUMN_ORDER])]
       : DEFAULT_SITE_COLUMN_ORDER;
   });
   const [hiddenColumns, setHiddenColumns] = React.useState<SiteTableColumn[]>(() => {
@@ -9049,6 +9079,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       projectTeam: site.project_team,
       needsTeamReview: typeof site.project_team === "string" && ["", "rankomen"].includes(site.project_team.trim().toLowerCase()),
       subdomainsCount: site.cache_showcase?.count ?? null,
+      pagesCount: projectPagesCount(site),
       domainsCount: site.domains_count,
       domains: Array.isArray(site.cache_domains) ? site.cache_domains : [],
       syncedAt: site.cache_synced_at
@@ -9075,6 +9106,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       menuType: [left.menuType, right.menuType],
       menuCount: [left.menuCount, right.menuCount],
       subdomainsCount: massActions ? [Number(left.participation), Number(right.participation)] : [left.subdomainsCount ?? -1, right.subdomainsCount ?? -1],
+      pagesCount: [left.pagesCount ?? -1, right.pagesCount ?? -1],
       domainsCount: [left.domainsCount, right.domainsCount]
     };
     const [leftValue, rightValue] = values[siteSort.key];
@@ -9160,7 +9192,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
   const requestedSelection = JSON.stringify(selectionIds ? [...selectionIds].sort() : []);
   const selectionSnapshotCurrent = sites.length === managedSites.length && sites.every(site => managedSites.some(managed => managed.id === site.id)) && (selectionIds || []).every(id => sites.some(site => site.id === id));
   React.useEffect(() => { if (selectionIds && selectionSnapshotCurrent && visibleSelection !== requestedSelection) onSelectionChange?.(JSON.parse(visibleSelection)); }, [visibleSelection, requestedSelection, selectionSnapshotCurrent, onSelectionChange]);
-  const domainTotalColumns = ["domainsCount", "dropsCount", "newregCount"] as const;
+  const domainTotalColumns = ["domainsCount", "dropsCount", "newregCount", "pagesCount"] as const;
   const domainTotals = Object.fromEntries(domainTotalColumns.map(column => [column, filteredRows.some(row => row[column] === null)
     ? <span title="Для части проектов количество ещё не определено">—</span>
     : formatNumber(filteredRows.reduce((total, row) => total + (row[column] ?? 0), 0))]));
@@ -9594,6 +9626,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
               subdomainsCount: massActions ? readOnly ? (row.participation ? "Да" : "Нет") : <fieldset className="massParticipation" disabled={savingParticipation.includes(row.id)}>
                 <SearchableSelect value={row.participation ? "yes" : "no"} searchable={false} compact ariaLabel={`Участвует в переклее ${row.name}`} searchPlaceholder="Найти значение" options={[{value:"yes",label:"Да"},{value:"no",label:"Нет"}]} onChange={value => void updateParticipation(row.id, value === "yes")} />
               </fieldset> : <span title={row.subdomainsCount === null ? "Состав витрины не определён или ещё загружается" : "Количество уникальных брендов на витрине"}>{row.subdomainsCount === null ? "—" : formatNumber(row.subdomainsCount)}</span>,
+              pagesCount: <span title="Главная и внутренние страницы проекта">{row.pagesCount === null ? "—" : formatNumber(row.pagesCount)}</span>,
               domainsCount: row.isActive ? <a href={projectFromPilotFilter(pathForRoute("workspace", "network", row.name), window.location.pathname + window.location.search + window.location.hash)} aria-label={`Открыть сетку проекта ${row.name}`}>{formatNumber(row.domainsCount)}</a> : <span title="Сохранённое число доменов неактивного проекта">{formatNumber(row.domainsCount)}</span>
             };
             return visibleColumnOrder.map((column) => cells[column]);

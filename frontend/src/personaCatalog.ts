@@ -1,9 +1,10 @@
 export type PersonaAward = { title: string; year: number };
+export type PersonaProject = { id: string; name: string; main_domain: string; fibery_name: string };
 export type Persona = {
   id: string; first_name: string; last_name: string; geo: string; country: string; flag: string;
   language: string; specialization: string; specializations: string[]; awards: PersonaAward[];
-  biography: string; biography_excerpt?: string; word_count: number; portrait_url: string;
-  fictional: boolean; revision: number; created_at: string; updated_at: string;
+  biography: string; word_count: number; portrait_url: string;
+  age: number | null; project_ids: string[]; projects: PersonaProject[]; revision: number; created_at: string; updated_at: string;
 };
 export type PersonaCountry = { code: string; name: string; flag: string; language: string; count: number };
 export type PersonaCatalog = { items: Persona[]; total: number; countries: PersonaCountry[] };
