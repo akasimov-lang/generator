@@ -72,6 +72,23 @@ def test_long_tasks_do_not_share_scheduler_or_publication_queue():
     assert routes["app.worker.reconcile_pending_publications"]["queue"] == "confirmation"
 
 
+def test_network_edits_dispatch_before_a_full_showcase_refresh_batch(env):
+    db, site, _ = env
+    earlier = datetime.now(timezone.utc) - timedelta(minutes=5)
+    refreshes = [models.BackgroundJob(kind='showcase_cache_refresh', payload={}, created_at=earlier)
+                 for _ in range(101)]
+    first = models.BackgroundJob(kind='fake_main_queue', payload={'site_id': site.id},
+                                created_at=earlier + timedelta(minutes=1))
+    second = models.BackgroundJob(kind='network_edit_queue', payload={'site_id': site.id},
+                                 created_at=earlier + timedelta(minutes=2))
+    db.add_all([*refreshes, first, second]); db.commit()
+    sent = []
+    dispatch_pending(db, lambda *args: sent.append(args))
+    assert len(sent) == 100
+    assert sent[:2] == [(first.id, 'network_changes'), (second.id, 'network_changes')]
+    assert {queue for _, queue in sent[2:]} == {'cache_sync'}
+
+
 def test_planning_and_small_generations_have_independent_queues(env):
     db, site, _ = env
     jobs = [models.BackgroundJob(kind=kind, payload=payload) for kind,payload in [

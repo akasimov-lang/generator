@@ -102,7 +102,7 @@ def test_dispatcher_delivers_edit_queue(env):
     db, site, _ = env; prepare(env)
     ident = add(env, 'reserve', domain='next.test'); sent = []
     background_jobs.dispatch_pending(db, lambda job, worker: sent.append((job, worker)))
-    assert sent == [(ident, 'cache_sync')]
+    assert sent == [(ident, 'network_changes')]
 
 
 def test_request_id_cannot_be_reused_for_different_edit(env):

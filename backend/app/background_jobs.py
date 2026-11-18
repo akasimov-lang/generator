@@ -27,7 +27,7 @@ def enqueue_publication(db, item, actor):
 
 def dispatch_pending(db, send, inflight_ids=None):
     from app.menu_generation_jobs import expire, recover_interrupted
-    from app.job_queues import queue_for
+    from app.job_queues import NETWORK_CHANGE_KINDS, queue_for
     expire(db)
     recover_interrupted(db)
     from app.sitemap_row_recheck import recover as recover_sitemap_rechecks
@@ -64,7 +64,9 @@ def dispatch_pending(db, send, inflight_ids=None):
         models.BackgroundJob.id.not_in(inflight_ids or []),
         or_(models.BackgroundJob.dispatched_at.is_(None),
             models.BackgroundJob.dispatched_at < now - timedelta(minutes=1)),
-    ).order_by(case((models.BackgroundJob.kind == 'auto_pilot_preview', 0), else_=1),
+    # User edits must reach their worker even when a cache refresh fills the batch.
+    ).order_by(case((models.BackgroundJob.kind.in_(NETWORK_CHANGE_KINDS), 0),
+                    (models.BackgroundJob.kind == 'auto_pilot_preview', 1), else_=2),
                models.BackgroundJob.created_at).limit(100).with_for_update(skip_locked=True)).all()
     sent = 0
     for job in jobs:

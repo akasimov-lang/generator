@@ -126,7 +126,7 @@ def test_worker_recovers_after_receipt_commit_without_repeating_write(env):
 def test_dispatcher_delivers_queued_fake_page_tasks(env):
     db,site,remote=env;paths=prepare(env,1);ident=add(db,site,paths[0]);sent=[]
     background_jobs.dispatch_pending(db,lambda job,worker_queue:sent.append((job,worker_queue)))
-    assert sent==[(ident,'cache_sync')]
+    assert sent==[(ident,'network_changes')]
 
 
 def test_create_updates_old_path_in_head_before_queue_reports_success(env):

@@ -10,7 +10,7 @@ from app import models
 from app.core.config import get_settings
 
 QUEUES = ('generation', 'pilot_texts', 'short_generation', 'planning', 'automation',
-          'publication', 'cache_sync', 'maintenance', 'background_dispatch', 'celery')
+          'publication', 'network_changes', 'cache_sync', 'maintenance', 'background_dispatch', 'celery')
 
 
 def broker():

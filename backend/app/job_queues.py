@@ -2,9 +2,12 @@
 from app import models
 
 SHORT_ACTIONS = {'meta_headings', 'headings', 'full_title_h1', 'full_title_headings', 'emoji', 'trim_50', 'trim_99'}
+NETWORK_CHANGE_KINDS = ('network_edit_queue', 'fake_main_queue')
 
 
 def queue_for(db, job):
+    if job.kind in NETWORK_CHANGE_KINDS:
+        return 'network_changes'
     if job.kind == 'pilot_row_replan':
         return 'short_generation' if (job.result or {}).get('phase') == 'headings' else 'planning'
     if job.kind == 'auto_pilot_preview':
