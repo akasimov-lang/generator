@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
-import {test} from 'node:test';
-import {projectGscState} from '../src/projectGscState.ts';
+import {after,test} from 'node:test';
+import {createServer} from 'vite';
+const server=await createServer({configFile:false,root:new URL('..',import.meta.url).pathname,server:{middlewareMode:true,hmr:false},optimizeDeps:{noDiscovery:true,include:[]},appType:'custom'});
+after(()=>server.close());
+const {projectGscState}=await server.ssrLoadModule('/src/projectGscState.ts');
 
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => {resolve = a; reject = b;}); return {promise, resolve, reject}; };
 
@@ -76,4 +79,24 @@ test('failed initial load cannot overwrite existing data with an empty value', a
   });
   await state.load(); state.edit(''); await state.flush(); assert.equal(writes, 0);
   fail = false; await state.load(); assert.equal(state.snapshot().value, 'saved');
+});
+
+test('history refresh follows successful saves only and carries no private field value', async () => {
+  const previous=globalThis.window, events=[];
+  globalThis.window={dispatchEvent:event=>events.push(event)};
+  try {
+    let fail=true;
+    const state=projectGscState('first',async(path,options)=>{
+      if(!options)return {value:'old'};
+      if(fail)throw Error('offline');
+      return {value:'private account'};
+    });
+    await state.load(); await state.flush();
+    state.edit('private account'); await state.flush();
+    assert.equal(events.length,0);
+    fail=false; await state.flush(); await state.flush();
+    assert.equal(events.length,1);
+    assert.equal(events[0].type,'pagepilot-project-history-changed');
+    assert.deepEqual(events[0].detail,{siteId:'first'});
+  } finally {globalThis.window=previous;}
 });

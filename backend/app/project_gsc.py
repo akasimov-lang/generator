@@ -46,6 +46,8 @@ def save_gsc(site_id: str, payload: GscValue, user: AuthUser, response: Response
         row = models.AutoReglueConfig(key=key)
         db.add(row)
     row.value = {'value': payload.value}
+    from app.project_field_history import record
+    record(db, site, 'gsc', previous, payload.value, user['username'])
     if payload.value.strip() and payload.value != previous:
         from app.gsc_fibery import enqueue
         enqueue(db, site, payload.value, user['username'])

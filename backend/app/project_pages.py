@@ -251,6 +251,9 @@ def confirm(db, operation, remote, site):
             and current.get("updatedTime") == operation.after_page.get("updatedTime")
             and current.get("publishedTime") == operation.after_page.get("publishedTime")):
         operation.status, operation.error = "confirmed", None
+        from app.project_field_history import record
+        record(db, site, 'title', operation.before_page.get('title') or '', current.get('title') or '',
+               operation.requested_by, page_path=current.get('slug') or '/', edit_id=operation.id)
         from app.project_page_autolink import saved_page
         saved_page(db, site, current)
         old_slug = operation.before_page.get("slug")

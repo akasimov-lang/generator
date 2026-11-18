@@ -25,8 +25,11 @@ import { NetworkSidebar } from "./NetworkSidebar";
 import { NetworkTableSaveLog } from "./networkTableSaveLog";
 import { projectNotice, projectChanged } from "./projectNotificationEvents";
 
+import {ProjectFieldChange, type FieldChange} from "./ProjectFieldChange";
+import {subscribeProjectHistory} from "./projectHistoryEvents";
+
 type AlternatesSnapshot = { markup: string; enabled: boolean };
-type NetworkOperation = { id: string; action: "reserve" | "reglue" | "alternates" | "create_domains" | "create_subdomains" | "delete_domain" | "create_fake_main" | "select_fake_main" | "domain_redirect" | "domain_redirects_main" | "page_redirect" | "reglue_redirects" | "indexing" | "structured_data"; page_redirects_before?:PageRedirectGroup[]; page_redirects_after?:PageRedirectGroup[]; redirects_before?: DomainRedirect[]; redirects_after?: DomainRedirect[]; task_id?: string; domains?: string[]; status: string; message: string | null; domain: string | null; source_domain?: string | null; alternates_before?: AlternatesSnapshot | null; alternates_after?: AlternatesSnapshot | null; initiator: string; created_at: string };
+type NetworkOperation = { id: string; action: "reserve" | "reglue" | "alternates" | "create_domains" | "create_subdomains" | "delete_domain" | "create_fake_main" | "select_fake_main" | "domain_redirect" | "domain_redirects_main" | "page_redirect" | "reglue_redirects" | "indexing" | "structured_data" | "gsc" | "title"; field_change?: FieldChange; page_redirects_before?:PageRedirectGroup[]; page_redirects_after?:PageRedirectGroup[]; redirects_before?: DomainRedirect[]; redirects_after?: DomainRedirect[]; task_id?: string; domains?: string[]; status: string; message: string | null; domain: string | null; source_domain?: string | null; alternates_before?: AlternatesSnapshot | null; alternates_after?: AlternatesSnapshot | null; initiator: string; created_at: string };
 type DomainClassification = { is_subdomain: boolean; parent_domain: string | null; parent_type: "drop" | "newreg" | null; unused_as_main: boolean };
 type Network = {
   reglue_participation?: boolean;
@@ -65,7 +68,7 @@ const domainCollator = new Intl.Collator("ru", {numeric: true, sensitivity: "bas
 type MarkupSection = "canonical" | "alternates" | "dynamic";
 const markupSignatures = (next: Network) => ({ canonical: JSON.stringify([next.canonicalDefaultMarkup ?? "", next.canonicalFakeMainMarkup ?? "", next.enableCanonical ?? null]), alternates: JSON.stringify([next.alternateMarkup, next.enableAlternates]), dynamic: JSON.stringify([!!next.fake_main_enabled, next.fake_main_paths || [], next.fake_main_current || ""]) });
 type Draft = { markup: string; enabled: boolean; originalMarkup: string; originalEnabled: boolean };
-const actionLabels = { structured_data: "Микроразметка", domain_redirects_main: "Все доменные редиректы на текущий Main", page_redirect: "Постраничные редиректы", reglue_redirects: "Цели редиректов после переклея", domain_redirect: "Доменные редиректы", create_domains: "Добавление доменов", select_fake_main: "Настройки фейковых страниц", indexing: "Индексация проекта", create_fake_main: "Создание фейковой главной", delete_domain: "Удаление домена", create_subdomains: "Создание поддоменов", reserve: "Сохранение резерва", reglue: "Ручной переклей", alternates: "Альтернейты" };
+const actionLabels = { gsc: "Подключение GSC", title: "Изменение Title", structured_data: "Микроразметка", domain_redirects_main: "Все доменные редиректы на текущий Main", page_redirect: "Постраничные редиректы", reglue_redirects: "Цели редиректов после переклея", domain_redirect: "Доменные редиректы", create_domains: "Добавление доменов", select_fake_main: "Настройки фейковых страниц", indexing: "Индексация проекта", create_fake_main: "Создание фейковой главной", delete_domain: "Удаление домена", create_subdomains: "Создание поддоменов", reserve: "Сохранение резерва", reglue: "Ручной переклей", alternates: "Альтернейты" };
 const statusLabels: Record<string, string> = { index_queued: "В очереди", index_submitting: "Отправляется", index_submitted: "Задача создана", index_unknown: "Отправка не подтверждена", confirmed: "Подтверждено", pending: "Ожидает подтверждения", unknown: "Результат пока неизвестен", failed: "Ошибка" };
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Не удалось выполнить запрос";
 
@@ -289,6 +292,12 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
     return () => window.clearInterval(timer);
   }, [uncertain]);
 
+  React.useEffect(() => subscribeProjectHistory<Pick<Network, "operations" | "recent_network_changes">>(site.id, api, history => {
+    if (!mounted.current || !dataRef.current) return;
+    const next = {...dataRef.current, operations: history.operations, recent_network_changes: history.recent_network_changes};
+    dataRef.current = next; setData(next);
+  }), [site.id, api]);
+
   const indexingPending = data?.operations.some(op => ["index_queued", "index_submitting"].includes(op.status));
   React.useEffect(() => {
     if (!indexingPending) return;
@@ -314,7 +323,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
     if (data?.domains.includes(domain)) return [domain + ": уже есть в сетке"];
     return [];
   });
-  async function mutate(action: Exclude<NetworkOperation["action"], "indexing" | "reglue_redirects" | "structured_data">, targetDomain?: string, markupDraft = draft, settings?: { fake_main_path?: string; delete_fake_main?: boolean; enable_canonical?: boolean; enable_dynamic_routes?: boolean } & Partial<RedirectEdit & PageRedirectEdit>, revision?: string): Promise<boolean> {
+  async function mutate(action: Exclude<NetworkOperation["action"], "indexing" | "reglue_redirects" | "structured_data" | "gsc" | "title">, targetDomain?: string, markupDraft = draft, settings?: { fake_main_path?: string; delete_fake_main?: boolean; enable_canonical?: boolean; enable_dynamic_routes?: boolean } & Partial<RedirectEdit & PageRedirectEdit>, revision?: string): Promise<boolean> {
     if (!data || !markupDraft || busyRef.current) return false;
     if(action === "alternates") {
       let problem="";
@@ -755,6 +764,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
             return <li key={operation.id}>
           <strong>{actionLabels[operation.action]}{operation.action === "reglue" && operation.domain ? `: ${operation.source_domain || "Исходный домен не сохранён"} -> ${operation.domain}` : operation.domain ? `: ${operation.domain}` : ""}</strong> — {statusLabels[operation.status] || operation.status}
           <small>{new Date(operation.created_at).toLocaleString("ru-RU")} · {operation.initiator}</small><p>{operation.message}</p>
+          {operation.field_change && <ProjectFieldChange change={operation.field_change}/>}
           {operation.action === "alternates" && <details className="networkAlternatesHistory">
             <summary>Альтернейты: было / {operation.status === "confirmed" ? "стало" : "запрошено"}</summary>
             <div className="networkAlternatesComparison">

@@ -1,3 +1,4 @@
+import {projectHistoryChanged} from "./projectHistoryEvents";
 type Api = <T>(path: string, options?: RequestInit) => Promise<T>;
 export const isProjectGscRequest = (path: string) => /^\/sites\/[^/?]+\/gsc(?:\?|$)/.test(path);
 type Snapshot = {
@@ -46,6 +47,7 @@ export function projectGscState(siteId: string, api: Api, delay = 700) {
           update({status: "saving"});
           await api<{value: string}>(path, {method: "PUT", body: JSON.stringify({value})});
           saved = value;
+          projectHistoryChanged(siteId);
         }
         update({status: "saved"});
       } catch { update({status: "error"}); }

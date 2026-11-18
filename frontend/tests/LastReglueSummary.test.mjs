@@ -75,3 +75,17 @@ test('alternate changes sort with Main and fake-page events without replacing th
  assert.ok(html.indexOf('Замена внутряка')<html.indexOf('Переклей:'));
  assert.equal((html.match(/Внутряк:/g)||[]).length,2);
 });
+
+test('title changes show the original page, actor and escaped before/after values',()=>{
+ const html=render({recent:[{id:'title',kind:'title',at:'2026-11-18T15:00:00Z',initiator:'editor',field_change:{domain:'original.test',page_path:'/bonus/',before:'Old title',after:'<New title>'}}]});
+ assert.match(html,/Изменение Title: 18.11.2026, 18:00:00 МСК/);
+ assert.match(html,/Сохранено · editor/);assert.match(html,/original.test\/bonus\//);
+ assert.match(html,/Значение до и после/);assert.match(html,/Old title/);assert.match(html,/&lt;New title&gt;/);
+ assert.doesNotMatch(html,/<New title>|Внутряк:|Переклей:/);
+});
+
+test('GSC clearing is visible alongside other project events',()=>{
+ const html=render({recent:[{...last,id:'main',kind:'reglue'},{id:'gsc',kind:'gsc',at:'2026-11-18T15:00:00Z',initiator:'editor',field_change:{domain:'original.test',before:'account@example.test',after:''}}]});
+ assert.match(html,/Подключение GSC/);assert.match(html,/account@example.test/);assert.match(html,/Не заполнено/);
+ assert.ok(html.indexOf('Подключение GSC')<html.indexOf('Переклей:'));
+});

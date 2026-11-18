@@ -144,16 +144,23 @@ def latest_for_site(db, site):
 
 
 def recent_for_site(db, site, limit=20):
-    """Confirmed Main, fake-path and alternate changes, newest first."""
+    """Confirmed project changes, newest first."""
     operations = db.scalars(select(models.NetworkOperation).where(
         models.NetworkOperation.site_id == site.id,
         models.NetworkOperation.status == 'confirmed',
-        models.NetworkOperation.action.in_(['reglue', 'create_fake_main', 'select_fake_main', 'alternates']))).all()
+        models.NetworkOperation.action.in_(['reglue', 'create_fake_main', 'select_fake_main', 'alternates', 'gsc', 'title']))).all()
     items = []
     for op in operations:
         payload = op.request_payload or {}
         before, after = payload.get('journal_before') or {}, payload.get('journal_after') or {}
-        if op.action == 'reglue':
+        if op.action in {'gsc', 'title'}:
+            change = payload.get('field_change')
+            if not change or change['before'] == change['after']:
+                continue
+            items.append({'id': op.id, 'kind': op.action, 'at': confirmed_at(op).isoformat(),
+                          'initiator': op.initiator, 'field_change': change,
+                          'old_main': None, 'new_main': None, 'old_path': None, 'new_path': None})
+        elif op.action == 'reglue':
             old_main, new_main = domain_name(payload.get('source_domain')), domain_name(payload.get('reserve'))
             if not new_main or old_main == new_main:
                 continue

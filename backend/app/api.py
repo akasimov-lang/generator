@@ -682,6 +682,15 @@ def get_network_operations(site_id: str, _: AuthUser, db: Session = Depends(get_
     return project_network.operation_history(db, _get_site_or_404(db, site_id))
 
 
+@router.get("/sites/{site_id}/network/history")
+def get_network_history(site_id: str, user: AuthUser, db: Session = Depends(get_db)):
+    from app.project_gsc import project
+    from app.reglue_journal import recent_for_site
+    site = project(db, site_id, user)
+    return {'operations': project_network.operation_history(db, site),
+            'recent_network_changes': recent_for_site(db, site)}
+
+
 @router.get("/sites/{site_id}/network/sitemap")
 def get_network_sitemap(site_id: str, _: AuthUser, db: Session = Depends(get_db)):
     return network_sitemap.receipt(network_sitemap.latest(db, _get_site_or_404(db, site_id)))

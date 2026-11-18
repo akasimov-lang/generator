@@ -92,6 +92,18 @@ def test_home_first_and_preserve_whole_page_on_edit(setup):
     assert audit.requested_by=='anton' and audit.before_page==before
     assert client.put(path,json=payload).json()['status']=='confirmed'
     assert len(state['requests'])==1
+    history = db.scalars(select(models.NetworkOperation).where(models.NetworkOperation.action == 'title')).all()
+    assert len(history) == 1
+    assert history[0].initiator == 'anton' and history[0].status == 'confirmed'
+    assert history[0].request_payload['field_change'] == {
+        'before': 'Home', 'after': 'Updated home', 'domain': 'brand.test', 'page_path': '/',
+    }
+    # Reconfirming the same edit must preserve the first timestamp and single receipt.
+    original_receipt = copy.deepcopy(history[0].request_payload)
+    with pages.Remote(db, site) as remote:
+        pages.confirm(db, audit, remote, site)
+    assert len(db.scalars(select(models.NetworkOperation).where(models.NetworkOperation.action == 'title')).all()) == 1
+    assert history[0].request_payload == original_receipt
 
 
 def test_conflict_and_wrong_identity_never_write(setup):
@@ -109,10 +121,13 @@ def test_timeout_is_not_retried_and_can_be_confirmed(setup):
     state['failure']=httpx.ReadTimeout('private connection details')
     result=client.put(path,json=payload).json()
     assert result['status']=='unknown' and 'private' not in result['error']
+    assert db.scalar(select(models.NetworkOperation).where(models.NetworkOperation.action == 'title')) is None
     assert client.put(path,json=payload).json()['status']=='unknown'
     assert len(state['requests'])==1
     state['project']['data']['pages'][1]=state['requests'][0]['page']
     assert client.get(path+'/edits/'+payload['request_id']).json()['status']=='confirmed'
+    receipt = db.scalar(select(models.NetworkOperation).where(models.NetworkOperation.action == 'title'))
+    assert receipt.request_payload['field_change']['after'] == 'Updated home'
 
 
 def test_pending_verification_and_archived_project(setup):
@@ -333,3 +348,32 @@ def test_page_url_edit_rejects_duplicate_and_home_before_write(setup):
     payload.update(request_id=str(uuid4()),slug='/')
     assert client.put(f'/sites/{site.id}/pages/{key}',json=payload).status_code==409
     assert state['requests']==[]
+
+
+def test_description_only_edit_does_not_invent_title_change(setup):
+    client, db, site, state = setup
+    path, payload = draft(client, site)
+    payload['title'] = 'Home'
+    assert client.put(path, json=payload).json()['status'] == 'confirmed'
+    assert db.scalar(select(models.NetworkOperation).where(models.NetworkOperation.action == 'title')) is None
+
+
+def test_internal_title_history_keeps_page_and_main_at_confirmation(setup):
+    from app.project_network import operation_history
+    from app.reglue_journal import recent_for_site
+    client, db, site, state = setup
+    site.cache_canon = 'www.current.test'; db.commit()
+    page = client.get(f'/sites/{site.id}/pages').json()['pages'][1]
+    path = f'/sites/{site.id}/pages/{page["key"]}'
+    detail = client.get(path).json()
+    payload = {'request_id': str(uuid4()), 'revision': detail['revision'],
+               'title': '<New bonus>', 'description': detail['description'], 'content': detail['content']}
+    assert client.put(path, json=payload).json()['status'] == 'confirmed'
+    site.cache_canon = 'later.test'; db.commit()
+    history = operation_history(db, site)
+    entry = next(row for row in history if row['action'] == 'title')
+    expected = {'before': 'Bonus', 'after': '<New bonus>', 'domain': 'www.current.test', 'page_path': '/bonus/'}
+    assert entry['field_change'] == expected
+    recent = next(row for row in recent_for_site(db, site) if row['kind'] == 'title')
+    assert recent['field_change'] == expected
+    assert recent['initiator'] == 'anton'

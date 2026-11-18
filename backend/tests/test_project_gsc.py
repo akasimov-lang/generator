@@ -9,6 +9,7 @@ from sqlalchemy.pool import StaticPool
 from app import models
 from app.db import Base, get_db
 from app.project_gsc import router, PREFIX
+from app.api import get_network_history
 from app.security import require_auth
 
 
@@ -25,6 +26,7 @@ def setup(monkeypatch):
         other = models.Site(name='second.test', base_url='https://second.test', publication_endpoint='/')
         db.add_all([site, other]); db.commit()
         app = FastAPI(); app.include_router(router)
+        app.add_api_route("/sites/{site_id}/network/history", get_network_history, methods=["GET"])
         user = {'id': 'user', 'username': 'editor', 'is_admin': False, 'allowed_site_ids': [site.id]}
         app.dependency_overrides[get_db] = lambda: db
         app.dependency_overrides[require_auth] = lambda: user
@@ -52,7 +54,15 @@ def test_saved_value_survives_reload_and_domain_changes_with_original_task_snaps
     assert job.kind == "gsc_fibery"
     assert job.payload["domain"] == "first.test"
     assert job.payload["value"] == "Вручную: account@example.test"
-    assert db.scalar(select(models.NetworkOperation)) is None
+    receipt = db.scalar(select(models.NetworkOperation))
+    assert receipt.action == 'gsc' and receipt.status == 'confirmed' and receipt.initiator == 'editor'
+    expected = {'before': '', 'after': 'Вручную: account@example.test', 'domain': 'first.test', 'page_path': None}
+    assert receipt.request_payload['field_change'] == expected
+    history = client.get(f'/sites/{site_id}/network/history').json()
+    assert history['operations'][0]['field_change'] == expected
+    recent = history['recent_network_changes'][0]
+    assert recent['kind'] == 'gsc' and recent['field_change'] == expected and recent['initiator'] == 'editor'
+    assert recent['at'] == receipt.request_payload['confirmed_at']
     assert db.scalar(select(models.ProjectNotification)) is None
 
 
@@ -66,6 +76,11 @@ def test_each_project_keeps_its_own_value_and_supports_clearing(setup):
     assert client.put(first, json={'value': ''}).json() == {'value': ''}
     assert client.get(first).json() == {'value': ''}
     assert client.get(second).json() == {'value': 'second account'}
+    history = client.get(f'/sites/{site.id}/network/history').json()
+    assert len(history['operations']) == 2
+    assert history['recent_network_changes'][0]['field_change']['before'] == 'first account'
+    assert history['recent_network_changes'][0]['field_change']['after'] == ''
+    assert all(row['field_change']['domain'] == 'first.test' for row in history['operations'])
     assert len(db.scalars(select(models.AutoReglueConfig).where(models.AutoReglueConfig.key.startswith(PREFIX))).all()) == 2
 
 
@@ -77,6 +92,7 @@ def test_inaccessible_or_missing_project_cannot_be_read_or_written(setup, method
     user['allowed_site_ids'] = None
     assert getattr(client, method)('/sites/missing/gsc', **kwargs).status_code == 404
     assert db.scalar(select(models.AutoReglueConfig)) is None
+    assert db.scalar(select(models.NetworkOperation)) is None
 
 
 @pytest.mark.parametrize('payload', [{'value': 'x' * 2001}, {'value': 123}, {'value': None}, {'value': 'ok', 'publish': True}])
@@ -86,6 +102,7 @@ def test_invalid_input_does_not_replace_saved_value(setup, payload):
     client.put(url, json={'value': 'keep'})
     assert client.put(url, json=payload).status_code == 422
     assert client.get(url).json() == {'value': 'keep'}
+    assert len(db.scalars(select(models.NetworkOperation)).all()) == 1
 
 
 def test_unauthenticated_request_is_rejected(setup):
@@ -107,6 +124,7 @@ def test_nonempty_changes_queue_receipts_but_repeats_and_clearing_do_not(setup):
     assert first.payload['value'] == value and value in first.payload['description']
     assert '````text' in first.payload['description']
     client.put(url, json={'value': value})
+    assert len(db.scalars(select(models.NetworkOperation)).all()) == 1
     client.put(url, json={'value': '  '})
     client.put(url, json={'value': ''})
     client.put(url, json={'value': value})
@@ -122,3 +140,12 @@ def test_existing_value_is_not_backfilled_on_read_or_unchanged_save(setup):
     assert client.get(url).json() == {'value': 'legacy'}
     client.put(url, json={'value': 'legacy'})
     assert db.scalar(select(models.BackgroundJob)) is None
+    assert db.scalar(select(models.NetworkOperation)) is None
+
+
+def test_history_requires_project_access_and_authentication(setup):
+    db, site, other, client, user = setup
+    assert client.get(f'/sites/{other.id}/network/history').status_code == 404
+    assert client.get('/sites/missing/network/history').status_code == 404
+    del client.app.dependency_overrides[require_auth]
+    assert client.get(f'/sites/{site.id}/network/history').status_code == 401

@@ -1,6 +1,7 @@
 import { openDetailPage } from "./detailNavigation";
 import { PageContentTools } from "./PageContentTools";
 import React from "react";
+import {projectHistoryChanged} from "./projectHistoryEvents";
 import { ArrowLeft, ArrowDown, ArrowUp, Check, ChevronRight, Copy, ExternalLink, FileText, Home, Link2, Plus, RefreshCcw, Save, Search, Trash2, X } from "lucide-react";
 import { TemplateCombobox } from "./TemplateCombobox";
 import { ShortcodeSidebar, type ShortcodeInfo } from "./ShortcodeSidebar";
@@ -328,6 +329,7 @@ export function PageEditor({ siteId, row, api, onClose, onSaved, breadcrumbs, re
       if(savedDraft.current?.request_id===result.id)savedDraft.current=null;
       setDurableFingerprint("");setDraftLocation("");
       const next=result.page;setPage(next);setOriginal(editablePageFingerprint(next));onSaved(next);setMessage("Изменения сохранены в Webdev и подтверждены.");setError("");
+      projectHistoryChanged(siteId);
     } else if(result.status === "pending" && result.background) {
       if(savedDraft.current?.request_id===result.id){
         savedDraft.current={...savedDraft.current,status:"pending"};

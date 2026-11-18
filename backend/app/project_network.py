@@ -318,6 +318,7 @@ def operation_history(db, site):
         *db.scalars(query.where(models.NetworkOperation.status.not_in(active)).order_by(models.NetworkOperation.created_at.desc()).limit(20)).all(),
     ]
     return [{"id": op.id, "action": op.action, "status": op.status, "message": op.message,
+                        "field_change": op.request_payload.get("field_change") if op.action in {"gsc", "title"} else None,
                         "initiator": op.initiator, "created_at": op.created_at,
                         "source_domain": op.request_payload.get("source_domain") if op.action == "reglue" else None,
                         "alternates_before": op.request_payload.get("alternates_before") if op.action == "alternates" else None,
