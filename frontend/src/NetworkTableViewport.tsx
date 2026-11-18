@@ -11,24 +11,34 @@ export function NetworkTableViewport({ rowKey, rowCount, children }: {
     const viewport = ref.current;
     if (!viewport) return;
     viewport.scrollTop = 0;
-    if (!limited) {
-      viewport.style.removeProperty("max-height");
-      return;
-    }
+    if (!limited) viewport.style.removeProperty("max-height");
     const table = viewport.querySelector("table");
     if (!table) return;
+    const workspace = viewport.closest<HTMLElement>(".networkWorkspace");
     const measure = () => {
       const lastVisibleRow = table.tBodies[0]?.rows[VISIBLE_ROWS - 1];
-      if (!lastVisibleRow) return;
-      const height = lastVisibleRow.getBoundingClientRect().bottom
-        - viewport.getBoundingClientRect().top + viewport.scrollTop
-        + viewport.offsetHeight - viewport.clientHeight;
-      viewport.style.maxHeight = `${Math.ceil(height)}px`;
+      if (limited && lastVisibleRow) {
+        const height = lastVisibleRow.getBoundingClientRect().bottom
+          - viewport.getBoundingClientRect().top + viewport.scrollTop
+          + viewport.offsetHeight - viewport.clientHeight;
+        viewport.style.maxHeight = `${Math.ceil(height)}px`;
+      }
+      if (workspace) {
+        // Side panels share the space beside the controls and visible rows only.
+        const height = viewport.getBoundingClientRect().bottom - workspace.getBoundingClientRect().top;
+        workspace.style.setProperty("--network-sidebar-height", `${Math.ceil(height)}px`);
+      }
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(table);
-    return () => observer.disconnect();
+    const controls = workspace?.querySelector(".networkTopControls");
+    if (controls) observer.observe(controls);
+    observer.observe(viewport);
+    return () => {
+      observer.disconnect();
+      workspace?.style.removeProperty("--network-sidebar-height");
+    };
   }, [rowKey, limited]);
   return <div ref={ref} className={`networkTableWrap${limited ? " networkTableWrapLimited" : ""}`}
     tabIndex={0} role="region" aria-label="Домены сетки">{children}</div>;

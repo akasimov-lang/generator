@@ -7,7 +7,7 @@ with sync_playwright() as p:
     page.on('pageerror', lambda e: errors.append(str(e)))
     page.goto(os.environ.get('VITE_TEST_URL', 'http://127.0.0.1:5174') + '/tests/network.html')
     page.get_by_role('button', name='Test network', exact=True).click()
-    for label in ['был Main', 'был в альтернейтах', 'x-default', 'БАН']:
+    for label in ['Main', 'Alternate', 'x-default', 'БАН']:
         box = page.get_by_label('reserve.test: ' + label, exact=True)
         expect(box).to_be_enabled()
         box.check()
@@ -18,7 +18,7 @@ with sync_playwright() as p:
         expect(box).not_to_be_checked()
     # Another user's saved checkbox is shown after focus refresh.
     page.evaluate("window.fixture.main_history.push('reserve.test'); window.dispatchEvent(new Event('focus'))")
-    expect(page.get_by_label('reserve.test: был Main', exact=True)).to_be_checked()
+    expect(page.get_by_label('reserve.test: Main', exact=True)).to_be_checked()
     assert not errors, errors
     print('PASS: four editable flags, save/reset, refresh and shared updates')
     browser.close()

@@ -15,12 +15,13 @@ import { readNetworkWithRetry } from "./networkReadRetry";
 import { parseNetworkDomainInput, formatNetworkDomainInput } from "./networkDomainInput";
 import { LastReglueSummary, type LastReglue, type RecentNetworkChange } from "./LastReglueSummary";
 import { matchesProjectSearch, normalizeDomainQuery } from "./projectSearch";
-import { Trash2, X, Search, Check, ExternalLink } from "lucide-react";
+import { Trash2, X, Search, Check, ExternalLink, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { buildBaseAlternates } from "./standardAlternates";
 import { DomainRedirects, domainRedirectTargets, domainRedirectTarget, type DomainRedirect, type RedirectEdit } from "./DomainRedirects";
 import { PageRedirects, type PageRedirectGroup, type PageRedirectEdit } from "./PageRedirects";
 import { ProjectStructuredData } from "./ProjectStructuredData";
 import { NetworkTableViewport } from "./NetworkTableViewport";
+import { NetworkTableSaveLog } from "./networkTableSaveLog";
 import { projectNotice, projectChanged } from "./projectNotificationEvents";
 
 type AlternatesSnapshot = { markup: string; enabled: boolean };
@@ -58,6 +59,8 @@ type Props = {
   site: { id: string; name: string; reglue_participation?: boolean; added_to_system_at?: string | null; fibery_name?: string | null; cache_language?: string | null; cache_geo?: string | null }; mode: "network" | "redirects"; username: string;
   api: <T>(path: string, options?: RequestInit) => Promise<T>; onChanged: () => void; refreshToken?: number;
 };
+type NetworkSortColumn = "domain" | "type" | "status" | "main" | "alternate" | "x_default" | "ban" | "added" | "removed";
+const domainCollator = new Intl.Collator("ru", {numeric: true, sensitivity: "base"});
 type MarkupSection = "canonical" | "alternates" | "dynamic";
 const markupSignatures = (next: Network) => ({ canonical: JSON.stringify([next.canonicalDefaultMarkup ?? "", next.canonicalFakeMainMarkup ?? "", next.enableCanonical ?? null]), alternates: JSON.stringify([next.alternateMarkup, next.enableAlternates]), dynamic: JSON.stringify([!!next.fake_main_enabled, next.fake_main_paths || [], next.fake_main_current || ""]) });
 type Draft = { markup: string; enabled: boolean; originalMarkup: string; originalEnabled: boolean };
@@ -108,6 +111,8 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
   const canonicalConflict = Boolean(data && canonicalDraft && canonicalDirty && (canonicalDraft.originalStandard !== (data.canonicalDefaultMarkup ?? "") || canonicalDraft.originalFake !== (data.canonicalFakeMainMarkup ?? "")));
   const [reserve, setReserve] = React.useState("");
   const [networkView, setNetworkView] = React.useState<"main" | "amp">("main");
+  const [tableSort, setTableSort] = React.useState<{column: NetworkSortColumn; descending: boolean} | null>(null);
+  React.useEffect(() => setTableSort(null), [site.id]);
   const [showDomainList, setShowDomainList] = React.useState(false);
   const [showNetworkHistory, setShowNetworkHistory] = React.useState(false);
   const domainListRef = React.useRef<HTMLTextAreaElement>(null);
@@ -139,7 +144,12 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
   const mounted = React.useRef(true);
   const historySite = React.useRef(site.id); historySite.current = site.id;
   const historySaving = React.useRef(new Set<string>());
-  const [historyStatus, setHistoryStatus] = React.useState<Record<string, {saving:boolean; checked?:boolean; message:string; error?:boolean}>>({});
+  const [historyStatus, setHistoryStatus] = React.useState<Record<string, {saving:boolean; checked?:boolean}>>({});
+  const tableSaveLog = React.useMemo(() => new NetworkTableSaveLog(username, site.id), [username, site.id]);
+  const tableSaveEvents = React.useSyncExternalStore(tableSaveLog.subscribe, tableSaveLog.getSnapshot);
+  const tableSaving = tableSaveEvents.some(item => item.status === "saving");
+  const tableSaveState = tableSaving ? "saving" : !tableSaveEvents.length ? "idle"
+    : tableSaveEvents[0].status === "saved" ? "saved" : "error";
   const fakeQueue = useFakeMainQueue<Network>(site.id, api, !!busy);
   const editQueue = useNetworkEditQueue<Network>(site.id, api, !!busy);
   const queueOperationIds = new Set([...fakeQueue.items.flatMap(item => item.operation_ids), ...editQueue.items.map(item => item.id)]);
@@ -381,11 +391,13 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
     const key = `${domain}:${field}`;
     if (!dataRef.current || historySaving.current.has(key)) return;
     historySaving.current.add(key);
-    setHistoryStatus(old => ({...old, [key]: {saving: true, checked, message: "Сохраняем…"}}));
+    setHistoryStatus(old => ({...old, [key]: {saving: true, checked}}));
+    const receipt = tableSaveLog.start(domain, ({main: "Main", alternate: "Alternate", x_default: "x-default", ban: "БАН"} as Record<string, string>)[field] || field, checked ? "Включено" : "Выключено");
     try {
       const saved = await api<Network>(`/sites/${site.id}/network/domain-history`, {
         method: "PATCH", body: JSON.stringify({ domain, field, checked }),
       });
+      tableSaveLog.finish(receipt);
       if (!mounted.current || historySite.current !== requestSite || !dataRef.current) return;
       const next = {...dataRef.current};
       if (field === "ban") next.domain_bans = {...next.domain_bans, [domain]: !!saved.domain_bans?.[domain]};
@@ -394,30 +406,32 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
         next[property] = [...next[property].filter(value => value !== domain), ...(saved[property].includes(domain) ? [domain] : [])];
       }
       dataRef.current = next; setData(next);
-      setHistoryStatus(old => ({...old, [key]: {saving:false, message:"Сохранено"}}));
+      setHistoryStatus(old => ({...old, [key]: {saving:false}}));
       projectChanged(site.id);
     } catch (err) {
-      if (mounted.current && historySite.current === requestSite) setHistoryStatus(old => ({...old, [key]: {saving:false, message:errorText(err), error:true}}));
+      tableSaveLog.finish(receipt, errorText(err));
+      if (mounted.current && historySite.current === requestSite) setHistoryStatus(old => ({...old, [key]: {saving:false}}));
     } finally { historySaving.current.delete(key); }
   }
   function historyCheckbox(domain: string, field: string, checked: boolean, label: string) {
     const status = historyStatus[`${domain}:${field}`];
-    return <><input type="checkbox" className="networkHistoryCheck" disabled={!!status?.saving}
+    return <input type="checkbox" className="networkHistoryCheck" disabled={!!status?.saving}
       checked={status?.saving ? !!status.checked : checked} aria-label={`${domain}: ${label}`}
-      onChange={event => void saveHistory(domain, field, event.target.checked)} />
-      {status && <small role={status.error ? "alert" : "status"}>{status.message}</small>}</>;
+      onChange={event => void saveHistory(domain, field, event.target.checked)} />;
   }
   async function saveDomainType(domain: string, domainType: string) {
     if (!data || busyRef.current) return;
+    const receipt = tableSaveLog.start(domain, "Тип домена", domainType === "drop" ? "Дроп" : "Новорег");
     busyRef.current = true; setBusy("domain-type"); setError("");
     try {
       const saved = await api<{ domain_types: Record<string, "drop" | "newreg">; domain_classification?: Record<string, DomainClassification> }>(`/sites/${site.id}/network/domain-type`, {
         method: "PATCH", body: JSON.stringify({ domain, domain_type: domainType }),
       });
+      tableSaveLog.finish(receipt);
       if (!mounted.current) return;
       const next = { ...dataRef.current!, domain_types: saved.domain_types, domain_classification: saved.domain_classification };
       dataRef.current = next; setData(next);
-    } catch (err) { if (mounted.current) setError(errorText(err)); }
+    } catch (err) { tableSaveLog.finish(receipt, errorText(err)); }
     finally { busyRef.current = false; if (mounted.current) setBusy(""); }
   }
   const known = data ? [...new Set([...data.domains, ...(data.amp_domains || []), data.canon, ...data.main_history, ...data.alternate_history, ...data.x_default_history, ...Object.keys(data.history_overrides || {}), ...Object.keys(data.domain_added_at || {}), ...Object.keys(data.domain_removed_at || {}), ...(data.domain_membership_history || []).map(period => period.domain)])].filter(Boolean) : [];
@@ -425,8 +439,53 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
   const currentDomains = new Set([...(data?.domains || []), ...(data?.amp_domains || []), data?.canon || ""]);
   const redirectTargets = domainRedirectTargets(data?.domain_redirects || [], !!data?.has_domain_redirects);
   const domainPosition = (domain: string) => networkView === "amp" ? 0 : domain === data?.canon ? 2 : domain === data?.reserve ? 1 : 0;
-  const visibleDomains = known.filter(domain => showNetworkHistory || currentDomains.has(domain)).filter((domain) => networkView === "amp" ? ampDomains.has(domain) : !ampDomains.has(domain)).filter(domain => matchesProjectSearch(domain, normalizeDomainQuery(domainQuery))).sort((left, right) => domainPosition(left) - domainPosition(right));
   const deletingDomains = new Set([...submittingDeletion, ...(data?.operations || []).filter(op => op.action === "delete_domain" && ["pending", "unknown"].includes(op.status)).flatMap(op => op.domains?.length ? op.domains : op.domain ? [op.domain] : [])]);
+  function domainTypeLabel(domain: string) {
+    if (ampDomains.has(domain)) return "AMP";
+    const classification = data?.domain_classification?.[domain];
+    if (classification?.is_subdomain) return classification.parent_type === "drop" ? "Поддомен D" : classification.parent_type === "newreg" ? "Поддомен N" : "Поддомен";
+    return data?.domain_types?.[domain] === "drop" ? "Дроп" : data?.domain_types?.[domain] === "newreg" ? "Новорег" : "Не указан";
+  }
+  function domainStatusLabel(domain: string) {
+    return deletingDomains.has(domain) ? "Удаление" : domainRedirectTarget(domain, redirectTargets) ? "301"
+      : networkView === "amp" && domain === data?.amp ? "Текущий AMP" : networkView === "amp" && domain === data?.prev_amp ? "Предыдущий AMP"
+      : domain === data?.canon ? "Main" : domain === data?.reserve ? "Резерв" : data?.domains.includes(domain) ? "В сетке" : "В истории";
+  }
+  function sortValue(domain: string, column: NetworkSortColumn): string | number | null {
+    if (column === "domain") return domain;
+    if (column === "type") return domainTypeLabel(domain);
+    if (column === "status") return domainStatusLabel(domain);
+    if (column === "added" || column === "removed") {
+      const date = column === "added" ? data?.domain_added_at?.[domain] || (domain === site.name ? data?.added_to_system_at || site.added_to_system_at : undefined)
+        : !currentDomains.has(domain) ? data?.domain_removed_at?.[domain] : undefined;
+      return date && Number.isFinite(Date.parse(date)) ? Date.parse(date) : null;
+    }
+    const pending = historyStatus[`${domain}:${column}`];
+    if (pending?.saving) return Number(!!pending.checked);
+    return Number(column === "ban" ? !!data?.domain_bans?.[domain] : (column === "main" ? data?.main_history : column === "alternate" ? data?.alternate_history : data?.x_default_history)?.includes(domain));
+  }
+  const visibleDomains = known.filter(domain => showNetworkHistory || currentDomains.has(domain))
+    .filter(domain => networkView === "amp" ? ampDomains.has(domain) : !ampDomains.has(domain))
+    .filter(domain => matchesProjectSearch(domain, normalizeDomainQuery(domainQuery)))
+    .sort((left, right) => {
+      if (!tableSort) return domainPosition(left) - domainPosition(right);
+      const a = sortValue(left, tableSort.column), b = sortValue(right, tableSort.column);
+      // Missing dates stay last in either direction. Equal values keep domain order stable.
+      if (a === null || b === null) return a === b ? domainCollator.compare(left, right) : a === null ? 1 : -1;
+      const compared = typeof a === "number" && typeof b === "number" ? a - b : domainCollator.compare(String(a), String(b));
+      return (tableSort.descending ? -compared : compared) || domainCollator.compare(left, right);
+    });
+  function sortDirection(column: NetworkSortColumn): "none" | "ascending" | "descending" {
+    return tableSort?.column === column ? tableSort.descending ? "descending" : "ascending" : "none";
+  }
+  function sortButton(column: NetworkSortColumn, label: string) {
+    const direction = sortDirection(column);
+    const Icon = direction === "none" ? ArrowUpDown : direction === "ascending" ? ArrowUp : ArrowDown;
+    return <button type="button" className="networkSortButton" aria-label={`Сортировать: ${label}`}
+      title={direction === "ascending" ? "Сортировать по убыванию" : "Сортировать по возрастанию"}
+      onClick={() => setTableSort(current => ({column, descending: current?.column === column ? !current.descending : false}))}>
+      {label}<Icon size={12} aria-hidden="true" /></button>;
+  }
   const disabled = Boolean(busy) || uncertain;
   const canSaveMarkup = !disabled && dirty && !!data?.has_head;
   function requestMarkupSave() {
@@ -554,15 +613,9 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
           {showDomainList && <div className="networkDomainList"><label>Домены — по одному в строке<textarea ref={domainListRef} readOnly aria-label="Домены для копирования" value={visibleDomains.join("\n")} rows={Math.min(12, Math.max(3, visibleDomains.length))} /></label><small>Ctrl+C / ⌘C — скопировать. Можно выделить только нужные строки.</small><button type="button" className="secondary compact" onClick={() => setShowDomainList(false)}>Скрыть список</button></div>}
           <div className="networkWithNavigation networkWorkspace"><div className="networkMembership">
           {topControls}
-          <div className="networkDomainTable"><div className="networkTableTools"><label className="networkHistoryToggle"><input type="checkbox" checked={showNetworkHistory} onChange={event => setShowNetworkHistory(event.target.checked)} />Показать историю</label><small className="networkDomainTotal">Доменов: {visibleDomains.length}</small></div><NetworkTableViewport rowKey={visibleDomains.join("\n")} rowCount={visibleDomains.length}><table className="networkTable"><thead><tr><th scope="col"><div className="networkDomainSearch"><Search size={14} aria-hidden="true" /><input aria-label="Поиск по доменам сетки" placeholder="Домены" value={domainQuery} onChange={event => setDomainQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); commitDomainFilter(domainQuery); } if (event.key === "Escape") setDomainQuery(savedFilter); }} />{(savedFilter || domainQuery) && <button type="button" aria-label="Сбросить фильтр доменов" title="Сбросить фильтр" onClick={() => commitDomainFilter("")}><X size={15} /></button>}<button type="button" className="networkSelectDomains" aria-expanded={showDomainList} onClick={() => setShowDomainList(value => !value)}>Выделить</button></div></th><th scope="col">Тип домена</th><th scope="col">Поддомен</th><th scope="col">Статус</th><th scope="col">Был Main</th><th scope="col">Был в альтернейтах</th><th scope="col">x-default</th><th scope="col">БАН</th><th scope="col">Действия</th><th scope="col">Дата добавления</th><th scope="col">Дата исключения</th></tr></thead>
-            <tbody>{visibleDomains.map((domain, index) => <tr key={domain} className={currentDomains.has(domain) ? undefined : "networkHistoricalDomain"}><td data-label="Домен"><span className="networkDomainNumber" aria-label={`Строка ${index + 1}`}>{index + 1}</span>{domain === data.canon || domain === data.reserve || domain === site.name ? <strong>{domain}</strong> : domain}</td><td data-label="Тип домена">{ampDomains.has(domain) ? <span className="networkAmpType">AMP</span> : data.domain_classification?.[domain]?.is_subdomain ? <span title="Тип задаётся у родительского домена">{data.domain_classification[domain].parent_type === "drop" ? "Дроп (родитель)" : data.domain_classification[domain].parent_type === "newreg" ? "Новорег (родитель)" : "Не указан у родителя"}</span> : <select className="networkDomainType" aria-label={`Тип домена ${domain}`} value={data.domain_types?.[domain] || ""} disabled={Boolean(busy)} onChange={(event) => void saveDomainType(domain, event.target.value)}><option value="" disabled>Не указан</option><option value="drop">Дроп</option><option value="newreg">Новорег</option></select>}</td><td data-label="Поддомен">
-                <span className="networkSubdomain"><input type="checkbox" className="networkHistoryCheck" disabled checked={!!data.domain_classification?.[domain]?.is_subdomain} aria-label={domain + ": поддомен"} />
-                {data.domain_classification?.[domain]?.is_subdomain && <span title={"Родитель: " + data.domain_classification[domain].parent_domain}>
-                  {data.domain_classification[domain].parent_type === "drop" ? "Поддомен дропа" : data.domain_classification[domain].parent_type === "newreg" ? "Поддомен новорега" : "Тип родителя не указан"}
-                  {data.domain_classification[domain].unused_as_main && <small>Не был Main</small>}
-                </span>}</span>
-              </td><td data-label="Статус">{deletingDomains.has(domain) ? <span className="networkDeletionStatus" role="status">Удаление</span> : domainRedirectTarget(domain, redirectTargets) ? <span title={`301 → ${domainRedirectTarget(domain, redirectTargets)}`}>301</span> : networkView === "amp" && domain === data.amp ? "Текущий AMP" : networkView === "amp" && domain === data.prev_amp ? "Предыдущий AMP" : domain === data.canon ? <strong>Main</strong> : domain === data.reserve ? <strong>Резерв</strong> : data.domains.includes(domain) ? "В сетке" : "В истории"}</td>
-              {[data.main_history, data.alternate_history, data.x_default_history].map((history, i) => <td key={i} data-label={["Был Main", "Был в альтернейтах", "x-default"][i]}>{historyCheckbox(domain, ["main", "alternate", "x_default"][i], history.includes(domain), ["был Main", "был в альтернейтах", "x-default"][i])}</td>)}
+          <div className="networkDomainTable"><div className="networkTableTools"><label className="networkHistoryToggle"><input type="checkbox" checked={showNetworkHistory} onChange={event => setShowNetworkHistory(event.target.checked)} />Показать историю</label><small className="networkDomainTotal">Доменов: {visibleDomains.length}</small><span className="networkTableSave"><SaveIndicator state={tableSaveState} version={tableSaveEvents.map(item => `${item.id}:${item.status}`).join(";")} label="Сохранение таблицы" showText={false} error="Подробности в истории операций внизу." /></span></div><NetworkTableViewport rowKey={visibleDomains.join("\n")} rowCount={visibleDomains.length}><table className="networkTable"><thead><tr><th scope="col" aria-sort={sortDirection("domain")}><div className="networkDomainHeading">{sortButton("domain", "Домены")}<div className="networkDomainSearch"><Search size={14} aria-hidden="true" /><input aria-label="Поиск по доменам сетки" placeholder="Домены" value={domainQuery} onChange={event => setDomainQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); commitDomainFilter(domainQuery); } if (event.key === "Escape") setDomainQuery(savedFilter); }} />{(savedFilter || domainQuery) && <button type="button" aria-label="Сбросить фильтр доменов" title="Сбросить фильтр" onClick={() => commitDomainFilter("")}><X size={15} /></button>}<button type="button" className="networkSelectDomains" aria-expanded={showDomainList} onClick={() => setShowDomainList(value => !value)}>Выделить</button></div></div></th><th scope="col" aria-sort={sortDirection("type")}>{sortButton("type", "Тип домена")}</th><th scope="col" aria-sort={sortDirection("status")}>{sortButton("status", "Status")}</th><th scope="col" aria-sort={sortDirection("main")}>{sortButton("main", "Main")}</th><th scope="col" aria-sort={sortDirection("alternate")}>{sortButton("alternate", "Alternate")}</th><th scope="col" aria-sort={sortDirection("x_default")}>{sortButton("x_default", "x-default")}</th><th scope="col" aria-sort={sortDirection("ban")}>{sortButton("ban", "БАН")}</th><th scope="col">Действия</th><th scope="col" aria-sort={sortDirection("added")}>{sortButton("added", "Дата добавления")}</th><th scope="col" aria-sort={sortDirection("removed")}>{sortButton("removed", "Дата исключения")}</th></tr></thead>
+            <tbody>{visibleDomains.map((domain, index) => <tr key={domain} className={currentDomains.has(domain) ? undefined : "networkHistoricalDomain"}><td data-label="Домен"><span className="networkDomainNumber" aria-label={`Строка ${index + 1}`}>{index + 1}</span>{domain === data.canon || domain === data.reserve || domain === site.name ? <strong>{domain}</strong> : domain}</td><td data-label="Тип домена">{ampDomains.has(domain) ? <span className="networkAmpType">AMP</span> : data.domain_classification?.[domain]?.is_subdomain ? <span className="networkSubdomainType" title={`Родитель: ${data.domain_classification[domain].parent_domain || "не указан"}. ${data.domain_classification[domain].parent_type === "drop" ? "Поддомен дропа" : data.domain_classification[domain].parent_type === "newreg" ? "Поддомен новорега" : "Тип родителя не указан"}${data.domain_classification[domain].unused_as_main ? ". Не был Main" : ""}`}>{domainTypeLabel(domain)}</span> : <select className="networkDomainType" aria-label={`Тип домена ${domain}`} value={data.domain_types?.[domain] || ""} disabled={Boolean(busy)} onChange={(event) => void saveDomainType(domain, event.target.value)}><option value="" disabled>Не указан</option><option value="drop">Дроп</option><option value="newreg">Новорег</option></select>}</td><td data-label="Status"><span className={deletingDomains.has(domain) ? "networkDeletionStatus" : undefined} title={domainRedirectTarget(domain, redirectTargets) ? `301 → ${domainRedirectTarget(domain, redirectTargets)}` : undefined}>{domainStatusLabel(domain)}</span></td>
+              {[data.main_history, data.alternate_history, data.x_default_history].map((history, i) => <td key={i} data-label={["Main", "Alternate", "x-default"][i]}>{historyCheckbox(domain, ["main", "alternate", "x_default"][i], history.includes(domain), ["Main", "Alternate", "x-default"][i])}</td>)}
               <td data-label="БАН">{historyCheckbox(domain, "ban", Boolean(data.domain_bans?.[domain]), "БАН")}</td>
               <td data-label="Действия"><button type="button" className="networkDeleteButton" aria-label={`Удалить ${domain} из сетки`}
                 title={domain === data.canon || domain === data.reserve || domain === site.name || domain === data.amp ? "Домен проекта, Main, AMP и резерв защищены от удаления" : "Удалить домен из сетки"}
@@ -673,7 +726,14 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
         </div>}
         {mode === "network" && networkView === "main" && <ProjectStructuredData key={site.id} siteId={site.id} api={api} refreshKey={refreshToken} backgroundRefreshKey={`${structuredDataRevision}:${data.revision}`}/>}
         <ShowcaseHistory siteId={site.id} api={api} refreshKey={refreshToken}/>
-        {(data.operations.some(op => op.action !== "indexing") || !!fakeQueue.items.length || !!fakeQueue.error) && <div className="networkSection"><h3>История операций{fakeQueue.count > 0 ? ` · Фейковые страницы в работе: ${fakeQueue.count}` : ""}</h3>
+        {(data.operations.some(op => op.action !== "indexing") || !!fakeQueue.items.length || !!fakeQueue.error || !!tableSaveEvents.length) && <div className="networkSection networkOperationHistory"><h3>История операций{fakeQueue.count > 0 ? ` · Фейковые страницы в работе: ${fakeQueue.count}` : ""}</h3>
+          {!!tableSaveEvents.length && <details className="networkTableSaveHistory" open><summary>Сохранение таблицы ({tableSaveEvents.length})</summary>
+            <ul className="networkOperations">{tableSaveEvents.map(item => <li key={item.id}>
+              <strong>{item.domain} · {item.field}</strong> — {item.value}
+              <small>{new Date(item.createdAt).toLocaleString("ru-RU", {timeZone: "Europe/Moscow"})} · МСК · {username}</small>
+              <p role={item.status === "error" || item.status === "unknown" ? "alert" : "status"}>{item.message}</p>
+            </li>)}</ul>
+          </details>}
           {fakeQueue.error && <p role="alert">Не удалось обновить статус: {fakeQueue.error}</p>}
           {[true,false].map(activeOnly => {
           const entries = networkOperationHistory(data.operations, fakeQueue.items).filter(entry => activeStatuses.has(entry.item.status) === activeOnly);
