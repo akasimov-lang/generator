@@ -12,6 +12,7 @@ import { useFakeMainQueue } from "./useFakeMainQueue";
 import { fakeQueueActive, normalizedFakePath } from "./fakeMainQueue";
 import { TemplateCombobox } from "./TemplateCombobox";
 import { readNetworkWithRetry } from "./networkReadRetry";
+import { parseNetworkDomainInput, formatNetworkDomainInput } from "./networkDomainInput";
 import { LastReglueSummary, type LastReglue, type RecentNetworkChange } from "./LastReglueSummary";
 import { matchesProjectSearch, normalizeDomainQuery } from "./projectSearch";
 import { Trash2, X, Search, Check, ExternalLink } from "lucide-react";
@@ -294,7 +295,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
     return () => { alive = false; window.clearInterval(timer); };
   }, [indexingPending, site.id, api]);
 
-  const subdomains = [...new Set(subdomainsInput.toLowerCase().split(/[\s,;]+/).map((value) => value.trim().replace(/\.$/, "")).filter(Boolean))];
+  const subdomains = parseNetworkDomainInput(subdomainsInput);
   const subdomainErrors = subdomains.flatMap((domain) => {
     if (!domain.includes(".") || domain.length > 253 || !domain.split(".").every((label) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) return [domain + ": некорректное имя"];
     if (data?.domains.includes(domain)) return [domain + ": уже есть в сетке"];
@@ -574,8 +575,17 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
 
           {networkView === "main" && <div className="networkDomainManagement"><div className="networkSection networkSubdomains">
             <h3>Добавление в сетку</h3>
-            <p>Укажите домены и поддомены через запятую, пробел или новую строку.</p>
-            <label className="networkSubdomainsField">Домены и поддомены<textarea aria-label="Домены и поддомены" rows={2} value={subdomainsInput} disabled={disabled} placeholder="example.com, test.example.com" onChange={(event) => setSubdomainsInput(event.target.value)} /></label>
+            <p>Вставьте домены или ссылки через запятую, пробел или новую строку. Протокол и крайние слеши удалятся, каждый домен будет на отдельной строке.</p>
+            <label className="networkSubdomainsField">Домены и поддомены<textarea aria-label="Домены и поддомены" rows={2} value={subdomainsInput} disabled={disabled} placeholder={"example.com\ntest.example.com"}
+              onChange={(event) => setSubdomainsInput(event.target.value)}
+              onBlur={() => setSubdomainsInput(current => formatNetworkDomainInput(current))}
+              onPaste={(event) => {
+                const pasted = event.clipboardData.getData("text/plain");
+                if (!pasted) return;
+                event.preventDefault();
+                const field = event.currentTarget;
+                setSubdomainsInput(formatNetworkDomainInput(field.value.slice(0, field.selectionStart) + pasted + field.value.slice(field.selectionEnd)));
+              }} /></label>
             {subdomains.length > 0 && <><p>Будет создано: {subdomains.length}</p><ul>{subdomains.map((domain) => <li key={domain}>{domain}</li>)}</ul></>}
             {!!subdomainErrors.length && <div className="notice" role="alert">{subdomainErrors.map((text) => <p key={text}>{text}</p>)}</div>}
             {subdomains.length > 100 && <p role="alert">За один запуск можно создать до 100 доменов.</p>}
