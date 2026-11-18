@@ -9450,6 +9450,12 @@ button.projectMetricCard { cursor: pointer; color: inherit; font: inherit; }
 button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
 /* Content-sized grid leaves room for future network columns. */
 .networkTableWrap { max-width: 100%; min-width: 0; overflow-x: auto; }
+.networkDomainTable { min-width: 0; max-width: 100%; }
+.networkTableTools { display: flex; align-items: center; gap: 12px; }
+.networkDomainTotal { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.networkTableWrapLimited { overflow-y: auto; overscroll-behavior-y: contain; }
+.networkTableWrapLimited thead { position: sticky; top: 0; z-index: 1; }
+.networkDomainNumber { display: inline-block; min-width: 3ch; margin-right: 8px; color: var(--muted); font-size: 10px; font-weight: 400; font-variant-numeric: tabular-nums; text-align: right; }
 .networkTable { display: table; width: max-content; min-width: 0; border-collapse: collapse; border: 1px solid var(--border); font-size: 13px; }
 .networkTable thead { display: table-header-group; }
 .networkTable tbody { display: table-row-group; }
@@ -10310,8 +10316,8 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .autoReglueContentResults > div { display:flex; gap:12px; align-items:center; flex-wrap:wrap; padding:10px 12px; border:1px solid var(--border,#d8e1ef); border-radius:10px; }
 .autoReglueContentResults > div > a { margin-left:auto; }
 @media(max-width:700px) { .autoReglueActionBar > button { flex:1 1 45%; justify-content:flex-start; } .autoReglueActionBar > small { width:100%; margin:2px 0 0; } }
-.networkTableWrap > .networkHistoryToggle { display:flex; width:max-content; align-items:center; gap:5px; white-space:nowrap; margin:0; padding:4px 7px; font-size:11px; font-weight:500; line-height:1.2; color:var(--muted); background:var(--surface-2); border:1px solid var(--border); border-bottom:0; border-radius:6px 6px 0 0; cursor:pointer; }
-.networkTableWrap > .networkHistoryToggle input { display:inline-block; flex:0 0 12px; width:12px; min-width:12px; max-width:12px; height:12px; min-height:12px; max-height:12px; padding:0; margin:0; box-shadow:none; border-radius:2px; accent-color:#16a05a; }
+.networkTableTools > .networkHistoryToggle { display:flex; width:max-content; align-items:center; gap:5px; white-space:nowrap; margin:0; padding:4px 7px; font-size:11px; font-weight:500; line-height:1.2; color:var(--muted); background:var(--surface-2); border:1px solid var(--border); border-bottom:0; border-radius:6px 6px 0 0; cursor:pointer; }
+.networkTableTools > .networkHistoryToggle input { display:inline-block; flex:0 0 12px; width:12px; min-width:12px; max-width:12px; height:12px; min-height:12px; max-height:12px; padding:0; margin:0; box-shadow:none; border-radius:2px; accent-color:#16a05a; }
 .networkDomainListTools { justify-content:flex-end; }
 
 .networkDomainSearch .networkSelectDomains { flex:0 0 auto; width:auto; height:24px; padding:2px 7px; border:1px solid var(--border); border-radius:5px; background:var(--surface); color:var(--muted); font-size:11px; font-weight:500; line-height:1.2; white-space:nowrap; }
