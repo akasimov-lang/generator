@@ -33,3 +33,23 @@ test('an already confirmed browser value becomes clean on reload',()=>{
  const old={markup:'saved',enabled:true,originalMarkup:'before',originalEnabled:false};
  assert.deepEqual(mergeMarkupDraft(old,'saved',true),{markup:'saved',enabled:true,originalMarkup:'saved',originalEnabled:true});
 });
+
+test('acknowledgement imports automatic changes to untouched fields without a new dirty draft',()=>{
+ const sent={standard:'manual root',originalStandard:'old root',fake:'old path',originalFake:'old path'};
+ assert.deepEqual(mergeCanonicalDraft(sent,'manual root','new automatic path',sent),{
+  standard:'manual root',originalStandard:'manual root',fake:'new automatic path',originalFake:'new automatic path'});
+});
+test('a confirmed switch change does not restore an old automatic alternate path',()=>{
+ const sent={markup:'old path',originalMarkup:'old path',enabled:false,originalEnabled:true};
+ assert.deepEqual(mergeMarkupDraft(sent,'new path',false,sent),{
+  markup:'new path',originalMarkup:'new path',enabled:false,originalEnabled:false});
+});
+test('an edit reverted during save remains a deliberate local change',()=>{
+ const sent={markup:'first edit',originalMarkup:'old path',enabled:true,originalEnabled:true};
+ const current={...sent,markup:'old path'};
+ assert.deepEqual(mergeMarkupDraft(current,'first edit',true,sent),{...current,originalMarkup:'first edit'});
+});
+test('a clean alternate follows a later automatic fake path change',()=>{
+ const saved={markup:'manual path',originalMarkup:'manual path',enabled:true,originalEnabled:true};
+ assert.deepEqual(mergeMarkupDraft(saved,'automatic path',true),{...saved,markup:'automatic path',originalMarkup:'automatic path'});
+});

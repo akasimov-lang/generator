@@ -30,7 +30,7 @@ def test_cache_cards_include_text_and_exclude_gallery_and_unused_groups():
     before = deepcopy(project)
     result = editor.view(project, 'cache')
     assert [row['brand'] for row in result['rows']] == ['Smash', 'Spinskull']
-    assert [f['key'] for f in result['rows'][0]['fields']] == ['brand', 'bonus', 'conditions']
+    assert [f['key'] for f in result['rows'][0]['fields']] == ['brand', 'bonus', 'conditions', 'wager']
     assert result['rows'][0]['fields'][2]['value'] == 'First\nSecond'
     assert project == before
 
@@ -237,3 +237,57 @@ def test_invalid_logo_never_contacts_remote(api_setup):
     payload['logo'] = {'name': 'bad.svg', 'data': base64.b64encode(b'<svg><script>alert(1)</script></svg>').decode()}
     assert client.put(path, json=payload).status_code == 422
     assert not state['requests'] and not state.get('uploads')
+
+
+def test_missing_wager_is_available_for_every_native_brand_without_mutating_source():
+    project = showcase_project()
+    before = deepcopy(project)
+    cards = editor.rows(project)
+    assert len(cards) == 2
+    assert all(next(f for f in card['fields'] if f['key'] == 'wager')['value'] == '' for card in cards)
+    assert project == before
+
+
+def test_empty_missing_wager_does_not_change_the_showcase():
+    project = showcase_project()
+    card = editor.rows(project)[0]
+    changes = {f['id']: f['value'] for f in card['fields']}
+    assert editor.edited_casinos(project, card['id'], changes) == project['data']['casinos']
+
+
+def test_add_wager_preserves_offer_other_brands_and_tracking():
+    project = showcase_project()
+    before = deepcopy(project)
+    card = editor.rows(project)[0]
+    changed = editor.edited_casinos(project, card['id'], {'new:wager': '35x bonus'})
+    assert changed['standard'][0][-1] == {'key': 'wager', 'type': 'text', 'value': '35x bonus'}
+    assert changed['standard'][0][:-1] == before['data']['casinos']['standard'][0]
+    assert changed['standard'][1:] == before['data']['casinos']['standard'][1:]
+    assert changed['basic'] == before['data']['casinos']['basic']
+    assert project == before
+
+
+def test_dictionary_card_can_add_and_clear_wager():
+    project = {'data': {'casinos': [{'brand': 'Smash', 'bonus': 'Original', 'split': 'keep'}]}}
+    row = editor.rows(project)[0]
+    changed = editor.edited_casinos(project, row['id'], {'wager': '40x'})
+    assert changed == [{'brand': 'Smash', 'bonus': 'Original', 'split': 'keep', 'wager': '40x'}]
+    project['data']['casinos'] = changed
+    assert editor.edited_casinos(project, row['id'], {'wager': ''})[0]['wager'] == ''
+
+
+def test_new_wager_save_readback_and_later_edit_do_not_duplicate_field(api_setup):
+    client, db, site, state = api_setup
+    path, payload = edit_request(client, site)
+    payload['fields'] = {'new:wager': '35x'}
+    response = client.put(path, json=payload).json()
+    assert response['status'] == 'confirmed'
+    row = response['showcase']['rows'][0]
+    wager = next(f for f in row['fields'] if f['key'] == 'wager')
+    assert wager['value'] == '35x' and wager['id'] != 'new:wager'
+    assert client.put(path, json=payload).json()['status'] == 'confirmed'
+    assert len(state['requests']) == 1
+    payload.update(request_id=str(uuid4()), revision=response['showcase']['revision'], fields={wager['id']: '40x'})
+    saved = client.put(path, json=payload).json()
+    assert saved['status'] == 'confirmed'
+    assert [f['value'] for f in saved['showcase']['rows'][0]['fields'] if f['key'] == 'wager'] == ['40x']

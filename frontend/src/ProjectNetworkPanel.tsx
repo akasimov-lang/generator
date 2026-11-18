@@ -1,7 +1,7 @@
 import { SaveIndicator, QueueSaveIndicator } from "./SaveIndicator";
 import { fakeSaveFeedback } from "./fakeSaveFeedback";
 import { saveMarkupWithRetry } from "./networkMarkupSave";
-import { mergeMarkupDraft, mergeCanonicalDraft } from "./networkDrafts";
+import { mergeMarkupDraft, mergeCanonicalDraft, type CanonicalDraft } from "./networkDrafts";
 import { useNetworkEditQueue } from "./useNetworkEditQueue";
 import { NetworkEditStatus } from "./NetworkEditStatus";
 import { type NetworkEditAction } from "./networkEditQueue";
@@ -60,7 +60,6 @@ type Props = {
 type MarkupSection = "canonical" | "alternates" | "dynamic";
 const markupSignatures = (next: Network) => ({ canonical: JSON.stringify([next.canonicalDefaultMarkup ?? "", next.canonicalFakeMainMarkup ?? "", next.enableCanonical ?? null]), alternates: JSON.stringify([next.alternateMarkup, next.enableAlternates]), dynamic: JSON.stringify([!!next.fake_main_enabled, next.fake_main_paths || [], next.fake_main_current || ""]) });
 type Draft = { markup: string; enabled: boolean; originalMarkup: string; originalEnabled: boolean };
-const sameMarkup = (a: string, b: string) => a.trim().replace(/>\s+</g, "><") === b.trim().replace(/>\s+</g, "><");
 const actionLabels = { structured_data: "Микроразметка", domain_redirects_main: "Все доменные редиректы на текущий Main", page_redirect: "Постраничные редиректы", reglue_redirects: "Цели редиректов после переклея", domain_redirect: "Доменные редиректы", create_domains: "Добавление доменов", select_fake_main: "Настройки фейковых страниц", indexing: "Индексация проекта", create_fake_main: "Создание фейковой главной", delete_domain: "Удаление домена", create_subdomains: "Создание поддоменов", reserve: "Сохранение резерва", reglue: "Ручной переклей", alternates: "Альтернейты" };
 const statusLabels: Record<string, string> = { index_queued: "В очереди", index_submitting: "Отправляется", index_submitted: "Задача создана", index_unknown: "Отправка не подтверждена", confirmed: "Подтверждено", pending: "Ожидает подтверждения", unknown: "Результат пока неизвестен", failed: "Ошибка" };
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Не удалось выполнить запрос";
@@ -130,7 +129,8 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
   const [savedMarkup, setSavedMarkup] = React.useState<Partial<Record<MarkupSection, string>>>({});
   const [markupErrors, setMarkupErrors] = React.useState<Partial<Record<MarkupSection, string>>>({});
   const [pendingMarkupSections, setPendingMarkupSections] = React.useState<MarkupSection[]>([]);
-  const pendingMarkupSave = React.useRef<{ id: string; sections: MarkupSection[] } | null>(null);
+  const pendingAutosave = React.useRef(false);
+  const pendingMarkupSave = React.useRef<{ id: string; sections: MarkupSection[]; draft?: Draft; canonical?: CanonicalDraft } | null>(null);
   const [fakeMainInput, setFakeMainInput] = React.useState("");
   const [subdomainsInput, setSubdomainsInput] = React.useState("");
   const [removeDomainInput, setRemoveDomainInput] = React.useState("");
@@ -192,13 +192,14 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
       pendingMarkupSave.current = null;
       setPendingMarkupSections([]);
     }
-    setCanonicalDraft(old => mergeCanonicalDraft(old, next.canonicalDefaultMarkup ?? "", next.canonicalFakeMainMarkup ?? ""));
+    const acknowledged = operation?.status === "confirmed" ? receipt : null;
+    setCanonicalDraft(old => mergeCanonicalDraft(old, next.canonicalDefaultMarkup ?? "", next.canonicalFakeMainMarkup ?? "", acknowledged?.canonical));
     setReserve((old) => !replaceReserve && old !== previous?.reserve && old && next.domains.includes(old) && old !== next.canon ? old : (next.reserve === next.canon ? "" : next.reserve));
-    setDraft(old => mergeMarkupDraft(old, next.alternateMarkup, next.enableAlternates));
+    setDraft(old => mergeMarkupDraft(old, next.alternateMarkup, next.enableAlternates, acknowledged?.draft));
   }
   async function load(force = true, replaceReserve = false) {
     if (busyRef.current) return;
-    busyRef.current = true; setBusy("refresh"); setError("");
+    busyRef.current = true; setBusy("refresh"); setError(""); setMessage("");
     const controller = new AbortController();
     const participationReadVersion = participationVersion.current;
     loadController.current = controller;
@@ -326,7 +327,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
       ...(markupDraft.markup !== data.alternateMarkup || markupDraft.enabled !== data.enableAlternates ? ["alternates" as const] : []),
     ] : action === "create_fake_main" || action === "select_fake_main" ? ["dynamic"] : [];
     if (sections.length) {
-      pendingMarkupSave.current = { id: requestId, sections }; setPendingMarkupSections(sections);
+      pendingMarkupSave.current = { id: requestId, sections, ...(action === "alternates" ? {draft: markupDraft, canonical: canonicalDraft ?? undefined} : {}) }; setPendingMarkupSections(sections);
       setMarkupErrors(current => ({...current, ...Object.fromEntries(sections.map(section => [section, ""]))}));
     }
     try {
@@ -427,16 +428,30 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
   const deletingDomains = new Set([...submittingDeletion, ...(data?.operations || []).filter(op => op.action === "delete_domain" && ["pending", "unknown"].includes(op.status)).flatMap(op => op.domains?.length ? op.domains : op.domain ? [op.domain] : [])]);
   const disabled = Boolean(busy) || uncertain;
   const canSaveMarkup = !disabled && dirty && !!data?.has_head;
-  React.useEffect(()=>{
-    if(!canSaveMarkup)return;
-    const outside=(event:MouseEvent)=>{
-      if(!mounted.current||busyRef.current)return;
-      if(event.target instanceof Element && event.target.closest("[data-markup-editor]"))return;
+  function requestMarkupSave() {
+    if (!dirty) return;
+    pendingAutosave.current = true;
+    if (canSaveMarkup && !busyRef.current) {
+      pendingAutosave.current = false;
       void mutate("alternates");
+    }
+  }
+  React.useEffect(() => {
+    if (!dirty) { pendingAutosave.current = false; return; }
+    if (pendingAutosave.current && canSaveMarkup && !busyRef.current) {
+      pendingAutosave.current = false;
+      void mutate("alternates");
+    }
+  }, [busy, dirty, canSaveMarkup, draft, canonicalDraft]);
+  React.useEffect(() => {
+    if (!dirty) return;
+    const outside = (event: MouseEvent) => {
+      if (!mounted.current || event.target instanceof Element && event.target.closest("[data-markup-editor]")) return;
+      requestMarkupSave();
     };
-    document.addEventListener("click",outside);
-    return()=>document.removeEventListener("click",outside);
-  },[canSaveMarkup,draft,canonicalDraft,site.id]);
+    document.addEventListener("click", outside);
+    return () => document.removeEventListener("click", outside);
+  }, [dirty, canSaveMarkup, draft, canonicalDraft, site.id]);
   function saveFakeMain(rawPath: string) {
     if (!rawPath.trim() || dataRef.current?.fake_main_paths?.includes(normalizedFakePath(rawPath))) return;
     if (fakeQueue.enqueue("create", rawPath)) setFakeMainInput(current => current === rawPath ? "" : current);
@@ -449,18 +464,11 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
   function saveMarkupOnEnter(event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
     event.preventDefault();
-    if (!event.repeat && canSaveMarkup) void mutate("alternates");
+    if (!event.repeat) requestMarkupSave();
   }
   function saveMarkupOnBlur(event: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) {
-    const target=event.relatedTarget;
-    if(target instanceof Element && target.closest("[data-markup-editor]"))return;
-    if(!canSaveMarkup)return;
-    window.setTimeout(()=>{
-      const latest=dataRef.current;
-      if(!mounted.current||busyRef.current||!latest||!draft)return;
-      if(sameMarkup(draft.markup,latest.alternateMarkup)&&draft.enabled===latest.enableAlternates&&canonicalDraft&&sameMarkup(canonicalDraft.standard,latest.canonicalDefaultMarkup??"")&&sameMarkup(canonicalDraft.fake,latest.canonicalFakeMainMarkup??"")) {useSavedMarkup();return;}
-      void mutate("alternates");
-    },0);
+    if (event.relatedTarget instanceof Element && event.relatedTarget.closest("[data-markup-editor]")) return;
+    requestMarkupSave();
   }
   async function startReglue() {
     if(dirty && !await mutate("alternates"))return;
@@ -608,10 +616,10 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
               onClick={() => void mutate("alternates", undefined, draft, { enable_canonical: !data.enableCanonical })}><span aria-hidden="true" /></button>
             {markupStatus("canonical")}
           </div>
-          <label>Каноникл всех страниц<input type="text" aria-label="Каноникл всех страниц" className="networkMarkup" onKeyDown={saveMarkupOnEnter} onBlur={saveMarkupOnBlur} spellCheck={false} disabled={disabled || !data.has_head || !canonicalDraft} value={canonicalDraft?.standard ?? ""} onChange={event => canonicalDraft && setCanonicalDraft({ ...canonicalDraft, standard: event.target.value })} placeholder={data.canonicalDefaultMarkup === undefined ? "Нет сохранённых данных" : "Не задан"} /></label>
+          <label>Каноникл всех страниц<input type="text" aria-label="Каноникл всех страниц" className="networkMarkup" onKeyDown={saveMarkupOnEnter} onBlur={saveMarkupOnBlur} spellCheck={false} disabled={!data.has_head || !canonicalDraft} value={canonicalDraft?.standard ?? ""} onChange={event => { setMarkupErrors(current => ({...current, canonical: ""})); if (canonicalDraft) setCanonicalDraft({ ...canonicalDraft, standard: event.target.value }); }} placeholder={data.canonicalDefaultMarkup === undefined ? "Нет сохранённых данных" : "Не задан"} /></label>
           <label><span className="networkMarkupHeading">Каноникл главной и фейковых внутренних страниц
             {data.canon && data.fake_main_current && <a className="iconButton" href={`https://${data.canon}/${data.fake_main_current.replace(/^\/+/, "")}`} target="_blank" rel="noopener noreferrer" aria-label="Открыть текущую фейковую страницу на Main в новой вкладке" title="Открыть текущую фейковую страницу на Main в новой вкладке"><ExternalLink size={18} aria-hidden="true" /></a>}
-          </span><input type="text" aria-label="Каноникл главной и фейковых внутренних страниц" className="networkMarkup" onKeyDown={saveMarkupOnEnter} onBlur={saveMarkupOnBlur} spellCheck={false} disabled={disabled || !data.has_head || !canonicalDraft} value={canonicalDraft?.fake ?? ""} onChange={event => canonicalDraft && setCanonicalDraft({ ...canonicalDraft, fake: event.target.value })} placeholder={data.canonicalFakeMainMarkup === undefined ? "Нет сохранённых данных" : "Не задан"} /></label>
+          </span><input type="text" aria-label="Каноникл главной и фейковых внутренних страниц" className="networkMarkup" onKeyDown={saveMarkupOnEnter} onBlur={saveMarkupOnBlur} spellCheck={false} disabled={!data.has_head || !canonicalDraft} value={canonicalDraft?.fake ?? ""} onChange={event => { setMarkupErrors(current => ({...current, canonical: ""})); if (canonicalDraft) setCanonicalDraft({ ...canonicalDraft, fake: event.target.value }); }} placeholder={data.canonicalFakeMainMarkup === undefined ? "Нет сохранённых данных" : "Не задан"} /></label>
           <p className="muted">Клик вне полей или Enter — сохранить изменения в Webdev.</p>
           {dirty && <div className="networkActions"><button type="button" className="button secondary compact" disabled={!canSaveMarkup} onClick={()=>void mutate("alternates")}>Сохранить разметку</button><button type="button" className="button secondary compact" disabled={disabled} onClick={useSavedMarkup}>Использовать сохранённую разметку</button></div>}
           {data.fake_main_current && <p className="muted">Текущая фейковая внутренняя страница: {data.fake_main_current}</p>}
@@ -636,7 +644,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
               } catch (err) { setError(errorText(err)); }
             }}>Добавить Alternate</button>
           </div>
-          <label>Альтернейты<textarea aria-label="Альтернейты" className="networkMarkup" onKeyDown={saveMarkupOnEnter} onBlur={saveMarkupOnBlur} rows={8} spellCheck={false} value={draft.markup} disabled={disabled || !data.has_head} onChange={(event) => setDraft({ ...draft, markup: event.target.value })} placeholder={'<link rel="alternate" hreflang="x-default" href="https://example.com/" />'} /></label>
+          <label>Альтернейты<textarea aria-label="Альтернейты" className="networkMarkup" onKeyDown={saveMarkupOnEnter} onBlur={saveMarkupOnBlur} rows={8} spellCheck={false} value={draft.markup} disabled={!data.has_head} onChange={(event) => { setMarkupErrors(current => ({...current, alternates: ""})); setDraft({ ...draft, markup: event.target.value }); }} placeholder={'<link rel="alternate" hreflang="x-default" href="https://example.com/" />'} /></label>
           <p className="muted">Клик вне полей или Enter — сохранить. Shift+Enter — новая строка.</p>
           {!data.has_head && <p>Настройки head не получены. Редактирование недоступно.</p>}
           {conflict && <button type="button" className="button secondary" disabled={Boolean(busy)} onClick={() => { setDraft({ markup: data.alternateMarkup, enabled: data.enableAlternates, originalMarkup: data.alternateMarkup, originalEnabled: data.enableAlternates }); setCanonicalDraft({ standard: data.canonicalDefaultMarkup ?? "", fake: data.canonicalFakeMainMarkup ?? "", originalStandard: data.canonicalDefaultMarkup ?? "", originalFake: data.canonicalFakeMainMarkup ?? "" }); }}>Загрузить актуальную разметку</button>}

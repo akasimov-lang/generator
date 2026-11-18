@@ -1,4 +1,7 @@
-const lockMessage = "С сеткой уже выполняется операция";
+export function isNetworkBusy(error: unknown): error is Error & {statusCode: number} {
+  return error instanceof Error && (error as Error & {statusCode?: number}).statusCode === 409
+    && ["С сеткой уже выполняется операция", "Ожидает освобождения сетки"].some(message => error.message.includes(message));
+}
 
 function pause(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -16,7 +19,7 @@ export async function readNetworkWithRetry<T>(read: () => Promise<T>, signal: Ab
     if (signal.aborted) throw new DOMException("Aborted", "AbortError");
     try { return await read(); }
     catch (error) {
-      const temporaryLock = error instanceof Error && (error as Error & { statusCode?: number }).statusCode === 409 && error.message.includes(lockMessage);
+      const temporaryLock = isNetworkBusy(error);
       if (!temporaryLock || attempt >= 5 || signal.aborted) throw error;
       onWait();
       await wait((attempt + 1) * 2000, signal);

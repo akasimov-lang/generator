@@ -36,3 +36,17 @@ test('rebase preserves the local switch and imports unedited remote markup',()=>
  const draft={markup:'old',originalMarkup:'old',enabled:false,originalEnabled:true};
  assert.deepEqual(mergeMarkupDraft(draft,'fresh',true),{markup:'fresh',originalMarkup:'fresh',enabled:false,originalEnabled:true});
 });
+
+test('current server lock message retries then saves the exact manually edited markup',async()=>{
+ const manual='<link rel="alternate" hreflang="pl" href="https://manual.test/" />\n';
+ const draft={markup:manual,originalMarkup:'old',enabled:true,originalEnabled:true};
+ let attempts=0,notices=0;
+ const result=await saveMarkupWithRetry(async()=>{
+  if(++attempts===1)throw conflict('Ожидает освобождения сетки. Продолжение выполняется автоматически.');
+  return mergeMarkupDraft(draft,'automatic new path',false);
+ },()=>notices++,async()=>{});
+ assert.equal(attempts,2);assert.equal(notices,1);assert.equal(result.markup,manual);assert.equal(result.enabled,false);
+});
+test('exhausted lock retry reports an actionable stop instead of promising automatic continuation',async()=>{
+ await assert.rejects(saveMarkupWithRetry(async()=>{throw conflict('Ожидает освобождения сетки. Продолжение выполняется автоматически.');},()=>{},async()=>{}),/Нажмите Enter/);
+});

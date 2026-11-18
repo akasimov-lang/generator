@@ -87,6 +87,11 @@ def rows(project):
                 continue
             brand = brand_name(values.get('brand') or values.get('name'))
             if brand:
+                # Missing conditions are editable, but remain absent in Webdev
+                # until the user actually supplies a value.
+                if 'wager' not in values:
+                    fields.append({'id': 'new:wager' if isinstance(record, list) else 'wager',
+                                   'key': 'wager', 'label': LABELS['wager'], 'value': '', 'list': False})
                 result.append({'id': json.dumps([group, index], separators=(',', ':')), 'brand': brand,
                                'fields': fields, 'editable': bool(fields), 'group': group, 'logo': showcase_logos.url(project, record)})
     return result
@@ -119,9 +124,14 @@ def edited_casinos(project, row_id, changes):
         if field['key'] in {'brand', 'name'} and not brand_name(value):
             raise HTTPException(422, 'Укажите корректное название бренда.')
         if isinstance(record, list):
-            record[int(field_id)]['data' if field['list'] else 'value'] = value.splitlines() if field['list'] else value
+            if field_id == 'new:wager':
+                if value.strip():
+                    record.append({'key': 'wager', 'type': 'text', 'value': value})
+            else:
+                record[int(field_id)]['data' if field['list'] else 'value'] = value.splitlines() if field['list'] else value
         else:
-            record[field_id] = value
+            if field_id in record or value.strip():
+                record[field_id] = value
     return casinos
 
 
