@@ -4,7 +4,7 @@ import { LANGUAGE_OPTIONS } from "./languageOptions";
 import "./styles/auto-lb.css";
 
 type Kind = "anchors" | "topics";
-type Context = { unlimited_anchors?: boolean; homepage_title?: string; brand: string; geo: string; language: string; main: string; main_url: string };
+type Context = { unlimited_anchors?: boolean; homepage_title?: string; generation_anchors?: string[]; brand: string; geo: string; language: string; main: string; main_url: string };
 type Generation = { id: string; kind: Kind; status: string; context: Context; prompt: string; text: string;
   error: string | null; line_count: number; unique_count: number; created_at: string };
 type State = { context: Context | null; context_error: string | null; provider_ready: boolean;
@@ -112,12 +112,14 @@ export function AutoLbPanel({ siteId, api }: { siteId: string; api: Api }) {
         const active = rows.find(pending);
         const title = kind === "anchors" ? "Анкор-лист" : "Генерация тем";
         const count = kind === "anchors" ? state?.anchor_count ?? 100 : state?.topic_count ?? 300;
-        const changed = row && state?.context && (["brand", "geo", "language", ...(kind === "anchors" && !unlimitedAnchors ? ["main", "main_url", "homepage_title", "unlimited_anchors"] : [])] as (keyof Context)[]).some(key => row.context[key] !== state.context?.[key]);
+        const changed = row && state?.context && ((["brand", "geo", "language", ...(kind === "anchors" ? ["main", "main_url", "homepage_title", "unlimited_anchors"] : [])] as (keyof Context)[]).some(key => row.context[key] !== state.context?.[key])
+          || (kind === "anchors" && JSON.stringify(row.context.generation_anchors || []) !== JSON.stringify(state.context.generation_anchors || [])));
         return <section className="autoLbCard" key={kind} aria-label={title}>
-          <div className="autoLbCardTitle"><h3>{title}</h3><span className="autoLbCount">{kind === "anchors" && unlimitedAnchors ? "Без ограничения строк" : `${count} строк`}</span></div>
+          <div className="autoLbCardTitle"><h3>{title}</h3><span className="autoLbCount">{kind === "anchors" && unlimitedAnchors ? "Без ограничения строк" : `${kind === "topics" ? "От " : ""}${count} строк`}</span></div>
           <p className="muted autoLbDescription">{kind === "anchors"
-            ? unlimitedAnchors ? "Количество строк свободное. Для понимания тематики передаём ссылку на текущий Main и тайтл главной страницы." : `${count} строк с повторами, без образца. Бренд и язык проекта, домен и URL — текущий Main.`
-            : "Каждый запуск добавляет 300 новых тем без образца. Общий список сохраняется для бренда, ГЕО и языка проекта."}</p>
+            ? unlimitedAnchors ? "Количество строк свободное. Используем ключи-анкоры из раздела «Генерация», текущий Main и тайтл главной страницы." : `${count} строк с повторами. Используем ключи-анкоры из раздела «Генерация», бренд и язык проекта. Домен и URL — текущий Main.`
+            : "Каждый запуск запрашивает 300 новых тем. Если Gemini вернёт больше, сохраним все. Общий список сохраняется для бренда, ГЕО и языка проекта."}</p>
+          {kind === "anchors" && !!state?.context?.generation_anchors?.length && <p className="muted">Ключей-анкоров из «Генерации»: {state.context.generation_anchors.length}</p>}
           {kind === "anchors" && !unlimitedAnchors && <div className="autoLbUnique">
             <label htmlFor="auto-lb-unique-anchors">Уникальных анкоров</label>
             <input id="auto-lb-unique-anchors" type="number" min={1} max={count} step={1} inputMode="numeric"

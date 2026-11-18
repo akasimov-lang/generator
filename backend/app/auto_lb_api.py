@@ -30,7 +30,7 @@ def state(site_id: str, user: AuthUser, db: Session = Depends(get_db),
     site = get_site(db, site_id)
     error, context = None, None
     try:
-        context = auto_lb.project_context(site)
+        context = auto_lb.project_context(site, db=db)
     except ValueError as exc:
         error = str(exc)
     rows = db.scalars(select(models.AutoLbGeneration).where(models.AutoLbGeneration.site_id == site_id)
@@ -49,7 +49,7 @@ def state(site_id: str, user: AuthUser, db: Session = Depends(get_db),
 def create(site_id: str, payload: GenerateRequest, user: AuthUser, db: Session = Depends(get_db)):
     site = get_site(db, site_id, lock=True)
     try:
-        context = auto_lb.project_context(site)
+        context = auto_lb.project_context(site, db=db)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     if payload.kind == "anchors" and not context.get("unlimited_anchors"):
