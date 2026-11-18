@@ -21,6 +21,7 @@ import { DomainRedirects, domainRedirectTargets, domainRedirectTarget, type Doma
 import { PageRedirects, type PageRedirectGroup, type PageRedirectEdit } from "./PageRedirects";
 import { ProjectStructuredData } from "./ProjectStructuredData";
 import { NetworkTableViewport } from "./NetworkTableViewport";
+import { NetworkSidebar } from "./NetworkSidebar";
 import { NetworkTableSaveLog } from "./networkTableSaveLog";
 import { projectNotice, projectChanged } from "./projectNotificationEvents";
 
@@ -627,13 +628,13 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
           </table></NetworkTableViewport></div>
           {!visibleDomains.length && <p>{domainQuery.trim() ? "Домены не найдены." : networkView === "amp" ? "В кеше проекта AMP-домены не указаны." : "В основной сетке нет доменов."}</p>}
           {networkView === "main" && <><DomainRedirects key={site.id} canon={data.canon} onRetargetMain={async () => enqueueEdit("domain_redirects_main")} queue={editQueue} redirects={data.domain_redirects || []} revision={data.revision} available={!!data.has_domain_redirects} disabled={disabled} onSave={async edit => enqueueEdit("domain_redirect", edit)} /><PageRedirects key={`pages:${site.id}`} groups={data.page_redirects||[]} domains={data.domains} canon={data.canon} revision={data.revision} available={!!data.has_page_redirects} disabled={disabled} queue={editQueue} onSave={async edit => enqueueEdit("page_redirect", edit)}/></>}
-          </div><aside className="networkSidebar"><LastReglueSummary last={data?.last_reglue} recent={data?.recent_network_changes} observedAt={data?.last_reglue_at} />{mode === "network" && !!networks.length && <nav className="networkBrandNavigation" aria-label="Навигация по сеткам бренда">
+          </div><NetworkSidebar><LastReglueSummary last={data?.last_reglue} recent={data?.recent_network_changes} observedAt={data?.last_reglue_at} />{mode === "network" && !!networks.length && <nav className="networkBrandNavigation" aria-label="Навигация по сеткам бренда">
             <div className="networkBrandNavigationHeading"><strong>Сетки бренда</strong><small>{brand} · {networks.length}</small></div>
             <ul>{networks.map(peer => { const current = peer.id === site.id; return <li key={peer.id}><a href={`/project-network/${encodeURIComponent(peer.name)}/`} aria-current={current ? "page" : undefined} aria-label={`Открыть сетку ${peer.name}`} onClick={event => { if (!onSelectNetwork || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onSelectNetwork(peer.name); }}>
               <span className="networkBrandNavigationText"><span className="networkBrandNavigationName" title={peer.name}>{peer.name}</span><small><span>{peer.geoLabel}</span><span title={current ? data.canon : peer.main}>{current ? data.canon : peer.main || "Main не задан"}</span></small></span>
               <span className="networkBrandNavigationCount" title="Доменов в сетке">{current ? data.domains.length : peer.domainCount}</span>
             </a></li>; })}</ul>
-          </nav>}</aside></div>
+          </nav>}</NetworkSidebar></div>
 
           {networkView === "main" && <div className="networkDomainManagement"><div className="networkSection networkSubdomains">
             <h3>Добавление в сетку</h3>

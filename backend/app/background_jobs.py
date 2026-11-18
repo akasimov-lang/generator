@@ -33,6 +33,8 @@ def dispatch_pending(db, send, inflight_ids=None):
     from app.sitemap_row_recheck import recover as recover_sitemap_rechecks
     recover_sitemap_rechecks(db, inflight_ids)
     now = datetime.now(timezone.utc)
+    from app.gsc_fibery import recover
+    recover(db, inflight_ids, now)
     # A worker can disappear after the text is published but before its retry
     # receipt is saved. Reconcile only when the broker snapshot is available,
     # the delivery is absent, and publication happened after this attempt began.
@@ -55,7 +57,7 @@ def dispatch_pending(db, send, inflight_ids=None):
                                 'published_at': item.published_at.isoformat()}
     jobs = db.scalars(select(models.BackgroundJob).where(
         models.BackgroundJob.status == "queued",
-        or_(models.BackgroundJob.kind.not_in(['fibery_reglue', 'fake_redirect_check', 'domain_placeholder_check']),
+        or_(models.BackgroundJob.kind.not_in(['fibery_reglue', 'fake_redirect_check', 'domain_placeholder_check', 'gsc_fibery']),
             (models.BackgroundJob.payload['due_at'].as_string() <= now.isoformat()) &
             or_(models.BackgroundJob.result['next_attempt_at'].as_string().is_(None),
                 models.BackgroundJob.result['next_attempt_at'].as_string() <= now.isoformat())),
@@ -66,6 +68,10 @@ def dispatch_pending(db, send, inflight_ids=None):
                models.BackgroundJob.created_at).limit(100).with_for_update(skip_locked=True)).all()
     sent = 0
     for job in jobs:
+        if job.kind == 'gsc_fibery':
+            from app.gsc_fibery import due
+            if not due(job):
+                continue
         if job.kind == 'fibery_reglue':
             from app.fibery_reglue import due
             if not due(job):
@@ -98,6 +104,9 @@ def dispatch_pending(db, send, inflight_ids=None):
 
 def run_job(db, job_id):
     candidate = db.get(models.BackgroundJob, job_id)
+    if candidate and candidate.kind == 'gsc_fibery':
+        from app.gsc_fibery import execute
+        return execute(db, job_id)
     if candidate and candidate.kind == 'domain_placeholder_check':
         from app.domain_placeholder_check import execute
         return execute(db, job_id)

@@ -19,6 +19,7 @@ def queue_for(db, job):
     return {
         'sitemap_row_recheck': 'maintenance',
         'fibery_reglue': 'maintenance',
+        'gsc_fibery': 'maintenance',
         'fake_redirect_check': 'maintenance',
         'domain_placeholder_check': 'maintenance',
         'menu_generation': 'short_generation', 'generation_retry': 'generation',

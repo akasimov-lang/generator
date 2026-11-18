@@ -18,7 +18,7 @@ export function ProjectGscField({siteId, api}: Props) {
     <input id={id} type="text" value={state.value} maxLength={2000}
       placeholder="Введите значение" autoComplete="off" spellCheck={false}
       readOnly={!state.loaded} aria-describedby={`${id}-status`} aria-invalid={state.status === "error"}
-      title="Ручная запись. Хранится только в PagePilot, отдельно для этого проекта."
+      title="После сохранения нового значения создаётся SEO-задача в Fibery: домен — Добавлен в GSC."
       onChange={event => store.edit(event.target.value)}
       onFocus={() => { if (!state.loaded) void store.load(); }}
       onBlur={() => void store.flush()}

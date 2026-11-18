@@ -1,4 +1,4 @@
-"""Manual project-local GSC note. Never included in site sync/publication payloads."""
+"""Manual GSC note, mirrored to a Fibery receipt on change; never published to the site."""
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
@@ -38,13 +38,17 @@ def read_gsc(site_id: str, user: AuthUser, response: Response, db: Session = Dep
 def save_gsc(site_id: str, payload: GscValue, user: AuthUser, response: Response,
              db: Session = Depends(get_db)):
     # Lock the existing project so simultaneous first saves cannot create duplicate keys.
-    project(db, site_id, user, lock=True)
+    site = project(db, site_id, user, lock=True)
     key = PREFIX + site_id
     row = db.get(models.AutoReglueConfig, key)
+    previous = (row.value or {}).get('value', '') if row else ''
     if row is None:
         row = models.AutoReglueConfig(key=key)
         db.add(row)
     row.value = {'value': payload.value}
+    if payload.value.strip() and payload.value != previous:
+        from app.gsc_fibery import enqueue
+        enqueue(db, site, payload.value, user['username'])
     db.commit()
     response.headers['Cache-Control'] = 'no-store'
     return {'value': payload.value}

@@ -25,6 +25,10 @@ def test_structural_trims_keep_h1_and_paragraph_without_block_ids():
 @pytest.mark.parametrize('action',['trim_50','trim_99','meta_headings','paragraphs'])
 def test_mass_actions_are_idempotent_drafts_and_never_publish(setup,monkeypatch,action):
     client,db,site,state=setup
+    # This contract covers the full-heading path. Short-H1 rewrites have their own
+    # tests and otherwise randomly add an unsupported prompt to this fake provider.
+    from app import short_h1
+    monkeypatch.setattr(short_h1, 'allocate', lambda site_ids, seed: [])
     client.app.include_router(router)
     site.project_status='mass_actions';site.cache_geo='PL'
     provider=models.AiProvider(name='Gemini',provider_type='gemini',endpoint_url='https://ai.test',api_key='test')
