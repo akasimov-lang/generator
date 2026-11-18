@@ -2,7 +2,7 @@ import {ProjectFiberyTasks} from "./ProjectFiberyTasks";
 import {ProjectGscField} from "./ProjectGscField";
 import {useMenuDrag} from "./useMenuDrag";
 import {persistMenuMove, type MenuMove, type MenuMoveItem} from "./menuReorder";
-import {GripVertical, Save} from "lucide-react";
+import {GripVertical, Save, Gift} from "lucide-react";
 import {isProjectGscRequest} from "./projectGscState";
 import {clearPilotTasks} from "./pilotTaskCache";
 import { ProjectStateReports } from "./ProjectStateReports";
@@ -46,6 +46,7 @@ import { ProjectNotificationCenter, ProjectLogs } from "./ProjectNotifications";
 import { projectApiResult, projectNotice } from "./projectNotificationEvents";
 import { isProjectExchangeRequest } from "./projectExchange";
 import { AutoReglueGuide } from "./AutoReglueGuide";
+const BrandBonusesView = React.lazy(() => import("./BrandBonuses"));
 const PersonasView = React.lazy(() => import("./Personas"));
 const UserGuideView = React.lazy(() => import("./UserGuide"));
 import { AutoPilotPage } from "./AutoPilot";
@@ -618,7 +619,7 @@ type PublicationCampaignQueue = {
 
 type ThemeMode = "light" | "dark";
 type InputStyle = "balanced" | "classic" | "soft" | "inset" | "underline" | "emerald" | "graphite" | "rounded" | "contrast" | "glass";
-type AppView = "personas" | "weeklyReports" | "reglueJournal" | "autoPilotReport" | "autoPilot" | "autoPilotLogs" | "reglueReserves" | "pagePreview" | "contentPreview" | "pageEditor" | "templateGenerator" | "autoReglueGuide" | "autoReglue" | "published" | "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "massActionReport" | "favorites" | "guide" | "settings";
+type AppView = "brandBonuses" | "personas" | "weeklyReports" | "reglueJournal" | "autoPilotReport" | "autoPilot" | "autoPilotLogs" | "reglueReserves" | "pagePreview" | "contentPreview" | "pageEditor" | "templateGenerator" | "autoReglueGuide" | "autoReglue" | "published" | "dashboard" | "workspace" | "prompts" | "tasks" | "taskArchive" | "content" | "publications" | "providers" | "sites" | "massActionReport" | "favorites" | "guide" | "settings";
 type WorkspaceTab = "overview" | "topics" | "content" | "publication" | "menu" | "network" | "redirects" | "autoReglue" | "autoLb" | "logs";
 
 type WorkspaceAccordionContextValue = {
@@ -716,6 +717,7 @@ async function copyTextToClipboard(text: string) {
 }
 
 const MAIN_VIEW_PATHS: Record<Exclude<AppView, "workspace">, string> = {
+  brandBonuses: "/brand-bonuses",
   personas: "/personas",
   pagePreview: "/page-preview",
   contentPreview: "/content-preview",
@@ -759,6 +761,7 @@ const WORKSPACE_TAB_PATHS: Record<WorkspaceTab, string> = {
 
 function routeFromPath(pathname: string): AppRoute {
   const path = pathname.replace(/\/+$/, "") || "/";
+  if (path.startsWith("/brand-bonuses/")) return { view: "brandBonuses", workspaceTab: DEFAULT_WORKSPACE_TAB };
   if (path.startsWith("/personas/")) return { view: "personas", workspaceTab: DEFAULT_WORKSPACE_TAB };
   if (path.startsWith("/page-preview/")) return { view: "pagePreview", workspaceTab: DEFAULT_WORKSPACE_TAB };
   if (path.startsWith("/content-preview/")) return { view: "contentPreview", workspaceTab: DEFAULT_WORKSPACE_TAB };
@@ -1353,6 +1356,7 @@ function App() {
     }
     const projectName = activeView === "workspace" ? workspaceProjectNameFromPath(window.location.pathname) : null;
     if (["contentPreview", "pageEditor", "pagePreview"].includes(activeView)) return;
+    if (activeView === "brandBonuses" && window.location.pathname.startsWith("/brand-bonuses/")) return;
     if (activeView === "personas" && window.location.pathname.startsWith("/personas/")) return;
     if (activeView === "guide" && window.location.pathname.startsWith("/guide/")) return;
     const nextPath = pathForRoute(activeView, activeView === "workspace" ? workspaceTab : DEFAULT_WORKSPACE_TAB, projectName);
@@ -1481,6 +1485,7 @@ function App() {
           {isAdmin ? <NavButton href={pathForRoute("published")} icon={<CheckCircle2 />} label="Опубликовано" active={activeView === "published"} onClick={() => navigateTo("published")} /> : null}
           <NavButton href={pathForRoute("guide")} icon={<BookOpen />} label="Инструкции" active={activeView === "guide" || activeView === "autoReglueGuide"} onClick={() => navigateTo("guide")} />
           <NavButton href={pathForRoute("weeklyReports")} icon={<FileText />} label="Недельные отчёты" active={activeView === "weeklyReports"} onClick={() => navigateTo("weeklyReports")} />
+          <NavButton href={pathForRoute("brandBonuses")} icon={<Gift />} label="Бонусы брендов" active={activeView === "brandBonuses"} onClick={() => navigateTo("brandBonuses")} />
         </nav>
         {compactNavigation && <div id="mobile-account-actions" className="mobileAccountActions" hidden={!mobileMenuOpen}>{accountActions}</div>}
       </aside>
@@ -1546,6 +1551,7 @@ function App() {
         </section>}
         {activeView === "favorites" && <SitesView api={api} sites={siteSnapshot} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={mergeSites} currentUsername={currentUser.username} favoritesOnly readOnly={!isAdmin} onChanged={loadAll} />}
         {activeView === "templateGenerator" && <TemplateGenerator api={api} projects={siteSnapshot} />}
+        {activeView === "brandBonuses" && <React.Suspense fallback={<p>Загрузка бонусов…</p>}><BrandBonusesView api={api} navigationLocation={window.location.pathname + window.location.search} /></React.Suspense>}
         {activeView === "personas" && <React.Suspense fallback={<p>Загрузка базы авторов…</p>}><PersonasView api={api} canEdit={Boolean(currentUser.is_admin)} navigationLocation={window.location.pathname + window.location.search} /></React.Suspense>}
         {activeView === "guide" && <React.Suspense fallback={<p>Загрузка инструкции…</p>}><UserGuideView /></React.Suspense>}
         {activeView === "autoReglue" && <><GlobalProjectSearchResults sites={siteSnapshot} query={massSearchQuery} onOpen={openMassSearchProject} loading={!catalogLoaded&&!catalogError} error={catalogError} onRetry={() => void loadProjectCatalog().catch(() => {})}/><div style={{display:globalMassQuery?"none":undefined}}><AutoReglueView refreshToken={massRefreshToken} api={api} onNetworksChanged={loadAll} renderReport={(onScopeChange, selectionIds, onSelection, moveActions, headerContainer) => <MassActionStatistics massOnly refreshToken={massRefreshToken} catalogReady={catalogLoaded} catalogError={catalogError} onInventoryChanged={loadAll} headerContainer={headerContainer} api={api} onScopeChange={onScopeChange} renderProjects={(ids, refresh, scopeLabel) => <SitesView projectScopeLabel={scopeLabel} embedded massActions api={api} sites={siteSnapshot.filter(site => ids.includes(site.id))} snapshotUpdatedAt={sitesUpdatedAt} onSitesChanged={updates => { mergeSites(updates); refresh(); }} currentUsername={currentUser.username} readOnly={!isAdmin} onChanged={loadAll} selectionIds={selectionIds} onSelectionChange={onSelection} headerActions={moveActions} />} />} /></div></>}
@@ -11326,6 +11332,7 @@ function viewTitle(view: AppView, _workspaceTab: WorkspaceTab) {
   }
 
   const titles: Record<Exclude<AppView, "workspace">, string> = {
+    brandBonuses: "Бонусы брендов",
     personas: "Персоны",
     pagePreview: "Просмотр страницы",
     contentPreview: "Просмотр текста",

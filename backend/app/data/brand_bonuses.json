@@ -1,0 +1,5287 @@
+{
+  "updated_at": "2026-11-18T10:38:27.271472+00:00",
+  "items": [
+    {
+      "id": "20bet",
+      "name": "20Bet",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/20bet.webp",
+      "offers": [
+        {
+          "id": "2701a534c3caf255",
+          "title": "100% do 3 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "40x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pripravanaporod.cz/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://clean-air-now.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://www.centrum-anabell.cz/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://top-online-casino-czech.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://pripravanaporod.cz/uploads/img/vitrina/logo/webp/brand-213c1cc5-d7b3-5b41-b820-46dd282edbc8.webp",
+      "_logo_sha256": "df53a94566daf7ba54633aeb18f6528b09c5e64e61d0a5dc4339b24d0366b56c"
+    },
+    {
+      "id": "22bet",
+      "name": "22Bet",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/22bet.png",
+      "offers": [
+        {
+          "id": "790d0ac54a04c079",
+          "title": "До 36 000 Kč + 150 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Тип",
+              "value": "Пакет бонусов казино"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://22bets-casino.cz/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "3fb175d42ab41da6",
+          "title": "100% до 3 000 Kč на спорт",
+          "category": "Спортивный бонус",
+          "facts": [
+            {
+              "label": "Этап",
+              "value": "Первый депозит"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://22bets-casino.cz/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "backend/app/data/template_assets/22bet-logo.png",
+      "_logo_sha256": "8d2be3668a4c51793afee62458cc55c7b0992cf9b0ebf11f2d11db818d606930"
+    },
+    {
+      "id": "69games",
+      "name": "69games",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/69games.webp",
+      "offers": [
+        {
+          "id": "7cb674a27afac0e9",
+          "title": "150% до 120 000 Kč + 69 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "1 000 Kč"
+            },
+            {
+              "label": "Активация",
+              "value": "Раздел Bonusy перед первым депозитом"
+            },
+            {
+              "label": "Срок",
+              "value": "30 дней на выполнение оборота"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://the-lic.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "d3521bf3de98614e",
+          "title": "Ежедневная миссия — 30 FS по 5 Kč",
+          "category": "Фриспины",
+          "facts": [
+            {
+              "label": "Оборот",
+              "value": "От 5 000 Kč за день на выбранных слотах Apollo"
+            },
+            {
+              "label": "Промокод",
+              "value": "Не требуется"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://the-lic.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://the-lic.com/uploads/img/webp/logo-69Games.webp",
+      "_logo_sha256": "64c2d05011ab5eb70dd817cb8f65eec8187aba86e9d58ef3c90c7db1c35ad09e"
+    },
+    {
+      "id": "admiral-casino",
+      "name": "Admiral Casino",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/admiral-casino.webp",
+      "offers": [
+        {
+          "id": "0cf86620d05d10ae",
+          "title": "250 Kč zdarma",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://top-online-casino-czech.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://top-online-casino-czech.com/uploads/img/vitrina/logo/webp/brand-4d845c95-629e-45fa-8aa6-793cbbed405e.webp",
+      "_logo_sha256": "364b0a10778bcc8ac75c1e6c6cfe6e460cb3b530dc68e4a4cb03ebb910f181b0"
+    },
+    {
+      "id": "alawin",
+      "name": "Alawin",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/alawin.webp",
+      "offers": [
+        {
+          "id": "4beca7a3f3eaad69",
+          "title": "Aktuální nabídka na webu casina",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://www.centrum-anabell.cz/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://www.centrum-anabell.cz/uploads/img/vitrina/logo/webp/brand-8e641a99-53e4-5185-87b7-da314a2d0407.webp",
+      "_logo_sha256": "ebfd57db7e1a6f5191be350913de997a4b8b25d45669dc07dbd8ed4dfd91e9be"
+    },
+    {
+      "id": "apollo-games",
+      "name": "Apollo Games",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/apollo-games.webp",
+      "offers": [
+        {
+          "id": "314a658817d2b8e6",
+          "title": "100 free spinů za registraci",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "Dokončené plné konto"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://stanleyvillage.info/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "29fe9e22914da82a",
+          "title": "100% do 5 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://chesserroewholesale.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "4d7547048d2de07b",
+          "title": "100% do 5 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://top-online-casino-czech.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "3f2f96134d8978e3",
+          "title": "5 000 Kč + 100 FS",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://onlinecasino-ceska.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://chesserroewholesale.com/uploads/img/vitrina/logo/webp/brand-562e2462-42a7-52e2-b2f3-6648526221f1.webp",
+      "_logo_sha256": "f49eb8eee2abe5ceea1c8c1b87190969808a42b4c00901d9deabd2c15f991fdf"
+    },
+    {
+      "id": "betano",
+      "name": "Betano",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/betano.webp",
+      "offers": [
+        {
+          "id": "bba79f7cc6981f1b",
+          "title": "100% do 3 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "25x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pripravanaporod.cz/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://clean-air-now.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://www.centrum-anabell.cz/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "55e54f9b1705c715",
+          "title": "100% do 3 000 Kč + 350 Free Spinů za registraci",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://stanleyvillage.info/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "2145fd4becddbf35",
+          "title": "100% do 50 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://top-online-casino-czech.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "cb66941a00d0eeeb",
+          "title": "100% do 6 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://chesserroewholesale.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "d575e4dcd72c8f48",
+          "title": "600 FREE SPINŮ",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://wiki-fame.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "33fac3e1a67dfa8b",
+          "title": "až 600 Kč + 500 Kč za ověření účtu",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://onlinecasino-ceska.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "2b5108263b1184a1",
+          "title": "Bonus 700 free spinů + 300 Kč",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://daytonhydroponics.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "9e83fb7f9cc78d6f",
+          "title": "Bonus za registraci bez vkladu: 500 Kč (400 free spinů v hodnotě 1 Kč na Multiplier 81 + 100 Kč „sázka zdarma“).Vstupní vkladový bonus: 100% do 50 000 Kč.Bonus za instalaci aplikace: 50 free spinů za stažení mobilní aplikace iOS/Android během promo akcí.Denní bonusy: Kolo štěstí s garantovanou výhrou až 50 free spinů nebo 100 Kč sázky zdarma denně.Věrnostní cashback: Až 10 % z čistých proher na vybraných technických hrách.",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://clean-air-now.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://chesserroewholesale.com/uploads/img/vitrina/logo/webp/brand-3ff97021-4324-5771-81c9-281013fcc48b.webp",
+      "_logo_sha256": "88cf8d7d781ac9e42328708bf5e26b0a648af69973eddcedb9add384f31e2610"
+    },
+    {
+      "id": "betonred",
+      "name": "BetOnRed",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/betonred.webp",
+      "offers": [
+        {
+          "id": "22452da5fc719732",
+          "title": "До 6 000 Kč + 250 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Для кого",
+              "value": "Новые игроки; пакет на первые депозиты"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://betonred-czech.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://betonred-czech.com/uploads/img/webp/logo.webp",
+      "_logo_sha256": "70c65711d8fa95d972260327a67e769e020b832f6cb21567f63618f06ff7cc51"
+    },
+    {
+      "id": "betrepublic",
+      "name": "BetRepublic",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/betrepublic.png",
+      "offers": [
+        {
+          "id": "4beca7a3f3eaad69",
+          "title": "Aktuální nabídka na webu casina",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://www.centrum-anabell.cz/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://www.google.com/s2/favicons?domain=betrepublic.com&sz=128",
+      "_logo_sha256": "c8909fc2f5ce450ff331bc743dfa4bee188cf5cdf59b226c555515fa8f87c89e"
+    },
+    {
+      "id": "betx-casino",
+      "name": "BetX Casino",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/betx-casino.webp",
+      "offers": [
+        {
+          "id": "3e8145c277ff8d80",
+          "title": "Až 250 free spinů podle výše vkladu",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://thestetsonexperience.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "19f276902b850228",
+          "title": "Až 50 000 Kč (podle výše sázek)",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://clean-air-now.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "ae0784c89b817027",
+          "title": "Až 50 000 Kč (podle výše sázek)",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://top-online-casino-czech.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://thestetsonexperience.com/uploads/img/vitrina/logo/webp/betx.webp",
+      "_logo_sha256": "592382cfeb1020e2a4ad315153c247e808f93a613a4101eab863a7c2fb5a6587"
+    },
+    {
+      "id": "casea",
+      "name": "Casea",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/casea.webp",
+      "offers": [
+        {
+          "id": "4beca7a3f3eaad69",
+          "title": "Aktuální nabídka na webu casina",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://www.centrum-anabell.cz/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://www.centrum-anabell.cz/uploads/img/vitrina/logo/webp/brand-08530db3-5742-544f-a6a0-6ae9b438f6d2.webp",
+      "_logo_sha256": "0b77660e01d24e6ddbaa697d9e2e438e9ed17cfcfc76f711d86e465ff5f69ff9"
+    },
+    {
+      "id": "chance",
+      "name": "Chance",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/chance.webp",
+      "offers": [
+        {
+          "id": "52db5c5c54a8febd",
+          "title": "100% do 25 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://chesserroewholesale.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "d0ec6819d0321b39",
+          "title": "100% do 50 000 Kč + 200 Kč bonus za registraci",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://stanleyvillage.info/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "3d4cbb575b16967f",
+          "title": "100% do 50 000 Kč + 200 Kč bonus za registraci",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://top-online-casino-czech.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "6e7abed8b6cbaf6c",
+          "title": "až 25 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://onlinecasino-ceska.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "65362aeb1b21a206",
+          "title": "Bonus 200 Kč zdarma",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://daytonhydroponics.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://chesserroewholesale.com/uploads/img/vitrina/logo/webp/brand-a8f8ac66-15c5-538c-8511-0b17f4d4804a.webp",
+      "_logo_sha256": "100617bd74aaa8a28a037654e3a5e70013c83de57d2c73fdd19d6196e93e90b1"
+    },
+    {
+      "id": "ecasino",
+      "name": "Ecasino",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/ecasino.webp",
+      "offers": [
+        {
+          "id": "99bd257b3acf9b63",
+          "title": "100% bonus k prvnímu vkladu do 5 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://thestetsonexperience.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "bce2db4130bc40f6",
+          "title": "100% bonus k prvnímu vkladu do 5 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://top-online-casino-czech.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://thestetsonexperience.com/uploads/img/vitrina/logo/webp/ecasino.webp",
+      "_logo_sha256": "3ade6750141d0e215e957d0d4d0b2e03926471aa8922f8da5840975ded61d1c6"
+    },
+    {
+      "id": "fbet-casino",
+      "name": "fBET Casino",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/fbet-casino.webp",
+      "offers": [
+        {
+          "id": "30895a65b75d20a7",
+          "title": "100% do 5 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://clean-air-now.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "aa39805c12687ff1",
+          "title": "100% do 5 000 Kč k prvnímu vkladu",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://thestetsonexperience.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "439accef8308a977",
+          "title": "100% do 5 000 Kč k prvnímu vkladu",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://top-online-casino-czech.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://thestetsonexperience.com/uploads/img/vitrina/logo/webp/Efbet.webp",
+      "_logo_sha256": "ccfd1e038b8166cf29f26eb6a51daa0acfa8772c464a7bef3e4956307c8948c3"
+    },
+    {
+      "id": "forbes-casino",
+      "name": "Forbes Casino",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/forbes-casino.webp",
+      "offers": [
+        {
+          "id": "46606dff5b99a3fa",
+          "title": "150–250% на первый депозит, до 125 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "1 000 Kč"
+            },
+            {
+              "label": "Уровни",
+              "value": "1 000 → 1 500 Kč; 5 000 → 8 250 Kč; 10 000 → 18 000 Kč; 15 000 → 30 000 Kč; 25 000 → 56 250 Kč; 50 000 → 125 000 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35× бонуса"
+            },
+            {
+              "label": "Срок",
+              "value": "14 дней после полной активации"
+            },
+            {
+              "label": "Условия",
+              "value": "Подтверждённый аккаунт. Активировать до первого депозита. Не совмещается с другим депозитным бонусом. После выполнения условий начисляются баллы лояльности с обменом на деньги."
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "verified",
+          "_sources": [
+            {
+              "url": "https://akce.forbescasino.cz/200-na-prvni-vklad-penez/",
+              "kind": "official",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "94eaba9bb1e63821",
+          "title": "200% do 20 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://chesserroewholesale.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "f860d129809c4402",
+          "title": "50 free spinů po dokončení registrace",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "Bez vkladu pro tuto akci"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://stanleyvillage.info/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "a263167da9de2633",
+          "title": "50 Kč za registraci + až 125 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://onlinecasino-ceska.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "daf588af15129ef5",
+          "title": "50 Kč za registraci + až 125 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://top-online-casino-czech.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "7d7b9d5cd07ddb0d",
+          "title": "Až 250 % do 125 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "1 000 Kč pro první úroveň"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35× bonus"
+            },
+            {
+              "label": "Срок",
+              "value": "14 dnů od aktivace"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pripravanaporod.cz/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://chesserroewholesale.com/uploads/img/vitrina/logo/webp/brand-9e6f8206-57d0-5370-be00-33546fcd836f.webp",
+      "_logo_sha256": "3a6c78775d5c96d7b2f88b1b37cf65ae0a43ddd861cd5ee560619cfae37f56a2"
+    },
+    {
+      "id": "fortuna",
+      "name": "Fortuna",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/fortuna.webp",
+      "offers": [
+        {
+          "id": "f10351ea7abdc3d9",
+          "title": "100% do 50 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://chesserroewholesale.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "2145fd4becddbf35",
+          "title": "100% do 50 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://top-online-casino-czech.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "80f4c210124c06e3",
+          "title": "3×10 € + 100 FS",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://onlinecasino-ceska.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "749d49890514df1c",
+          "title": "500 free spinů bez rizika za ověření účtu",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://stanleyvillage.info/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "ea4934b0ecef4121",
+          "title": "Bonus 1 000 Kč ve FreeBetech + 500 FS",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://daytonhydroponics.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://chesserroewholesale.com/uploads/img/vitrina/logo/webp/brand-062ea168-9f7f-5462-97ac-11e8ba4e0255.webp",
+      "_logo_sha256": "3d71f3eab83bbe8f7da047b6cb55c40c737953d032ca169101a1c4e16371d052"
+    },
+    {
+      "id": "glorion",
+      "name": "Glorion",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/glorion.png",
+      "offers": [
+        {
+          "id": "4beca7a3f3eaad69",
+          "title": "Aktuální nabídka na webu casina",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://www.centrum-anabell.cz/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "backend/app/data/template_assets/showcase/glorion.png",
+      "_logo_sha256": "37330fb05f65111f9eacb33c7fd73e04ca6aaafbb5de43c162f28c4f379fc0a0"
+    },
+    {
+      "id": "grandwin",
+      "name": "Grandwin",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/grandwin.webp",
+      "offers": [
+        {
+          "id": "befe62a32d88cfda",
+          "title": "100% do 15 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://chesserroewholesale.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "d8c8a889c47294c3",
+          "title": "až 100 000 Kč + 150 FS",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://onlinecasino-ceska.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "351ceaed6fb91720",
+          "title": "až 100 000 Kč + 150 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://top-online-casino-czech.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://chesserroewholesale.com/uploads/img/vitrina/logo/webp/brand-f227befe-5c27-5245-91eb-f62f14151ac4.webp",
+      "_logo_sha256": "978c4830668dc80a3512d358e3e81e729c06db86804edfaf365cfd1af972b982"
+    },
+    {
+      "id": "gransino",
+      "name": "Gransino",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/gransino.webp",
+      "offers": [
+        {
+          "id": "4beca7a3f3eaad69",
+          "title": "Aktuální nabídka na webu casina",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://www.centrum-anabell.cz/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://www.centrum-anabell.cz/uploads/img/vitrina/logo/webp/brand-e66bb964-f9d9-53dd-84d8-b21b364f5fa3.webp",
+      "_logo_sha256": "10c307403d91b55f0fb558cfdb1856ecba5cbaf90c18778ba59a98208d08c66d"
+    },
+    {
+      "id": "kingsbet",
+      "name": "Kingsbet",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/kingsbet.webp",
+      "offers": [
+        {
+          "id": "8bde8fd559884604",
+          "title": "100% до 500 Kč + 10 мегаспинов по 20 Kč",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč в течение 30 дней"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "2× первого депозита; live casino и рулетка учитываются на 10%"
+            },
+            {
+              "label": "Фриспины",
+              "value": "Respin Joker 81; принять за 3 дня, использовать за 7 дней"
+            },
+            {
+              "label": "Для кого",
+              "value": "Полная регистрация, верификация и лимиты; другой вступительный бонус ранее не получен"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "verified",
+          "_sources": [
+            {
+              "url": "https://www.kingsbet.cz/promo-bonusy/casino-vstupni-bonus",
+              "kind": "official",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "07c347db0443ac52",
+          "title": "100% до 555 Kč + 55 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč в течение 30 дней"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "Сумма депозита за 7 дней"
+            },
+            {
+              "label": "Игра",
+              "value": "100 Hot Wild"
+            },
+            {
+              "label": "Активация",
+              "value": "Выбрать Casino bonus 555 Kč при депозите"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "verified",
+          "_sources": [
+            {
+              "url": "https://www.kingsbet.cz/promo-bonusy/casino-vstupni-bonus",
+              "kind": "official",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "7a69e7f8eb6bad1c",
+          "title": "100 % do 50 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35× bonus"
+            },
+            {
+              "label": "Срок",
+              "value": "14 dnů od vkladu a přijetí"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pripravanaporod.cz/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "4b9fb8ce62f32111",
+          "title": "100% do 5 000 Kč na automaty",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://top-online-casino-czech.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "f036ee13a4654678",
+          "title": "500 Kč ve free chipech do live casina",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "500 Kč pro tuto akci"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://stanleyvillage.info/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "1d4faef23dbf8f5d",
+          "title": "500 Kč ve free spinech za verifikaci",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://thestetsonexperience.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "4951d8dde390d891",
+          "title": "500 Kč za registraci (ve formě free spinů)",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://clean-air-now.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "ff7a202d8511f035",
+          "title": "555 FREE SPINŮ",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://wiki-fame.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "f9e92fc696c32e09",
+          "title": "Uvítací bonus: 111 free spinů v celkové hodnotě 555 Kč (za registraci, vklad a protočení 500 Kč).Vysoký vkladový bonus: 100% do 5 000 Kč na automaty.Live casino bonus: 500 Kč na živé hry s krupiérem (ruleta, blackjack).Věrnostní cashback: Týdenní vrácení až 20 % z čistých proher na základě dosažené VIP úrovně.",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://clean-air-now.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "128bbd38db200f3d",
+          "title": "Vstupní balíčky na míru, free spiny a bonusy bez rizika",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://daytonhydroponics.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://thestetsonexperience.com/uploads/img/vitrina/logo/webp/kingsbet.webp",
+      "_logo_sha256": "e95314c5417a52a7f727d34205b34f8825835ca8096eef8defc7cef30cc791a3"
+    },
+    {
+      "id": "magic-planet",
+      "name": "Magic Planet",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/magic-planet.webp",
+      "offers": [
+        {
+          "id": "4e83e596bcf3ac8b",
+          "title": "100% do 12 000 Kč (rozděleno do 3 po sobě jdoucích vkladů)",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://top-online-casino-czech.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "0f4010b25d7764b0",
+          "title": "500 Kč + 100 Kč ve spinech",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://onlinecasino-ceska.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "1cbe2e7856992799",
+          "title": "500 Kč + free spiny za 100 Kč",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "5× hodnota vkladového bonusu"
+            },
+            {
+              "label": "Срок",
+              "value": "14 dnů pro vkladový bonus"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pripravanaporod.cz/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "316df1844ba966a2",
+          "title": "Bonus za ověření účtu: 20 free spinů v celkové hodnotě 100 Kč (každé otočení má vysokou fixní hodnotu 5 Kč).Vstupní vkladový bonus: 100% do 12 000 Kč (rozděleno do 3 po sobě jdoucích vkladů).Týdenní reload bonus: 50% do 2 000 Kč každé čtvrteční odpoledne.Narozeninový bonus: 200 Kč pro stálé a aktivní hráče.",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://clean-air-now.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://onlinecasino-ceska.com/uploads/img/vitrina/logo/webp/brand-36cad118-24f7-5df3-a45e-bb44e2161f3e.webp",
+      "_logo_sha256": "a00e46eb87a55e5c851a23de1c6715cf5bbee8437fc41084ff5761993c5cf7b2"
+    },
+    {
+      "id": "maxa-casino",
+      "name": "Maxa Casino",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/maxa-casino.webp",
+      "offers": [
+        {
+          "id": "c517de2742af0a0d",
+          "title": "3 000 Kč k prvnímu vkladu",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "1 Kč (převod) / 100 Kč (karta)"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://clean-air-now.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "5ff7f4e7fc5f0bce",
+          "title": "3 000 Kč k prvnímu vkladu",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "1 Kč (převod) / 100 Kč (karta)"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://top-online-casino-czech.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "d04a85a5140cfbec",
+          "title": "300 Kč zdarma za dokončení registrace",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://thestetsonexperience.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "0ce4a647f4a528bf",
+          "title": "Registrační bonus bez vkladu: 300 Kč zdarma (připsáno okamžitě jako 3 600 věrnostních „káček“ využivatelných na sázky nebo stírací losy).Vstupní vkladový bonus: 100% do 3 000 Kč.Bonus za doporučení přítele: Až 500 Kč na hráčské konto za každého nového přivedeného uživatele.Denní slosování: Možnost vyhrát podíl z banku 50 000 Kč v denních loterijních misích.",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://clean-air-now.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://thestetsonexperience.com/uploads/img/vitrina/logo/webp/Maxa%20Casino.webp",
+      "_logo_sha256": "ed31bc33e02bf0fd3222a2879abab63dbbcf7a19c8960274c7435d398373a773"
+    },
+    {
+      "id": "merkurxtip",
+      "name": "MerkurXtip",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/merkurxtip.webp",
+      "offers": [
+        {
+          "id": "9b041bf114776821",
+          "title": "100 % do 60 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "500 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "30× bonus"
+            },
+            {
+              "label": "Срок",
+              "value": "15 dnů od aktivace"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pripravanaporod.cz/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "e6e1ecbc50003a88",
+          "title": "100% do 10 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://chesserroewholesale.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "509c59f61dfe0ff9",
+          "title": "333 FREE SPINŮ",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://wiki-fame.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "14ee9f959a729011",
+          "title": "333 free spinů za registraci/vklad + bonus až 50 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://daytonhydroponics.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "9a727accdbb4be23",
+          "title": "333 free spinů za registraci/vklad + bonus až 50 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://top-online-casino-czech.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "66828777a08fd4af",
+          "title": "50 FS + 200 Kč",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://onlinecasino-ceska.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "2867d52e480fa4a2",
+          "title": "Bonus za registraci: 200 Kč zdarma bez vkladu (lze zvolit i variantu 50 free spinů po 4 Kč).Vkladový uvítací bonus: 200 free spinů (hodnota 200 Kč) za první vklad ve výši minimálně 500 Kč.Obratový vkladový bonus: 100% do 10 000 Kč s mírným wagerem 25x.Jackpotové bonusy: Možnost trefit Merkur Jackpot až do výše 500 000 Kč při sázce od 1 Kč.",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://clean-air-now.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "37fe4db770094e04",
+          "title": "Casino mise až 500 free spinů",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "500 Kč pro tuto akci"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://stanleyvillage.info/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://chesserroewholesale.com/uploads/img/vitrina/logo/webp/brand-0e91c36b-811a-529c-9449-4577858772d9.webp",
+      "_logo_sha256": "284c11076d13f2223fcd405d2afeb06a0ea4435ff1f68b134c2a73047ed209e2"
+    },
+    {
+      "id": "monacobet",
+      "name": "Monacobet",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/monacobet.webp",
+      "offers": [
+        {
+          "id": "466fc3dd56a70eee",
+          "title": "100% do 10 000 Kč + 200 free spinů",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://thestetsonexperience.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "4739aa3a35164a97",
+          "title": "100% do 10 000 Kč + 200 free spinů",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://top-online-casino-czech.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "ba9b1c87f5b7147e",
+          "title": "100% do 10 000 Kč + 200 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://clean-air-now.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://thestetsonexperience.com/uploads/img/vitrina/logo/webp/MonacoBet.webp",
+      "_logo_sha256": "37f3c035e372e71668538adb151b9c195f354c5f98fdca780dc26b42ba87fb14"
+    },
+    {
+      "id": "mostbet",
+      "name": "Mostbet",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/mostbet.webp",
+      "offers": [
+        {
+          "id": "9c7eeb0f55000389",
+          "title": "100 FS за приложение",
+          "category": "Фриспины",
+          "facts": [
+            {
+              "label": "Активация",
+              "value": "Установка и вход в аккаунт в приложении"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://sunarcana.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://pl-kasyno.online/uploads/img/vitrina/logo/webp/brand-9ab26168-2863-4e3a-b08e-eeab581ed47d.webp",
+      "_logo_sha256": "2696023845cdfcdfbf6b03daca08725af74c94f8b7bcad6843024a05021b4ff4"
+    },
+    {
+      "id": "nomini",
+      "name": "Nomini",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/nomini.webp",
+      "offers": [
+        {
+          "id": "fae7c47453d38b4b",
+          "title": "100% do 12 500 Kč",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pripravanaporod.cz/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://clean-air-now.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://www.centrum-anabell.cz/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://top-online-casino-czech.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://pripravanaporod.cz/uploads/img/vitrina/logo/webp/brand-02f6997e-a3d5-5447-bfb9-b2601f96ea9b.webp",
+      "_logo_sha256": "054e5397fe624da4351c319ba1484a89e5065605f84f713cffe2da9369d853db"
+    },
+    {
+      "id": "richroyal",
+      "name": "RichRoyal",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/richroyal.webp",
+      "offers": [
+        {
+          "id": "4beca7a3f3eaad69",
+          "title": "Aktuální nabídka na webu casina",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://www.centrum-anabell.cz/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://www.centrum-anabell.cz/uploads/img/vitrina/logo/webp/brand-23aa121f-a29d-5434-ae08-b36074290795.webp",
+      "_logo_sha256": "8e1af4b01876e5ca8433fd8db18432868f365775221a78449c3b29d4d6d9b0b2"
+    },
+    {
+      "id": "royalxo",
+      "name": "Royalxo",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/royalxo.webp",
+      "offers": [
+        {
+          "id": "4beca7a3f3eaad69",
+          "title": "Aktuální nabídka na webu casina",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://www.centrum-anabell.cz/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://www.centrum-anabell.cz/uploads/img/vitrina/logo/webp/brand-d3c68b3a-144c-518a-bcea-35e2c4a7332f.webp",
+      "_logo_sha256": "2d5eb10ba4c4ac96bd96510e694e34a3295772650ed1f9d580e7b518d58c9f3a"
+    },
+    {
+      "id": "sazka-hry",
+      "name": "Sazka Hry",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/sazka-hry.webp",
+      "offers": [
+        {
+          "id": "f10351ea7abdc3d9",
+          "title": "100% do 50 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://chesserroewholesale.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "61f47bc136ca5fb9",
+          "title": "50 300 Kč + 100 FS",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://onlinecasino-ceska.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "e3e3b21111bf8b15",
+          "title": "50 300 Kč + 100 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://top-online-casino-czech.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://chesserroewholesale.com/uploads/img/vitrina/logo/webp/brand-65b89e92-b1ae-592d-8066-092efd0a4e5d.webp",
+      "_logo_sha256": "aec11595eee6c26106ef9ce3ccc180b5f68644cd391b4939a3ca585649829653"
+    },
+    {
+      "id": "stake",
+      "name": "Stake",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/stake.webp",
+      "offers": [
+        {
+          "id": "04714dabda4e5295",
+          "title": "100% do $1 000",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pripravanaporod.cz/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://clean-air-now.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://www.centrum-anabell.cz/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://top-online-casino-czech.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://pripravanaporod.cz/uploads/img/vitrina/logo/webp/brand-2d585062-819d-50ec-90f3-9754ede6ceb0.webp",
+      "_logo_sha256": "ec68967bf4854b790dd46bdef6cfa34d5469d8ec3b736fec857dd9c5ae7ae844"
+    },
+    {
+      "id": "star-casino",
+      "name": "Star Casino",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/star-casino.webp",
+      "offers": [
+        {
+          "id": "09583289ae359044",
+          "title": "100 free spinů bez nutnosti vkladu",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://thestetsonexperience.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "271090342d4089cf",
+          "title": "100 free spinů bez nutnosti vkladu",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://top-online-casino-czech.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://thestetsonexperience.com/uploads/img/vitrina/logo/webp/Star%20Casino.webp",
+      "_logo_sha256": "0a4f8400ee15c0d657e944fc4ab478a7eccb74fbc49040f1d028ad03c5a78f1c"
+    },
+    {
+      "id": "synottip",
+      "name": "SynotTip",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/synottip.webp",
+      "offers": [
+        {
+          "id": "25709fa901b051b4",
+          "title": "500 Kč za ověření",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://onlinecasino-ceska.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "5e2aa8c5beafeb24",
+          "title": "500,- BEZ RIZIKA",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://wiki-fame.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "e44abffefb0d25e0",
+          "title": "Až 300 free spinů + do 10 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://chesserroewholesale.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "34692eecd9310a8b",
+          "title": "Až 300 free spinů + do 10 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://top-online-casino-czech.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "b26ff75c998b1fb7",
+          "title": "Až 300 free spinů bez rizika + 500 Kč za registraci",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://stanleyvillage.info/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "6c0ead5e5f5fd7f4",
+          "title": "Bonus 500 Kč zdarma bez nutnosti vkladu",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://daytonhydroponics.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://chesserroewholesale.com/uploads/img/vitrina/logo/webp/brand-e02e44ca-9e4d-509e-89d8-e57ddfa4e832.webp",
+      "_logo_sha256": "bb83eb4f96e4a9add39f207657350388790332ae6672a411cbdf0c3eee5e5b00"
+    },
+    {
+      "id": "tikitaka",
+      "name": "Tikitaka",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/tikitaka.png",
+      "offers": [
+        {
+          "id": "4beca7a3f3eaad69",
+          "title": "Aktuální nabídka na webu casina",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://www.centrum-anabell.cz/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://www.google.com/s2/favicons?domain=tikitaka.com&sz=128",
+      "_logo_sha256": "0e6b4bc5531d4530dd2ee15eb46322c6b500645e415a2c9ee16eada8c9adf3a5"
+    },
+    {
+      "id": "tipsport-vegas",
+      "name": "Tipsport Vegas",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/tipsport-vegas.webp",
+      "offers": [
+        {
+          "id": "f10351ea7abdc3d9",
+          "title": "100% do 50 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://chesserroewholesale.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "2145fd4becddbf35",
+          "title": "100% do 50 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://top-online-casino-czech.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "74ef84f408eb6d99",
+          "title": "100% do 50 000 Kč + 300 Kč zdarma za registraci",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://stanleyvillage.info/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "e635b208d6983026",
+          "title": "300 Kč ZDARMA",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://wiki-fame.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "13744721d5da36ad",
+          "title": "Bonus 500 free spinů + 500 Kč zdarma",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://daytonhydroponics.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://chesserroewholesale.com/uploads/img/vitrina/logo/webp/brand-d137e649-9422-59e3-90c2-2815ff1309a6.webp",
+      "_logo_sha256": "996ce9fc66d7f1d338887f16846c521934d45d85cb24c5f53c5aab3f4e7fd0e8"
+    },
+    {
+      "id": "tokyo-casino",
+      "name": "Tokyo Casino",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/tokyo-casino.webp",
+      "offers": [
+        {
+          "id": "e6e1ecbc50003a88",
+          "title": "100% do 10 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://wiki-fame.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "8ab4069dc1bd629e",
+          "title": "Atraktivní free spiny za registraci a vkladové bonusy",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://daytonhydroponics.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "87e5a4ca34b71b0a",
+          "title": "Atraktivní free spiny za registraci a vkladové bonusy",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://top-online-casino-czech.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "6fefe88a27df586c",
+          "title": "Bonusové akce a věrnostní program",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "Podle zvolené akce"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://stanleyvillage.info/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://daytonhydroponics.com/uploads/img/vitrina/logo/webp/dayton-tokyo-casino-wordmark.webp",
+      "_logo_sha256": "e4a24690dcd717dc79f95b6c2fc90653d8b64bb56f888a183d8307878415cc40"
+    },
+    {
+      "id": "vulkan-vegas",
+      "name": "Vulkan Vegas",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/vulkan-vegas.webp",
+      "offers": [
+        {
+          "id": "cd9ea9862523cfcd",
+          "title": "Až 40 000 Kč",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 Kč"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "40x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pripravanaporod.cz/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://clean-air-now.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://www.centrum-anabell.cz/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://top-online-casino-czech.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://pripravanaporod.cz/uploads/img/vitrina/logo/webp/brand-ae28df7e-f722-5601-ad9f-a76922f9d31e.webp",
+      "_logo_sha256": "4014ff4f44d17aa1c70f442f9b72dc99312854bef0188e645ec7a89684f1bc49"
+    },
+    {
+      "id": "westace",
+      "name": "Westace",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/westace.webp",
+      "offers": [
+        {
+          "id": "4beca7a3f3eaad69",
+          "title": "Aktuální nabídka na webu casina",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://www.centrum-anabell.cz/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://www.centrum-anabell.cz/uploads/img/vitrina/logo/webp/brand-498517c3-71c0-549a-8026-f9b327ccd844.webp",
+      "_logo_sha256": "7bc5fc84a3fbd27baa3adf6a52ce81f5f2c39a63b9132b5e9d12a145d832288a"
+    },
+    {
+      "id": "winspirit",
+      "name": "WinSpirit",
+      "geo": "CZ",
+      "logo_url": "/brand-bonuses/logos/winspirit.webp",
+      "offers": [
+        {
+          "id": "4beca7a3f3eaad69",
+          "title": "Aktuální nabídka na webu casina",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://www.centrum-anabell.cz/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://www.centrum-anabell.cz/uploads/img/vitrina/logo/webp/brand-d658c7c2-888b-5d2a-9fd3-4cd7a4e6f5ea.webp",
+      "_logo_sha256": "1e6037f5337bcfb8688c793222fd99c6dfdf0ed07c5c127834afb24e48cc3f1d"
+    },
+    {
+      "id": "1bet",
+      "name": "1Bet",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/1bet.webp",
+      "offers": [
+        {
+          "id": "55e973e32ec562f8",
+          "title": "100% do 630 zł + 100 Darmowych Spinów",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "39x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "1d738264c28a5e43",
+          "title": "100% do 630 zł + 100 Darmowych Spinów",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50 zł"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://www.dominiqueduroseau.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://pl-kasyno.online/uploads/img/vitrina/logo/webp/brand-e88af358-db57-49a1-a4f5-de2e75ce795a.webp",
+      "_logo_sha256": "6730eb9550e34aaf01b1fc27d27da94e6c0dd87459f0d499ee89fe2a14d0bc7a"
+    },
+    {
+      "id": "22bet",
+      "name": "22Bet",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/22bet.png",
+      "offers": [
+        {
+          "id": "1ea27c11e47798f6",
+          "title": "Cash Splash — 900 PLN",
+          "category": "Повторный депозит",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "20 PLN в среду"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://22betpolska.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "1783c3bbd989e5dd",
+          "title": "100% до 1 200 PLN в казино",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Этап",
+              "value": "Первый депозит нового пользователя"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://22betpolska.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "0625919aa67916f7",
+          "title": "100% до 500 PLN на спорт",
+          "category": "Спортивный бонус",
+          "facts": [
+            {
+              "label": "Этап",
+              "value": "Первый депозит; альтернатива бонусу казино"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://22betpolska.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "backend/app/data/template_assets/22bet-logo.png",
+      "_logo_sha256": "8d2be3668a4c51793afee62458cc55c7b0992cf9b0ebf11f2d11db818d606930"
+    },
+    {
+      "id": "888starz-casino",
+      "name": "888Starz Casino",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/888starz-casino.webp",
+      "offers": [
+        {
+          "id": "49ebb59195f50af6",
+          "title": "200 FS bez depozytu ta do 6500 PLN + 150 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "45x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://pl-kasyno.online/uploads/img/vitrina/logo/webp/brand-55f8d5e6-baee-493c-aa32-e9aa8cc0793f.webp",
+      "_logo_sha256": "a1046640708a9b1f7de7a2128787784e0dd458b1b43480af95290e4c800f5924"
+    },
+    {
+      "id": "allyspin",
+      "name": "AllySpin",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/allyspin.webp",
+      "offers": [
+        {
+          "id": "e2bbe1a281422f56",
+          "title": "225% do 4,500 zł + 1 Bonus Crab",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "60x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "26d802a66d625663",
+          "title": "225% do 4,500 zł + 1 Bonus Crab",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50 zł"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://www.dominiqueduroseau.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://pl-kasyno.online/uploads/img/vitrina/logo/webp/brand-c9658cb4-7aac-4492-b96f-a3c5b9ac6bc1.webp",
+      "_logo_sha256": "801ba2dce72cd7d27a40a2dda5fddafed15803e2159e9742163a600ee24e0bd3"
+    },
+    {
+      "id": "betalice-casino",
+      "name": "BetAlice Casino",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/betalice-casino.webp",
+      "offers": [
+        {
+          "id": "821ec1f89b36e6c2",
+          "title": "120% do 2 100 zł + 200 FS + Bonus Crab",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50 zł"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://drtarnow.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://showcentral.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://runonline.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "8f5509cd22169cdb",
+          "title": "120% do 2 100 zł + 200 FS + Bonus Crab",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "40x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://drtarnow.pl/uploads/img/vitrina/logo/webp/BetAlice.webp",
+      "_logo_sha256": "9f9b3aff78ed4ef3be15d10661643ee1fff7ea70c608a52493cdc32ceaadc8f6"
+    },
+    {
+      "id": "betlabel-casino",
+      "name": "Betlabel Casino",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/betlabel-casino.webp",
+      "offers": [
+        {
+          "id": "4fde11083655d2ec",
+          "title": "Bonus Powitalny 6000 PLN + 150 FS + 30 FS bez depozytu",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "55x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://pl-kasyno.online/uploads/img/vitrina/logo/webp/brand-570095ae-f107-4a5f-a4ae-67a27d99e286.webp",
+      "_logo_sha256": "98605c07bddac9a5df6876b5a739895dcef94558f2a5e1a26b4bbcaaf130dd3a"
+    },
+    {
+      "id": "betmica",
+      "name": "Betmica",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/betmica.webp",
+      "offers": [
+        {
+          "id": "6b9f262b713c4971",
+          "title": "570% do 25 000 PLN + 270 darmowych spinów",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "80 PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "40x bonus"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://ionickiss.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://ionickiss.pl/uploads/img/vitrina/logo/webp/brand-26823dd9-0b82-585f-b725-f6a0090f6897.webp",
+      "_logo_sha256": "73237a9e10e6b571e06919ebd13fba2a56c5f0e3a695ebcc563fc981d91bce04"
+    },
+    {
+      "id": "betninja",
+      "name": "Betninja",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/betninja.webp",
+      "offers": [
+        {
+          "id": "b3e1ef66c845c2ea",
+          "title": "Do 4 000 PLN + 100 darmowych spinów",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "40 PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35x bonus"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://ionickiss.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://ionickiss.pl/uploads/img/vitrina/logo/webp/brand-1404f558-689f-5f76-9098-79807d739589.webp",
+      "_logo_sha256": "6246830e94fe3ee0d5f185fcf81fbb7127d66ec325787f82704abc3948173169"
+    },
+    {
+      "id": "bison-casino",
+      "name": "Bison Casino",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/bison-casino.webp",
+      "offers": [
+        {
+          "id": "ad11bdfe25ffd67a",
+          "title": "2,500 zł & 100 Darmowych Spinów",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 zł"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://www.dominiqueduroseau.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "5094a1ee6158c2cd",
+          "title": "60 FS i 50 FS bez depozytu z kodami promocyjnymi lub Bonus powitalny do 2500 zł + 100 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "50x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://pl-kasyno.online/uploads/img/vitrina/logo/webp/brand-beb28d99-9e66-4a41-aa18-21e4f6ac3f14.webp",
+      "_logo_sha256": "fa36e9411f0c597c09c106a050b475790628e0fe7ab3fe79e1736c42dfc45a8a"
+    },
+    {
+      "id": "coinpoker",
+      "name": "CoinPoker",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/coinpoker.webp",
+      "offers": [
+        {
+          "id": "9d603750ca520ab0",
+          "title": "150% do 2 000 $",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "20 $"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "Uwalniany poprzez wygenerowany rake"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://ionickiss.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://ionickiss.pl/uploads/img/vitrina/logo/webp/brand-b331d36b-b608-5160-b79c-d7b92b9f4055.webp",
+      "_logo_sha256": "a2fa7c6ec4817f293a1026cdca9b9eebb94562863cbfdd99f3c304bdc8d6d33b"
+    },
+    {
+      "id": "cryptoleo",
+      "name": "CryptoLeo",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/cryptoleo.webp",
+      "offers": [
+        {
+          "id": "ed6f5e7a3fdfd7af",
+          "title": "100% do 2500 €",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://kasyno-online.solartechinvest.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "c9fec3f78789c231",
+          "title": "100% do 2500 €",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "43x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://kasyno-online.solartechinvest.pl/uploads/img/vitrina/logo/webp/cryptoleo-casino-logo.webp",
+      "_logo_sha256": "adb411e569d7c0dc348d9705592efa0834a9f4042add11abe165dc45388fb030"
+    },
+    {
+      "id": "daytonaspin",
+      "name": "Daytonaspin",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/daytonaspin.webp",
+      "offers": [
+        {
+          "id": "339160c0e43ee029",
+          "title": "255% do 18 000 PLN + 255 darmowych spinów",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "80 PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "40x bonus"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://ionickiss.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://ionickiss.pl/uploads/img/vitrina/logo/webp/brand-8da42135-4344-58d9-b0d7-cf496815c5fe.webp",
+      "_logo_sha256": "08784f13374546be8140d371c663916cfe5d70cff7e1bc424a3f76bf6d382180"
+    },
+    {
+      "id": "dicepalace-casino",
+      "name": "DicePalace Casino",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/dicepalace-casino.webp",
+      "offers": [
+        {
+          "id": "b73350e75ce51189",
+          "title": "100% do 11 250 zł i 100 free spinów",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "45x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://pl-kasyno.online/uploads/img/vitrina/logo/webp/brand-fac3d23a-8ec3-424c-aaf0-521a2fab8003.webp",
+      "_logo_sha256": "5aabec55a8d491ac574e2ab7c51e9368526561078e611af4fc6468faa80bf7f5"
+    },
+    {
+      "id": "dieselwin",
+      "name": "Dieselwin",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/dieselwin.webp",
+      "offers": [
+        {
+          "id": "f085ae1a05ed52a1",
+          "title": "460% do 15 000 € + 460 darmowych spinów",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "20 € (ok. 90 zł)"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "40x bonus"
+            },
+            {
+              "label": "Дополнительные условия",
+              "value": "Pakiet powitalny zależny od wpłat. Waluta EUR."
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://ionickiss.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://ionickiss.pl/uploads/img/vitrina/logo/webp/brand-a0fb1193-a9e1-54e1-9695-38aa295fc919.webp",
+      "_logo_sha256": "7920475979a2bf625799c8bf692ffe9ca94ee8769683096de2d6fb7d4737730f"
+    },
+    {
+      "id": "energycasino-pl",
+      "name": "EnergyCasino PL",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/energycasino-pl.webp",
+      "offers": [
+        {
+          "id": "6654d40766f9fb6e",
+          "title": "30 FS bez depozuty + 100% do 1000 PLN + 400 spinów",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "45x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://pl-kasyno.online/uploads/img/vitrina/logo/webp/brand-a6909cb4-fe18-4c4a-9d02-3b66f0ef632e.webp",
+      "_logo_sha256": "1dd8a6901c526d7e5d969c452f36274208a0333f6b13d107ea4a23569947a012"
+    },
+    {
+      "id": "fontan",
+      "name": "Fontan",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/fontan.webp",
+      "offers": [
+        {
+          "id": "54ff355aa990b169",
+          "title": "50 PLN или 100 FS без депозита",
+          "category": "Без депозита",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://stuccorepairextraordinaire.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "e4a302bf58aa117f",
+          "title": "100% до 500 PLN + 50 FS",
+          "category": "Повторный депозит",
+          "facts": [
+            {
+              "label": "Этап",
+              "value": "Третий депозит"
+            },
+            {
+              "label": "Минимальный депозит",
+              "value": "50 PLN"
+            },
+            {
+              "label": "Игра",
+              "value": "Starburst"
+            },
+            {
+              "label": "Промокод",
+              "value": "FONTAN100"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://stuccorepairextraordinaire.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "3605fc1f11bfac40",
+          "title": "150% до 1 000 PLN + 50 FS",
+          "category": "Повторный депозит",
+          "facts": [
+            {
+              "label": "Этап",
+              "value": "Второй депозит"
+            },
+            {
+              "label": "Минимальный депозит",
+              "value": "50 PLN"
+            },
+            {
+              "label": "Игра",
+              "value": "Fire Joker"
+            },
+            {
+              "label": "Промокод",
+              "value": "FONTAN150"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://stuccorepairextraordinaire.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "2c826d65a53d98f0",
+          "title": "200% до 1 500 PLN + 50 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Этап",
+              "value": "Первый депозит"
+            },
+            {
+              "label": "Минимальный депозит",
+              "value": "40 PLN"
+            },
+            {
+              "label": "Игра",
+              "value": "Book of Dead"
+            },
+            {
+              "label": "Промокод",
+              "value": "FONTAN200"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://stuccorepairextraordinaire.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://stuccorepairextraordinaire.com/uploads/img/webp/fontan-logo.webp",
+      "_logo_sha256": "6b03ce8f1bdcfc9ade2bdb595faf4d3b47c32d60f02e3b5b3ab0b55338ed7d37"
+    },
+    {
+      "id": "ggbet-casino",
+      "name": "GGbet Casino",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/ggbet-casino.webp",
+      "offers": [
+        {
+          "id": "d0af35013ab017de",
+          "title": "Bonus 100% przy pierwszym depozycie do 400 PLN",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "40 PLN"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://ionickiss.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "af0d308e005c0273",
+          "title": "Bonus 100% przy pierwszym depozycie do 400 PLN",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "44x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://ionickiss.pl/casinos/ggbet.webp",
+      "_logo_sha256": "6ccf6c124d971de17c0ab582a887cb97ac7d26b723827114f087381b1a6a72fa"
+    },
+    {
+      "id": "goldspin",
+      "name": "GoldSpin",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/goldspin.webp",
+      "offers": [
+        {
+          "id": "78e6e1c4f7f44e6a",
+          "title": "100% do 6,000 zł + 100 Darmowych Spinów",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "45x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "6981f5c5ba5a8d4e",
+          "title": "100% do 6,000 zł + 100 Darmowych Spinów",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50 zł"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://www.dominiqueduroseau.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://pl-kasyno.online/uploads/img/vitrina/logo/webp/brand-9e8cb1f4-eee2-4108-88b8-17ae2ae7792d.webp",
+      "_logo_sha256": "682b33f5f8d451d4f5c246fa085dc1ffa2454d9bf734f511292a6bde10f9743a"
+    },
+    {
+      "id": "hit-n-spin",
+      "name": "Hit'n'spin",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/hit-n-spin.webp",
+      "offers": [
+        {
+          "id": "a71ef08540548a25",
+          "title": "Do 1000 PLN + 50 darmowych spinów",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "40 PLN"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://ionickiss.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "8cf378b114f2c2a8",
+          "title": "Do 1000 PLN + 50 darmowych spinów",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "50x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://ionickiss.pl/casinos/hitnspin.webp",
+      "_logo_sha256": "e595b2ec1bc32a5391dc925c37d063b4a097f8bbaa10d3af8ae7cd0fb9742799"
+    },
+    {
+      "id": "hugo-casino",
+      "name": "Hugo Casino",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/hugo-casino.webp",
+      "offers": [
+        {
+          "id": "2cda980045426b8c",
+          "title": "225% do 2,700 zł + 275 DS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 zł"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://www.dominiqueduroseau.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "cf645288d021db67",
+          "title": "225% do 2700 zł + 275 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "30 zł"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://drtarnow.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://showcentral.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://runonline.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "9c839454654c8e3c",
+          "title": "225% do 2700 zł + 275 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "70x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://drtarnow.pl/uploads/img/vitrina/logo/webp/Hugo%20casino%20(2).webp",
+      "_logo_sha256": "d3cc3bbb61ea446eae4af051b07279eb09114b358717814b18badcdf4f42ff6a"
+    },
+    {
+      "id": "instant-casino",
+      "name": "Instant Casino",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/instant-casino.webp",
+      "offers": [
+        {
+          "id": "69cc3a4290478a1d",
+          "title": "100% do 2250 zł + 200 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50 zł"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://drtarnow.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://showcentral.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://runonline.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "2d57e5e61773f8bb",
+          "title": "100% do 2250 zł + 200 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "55x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://drtarnow.pl/uploads/img/vitrina/logo/webp/Instant%20Casino.webp",
+      "_logo_sha256": "25ac24d88a3b820ffbe9a33b6aa105b0540b9d0d6bfafb2fd70afaef5db852f0"
+    },
+    {
+      "id": "jokery-casino",
+      "name": "Jokery Casino",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/jokery-casino.webp",
+      "offers": [
+        {
+          "id": "08b362b2721295d0",
+          "title": "100% do 6 500 zł + 250 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50 zł"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://drtarnow.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://showcentral.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://runonline.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "1f1fad645eb99d8d",
+          "title": "100% do 6 500 zł + 250 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "55x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://drtarnow.pl/uploads/img/vitrina/logo/webp/Jokery.webp",
+      "_logo_sha256": "2d4528c9a4123192a39e116826ab0e4d0f13472b40ec9be7961bac91fb17f160"
+    },
+    {
+      "id": "kikibet",
+      "name": "Kikibet",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/kikibet.webp",
+      "offers": [
+        {
+          "id": "e77aa0818350f47c",
+          "title": "350% do 25 000 PLN + 300 darmowych spinów",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "80 PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35x bonus"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://ionickiss.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://ionickiss.pl/uploads/img/vitrina/logo/webp/brand-b8574719-2edc-52b3-a27a-919fe4807c9e.webp",
+      "_logo_sha256": "d340f383434712e332a48be5448756f64ad4a42567255bac4616b6667f609dd4"
+    },
+    {
+      "id": "lemon-casino",
+      "name": "Lemon Casino",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/lemon-casino.webp",
+      "offers": [
+        {
+          "id": "ddbfbab742351a20",
+          "title": "20 FS без депозита",
+          "category": "Без депозита",
+          "facts": [
+            {
+              "label": "Активация",
+              "value": "После полной регистрации"
+            },
+            {
+              "label": "Стоимость спина",
+              "value": "0,50 PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "50× выигрыша за 3 дня"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://www.biletico.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "73cc76fa5a9272f1",
+          "title": "100% до 1 200 PLN + до 100 FS",
+          "category": "Повторный депозит",
+          "facts": [
+            {
+              "label": "Этап",
+              "value": "Второй депозит"
+            },
+            {
+              "label": "Фриспины",
+              "value": "25 FS при 40–396 PLN; 50 FS при 400–796 PLN; 100 FS от 800 PLN. Стоимость спина — 0,80 PLN."
+            },
+            {
+              "label": "Игра",
+              "value": "Big Bass Bonanza"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://www.biletico.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "b15de2777c1a2e7a",
+          "title": "100% do 150 zł",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50 zł"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://www.dominiqueduroseau.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "5176fea4e48e7ea8",
+          "title": "100% Non-Sticky Bonus do 1 200 zł + 100 Darmowych Spinów + 20 FS bez depozytu z kodem",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "40x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://pl-kasyno.online/uploads/img/vitrina/logo/webp/brand-195c8c26-fbbb-4139-a411-f9576973895d.webp",
+      "_logo_sha256": "d2ac84f6a4054465cff5e8ba6cfc04d5a0dde34130551810d0b54c7cdc82fb6b"
+    },
+    {
+      "id": "mostbet",
+      "name": "Mostbet",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/mostbet.webp",
+      "offers": [
+        {
+          "id": "45ebcbb612dc4495",
+          "title": "Up to 3000 PLN + 50 Free Spins + 15% Cashback",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://pl-kasyno.online/uploads/img/vitrina/logo/webp/brand-9ab26168-2863-4e3a-b08e-eeab581ed47d.webp",
+      "_logo_sha256": "2696023845cdfcdfbf6b03daca08725af74c94f8b7bcad6843024a05021b4ff4"
+    },
+    {
+      "id": "nv-casino",
+      "name": "NV Casino",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/nv-casino.webp",
+      "offers": [
+        {
+          "id": "510cce1ab6809093",
+          "title": "100% do 10 000 zł + 225 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "5 zł"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://drtarnow.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://showcentral.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://runonline.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "b32da43d81176408",
+          "title": "100% do 10 000 zł + 225 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "40x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "72a2790241d10079",
+          "title": "Do 10 000 zł + 225 Darmowych spinów",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 zł"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://www.dominiqueduroseau.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://drtarnow.pl/uploads/img/vitrina/logo/webp/NV%20Casino%201.webp",
+      "_logo_sha256": "8514684044c64f307aaba6bdb71f675af98ccff83b3750a5f57ea5d172c144dc"
+    },
+    {
+      "id": "pelican-casino",
+      "name": "Pelican Casino",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/pelican-casino.webp",
+      "offers": [
+        {
+          "id": "8f0e8cead2b4958c",
+          "title": "30–100 FS по средам",
+          "category": "Повторный депозит",
+          "facts": [
+            {
+              "label": "Условия",
+              "value": "Количество спинов зависит от депозита"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://kasyno-pelican.pl-pelicancasino.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "b61ff628baa142fd",
+          "title": "30 darmowych spinów bez depozytu ta 60 zł za rejestrację",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "50x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "6055ac6c78e902df",
+          "title": "До 4 500 PLN + 200 FS за три депозита",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Этапы",
+              "value": "Лимиты по депозитам: 2 000 / 1 500 / 1 000 PLN"
+            },
+            {
+              "label": "Минимальный депозит",
+              "value": "50 PLN на каждом этапе"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35×"
+            },
+            {
+              "label": "Максимальная ставка",
+              "value": "20 PLN"
+            },
+            {
+              "label": "Срок",
+              "value": "7 дней"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://kasyno-pelican.pl-pelicancasino.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://pl-kasyno.online/uploads/img/vitrina/logo/webp/brand-cd4e7a37-e5e6-4efa-88c1-4a8c3447af05.webp",
+      "_logo_sha256": "e0fdeb26a097ec2ad6ff9c58d0b1d6f4165d0b0f38d9b94af48eeeaec153d106"
+    },
+    {
+      "id": "quickwin-casino",
+      "name": "Quickwin Casino",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/quickwin-casino.webp",
+      "offers": [
+        {
+          "id": "fcd1984a54f61b30",
+          "title": "Bonus 100% przy pierwszym depozycie do 800 PLN",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "40 PLN"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://ionickiss.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "35a7f8e817fdd9cf",
+          "title": "Bonus 100% przy pierwszym depozycie do 800 PLN",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "49x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://ionickiss.pl/casinos/Quickwin.webp",
+      "_logo_sha256": "60dfb607ab8ece205cc7aab994ac8dd398f7a0872987e57dfb088f1b79af3073"
+    },
+    {
+      "id": "ritzo",
+      "name": "Ritzo",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/ritzo.webp",
+      "offers": [
+        {
+          "id": "9f61c300b1ceb00c",
+          "title": "225% do 12 345 zł + 300 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "5 zł"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://drtarnow.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://showcentral.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://runonline.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "841bf5990c08fc7a",
+          "title": "225% do 12 345 zł + 300 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "48x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://drtarnow.pl/uploads/img/vitrina/logo/webp/Ritzo.webp",
+      "_logo_sha256": "44ccb5030905d1a4537344ba1b819fd89a4728e37379aaadccf0abeaaf577295"
+    },
+    {
+      "id": "robocat",
+      "name": "RoboCat",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/robocat.webp",
+      "offers": [
+        {
+          "id": "6fda25141f659d3d",
+          "title": "100% do 2,100+ 200 DS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "70x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "a33f0c9ec322399a",
+          "title": "100% do 2,100+ 200 DS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 zł"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://www.dominiqueduroseau.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://pl-kasyno.online/uploads/img/vitrina/logo/webp/brand-81e384f4-1b1e-4a42-9932-8e6659a4871a.webp",
+      "_logo_sha256": "0fce8b0ddacdf7daaececa401f546490816a151efc25b782843002a07fdc35ef"
+    },
+    {
+      "id": "roby-casino",
+      "name": "Roby Casino",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/roby-casino.webp",
+      "offers": [
+        {
+          "id": "508adc32873f6603",
+          "title": "250% do 11 250 zł",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "5 zł"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://drtarnow.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://showcentral.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://runonline.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "7816cf4db7219cce",
+          "title": "250% do 11 250 zł",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "55x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://drtarnow.pl/uploads/img/vitrina/logo/webp/Roby%20Casino.webp",
+      "_logo_sha256": "0fb14b37190e890485777f29737a1ae7b06085ae6cbcccc824cf18f77e3bd18c"
+    },
+    {
+      "id": "sankra-casino",
+      "name": "Sankra Casino",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/sankra-casino.webp",
+      "offers": [
+        {
+          "id": "4001e8354c0ef31a",
+          "title": "100% do 2 700 zł + 200 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50 zł"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://drtarnow.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://showcentral.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://runonline.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "dd73ab305693ea36",
+          "title": "100% do 2 700 zł + 200 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "45x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://drtarnow.pl/uploads/img/vitrina/logo/webp/sankra.webp",
+      "_logo_sha256": "ba1daf59760419f5e44359381030e162931f7c587d57c67428ffea04bb9bc642"
+    },
+    {
+      "id": "slotoro-casino",
+      "name": "Slotoro Casino",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/slotoro-casino.webp",
+      "offers": [
+        {
+          "id": "332687b927c3fd73",
+          "title": "120% do 2 100 zł + 200 FS + Bonus Crab",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "20 zł"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://drtarnow.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://showcentral.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://runonline.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "fd24ec4bcfd730c2",
+          "title": "120% do 2 100 zł + 200 FS + Bonus Crab",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "45x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://drtarnow.pl/uploads/img/vitrina/logo/webp/slotoro.webp",
+      "_logo_sha256": "9113c449ab3e513107cf5fe1902ff54e43e5c485e9e94eba02daf659e7e78329"
+    },
+    {
+      "id": "smash-casino",
+      "name": "Smash Casino",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/smash-casino.webp",
+      "offers": [
+        {
+          "id": "3a1ac0ec8b64a82d",
+          "title": "600% do 10 000 €",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "20 €"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "45x bonus"
+            },
+            {
+              "label": "Дополнительные условия",
+              "value": "Pakiet może obejmować kolejne depozyty. Waluta EUR."
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://ionickiss.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://ionickiss.pl/uploads/img/vitrina/logo/webp/brand-b730f9be-1fe3-5602-8050-25b5f37f7696.webp",
+      "_logo_sha256": "aa5ad3bf577e9edf5c69ec5b27e5c02334c3810c6c7561ce847f52769990b989"
+    },
+    {
+      "id": "spingreen-casino",
+      "name": "SpinGreen Casino",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/spingreen-casino.webp",
+      "offers": [
+        {
+          "id": "64dd95b00c772a74",
+          "title": "45 FS bez depozytu lub do 4200 zł + 250 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "50x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://pl-kasyno.online/uploads/img/vitrina/logo/webp/brand-1323bc84-6995-469f-9d68-be8ff6d347d1.webp",
+      "_logo_sha256": "32ef2317a96c8a8950db9e8d85f77d342ee9ba76eb71482c05d0489fcc28c380"
+    },
+    {
+      "id": "total-casino",
+      "name": "Total Casino",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/total-casino.jpg",
+      "offers": [
+        {
+          "id": "17ac0c651575d15f",
+          "title": "До 25 FS + 20 GS за активацию",
+          "category": "За регистрацию",
+          "facts": [
+            {
+              "label": "Активация",
+              "value": "Регистрация и подтверждение аккаунта"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "verified",
+          "_sources": [
+            {
+              "url": "https://oferta.totalcasino.pl/skrill",
+              "kind": "official",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "669383662820b172",
+          "title": "100% до 200 PLN с кодом SKRILL",
+          "category": "Повторный депозит",
+          "facts": [
+            {
+              "label": "Платёжный метод",
+              "value": "Skrill"
+            },
+            {
+              "label": "Этап",
+              "value": "Второй депозит"
+            },
+            {
+              "label": "Промокод",
+              "value": "SKRILL"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "verified",
+          "_sources": [
+            {
+              "url": "https://oferta.totalcasino.pl/skrill",
+              "kind": "official",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "171b43457a66d899",
+          "title": "100% до 1 200 PLN + до 240 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Платёжный метод",
+              "value": "Skrill"
+            },
+            {
+              "label": "Этап",
+              "value": "Первый депозит"
+            },
+            {
+              "label": "Условия",
+              "value": "Подтверждение email, личности и возраста. Полный порог депозита и отыгрыш в извлечённом описании не указаны."
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "verified",
+          "_sources": [
+            {
+              "url": "https://oferta.totalcasino.pl/skrill",
+              "kind": "official",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "69e5cdb1004aff0a",
+          "title": "20 FS за приложение",
+          "category": "Фриспины",
+          "facts": [
+            {
+              "label": "Активация",
+              "value": "Загрузка мобильного приложения"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "verified",
+          "_sources": [
+            {
+              "url": "https://oferta.totalcasino.pl/skrill",
+              "kind": "official",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://www.google.com/s2/favicons?domain=totalcasino.pl&sz=128",
+      "_logo_sha256": "2b5960937db58d00e1e937b0f8256f77259ab111af8859bf83f3ca94210401ec"
+    },
+    {
+      "id": "trixino",
+      "name": "Trixino",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/trixino.webp",
+      "offers": [
+        {
+          "id": "367ac425603c3edd",
+          "title": "777% do 7 777 €",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "20 €"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "45x bonus"
+            },
+            {
+              "label": "Дополнительные условия",
+              "value": "Cotygodniowy cashback do 25% zależy od statusu VIP."
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://ionickiss.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://ionickiss.pl/uploads/img/vitrina/logo/webp/brand-f9de5877-2440-5c90-be93-173995681c0f.webp",
+      "_logo_sha256": "7c93489ecfadec9b7267d748fc0f1a9eff4b1bc685ee43aea70e010ec84fd2d0"
+    },
+    {
+      "id": "vavada-casino",
+      "name": "Vavada Casino",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/vavada-casino.webp",
+      "offers": [
+        {
+          "id": "916ba7dbac2a33e6",
+          "title": "40 oraz 50 darmowych spinów z kodem promo bez depozytu oraz 100 FS za rejestrację",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "48x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://pl-kasyno.online/uploads/img/vitrina/logo/webp/brand-dadda0d0-4f89-4c12-afca-6968aca74de4.webp",
+      "_logo_sha256": "2e861993327b9b331de4cb40f47131fc1fe2da3fa7516d8d4b2eb22eab3dccd6"
+    },
+    {
+      "id": "vave",
+      "name": "Vave",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/vave.webp",
+      "offers": [
+        {
+          "id": "0fc8ab3598e728ca",
+          "title": "150% do 1,5 BTC + 100 FS",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://kasyno-online.solartechinvest.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "c7fc0aa55715db7f",
+          "title": "150% do 1,5 BTC + 100 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "49x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://kasyno-online.solartechinvest.pl/uploads/img/vitrina/logo/webp/vave-casino-logo.webp",
+      "_logo_sha256": "bc8817a3b3945dd280300826f3b3e53df7cf5c85df7dd4204de9c4eed5ea8e6b"
+    },
+    {
+      "id": "verde-casino",
+      "name": "Verde Casino",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/verde-casino.webp",
+      "offers": [
+        {
+          "id": "48b30e1ce7fb10ff",
+          "title": "50 FS или 100 PLN без депозита",
+          "category": "Без депозита",
+          "facts": [
+            {
+              "label": "Активация",
+              "value": "Подтверждение телефона и email"
+            },
+            {
+              "label": "Игра",
+              "value": "Joker Stoker для FS"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-verdecasynos.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "a871e19d81da2a52",
+          "title": "Bonus 100% przy pierwszym depozycie do 1000 PLN",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "40 PLN"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://ionickiss.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "a982b412ad8aaf64",
+          "title": "Bonus 100% przy pierwszym depozycie do 1000 PLN",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "40x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "d684bd94f2a32fc1",
+          "title": "До 5 000 PLN + 220 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Этапы",
+              "value": "Четыре первых депозита"
+            },
+            {
+              "label": "Минимальный депозит",
+              "value": "40 PLN / 10 EUR"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-verdecasynos.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://ionickiss.pl/casinos/verde.webp",
+      "_logo_sha256": "0dcdf9ced43c941db40826a62f44500a6154eee811404e9562ab3f5d6c7164db"
+    },
+    {
+      "id": "vulcan-casino",
+      "name": "Vulcan Casino",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/vulcan-casino.webp",
+      "offers": [
+        {
+          "id": "df4817a3aed4f4e5",
+          "title": "Do 1000 PLN + 150 darmowych spinów",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "40 PLN"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://ionickiss.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "aab41afa106c6a00",
+          "title": "Do 1000 PLN + 150 darmowych spinów",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "45x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://ionickiss.pl/casinos/vulcan.webp",
+      "_logo_sha256": "cc9f9381c93691d08dc12e5327b8c526412efa69a642fcb47935b09fc12dfe8b"
+    },
+    {
+      "id": "vulkan-vegas",
+      "name": "Vulkan Vegas",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/vulkan-vegas.webp",
+      "offers": [
+        {
+          "id": "2680c9337d23f589",
+          "title": "Еженедельный cashback",
+          "category": "Кешбэк",
+          "facts": [
+            {
+              "label": "Условия",
+              "value": "Пополнение и ставки от 80 PLN за расчётный период"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "5× суммы возврата"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://vulkanvegastop.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "eb9933b15da80bdb",
+          "title": "До 6 000 PLN + 150 FS",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://vulkanvegastop.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "5f002eaef919cef5",
+          "title": "50 FS за установку приложения",
+          "category": "Фриспины",
+          "facts": [
+            {
+              "label": "Активация",
+              "value": "Установка приложения и переход в раздел игр"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://vulkanvegastop.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://pripravanaporod.cz/uploads/img/vitrina/logo/webp/brand-ae28df7e-f722-5601-ad9f-a76922f9d31e.webp",
+      "_logo_sha256": "4014ff4f44d17aa1c70f442f9b72dc99312854bef0188e645ec7a89684f1bc49"
+    },
+    {
+      "id": "wild-robin",
+      "name": "Wild Robin",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/wild-robin.webp",
+      "offers": [
+        {
+          "id": "81b79683b43059fd",
+          "title": "50 darmowych spinów + 100% bonus powitalny",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "45x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "4640acaa065a623d",
+          "title": "50 darmowych spinów + 100% bonus powitalny",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50 zł"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://www.dominiqueduroseau.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://pl-kasyno.online/uploads/img/vitrina/logo/webp/brand-4b90fee0-5787-4a6b-af7f-a8df836330fa.webp",
+      "_logo_sha256": "f83b40e4c13ada7bc709f39153408b1eac60eef390ea1484b57350d88f401ae2"
+    },
+    {
+      "id": "wild-tokyo",
+      "name": "Wild Tokyo",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/wild-tokyo.webp",
+      "offers": [
+        {
+          "id": "3d104e2cb387d41d",
+          "title": "260% do 13 000 zł + 620 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "5 zł"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://drtarnow.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://showcentral.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://runonline.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "adbc51e21e07f047",
+          "title": "260% do 13 000 zł + 620 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "45x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://drtarnow.pl/uploads/img/vitrina/logo/webp/Wild%20Tokyo.webp",
+      "_logo_sha256": "0fde13f3f4f487bd9d609853c44e7af9e7c800b95bfeabb52e1ddb9202d02739"
+    },
+    {
+      "id": "winnerisland",
+      "name": "WinnerIsland",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/winnerisland.webp",
+      "offers": [
+        {
+          "id": "899d56d6c3c0c2c8",
+          "title": "Do 1 000 € + 100 darmowych spinów",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "10 € (ok. 45 zł)"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "35x bonus"
+            },
+            {
+              "label": "Дополнительные условия",
+              "value": "Waluta EUR."
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://ionickiss.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://ionickiss.pl/uploads/img/vitrina/logo/webp/brand-360ecc16-2e0c-5f3f-8749-811d36b99f06.webp",
+      "_logo_sha256": "4bfbfc15c6d17ed48f80a8b20ab8afb7809dbe24d1c07ed518512a3a83d8705f"
+    },
+    {
+      "id": "winshark",
+      "name": "WinShark",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/winshark.webp",
+      "offers": [
+        {
+          "id": "4f4ea2e33d68d19f",
+          "title": "240% do 10,500 zł + 300 Darmowe Spiny",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "45x"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "a0283e2a46bb8cea",
+          "title": "240% do 10,500 zł + 300 Darmowe Spiny",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "100 zł"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://www.dominiqueduroseau.com/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://pl-kasyno.online/uploads/img/vitrina/logo/webp/Winshark.webp",
+      "_logo_sha256": "dbb537d62743cc1107e824f850f997eaf4881e2fd21a592b090337d51889b938"
+    },
+    {
+      "id": "yep-casino",
+      "name": "Yep Casino",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/yep-casino.webp",
+      "offers": [
+        {
+          "id": "7c8b0f7a1c2dc51f",
+          "title": "200% bonusu powitalnego do 25 000 € + 50 FS",
+          "category": "Приветственный бонус",
+          "facts": [],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://kasyno-online.solartechinvest.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "2eae57b5b07102b0",
+          "title": "200% bonusu powitalnego do 25 000 € + 50 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "50PLN"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://pl-kasyno.online/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        },
+        {
+          "id": "6672ba7560d3f625",
+          "title": "do 15 000 zł + 300 FS",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "20 zł"
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://drtarnow.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://showcentral.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            },
+            {
+              "url": "https://runonline.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://drtarnow.pl/uploads/img/vitrina/logo/webp/logo-yep%20casino.webp",
+      "_logo_sha256": "33ff877a98fa8d6fd48b7261c7eb7a36eb70ee83ca2b640c062f3403f0702479"
+    },
+    {
+      "id": "zombillion",
+      "name": "Zombillion",
+      "geo": "PL",
+      "logo_url": "/brand-bonuses/logos/zombillion.webp",
+      "offers": [
+        {
+          "id": "08cfd30af8e6ba83",
+          "title": "250% do 16 000 PLN + 200 darmowych spinów",
+          "category": "Приветственный бонус",
+          "facts": [
+            {
+              "label": "Минимальный депозит",
+              "value": "80 PLN"
+            },
+            {
+              "label": "Отыгрыш",
+              "value": "40x bonus"
+            },
+            {
+              "label": "Дополнительные условия",
+              "value": "Pakiet rozłożony na kolejne depozyty."
+            }
+          ],
+          "observed_at": "2026-11-18T10:38:27.271472+00:00",
+          "status": "saved",
+          "_sources": [
+            {
+              "url": "https://ionickiss.pl/",
+              "kind": "saved_project",
+              "collected_at": "2026-11-18T10:38:27.271472+00:00"
+            }
+          ]
+        }
+      ],
+      "_logo_source": "https://ionickiss.pl/uploads/img/vitrina/logo/webp/brand-9f3e77b0-c9c7-5ddc-b644-8aee609eb6e5.webp",
+      "_logo_sha256": "a01998723989af5217dbafc4cbb1ec0a3ba8461c9cf614014dcdba96b60b1da1"
+    }
+  ]
+}

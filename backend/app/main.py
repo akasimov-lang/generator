@@ -21,6 +21,7 @@ from app.weekly_digests import router as weekly_digests_router
 from app.project_gsc import router as project_gsc_router
 from app.menu_reorder import router as menu_reorder_router
 from app.personas import router as personas_router, seed_catalog
+from app.brand_bonuses import router as brand_bonuses_router
 from app.db import SessionLocal
 
 
@@ -67,3 +68,4 @@ app.include_router(project_gsc_router, prefix="/api")
 app.include_router(menu_reorder_router, prefix="/api")
 
 app.include_router(personas_router, prefix="/api")
+app.include_router(brand_bonuses_router, prefix="/api")
