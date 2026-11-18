@@ -71,12 +71,14 @@ def test_provenance_is_internal_on_list_and_detail(client):
 def test_dataset_has_distinct_offers_country_specific_evidence_and_local_logos():
     data = dataset()
     public = Path(__file__).resolve().parents[2] / 'frontend/public'
+    # Nginx try_files must reach the SPA rather than a public directory index.
+    assert not (public / 'brand-bonuses').exists()
     keys = [(b['geo'], b['id']) for b in data['items']]
     assert len(keys) == len(set(keys))
     for brand in data['items']:
         assert brand['geo'] in {'PL', 'CZ'}
         assert re.fullmatch('[a-z0-9-]+', brand['id'])
-        assert brand['logo_url'].startswith('/brand-bonuses/logos/')
+        assert brand['logo_url'].startswith('/brand-bonus-logos/')
         assert '..' not in brand['logo_url']
         assert (public / brand['logo_url'].lstrip('/')).stat().st_size > 100
         ids = [o['id'] for o in brand['offers']]
