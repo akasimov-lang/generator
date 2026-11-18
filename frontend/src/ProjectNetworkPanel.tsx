@@ -647,7 +647,6 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
 
           {networkView === "main" && <div className="networkDomainManagement"><div className="networkSection networkSubdomains">
             <h3>Добавление в сетку</h3>
-            <p>Вставьте домены или ссылки через запятую, пробел или новую строку. Протокол и крайние слеши удалятся, каждый домен будет на отдельной строке.</p>
             <label className="networkSubdomainsField">Домены и поддомены<textarea aria-label="Домены и поддомены" rows={2} value={subdomainsInput} disabled={disabled} placeholder={"example.com\ntest.example.com"}
               onChange={(event) => setSubdomainsInput(event.target.value)}
               onBlur={() => setSubdomainsInput(current => formatNetworkDomainInput(current))}
@@ -662,14 +661,11 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
             {!!subdomainErrors.length && <div className="notice" role="alert">{subdomainErrors.map((text) => <p key={text}>{text}</p>)}</div>}
             {subdomains.length > 100 && <p role="alert">За один запуск можно создать до 100 доменов.</p>}
             <div className="networkActions"><button type="button" className="button compact" disabled={disabled || !subdomains.length || subdomains.length > 100 || !!subdomainErrors.length} onClick={() => void mutate("create_domains")}>{busy === "create_domains" ? "Добавляем…" : "Добавить в сетку"}</button></div>
-            <p className="muted">Перед запуском сервер проверит домены по нашей базе и актуальной сетке Webdev. Домены добавятся в сетку автоматически; появление в списке ещё не подтверждает готовность HTTPS.</p>
           </div><div className="networkSection networkRemoveDomains">
             <h3>Удаление из сетки</h3>
-            <p>Укажите домены и поддомены через запятую, пробел или новую строку — до 100 за один запрос.</p>
             <label className="networkSubdomainsField">Домен для удаления<textarea aria-label="Домен для удаления" rows={2} value={removeDomainInput} disabled={disabled} placeholder="test.example.com" onChange={event => setRemoveDomainInput(event.target.value)} /></label>
             {removeErrors.length > 0 && <p role="alert">{removeErrors.join(" ")}</p>}
             <div className="networkActions"><button type="button" className="button secondary compact" disabled={disabled || !removeDomains.length || removeDomains.length > 100 || !!removeErrors.length} onClick={() => void mutate("delete_domain")}>{busy === "delete_domain" ? "Удаляем…" : "Удалить из сетки"}</button></div>
-            <p className="muted">Домен проекта, Main, AMP и резерв защищены от удаления.</p>
           </div></div>}
         </>}
 
