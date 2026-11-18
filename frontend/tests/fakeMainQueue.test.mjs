@@ -5,6 +5,49 @@ const settle=()=>new Promise(resolve=>setImmediate(resolve));
 const snapshot=(items=[])=>({items,limit:10,active_count:items.length,network:null});
 const queued=(id,path,action='delete')=>({id,path,action,status:'queued',message:'В очереди',operation_ids:[id]});
 
+test('request lost before server acceptance retries automatically with the same id',async()=>{
+ const posts=[];
+ const queue=new FakeMainQueue('site',async(path,options)=>{
+  if(!options)return snapshot();
+  const body=JSON.parse(options.body);posts.push(body);
+  if(posts.length===1)throw Error('server restarting');
+  return snapshot([queued(body.request_id,body.path,'create')]);
+ });
+ queue.enqueue('create','/_ABOUT.html');await settle();
+ await queue.refresh();await settle();
+ assert.equal(posts.length,2);assert.deepEqual(posts[0],posts[1]);
+ assert.equal(queue.items[0].status,'queued');assert.equal(queue.count,1);
+});
+
+test('failed queue reads do not retry; repeated failures back off',async()=>{
+ let now=100,readsFail=true,posts=0;
+ const queue=new FakeMainQueue('site',async(path,options)=>{
+  if(!options){if(readsFail)throw Error('unavailable');return snapshot();}
+  posts++;throw Error('unavailable');
+ },()=>now);
+ queue.enqueue('create','new');await settle();
+ await queue.refresh();assert.equal(posts,1);
+ readsFail=false;await queue.refresh();await settle();assert.equal(posts,2);
+ await queue.refresh();await settle();assert.equal(posts,2);
+ now+=5000;await queue.refresh();await settle();assert.equal(posts,3);
+});
+
+test('polling continues during another field save without restoring stale network',async()=>{
+ const queue=new FakeMainQueue('site',async()=>({...snapshot([queued('receipt','/new/')]),network:{revision:'old'}}));
+ queue.setNetworkBusy(true);await queue.refresh();
+ assert.equal(queue.count,1);assert.equal(queue.server.network,null);
+});
+
+test('validation rejection is terminal and is not retried automatically',async()=>{
+ let posts=0;
+ const queue=new FakeMainQueue('site',async(path,options)=>{
+  if(!options)return snapshot();
+  posts++;throw Object.assign(Error('invalid path'),{statusCode:422});
+ });
+ queue.enqueue('create','new');await settle();await queue.refresh();
+ assert.equal(posts,1);assert.equal(queue.items[0].status,'failed');
+});
+
 test('ten rapid clicks are accepted without waiting for remote deletion; eleventh is refused',async()=>{
  let unblock;const calls=[],items=[];
  const queue=new FakeMainQueue('site',async(path,options)=>{

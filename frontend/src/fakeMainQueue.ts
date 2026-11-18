@@ -17,9 +17,11 @@ export class FakeMainQueue<T> {
   private networkBusy = false;
   private outbox: string[] = [];
   private cancelled = new Map<string, FakeQueueItem>();
+  private attempts = new Map<string, { count: number; retryAt: number }>();
   private siteId: string;
   private api: Api;
-  constructor(siteId: string, api: Api) { this.siteId = siteId; this.api = api; }
+  private now: () => number;
+  constructor(siteId: string, api: Api, now = Date.now) { this.siteId = siteId; this.api = api; this.now = now; }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   private emit() { for (const listener of this.listeners) listener(); }
   get items() { return [...this.pending.values(), ...this.server.items.filter(item => !this.pending.has(item.id))]; }
@@ -31,15 +33,22 @@ export class FakeMainQueue<T> {
   private accept(snapshot: FakeQueueSnapshot<T>) {
     snapshot = { ...snapshot, items: snapshot.items.map(item => this.cancelled.get(item.id) || item) };
     this.server = this.networkBusy ? { ...snapshot, network: null } : snapshot;
-    for (const item of snapshot.items) this.pending.delete(item.id);
+    for (const item of snapshot.items) { this.pending.delete(item.id); this.attempts.delete(item.id); }
     this.emit();
   }
   async refresh() {
-    if (this.reading || this.sending || this.networkBusy) return;
+    if (this.reading || this.sending) return;
     this.reading = true; const epoch = this.epoch;
     try {
       const snapshot = await this.api<FakeQueueSnapshot<T>>(`/sites/${this.siteId}/network/fake-main-queue`);
-      if (epoch === this.epoch && !this.sending) { this.error = ""; this.accept(snapshot); }
+      if (epoch === this.epoch && !this.sending) {
+        this.error = ""; this.accept(snapshot);
+        // A request interrupted before the server received it has no receipt
+        // to poll. Retry the SAME id only after a successful queue read.
+        for (const item of this.pending.values()) {
+          if (item.status === "unconfirmed" && this.now() >= (this.attempts.get(item.id)?.retryAt || 0)) this.retry(item.id);
+        }
+      }
     } catch (error) { this.error = error instanceof Error ? error.message : "Не удалось проверить очередь"; this.emit(); }
     finally { this.reading = false; }
   }
@@ -91,11 +100,13 @@ export class FakeMainQueue<T> {
           });
           this.pending.delete(id); this.accept(epoch === this.epoch ? snapshot : { ...snapshot, network: null });
         } catch (error) {
-          if (this.cancelled.has(id)) continue;
+          if (this.cancelled.has(id) || this.pending.get(id)?.status === "cancelling") continue;
           const status = (error as { statusCode?: number })?.statusCode;
           const rejected = !!status && status >= 400 && status < 500;
+          const count = (this.attempts.get(id)?.count || 0) + 1;
+          this.attempts.set(id, { count, retryAt: this.now() + (count === 1 ? 0 : Math.min(30000, 1000 * 2 ** Math.min(count, 5))) });
           this.pending.set(id, { ...item, status: rejected ? "failed" : "unconfirmed", message:
-            rejected ? (error instanceof Error ? error.message : "Не удалось добавить задачу") : "Отправка не подтверждена. Проверяем очередь…" });
+            rejected ? (error instanceof Error ? error.message : "Не удалось добавить задачу") : "Нет подтверждения сервера. Проверим очередь и автоматически повторим отправку…" });
           this.emit();
         }
       }

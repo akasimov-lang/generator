@@ -576,7 +576,8 @@ def dispatch_background_jobs_job():
 @celery_app.task(bind=True, name="app.worker.background_operation", acks_late=True, reject_on_worker_lost=True)
 def background_operation_job(self, job_id):
     from app.background_jobs import run_job
-    from app.job_queues import queue_for
+    from app.job_queues import NETWORK_CHANGE_KINDS, queue_for
+    from app.network_queue_dispatch import kick, TERMINAL
     with SessionLocal() as db:
         job = db.get(models.BackgroundJob, job_id)
         delivered = (self.request.delivery_info or {}).get('routing_key')
@@ -584,4 +585,10 @@ def background_operation_job(self, job_id):
         if job and job.status == 'queued' and delivered and delivered != queue_for(db, job):
             background_operation_job.apply_async(args=[job_id], queue=queue_for(db, job), task_id=job_id)
             return {'status': 'rerouted'}
-        return run_job(db, job_id)
+        result = run_job(db, job_id)
+        next_site = job.payload.get('site_id') if job and job.kind in NETWORK_CHANGE_KINDS and job.status in TERMINAL else None
+    # The remote/project lock and DB session are released before the next job
+    # is delivered. No polling interval between consecutive edits of one site.
+    if next_site:
+        kick(next_site)
+    return result

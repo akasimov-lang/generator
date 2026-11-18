@@ -79,7 +79,7 @@ def test_network_edits_dispatch_before_a_full_showcase_refresh_batch(env):
                  for _ in range(101)]
     first = models.BackgroundJob(kind='fake_main_queue', payload={'site_id': site.id},
                                 created_at=earlier + timedelta(minutes=1))
-    second = models.BackgroundJob(kind='network_edit_queue', payload={'site_id': site.id},
+    second = models.BackgroundJob(kind='network_edit_queue', payload={'site_id': str(uuid4())},
                                  created_at=earlier + timedelta(minutes=2))
     db.add_all([*refreshes, first, second]); db.commit()
     sent = []

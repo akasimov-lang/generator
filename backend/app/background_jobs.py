@@ -28,6 +28,7 @@ def enqueue_publication(db, item, actor):
 def dispatch_pending(db, send, inflight_ids=None):
     from app.menu_generation_jobs import expire, recover_interrupted
     from app.job_queues import NETWORK_CHANGE_KINDS, queue_for
+    from app.network_queue_dispatch import head_ids
     expire(db)
     recover_interrupted(db)
     from app.sitemap_row_recheck import recover as recover_sitemap_rechecks
@@ -57,6 +58,8 @@ def dispatch_pending(db, send, inflight_ids=None):
                                 'published_at': item.published_at.isoformat()}
     jobs = db.scalars(select(models.BackgroundJob).where(
         models.BackgroundJob.status == "queued",
+        or_(models.BackgroundJob.kind.not_in(NETWORK_CHANGE_KINDS),
+            models.BackgroundJob.id.in_(head_ids())),
         or_(models.BackgroundJob.kind.not_in(['fibery_reglue', 'fake_redirect_check', 'domain_placeholder_check', 'gsc_fibery']),
             (models.BackgroundJob.payload['due_at'].as_string() <= now.isoformat()) &
             or_(models.BackgroundJob.result['next_attempt_at'].as_string().is_(None),
@@ -106,6 +109,15 @@ def dispatch_pending(db, send, inflight_ids=None):
 
 def run_job(db, job_id):
     candidate = db.get(models.BackgroundJob, job_id)
+    from app.job_queues import NETWORK_CHANGE_KINDS
+    from app.network_queue_dispatch import head_ids, TERMINAL
+    if candidate and candidate.kind in NETWORK_CHANGE_KINDS and candidate.status not in TERMINAL:
+        # Older broker deliveries can predate the one-head-per-site dispatcher.
+        # They must not overtake another kind of edit on the same project.
+        if not db.scalar(select(models.BackgroundJob.id).where(
+                models.BackgroundJob.id == job_id, models.BackgroundJob.id.in_(head_ids()))):
+            from app.fake_main_queue import waiting
+            return waiting(db, candidate, 'Ожидает предыдущее изменение этой сетки.')
     if candidate and candidate.kind == 'gsc_fibery':
         from app.gsc_fibery import execute
         return execute(db, job_id)

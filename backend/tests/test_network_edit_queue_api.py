@@ -4,6 +4,8 @@ from test_permissions import api
 
 def test_enqueue_and_read_do_not_contact_webdev(api, monkeypatch):
     client, _, _ = api
+    kicks=[]
+    monkeypatch.setattr('app.network_queue_dispatch.kick', kicks.append)
     monkeypatch.setattr('app.project_network.Remote', lambda *_: (_ for _ in ()).throw(AssertionError('Enqueue contacted Webdev')))
     payload = {'request_id': str(uuid4()), 'action': 'reserve', 'revision': 'cached', 'domain': 'next.test', 'expected': {'canon': 'main.test', 'reserve': ''}}
     response = client.post('/api/sites/own/network/edit-queue', json=payload)
@@ -11,6 +13,7 @@ def test_enqueue_and_read_do_not_contact_webdev(api, monkeypatch):
     assert response.json()['items'][0]['status'] == 'queued'
     assert len(client.post('/api/sites/own/network/edit-queue', json=payload).json()['items']) == 1
     assert len(client.get('/api/sites/own/network/edit-queue').json()['items']) == 1
+    assert kicks==['own','own']
 
 
 def test_queue_respects_project_access(api):

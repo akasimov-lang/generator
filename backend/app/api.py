@@ -8,7 +8,7 @@ import httpx
 from typing import Any
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, load_only, selectinload
 from sqlalchemy.exc import IntegrityError
@@ -644,7 +644,7 @@ def get_site_network(site_id: str, _: AuthUser, db: Session = Depends(get_db), r
     return _network_call(project_network.read_network, db, site)
 
 
-from app import network_edit_queue
+from app import network_edit_queue, network_queue_dispatch
 
 
 @router.get("/sites/{site_id}/network/edit-queue")
@@ -653,8 +653,10 @@ def get_network_edit_queue(site_id: str, _: AuthUser, db: Session = Depends(get_
 
 
 @router.post("/sites/{site_id}/network/edit-queue", status_code=202)
-def enqueue_network_edit(site_id: str, payload: network_edit_queue.Request, user: AuthUser, db: Session = Depends(get_db)):
-    return _network_call(network_edit_queue.enqueue, db, _get_site_or_404(db, site_id), payload, _request_username(user) or "user")
+def enqueue_network_edit(site_id: str, payload: network_edit_queue.Request, user: AuthUser, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    result = _network_call(network_edit_queue.enqueue, db, _get_site_or_404(db, site_id), payload, _request_username(user) or "user")
+    background_tasks.add_task(network_queue_dispatch.kick, site_id)
+    return result
 
 
 @router.delete("/sites/{site_id}/network/edit-queue/{job_id}")
@@ -668,13 +670,17 @@ def get_fake_main_queue(site_id: str, _: AuthUser, db: Session = Depends(get_db)
 
 
 @router.post("/sites/{site_id}/network/fake-main-queue", status_code=202)
-def enqueue_fake_main(site_id: str, payload: fake_main_queue.Request, user: AuthUser, db: Session = Depends(get_db)):
-    return _network_call(fake_main_queue.enqueue, db, _get_site_or_404(db, site_id), payload, _request_username(user) or "user")
+def enqueue_fake_main(site_id: str, payload: fake_main_queue.Request, user: AuthUser, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    result = _network_call(fake_main_queue.enqueue, db, _get_site_or_404(db, site_id), payload, _request_username(user) or "user")
+    background_tasks.add_task(network_queue_dispatch.kick, site_id)
+    return result
 
 
 @router.post("/sites/{site_id}/network/fake-main-queue/cancel")
-def cancel_fake_main(site_id: str, payload: fake_main_queue.Request, user: AuthUser, db: Session = Depends(get_db)):
-    return _network_call(fake_main_queue.cancel, db, _get_site_or_404(db, site_id), payload, _request_username(user) or "user")
+def cancel_fake_main(site_id: str, payload: fake_main_queue.Request, user: AuthUser, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    result = _network_call(fake_main_queue.cancel, db, _get_site_or_404(db, site_id), payload, _request_username(user) or "user")
+    background_tasks.add_task(network_queue_dispatch.kick, site_id)
+    return result
 
 
 @router.get("/sites/{site_id}/network/operations")

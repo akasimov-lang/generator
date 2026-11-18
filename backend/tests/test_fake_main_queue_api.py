@@ -4,6 +4,8 @@ from test_permissions import api
 
 def test_queue_endpoint_accepts_task_without_webdev_and_get_is_read_only(api,monkeypatch):
     client,engine,grants=api
+    kicks=[]
+    monkeypatch.setattr('app.network_queue_dispatch.kick', kicks.append)
     monkeypatch.setattr('app.project_network.Remote',lambda *_:(_ for _ in ()).throw(AssertionError('No Webdev request while enqueuing')))
     request={'request_id':str(uuid4()),'action':'create','path':'resources'}
     reply=client.post('/api/sites/own/network/fake-main-queue',json=request)
@@ -11,6 +13,7 @@ def test_queue_endpoint_accepts_task_without_webdev_and_get_is_read_only(api,mon
     assert reply.json()['items'][0]['path']=='/resources' and reply.json()['items'][0]['status']=='queued'
     assert client.post('/api/sites/own/network/fake-main-queue',json=request).json()['active_count']==1
     assert client.get('/api/sites/own/network/fake-main-queue').json()['active_count']==1
+    assert kicks==['own','own']  # Reads do not publish or perform remote work.
 
 
 def test_queue_cannot_be_read_or_changed_for_inaccessible_project(api):

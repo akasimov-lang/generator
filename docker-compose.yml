@@ -214,18 +214,20 @@ services:
       - .env
     environment:
       DB_POOL_SIZE: "2"
-      DB_MAX_OVERFLOW: "1"
+      # Each task may hold a session and a separate project advisory lock.
+      DB_MAX_OVERFLOW: "58"
+      WORKER_SHARED_DB_POOL: "1"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    cpus: 0.5
+    cpus: 1.5
     cpu_shares: 1024
-    mem_limit: 768m
+    mem_limit: 1536m
     stop_grace_period: 120s
-    # Preserve edit ordering; cache/showcase refreshes have a separate worker.
-    command: celery -A app.worker.celery_app worker --loglevel=info --hostname=network_changes@%h --queues=network_changes --concurrency=1
+    # Dispatch one head per project; independent projects run concurrently.
+    command: celery -A app.worker.celery_app worker --loglevel=info --hostname=network_changes@%h --queues=network_changes --pool=threads --concurrency=30
 
   cache_worker:
     image: generator-backend
