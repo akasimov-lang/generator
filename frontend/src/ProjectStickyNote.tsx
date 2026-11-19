@@ -13,7 +13,38 @@ function fitSize(s:Size,p:Point={x:8,y:8}):Size {
 }
 function fit(p:Point,size:Size):Point {return {x:Math.max(8,Math.min(Number.isFinite(p.x)?p.x:8,innerWidth-size.width-8)),y:Math.max(8,Math.min(Number.isFinite(p.y)?p.y:8,innerHeight-size.height-8))};}
 function PaperIcon({filled}:{filled:boolean}) {
-  return <span className={`stickyPaperIcon ${filled?"isWritten":""}`} aria-hidden="true"><span className="stickyPaperLines"/>{filled&&<span className="stickyPaperPen"/>}</span>;
+  const id=React.useId();
+  const paper="M8 6.5 33 5q2-.1 2.2 2.1l1.2 25.2q-1 7.3-8.1 8.7l-17.4 1Q8.8 42 8.6 40L6 9q-.1-2 2-2.5Z";
+  return <span className={`stickyPaperIcon ${filled?"isWritten":""}`} aria-hidden="true"><svg viewBox="0 0 48 48" fill="none" focusable="false">
+    <defs>
+      <linearGradient id={`${id}-paper`} x1="9" y1="5" x2="34" y2="42" gradientUnits="userSpaceOnUse"><stop stopColor="#fff9ce"/><stop offset=".18" stopColor="#fff0a0"/><stop offset=".7" stopColor="#f5df87"/><stop offset="1" stopColor="#e6c76b"/></linearGradient>
+      <linearGradient id={`${id}-curl`} x1="27" y1="31" x2="35" y2="39" gradientUnits="userSpaceOnUse"><stop stopColor="#fffde4"/><stop offset=".42" stopColor="#fff3b4"/><stop offset="1" stopColor="#c5a34e"/></linearGradient>
+      <linearGradient id={`${id}-pen`} x1="-3" y1="12" x2="3" y2="12" gradientUnits="userSpaceOnUse"><stop stopColor="#162330"/><stop offset=".23" stopColor="#496273"/><stop offset=".48" stopColor="#7b93a1"/><stop offset=".6" stopColor="#344b5c"/><stop offset="1" stopColor="#101c27"/></linearGradient>
+      <linearGradient id={`${id}-metal`} x1="-3" y1="0" x2="3" y2="0" gradientUnits="userSpaceOnUse"><stop stopColor="#726d61"/><stop offset=".35" stopColor="#f8f5e7"/><stop offset=".6" stopColor="#bcb8aa"/><stop offset="1" stopColor="#615c50"/></linearGradient>
+      <filter id={`${id}-shadow`} x="-40%" y="-30%" width="180%" height="180%"><feDropShadow dx=".7" dy="2.4" stdDeviation="1.5" floodColor="#4d3b15" floodOpacity=".3"/></filter>
+      <filter id={`${id}-pen-shadow`} x="-100%" y="-30%" width="300%" height="180%"><feDropShadow dx="1" dy="1.5" stdDeviation=".7" floodColor="#463811" floodOpacity=".42"/></filter>
+      <filter id={`${id}-grain`}><feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="3" seed="7"/><feColorMatrix type="saturate" values="0"/></filter>
+      <clipPath id={`${id}-clip`}><path d={paper}/></clipPath>
+    </defs>
+    <g filter={`url(#${id}-shadow)`}>
+      <path d={paper} fill={`url(#${id}-paper)`} stroke="#b79b50" strokeWidth=".35"/>
+      <path d="m8.1 8 25-1.5q.7 0 .8 1l.2 6" stroke="#fffdeb" strokeOpacity=".6" strokeWidth=".5"/>
+      <path d="M10.4 39.6q10.5.6 19.3-1.1" stroke="#d0b15d" strokeOpacity=".5" strokeWidth=".6"/>
+      <g clipPath={`url(#${id}-clip)`}><rect x="5" y="4" width="34" height="40" filter={`url(#${id}-grain)`} opacity=".09"/></g>
+      {filled&&<g className="stickyPaperLines" stroke="#4c5671" strokeWidth=".85" strokeLinecap="round" opacity=".8"><path d="m11.5 15 3-.5 1 .3 3-.6 2 .2 5-.7M12 19.2l2-.4 1.6.2 2.6-.5 1 .2 6-.6M12.5 23.5l2.5-.3 2 .2 2-.6 3.5-.1M13 27.5l2-.4 1.5.1 3-.3"/></g>}
+      <path d="M26.7 40.8q4-3.8 2.8-8.5l6.6-1.6q.4 6.8-9.4 10.1Z" fill="#94742d" opacity=".2"/>
+      <path d="M27.9 40.4q3-4.8 1.1-8.5 4.2.1 7.4-.9-1 7.7-8.5 9.4Z" fill={`url(#${id}-curl)`} stroke="#c6aa62" strokeWidth=".4"/>
+      <path d="M29.1 32.1q3.5.2 6.7-.8" stroke="#fffce0" strokeWidth=".8"/>
+    </g>
+    {filled&&<g className="stickyPaperPen" transform="translate(38 7) rotate(27)" filter={`url(#${id}-pen-shadow)`}>
+      <rect x="-2.4" y="1" width="4.8" height="24.5" rx="1.5" fill={`url(#${id}-pen)`}/>
+      <rect x="-2" y=".3" width="4" height="2.6" rx=".8" fill={`url(#${id}-metal)`}/>
+      <path d="M1.5 3.4v8.4q0 1.1-.7 1.1" stroke="#e3e3dc" strokeWidth=".75" strokeLinecap="round"/>
+      <path d="M-2.4 24.4h4.8l-1.7 6h-1.4Z" fill={`url(#${id}-metal)`}/>
+      <path d="M-.65 30.2h1.3L0 32.6Z" fill="#303536"/>
+      <path d="M-1 4.5v18" stroke="#b0c2c8" strokeWidth=".35" opacity=".6"/>
+    </g>}
+  </svg></span>;
 }
 export function ProjectStickyNote({siteId,project,username,api,hasNote}:{siteId:string;project:string;username:string;api:NoteApi;hasNote?:boolean}) {
   const key=`project-note-draft:${username}:${siteId}`, positionKey=`project-note-position:${username}:${siteId}`,sizeKey=`project-note-size:${username}:${siteId}`;
