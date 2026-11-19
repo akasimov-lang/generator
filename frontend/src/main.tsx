@@ -9650,6 +9650,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
             const statusClass = row.projectStatus === "mass_actions" ? "massActions" : row.projectStatus === "duplicate" ? "duplicate" : row.isTest ? "test" : row.isWorking ? "working" : "unfocused";
             return `siteDomainRow ${statusClass} ${row.isFavorite ? "favorite" : ""}`.trim();
           })}
+          rowKeys={visibleRows.map(row => row.id)}
           wrapperClassName="siteDomainsTable"
           sortableColumnIndexes={visibleColumnOrder.map((column, index) => SITE_COLUMN_SORT_KEYS[column] && !["status", "menuType"].includes(column) ? index : -1).filter((index) => index >= 0)}
           sortColumnIndex={siteSort ? siteSortKeys.indexOf(siteSort.key) : null}
@@ -10706,7 +10707,7 @@ function DataPanel({ id, title, actions, children, collapseKey, allowCollapse = 
   );
 }
 
-function ResponsiveTable({ columns, columnKeys = [], rows, rowClassNames, footer, footerLabelIndex = 0, wrapperClassName = "", sortableColumnIndexes = [], sortColumnIndex = null, sortDirection, onSortColumn, columnHeaders = {} }: { columns: string[]; columnKeys?: string[]; rows: React.ReactNode[][]; rowClassNames?: string[]; footer?: React.ReactNode[]; footerLabelIndex?: number; wrapperClassName?: string; sortableColumnIndexes?: number[]; sortColumnIndex?: number | null; sortDirection?: "asc" | "desc"; onSortColumn?: (columnIndex: number) => void; columnHeaders?: Record<number, React.ReactNode> }) {
+function ResponsiveTable({ columns, columnKeys = [], rows, rowKeys, rowClassNames, footer, footerLabelIndex = 0, wrapperClassName = "", sortableColumnIndexes = [], sortColumnIndex = null, sortDirection, onSortColumn, columnHeaders = {} }: { columns: string[]; columnKeys?: string[]; rows: React.ReactNode[][]; rowKeys?: string[]; rowClassNames?: string[]; footer?: React.ReactNode[]; footerLabelIndex?: number; wrapperClassName?: string; sortableColumnIndexes?: number[]; sortColumnIndex?: number | null; sortDirection?: "asc" | "desc"; onSortColumn?: (columnIndex: number) => void; columnHeaders?: Record<number, React.ReactNode> }) {
   if (!rows.length) return <EmptyState text="Данных пока нет." />;
   return (
     <div className={`tableWrap ${wrapperClassName}`.trim()}>
@@ -10721,7 +10722,7 @@ function ResponsiveTable({ columns, columnKeys = [], rows, rowClassNames, footer
             ) : column)}
           </th>
         ))}</tr></thead>
-        <tbody>{rows.map((row, rowIndex) => <tr className={rowClassNames?.[rowIndex] || undefined} key={rowIndex}>{row.map((cell, cellIndex) => <td className={columnKeys[cellIndex] ? `column-${columnKeys[cellIndex]}` : undefined} data-label={columns[cellIndex]} key={cellIndex}>{cell}</td>)}</tr>)}</tbody>
+        <tbody>{rows.map((row, rowIndex) => <tr className={rowClassNames?.[rowIndex] || undefined} key={rowKeys?.[rowIndex] ?? rowIndex}>{row.map((cell, cellIndex) => <td className={columnKeys[cellIndex] ? `column-${columnKeys[cellIndex]}` : undefined} data-label={columns[cellIndex]} key={cellIndex}>{cell}</td>)}</tr>)}</tbody>
         {footer && <tfoot aria-label="Итого по текущей выборке"><tr>{footer.map((cell, index) => index === footerLabelIndex
           ? <th scope="row" className={columnKeys[index] ? `column-${columnKeys[index]}` : undefined} key={index}>{cell}</th>
           : <td className={columnKeys[index] ? `column-${columnKeys[index]}` : undefined} data-label={columns[index]} key={index}>{cell}</td>)}</tr></tfoot>}
