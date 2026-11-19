@@ -69,3 +69,6 @@ app.include_router(menu_reorder_router, prefix="/api")
 
 app.include_router(personas_router, prefix="/api")
 app.include_router(brand_bonuses_router, prefix="/api")
+
+from app.project_notes import router as project_notes_router
+app.include_router(project_notes_router, prefix="/api")

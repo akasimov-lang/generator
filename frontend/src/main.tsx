@@ -1,3 +1,6 @@
+import { ProjectStickyNote } from "./ProjectStickyNote";
+import { useProjectNoteIndex } from "./projectNoteIndex";
+import { notesFirst } from "./projectNoteOrder";
 import {ProjectFiberyTasks} from "./ProjectFiberyTasks";
 import {ProjectGscField} from "./ProjectGscField";
 import {useMenuDrag} from "./useMenuDrag";
@@ -2634,6 +2637,7 @@ function ProjectWorkspaceView({
               onChange={changeWorkspaceBrand} disabled={brandSavingId !== null} ariaLabel="Бренд текущего проекта" searchPlaceholder="Найти бренд" compact /></span>
             {brandError?.siteId === selectedSite.id ? <span className="formError" role="alert">{brandError.message}</span> : null}
           </span> : null}
+          {selectedSite ? <ProjectStickyNote key={selectedSite.id} siteId={selectedSite.id} project={selectedSite.name} username={currentUsername} api={sourceApi} /> : null}
         </span>
       )}>
         <div className="projectHeader">
@@ -8834,6 +8838,7 @@ function PeerProjectPicker({ sites, geo, brand, onChange }: { sites: Site[]; geo
 }
 
 function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsername, favoritesOnly = false, readOnly = false, embedded = false, massActions = false, onChanged, onSelectionChange, selectionIds, headerActions, moveFilter, projectScopeLabel, showProjectTypeFilters = false }: ViewProps & { showProjectTypeFilters?: boolean; massActions?: boolean; projectScopeLabel?:string; moveFilter?: MassActionFilter; headerActions?: React.ReactNode; sites: Site[]; snapshotUpdatedAt: string | null; onSitesChanged: (sites: Site[], replace?: boolean) => void; currentUsername: string; favoritesOnly?: boolean; readOnly?: boolean; embedded?: boolean; selectionIds?: string[]; onSelectionChange?: (ids: string[]) => void }) {
+  const projectNotes = useProjectNoteIndex(api);
   const [showStatistics, setShowStatistics] = React.useState(() => window.location.hash === "#mass-action-statistics");
   const [typeFilter, setTypeFilter] = React.useState<ProjectTypeFilter|null>(() => showProjectTypeFilters ? projectTypeFilter(window.location.search) : null);
   function changeTypeFilter(next: ProjectTypeFilter|null) {
@@ -9150,6 +9155,8 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
   });
   const statusCounts = new Map(statusFilterOptions.map(option => [option.value, rowsBeforeStatus.filter(row => row.projectStatus === option.value).length]));
   const filteredRows = rowsBeforeStatus.filter(row => statusFilters.includes(row.projectStatus) && matchesSummaryFilter(row)).sort((left, right) => {
+    const priority = notesFirst(left.id, right.id, projectNotes.ids);
+    if (priority) return priority;
     if (!normalizedQuery) return 0;
     return Number(isExactNetworkDomainSearch(right.domains, normalizedQuery))
       - Number(isExactNetworkDomainSearch(left.domains, normalizedQuery));
@@ -9425,6 +9432,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
       >
         {networkRefreshResult?.scope===networkRefreshScope&&!!networkRefreshResult.errors.length&&<details className="siteNetworkRefreshErrors"><summary>Не удалось обновить сетки: {networkRefreshResult.errors.length}</summary>{networkRefreshResult.errors.map(error=><p key={error}>{error}</p>)}</details>}
         <div className="siteCacheSearch">
+          {projectNotes.error && <p className="formError" role="alert">{projectNotes.error}</p>}
           {exportTableError && <p className="formError" role="alert">{exportTableError}</p>}
           <Search size={18} />
           <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Поиск по домену или имени проекта" />
@@ -9561,6 +9569,7 @@ function SitesView({ api, sites, snapshotUpdatedAt, onSitesChanged, currentUsern
                     >
                       <strong>{row.name}</strong>
                     </a>}
+                    <ProjectStickyNote key={row.id} siteId={row.id} project={row.name} username={currentUsername} api={api} hasNote={projectNotes.ids.has(row.id)} />
                     {row.reserve && <span className="siteReserveChosen" role="img" aria-label={`Резерв выбран: ${row.reserve}`} title={`Резерв выбран: ${row.reserve}`}><CheckCircle2 size={15} strokeWidth={2.5}/></span>}
                   </span>
                   <span className="siteNameActions">
