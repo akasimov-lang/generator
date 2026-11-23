@@ -129,6 +129,12 @@ def update_redirects(project, source, target, original_source='', *, delete=Fals
 
 def for_reglue(state, payload):
     """Auto plans retarget the complete network; manual reglue retains its policy."""
+    if payload.get('redirect_to_main') is False:
+        # Even if Webdev changes redirects as a side effect, restore exactly the
+        # snapshot authorized before the Main change. Legacy receipts retain
+        # their original policy when this field is absent.
+        verified_redirects(state)
+        return deepcopy(payload['redirects_before'])
     destination = payload.get('redirect_target')
     if not destination:
         return retarget_redirects(state, payload['source_domain'], payload['reserve'])

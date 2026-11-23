@@ -8,12 +8,11 @@
 .networkEditStatus.error { color: #b42318; }
 .networkEditPending { opacity: .65; }
 
-/* Reserve actions and feedback independently of message length. */
-.domainRedirectActionSlot { position:relative; width:230px; height:44px; }
-.domainRedirectActionSlot > .networkEditStatus { position:absolute; top:28px; left:0; right:0; max-width:none; max-height:16px; overflow:auto; white-space:normal; overflow-wrap:anywhere; }
+/* Let messages grow below the controls instead of overlapping in a 16px slot. */
+.domainRedirectActionSlot { display:flex; flex-direction:column; align-items:flex-start; gap:6px; width:230px; min-height:44px; }
+.domainRedirectActionSlot > .networkEditStatus { position:static; max-width:100%; white-space:normal; overflow-wrap:anywhere; }
 
 .networkRedirects .domainRedirectsTable td { padding-top:4px; padding-bottom:4px; }
 .domainRedirectActionSlot > .domainRedirectInlineActions { height:28px; }
 .domainRedirectDelete { color:var(--danger, #b42318); }
-.networkRedirects .networkRedirectForm { position:relative; padding-bottom:20px; }
-.domainRedirectFormError { position:absolute; bottom:0; left:0; right:0; height:16px; overflow:auto; white-space:nowrap; font-size:11px; color:#b42318; }
+.domainRedirectFormError { white-space:normal; overflow-wrap:anywhere; font-size:12px; line-height:1.5; color:#b42318; }

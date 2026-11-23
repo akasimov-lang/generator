@@ -32,7 +32,7 @@ def continue_pending(db, site, remote, state, project):
             if child and child.status in {'pending', 'unknown'}:
                 child.status = 'confirmed'; child.message = 'Конечные цели редиректов подтверждены.'
             parent.status = 'confirmed' if network.operation_matches(parent, state) else 'unknown'
-            parent.message = ('Main и конечные цели доменных редиректов подтверждены.' if parent.status == 'confirmed'
+            parent.message = ('Main и настройки доменных редиректов подтверждены.' if parent.status == 'confirmed'
                               else 'Main и редиректы обновлены. Ожидаем подтверждения альтернейтов.')
             parent.request_payload = {**parent.request_payload, 'redirects_after':state['domain_redirects']}
             db.commit(); continue
@@ -42,7 +42,7 @@ def continue_pending(db, site, remote, state, project):
                 action='reglue_redirects', initiator=parent.initiator, status='pending',
                 request_payload={'folder':site.name.encode('idna').decode(), 'redirects':desired,
                     'redirects_before':state['domain_redirects'], 'parent_id':parent.id,
-                    'expected_canon':payload['reserve'], 'old_main':payload['source_domain']}, message='Обновляем конечные цели редиректов после смены Main.')
+                    'expected_canon':payload['reserve'], 'old_main':payload['source_domain']}, message='Применяем сохранённую настройку редиректов после смены Main.')
             db.add(child); db.commit()  # Durable intent before the only write attempt.
             try:
                 code, body = remote.request('POST', '/projects/update-value',
@@ -70,12 +70,12 @@ def continue_pending(db, site, remote, state, project):
         if network.operation_matches(child, actual):
             child.status = 'confirmed'; child.message = 'Конечные цели редиректов подтверждены.'
             parent.status = 'confirmed' if network.operation_matches(parent, state) else 'unknown'
-            parent.message = ('Main и конечные цели доменных редиректов подтверждены.' if parent.status == 'confirmed'
+            parent.message = ('Main и настройки доменных редиректов подтверждены.' if parent.status == 'confirmed'
                               else 'Main и редиректы обновлены. Ожидаем подтверждения альтернейтов.')
             parent.request_payload = {**parent.request_payload, 'redirects_after':state['domain_redirects']}
         elif child.status == 'failed':
             parent.status = 'failed'; parent.message = 'Main изменён, обновление целей редиректов не завершено. ' + (child.message or '')
         elif parent.status != 'confirmed':
-            parent.status = 'unknown'; parent.message = 'Main изменён. Ждём подтверждения новых целей редиректов; повторная отправка не выполняется.'
+            parent.status = 'unknown'; parent.message = 'Main изменён. Ждём подтверждения настроек редиректов; повторная отправка не выполняется.'
         db.commit()
     return state, project

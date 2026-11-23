@@ -73,6 +73,8 @@ def test_cross_reglue_skips_redirect_domains_and_rechecks_before_extract(setup):
 
 def reglue(env,rows):
  db,site,remote=env
+ from app.reglue_redirect_policy import save
+ save(db,site,True,'test')
  remote.data['settings']['redirects']=copy.deepcopy(rows)
  before=network.read_network(db,site)
  request=network.NetworkChange(request_id=uuid4(),action='reglue',revision=before['revision'],domain='reserve.test')
@@ -155,6 +157,8 @@ def test_redirect_failure_leaves_main_changed_but_operation_not_success(env):
 
 def test_automatic_same_network_reglue_updates_redirects(env,monkeypatch):
  db,site,remote=env
+ from app.reglue_redirect_policy import save
+ save(db,site,True,'test')
  site.brand='Pin-Up';site.cache_geo='AZ';site.cache_language='az';site.project_status='mass_actions'
  site.domain_types={'reserve.test':'newreg','next.test':'newreg'};db.commit()
  auto.save_config(db,auto.GlobalConfig(enabled=True,scheme_mode='clean'))
@@ -170,6 +174,8 @@ def test_automatic_same_network_reglue_updates_redirects(env,monkeypatch):
 
 def test_cross_reglue_updates_target_redirects_after_promotion(setup):
  db,source,target,sr,tr=setup
+ from app.reglue_redirect_policy import save
+ save(db,target,True,'test')
  tr.data['settings']['redirects']=[{'url':'old-redirect.test','value':'target.test'}]
  run=launch(setup);auto.execute(db,run.id)
  assert run.status=='completed',run.message

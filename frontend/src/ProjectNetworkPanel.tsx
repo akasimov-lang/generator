@@ -1,3 +1,4 @@
+import { ReglueRedirectPolicy } from "./ReglueRedirectPolicy";
 import { SaveIndicator, QueueSaveIndicator } from "./SaveIndicator";
 import { fakeSaveFeedback } from "./fakeSaveFeedback";
 import { saveMarkupWithRetry } from "./networkMarkupSave";
@@ -88,6 +89,7 @@ export function MassReglueParticipationControl({enabled, saving, saved, error, o
 }
 
 export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refreshToken = 0, networks = [], brand, onSelectNetwork }: Props) {
+  const [redirectPolicyBusy, setRedirectPolicyBusy] = React.useState(true);
   const [structuredDataRevision, setStructuredDataRevision] = React.useState(0);
   const draftKey = `network-alternates:${username}:${site.id}`;
   const [data, setData] = React.useState<Network | null>(null);
@@ -578,7 +580,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
   const protectedDomains = [data?.canon, data?.reserve, site.name, data?.amp, ...(data?.amp_domains || [])].filter(Boolean).map(value => value!.replace(/^www\./, ""));
   const removeErrors = removeDomains.flatMap(domain => !data?.domains.includes(domain) ? [domain + ": домен отсутствует в сетке."] : protectedDomains.includes(domain.replace(/^www\./, "")) ? [domain + ": домен проекта, Main, AMP или резерв защищён от удаления."] : data.alternates.some(link => link.domain.replace(/^www\./, "") === domain.replace(/^www\./, "")) ? [domain + ": используется в альтернейтах."] : []);
   const reserveValid = Boolean(data && reserve && reserve !== data.canon && data.domains.includes(reserve) && !ampDomains.has(reserve));
-  const reglueBlockedReason = editQueue.busy("reglue") ? "Переклей отправлен на сервер."
+  const reglueBlockedReason = redirectPolicyBusy ? "Ожидаем подтверждения настройки редиректов." : editQueue.busy("reglue") ? "Переклей отправлен на сервер."
     : editQueue.busy("reserve") ? "Ожидаем сохранения резерва."
     : busy && dirty ? "Ожидаем сохранения разметки."
     : !reserveValid ? "Выберите резервный домен из текущей сетки."
@@ -606,6 +608,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
           <button type="button" aria-pressed={networkView === "amp"} onClick={() => setNetworkView("amp")}>Ампы</button>
         </div>}
         {data && mode === "network" && <MassReglueParticipationControl enabled={participationEnabled} {...participationStatus} onChange={enabled => void updateParticipation(enabled)} />}
+        {data && <ReglueRedirectPolicy key={site.id} siteId={site.id} api={api} onBusyChange={setRedirectPolicyBusy} />}
       </div>
       <div className="networkRefreshStatus"><button type="button" className="button secondary compact" disabled={Boolean(busy)} onClick={() => void load(true, true)}>{busy === "refresh" ? "Обновляем…" : "Обновить данные"}</button>{message && message !== "Ручной переклей: подтверждено." && <small role="status">{message}</small>}
         {mode !== "network" && <LastReglueSummary last={data?.last_reglue} recent={data?.recent_network_changes} observedAt={data?.last_reglue_at} />}

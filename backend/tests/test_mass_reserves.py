@@ -27,7 +27,8 @@ def test_selected_reserve_promotes_without_extracting_or_importing(setup, scheme
     auto.execute(db, run.id)
     assert run.status == 'completed', run.message
     assert tr.data['settings']['canon'] == 'local-reserve.test'
-    assert tr.data['settings']['redirects'] == [{'url': 'old-redirect.test', 'value': 'local-reserve.test'}]
+    # Retargeting is opt-in; a Main change preserves existing destinations by default.
+    assert tr.data['settings']['redirects'] == [{'url': 'old-redirect.test', 'value': 'target.test'}]
     assert not sr.calls
     assert not any(path in {'/site-config/create', '/site-config/delete'} for path, _ in tr.calls)
     assert len(tr.data['settings']['domains']) == 2

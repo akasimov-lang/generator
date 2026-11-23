@@ -485,6 +485,20 @@ class ParticipationRequest(BaseModel):
     enabled: bool
 
 
+@router.get('/projects/{site_id}/redirect-policy')
+def redirect_policy(site_id: str, user: AuthUser, db: Session = Depends(get_db)):
+    from app.reglue_redirect_policy import enabled
+    site = site_or_404(db, site_id, user)
+    return {'site_id': site.id, 'enabled': enabled(db, site.id)}
+
+
+@router.patch('/projects/{site_id}/redirect-policy')
+def update_redirect_policy(site_id: str, payload: ParticipationRequest, user: AuthUser, db: Session = Depends(get_db)):
+    from app.reglue_redirect_policy import save
+    site = site_or_404(db, site_id, user)
+    return save(db, site, payload.enabled, user['username'])
+
+
 @router.patch('/projects/{site_id}/participation')
 def participation(site_id: str, payload: ParticipationRequest, user: AuthUser, db: Session = Depends(get_db)):
     from app.schemas import SiteResponse

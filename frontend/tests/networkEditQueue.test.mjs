@@ -174,3 +174,25 @@ test('discard response cannot replace network after concurrent edit',async()=>{
   assert.equal(queue.server.network,null);
   assert.equal(queue.latest('domain:other.test').status,'submitting');
 });
+
+test('hung edit submission times out and refresh confirms it without replay',async()=>{
+ let accepted;let posts=0;
+ const queue=new NetworkEditQueue('site',async(path,options)=>{
+  if(options?.method==='POST') {posts++;const body=JSON.parse(options.body);accepted={id:body.request_id,request:body,status:'completed',message:'Сохранено'};return new Promise(()=>{});}
+  return snapshot([accepted]);
+ },10);
+ queue.enqueue(request('existing.test'));
+ await new Promise(resolve=>setTimeout(resolve,30));
+ assert.equal(queue.latest('domain:existing.test').status,'unconfirmed');
+ await queue.refresh();
+ assert.equal(queue.latest('domain:existing.test').status,'completed');assert.equal(posts,1);
+});
+
+test('hung queue read releases refresh lock so next poll can recover',async()=>{
+ let calls=0;
+ const queue=new NetworkEditQueue('site',async()=>++calls===1?new Promise(()=>{}):snapshot(),10);
+ const read=queue.refresh();
+ await new Promise(resolve=>setTimeout(resolve,30));await read;
+ assert.match(queue.error,/не ответил/);
+ await queue.refresh();assert.equal(calls,2);assert.equal(queue.error,'');
+});

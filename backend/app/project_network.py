@@ -647,6 +647,10 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
                 from app.domain_redirects import retarget_redirects
                 # Full redirect settings must be known before changing Main.
                 retarget_redirects({**state, "redirects_verified": isinstance(project["settings"].get("redirects"), list)}, state["canon"], domain)
+                from app.reglue_redirect_policy import enabled as redirect_policy_enabled
+                redirect_to_main = redirect_policy_enabled(db, site.id)
+                if not redirect_to_main and any(domain_name(row['url']).removeprefix('www.') == domain.removeprefix('www.') for row in state['domain_redirects']):
+                    raise ValueError('Новый Main сам перенаправляется на другой адрес. Удалите этот редирект перед переклеем или включите «301 редирект на главный домен при переклее».')
                 path = "/projects/update-reglue"
                 request.update(trigger="webdev:settings", initiator=get_settings().project_cache_username)
         else:
@@ -707,6 +711,7 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
         if payload.action == "reglue":
             stored_request["source_domain"] = state["canon"]
             stored_request["redirect_sync"] = True
+            stored_request["redirect_to_main"] = redirect_to_main
             stored_request["redirects_before"] = state["domain_redirects"]
             if auto_run_id:
                 run = db.get(models.AutoReglueRun, auto_run_id)

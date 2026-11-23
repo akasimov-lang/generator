@@ -25,7 +25,25 @@ export class NetworkEditQueue<T> {
   private outbox: string[] = [];
   private siteId: string;
   private api: Api;
-  constructor(siteId: string, api: Api) { this.siteId = siteId; this.api = api; }
+  private requestTimeoutMs: number;
+  constructor(siteId: string, api: Api, requestTimeoutMs = 20000) { this.siteId = siteId; this.api = api; this.requestTimeoutMs = requestTimeoutMs; }
+  private async request<R>(path: string, options?: RequestInit): Promise<R> {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        this.api<R>(path, { ...options, signal: controller.signal }),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            reject(new Error("Сервер не ответил вовремя. Проверяем статус отправки."));
+            controller.abort();
+          }, this.requestTimeoutMs);
+          // Unresolved test/middleware promises must not keep a Node process alive.
+          (timer as unknown as { unref?: () => void }).unref?.();
+        }),
+      ]);
+    } finally { if (timer !== undefined) clearTimeout(timer); }
+  }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   private emit() { for (const listener of this.listeners) listener(); }
   get items() { return [...this.pending.values(), ...this.server.items.filter(item => !this.pending.has(item.id))].filter(item => !this.dismissedIds.has(item.id)); }
@@ -44,7 +62,7 @@ export class NetworkEditQueue<T> {
     if (this.reading || this.sending || this.dismissing.size) return;
     this.reading = true; const epoch = this.epoch;
     try {
-      const snapshot = await this.api<NetworkEditSnapshot<T>>(`/sites/${this.siteId}/network/edit-queue`);
+      const snapshot = await this.request<NetworkEditSnapshot<T>>(`/sites/${this.siteId}/network/edit-queue`);
       if (epoch === this.epoch && !this.sending) { this.error = ""; this.accept(snapshot); void this.send(); }
     } catch (error) { this.error = error instanceof Error ? error.message : "Не удалось проверить очередь"; this.emit(); }
     finally { this.reading = false; }
@@ -76,7 +94,7 @@ export class NetworkEditQueue<T> {
     const saved = this.server.items.filter(olderFailure).sort((a,b) => (b.created_at || "").localeCompare(a.created_at || ""))[0];
     this.dismissing.add(key); const epoch = ++this.epoch;
     try {
-      const snapshot = saved ? await this.api<NetworkEditSnapshot<T>>(`/sites/${this.siteId}/network/edit-queue/${encodeURIComponent(saved.id)}`, { method: "DELETE" }) : null;
+      const snapshot = saved ? await this.request<NetworkEditSnapshot<T>>(`/sites/${this.siteId}/network/edit-queue/${encodeURIComponent(saved.id)}`, { method: "DELETE" }) : null;
       const current = epoch === this.epoch;
       this.epoch++;
       for (const discardedId of discarded) { this.dismissedIds.add(discardedId); this.pending.delete(discardedId); }
@@ -99,7 +117,7 @@ export class NetworkEditQueue<T> {
         if (!item) continue;
         const epoch = this.epoch;
         try {
-          const snapshot = await this.api<NetworkEditSnapshot<T>>(`/sites/${this.siteId}/network/edit-queue`, {
+          const snapshot = await this.request<NetworkEditSnapshot<T>>(`/sites/${this.siteId}/network/edit-queue`, {
             method: "POST", body: JSON.stringify({ ...item.request, request_id: id }),
           });
           this.pending.delete(id); this.accept(epoch === this.epoch ? snapshot : { ...snapshot, network: null });
