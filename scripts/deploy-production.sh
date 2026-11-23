@@ -16,7 +16,13 @@ restore_vpn() {
   # Existing runtime files may be root-owned. Do not rewrite identical rules.
   if ! cmp -s "$vpn_source" "$vpn_target"; then
     mkdir -p "$(dirname "$vpn_target")"
-    cp -p "$vpn_source" "$vpn_target"
+    if [ -e "$vpn_target" ] && [ ! -w "$vpn_target" ]; then
+      # Docker may have created the bind-mounted runtime file as root.
+      # Restore only the existing server whitelist; never source it from Git.
+      sudo -n cp -p "$vpn_source" "$vpn_target"
+    else
+      cp -p "$vpn_source" "$vpn_target"
+    fi
   fi
   cmp -s "$vpn_source" "$vpn_target"
 }
