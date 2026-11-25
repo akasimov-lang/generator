@@ -90,7 +90,7 @@
 .redirectNode.newreg { background:linear-gradient(150deg,#fafffe,#d7f1e9); border-color:#64a58f; box-shadow:0 4px 0 #5d9784,0 9px 18px #20594729,inset 0 1px 1px #fff; }
 .redirectNodeHandle { font-size:13px; line-height:17px; max-height:34px; overflow:hidden; padding-right:10px; }
 .redirectNode small { font-size:11px; color:#687891; pointer-events:none; }
-.redirectNode.mainNode { width:164px; height:164px; border-radius:50%; padding:22px 15px; text-align:center; align-items:center; border:2px solid #c95454; background:radial-gradient(ellipse at 32% 16%,#fff4f0 0,#ffc7bc 17%,#f7786c 47%,#d84a49 76%,#b93037 100%); box-shadow:0 7px 0 #982c35,0 13px 14px #8b2b3d38,0 22px 35px #c4474340,inset 0 4px 7px #fff9,inset -6px -9px 16px #8f21374a; color:#67202c; }
+.redirectNode.mainNode { width:164px; height:164px; border-radius:50%; padding:22px 15px; text-align:center; align-items:center; border:2px solid #c95454; background:radial-gradient(ellipse at 32% 16%,#fff4f0 0,#ffc7bc 17%,#f7786c 47%,#d84a49 76%,#b93037 100%); box-shadow:0 5px 16px #8b2b3d30; color:#67202c; }
 .redirectNode.mainNode .redirectNodeHandle { max-height:68px; padding:0; }
 .redirectNode.mainNode small { color:#8c2734; font-size:12px; font-weight:700; }
 .redirectNode:hover { filter:brightness(1.02); }
@@ -180,7 +180,7 @@
 .redirectSchemaWorkspace .redirectGraphHelp[open] > p { position:absolute; top:100%; left:0; width:min(420px,70vw); background:#fff; box-shadow:0 5px 20px #1e335e30; padding:12px; border:1px solid #d9dfed; border-radius:8px; }
 
 /* Main remains prominent while its rectangular outline matches connection geometry. */
-.redirectNode.mainNode { width:360px; height:100px; border:4px solid #aa3743; border-radius:13px; padding:12px 62px; gap:4px; background:radial-gradient(ellipse at 28% 5%,#fff4ef 0,#ffc4b8 18%,#f58173 46%,#d34d4c 78%,#b5333b 100%); }
+.redirectNode.mainNode { width:360px; height:100px; border:1px solid #aa3743; border-radius:13px; padding:12px 62px; gap:4px; background:radial-gradient(ellipse at 28% 5%,#fff4ef 0,#ffc4b8 18%,#f58173 46%,#d34d4c 78%,#b5333b 100%); }
 .redirectNode.mainNode .redirectNodeHandle { width:100%; max-height:51px; padding:0; }
 .redirectNode.mainNode .redirectNodeGrabZone { top:0; bottom:0; left:0; width:52px; height:auto; border-right:1px solid #a6414b40; border-radius:9px 0 0 9px; background:linear-gradient(130deg,#ffffff85,#ffffff05); }
 .redirectNode.mainNode .redirectNodePlus { top:0; bottom:0; left:auto; right:0; width:54px; height:100%; border:0; border-left:1px solid #a6414b40; border-radius:0 9px 9px 0; background:linear-gradient(135deg,#ffffff66,#ffffff05); box-shadow:none; }
