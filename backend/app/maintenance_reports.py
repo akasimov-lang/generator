@@ -76,7 +76,7 @@ def summary(job, report_id=None, *, entries=None):
     repeat = bool(job.payload.get('repeat'))
     from app.maintenance_worklist import is_work_report
     work_list = is_work_report(job)
-    factual = work_list or job.payload.get('task_type') in {'sitemap_repair', 'brand_health_audit', 'system_recovery', 'toc_repair', 'showcase_audit', 'showcase_inventory', 'showcase_standardization', 'article_image_localization'}
+    factual = work_list or job.payload.get('task_type') in {'ahrefs_batch_audit', 'sitemap_repair', 'brand_health_audit', 'system_recovery', 'toc_repair', 'showcase_audit', 'showcase_inventory', 'showcase_standardization', 'article_image_localization'}
     done = sum(row['status'] in {'completed', 'partial', 'failed', 'skipped'} for row in entries)
     active = any(row['status'] in {'pending','running','waiting'} for row in entries)
     progress = [entry_progress(row, content_only=bool(job.payload.get('text_revision_20261027')),
@@ -172,6 +172,10 @@ def paragraph_metrics(page):
 
 def view(job, db=None):
     entries = deepcopy((job.result or {}).get('entries', []))
+    if job.payload.get('task_type') == 'ahrefs_batch_audit':
+        from app import report_ids
+        compact = [{k:v for k,v in row.items() if k in {'site_id','project','status','domains','domains_count','facts','error','plan','finished_at'}} for row in entries]
+        return {**summary(job, report_ids.get(db,job) if db is not None else None, entries=compact), 'entries':compact, 'updated_at':job.updated_at, 'can_exclude':False, 'sources':job.payload.get('ahrefs_sources',[])}
     if job.payload.get('task_type') == 'sitemap_repair':
         from app import report_ids
         compact = []

@@ -195,3 +195,32 @@
 .redirectZoomControls > button:hover { background:#eaf0fd; color:#355aab; }
 .redirectZoomControls > button:disabled { opacity:.35; cursor:default; }
 .redirectZoomControls > button:focus-visible { outline:2px solid #5c70df; outline-offset:1px; }
+.domainMetrics { display:inline-flex; align-items:center; flex-wrap:nowrap; gap:7px; font:9px/13px system-ui; color:#62748b; white-space:nowrap; pointer-events:none; }
+.domainMetrics b { font-weight:650; color:#3d526d; }
+.redirectNode:has(.domainMetrics) .redirectNodeHandle { max-height:34px; }
+.redirectNode:not(.mainNode):has(.domainMetrics) { gap:3px; }
+.redirectNode.mainNode .domainMetrics { font-size:9px; color:#8a3f4a; }
+.redirectNode.mainNode .domainMetrics b { color:#762732; }
+.redirectShelfDomain > .domainMetrics { display:flex; font-size:9px; margin-top:2px; }
+.redirectShelfDomain > span:first-child { display:block; overflow:hidden; text-overflow:ellipsis; }
+.networkMetricCell { font-size:11px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+
+/* Compact lettering with a fine light edge and subtle relief. */
+.redirectNode:not(.mainNode) { height:112px; padding:4px 56px 4px 54px; gap:2px; }
+.redirectNode.mainNode { padding:4px 56px 4px 54px; gap:2px; }
+.redirectNodeHandle, .redirectNode:has(.domainMetrics) .redirectNodeHandle { font-size:15px; line-height:19px; font-weight:750; max-height:38px; -webkit-text-stroke:.35px #fff; paint-order:stroke fill; text-shadow:0 1px 0 #fff,0 2px 2px #263b5825; }
+.redirectNode.mainNode .redirectNodeHandle { max-height:38px; }
+.redirectNodeRoute { min-width:0; font:9px/12px system-ui; color:#7e8d9f; pointer-events:none; }
+.redirectNodeRoute > span { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.redirectNodeRoute > time { display:block; color:#8c99aa; }
+.redirectNode.mainNode .redirectNodeRoute { color:#94545c; }
+.redirectDraftStatus, .redirectLibraryStatus { font-size:10px; color:#718199; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:260px; }
+.redirectDraftStatus.error { color:#aa343d; }
+.redirectSchemaWorkspace .networkActions { flex-wrap:nowrap; min-width:0; }
+.redirectSchemaWorkspace .networkActions > .button { white-space:nowrap; font-size:11px; padding:6px 9px; }
+.redirectLibrary { position:relative; flex:none; font-size:11px; }
+.redirectLibrary > summary { cursor:pointer; padding:7px 9px; border:1px solid #c5d0e3; border-radius:7px; background:#fff; white-space:nowrap; }
+.redirectLibraryPanel { position:absolute; top:100%; right:0; z-index:30; width:320px; max-height:65dvh; overflow:auto; display:grid; gap:8px; padding:12px; border:1px solid #ccd7e9; border-radius:10px; background:#f9fbff; box-shadow:0 8px 28px #243b6433; }
+.redirectLibraryPanel label { display:grid; gap:4px; font-size:11px; }
+.redirectLibraryPanel input { min-width:0; padding:6px 8px; }
+.redirectLibraryPanel small { color:#718199; font-size:10px; }

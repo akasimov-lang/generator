@@ -41,7 +41,7 @@ export function sourceChoices(domains:string[], types:Record<string,string>, ass
   const occupied=new Set(assigned.map(host));
   const rank=(d:string)=>types[d]==='drop'?0:types[d]==='newreg'?1:2;
   return [...new Set([...domains,...(current?[current]:[])])]
-    .filter(d=>host(d)===host(current)||(!occupied.has(host(d))&&host(d)!==host(canon)))
+    .filter(d=>types[d]!=='amp'&&(host(d)===host(current)||(!occupied.has(host(d))&&host(d)!==host(canon))))
     .sort((a,b)=>rank(a)-rank(b)||a.localeCompare(b));
 }
 /** Remove obsolete edges first, then update destinations before their incoming edges. */
@@ -59,4 +59,10 @@ export function graphDomainNames(domains:string[], rows:RedirectRow[], canon:str
   const nodes=all.filter(d=>host(d)===host(canon)||linked.has(host(d))||placed.includes(host(d)));
   const unused=domains.filter(d=>!nodes.some(n=>host(n)===host(d)));
   return {nodes,unused,linked};
+}
+export function redirectDomainScope(domains:string[],rows:RedirectRow[],types:Record<string,string>,excluded:string[]=[]) {
+  const ampKeys=new Set([...excluded,...Object.keys(types).filter(d=>types[d]==='amp')].map(host).filter(Boolean));
+  const isAmp=(value:string)=>{const name=host(value);if(!name)return false;return [...ampKeys].some(root=>name===root||name.endsWith('.'+root));};
+  for(const domain of [...domains,...rows.flatMap(r=>[r.url,r.value])])if(isAmp(domain))ampKeys.add(host(domain));
+  return {ampKeys,isAmp,domains:domains.filter(d=>!isAmp(d)),redirects:rows.filter(r=>!isAmp(r.url)&&!isAmp(r.value))};
 }

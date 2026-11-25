@@ -74,13 +74,19 @@ def redirect_address(value, *, source=False):
     return host + url.path + ('?' + url.query if url.query else '') + ('#' + url.fragment if url.fragment else '')
 
 
-def all_to_main(state):
+def all_to_main(state, types=None):
     """Preserve sources/metadata, replace every destination, and remove self-redirects."""
     main = redirect_domain(state.get('canon') or '')
+    from app.redirect_eligibility import amp_keys, require_non_amp
+    require_non_amp(state, types, main, main)
+    excluded = amp_keys(state, types)
     rows = deepcopy(verified_redirects(state))
     result = []
     for row in rows:
         source = redirect_domain(row['url'])
+        if any(source.removeprefix('www.') == root or source.removeprefix('www.').endswith('.' + root) for root in excluded):
+            result.append(row)
+            continue
         if source.removeprefix('www.') == main.removeprefix('www.'):
             continue
         row['value'] = main

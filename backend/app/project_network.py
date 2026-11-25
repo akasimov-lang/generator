@@ -334,9 +334,11 @@ def operation_history(db, site):
 
 def result(db, site, state):
     from app.network_stock_warning import notice
+    from app.ahrefs_metrics import network_metrics
     from app.domain_transfer_policy import banned_domains
     from app.reglue_journal import latest_for_site, recent_for_site
     return {
+        "domain_metrics": network_metrics(db, site, state),
         "stock_warning": notice(db, site, state),
         "added_to_system_at": site.added_to_system_at,
         "fibery_name": site.fibery_name,
@@ -595,12 +597,18 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
         elif payload.action == "domain_redirects_main":
             from app.domain_redirects import all_to_main
             path = "/projects/update-value"
-            request["redirects"] = all_to_main(state)
+            request["redirects"] = all_to_main(state, site.domain_types)
         elif payload.action == "domain_redirect":
+            if not payload.redirect_delete:
+                from app.redirect_eligibility import require_non_amp
+                require_non_amp(state, site.domain_types, payload.redirect_source, payload.redirect_target)
             from app.domain_redirects import update_redirects
             path = "/projects/update-value"
             request["redirects"] = update_redirects(project, payload.redirect_source, payload.redirect_target, payload.redirect_original_source, delete=payload.redirect_delete)
         elif payload.action == 'page_redirect':
+            if not payload.page_redirect_delete:
+                from app.redirect_eligibility import require_non_amp
+                require_non_amp(state, site.domain_types, payload.page_redirect_domain, payload.page_redirect_target)
             from app.page_redirects import update
             from app.domain_redirects import redirect_domain
             if not payload.page_redirect_delete and redirect_domain(payload.page_redirect_domain) not in state['domains']:

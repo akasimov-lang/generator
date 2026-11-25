@@ -3070,3 +3070,7 @@ def list_menu_generations(site_id: str, user: AuthUser, db: Session = Depends(ge
 def accept_menu_generation(site_id: str, job_id: str, payload: GeneratedMenuStructureApply, user: AuthUser, db: Session = Depends(get_db)):
     _get_site_or_404(db, site_id)
     return menu_generation_jobs.accept(db, site_id, job_id, payload)
+
+# Editable redirect snapshots are independent of live network operations.
+from app.redirect_schemes import router as redirect_schemes_router
+router.include_router(redirect_schemes_router)

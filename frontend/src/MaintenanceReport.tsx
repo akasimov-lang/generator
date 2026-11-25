@@ -64,6 +64,7 @@ function Changes({before,after,planned,contentOnly=false,brandTerm}:{before?:Val
 }
 
 export function MaintenanceReportBody({report,onExclude,excluding,api,onReportChange}:{report:MaintenanceReportData;api?:Api;onReportChange?:(raw:unknown)=>void;onExclude?:(id:string)=>void;excluding?:string|null}) {
+ if(report.task_type==="ahrefs_batch_audit")return <><p>DR, Backlinks All и Referring domains All из выгрузок Ahrefs. Пустые значения сохранены как отсутствие данных. <a href="https://app.ahrefs.com/batch-analysis" target="_blank" rel="noreferrer">Источник: Ahrefs Batch Analysis</a>.</p>{report.entries.map(entry=><article className="maintenanceEntry" key={entry.site_id}><header><h3><a href={`/project-network/${encodeURIComponent(entry.project)}/`}>{entry.project}</a></h3><strong>{labels[entry.status]||entry.status}</strong></header><table className="maintenanceChanges maintenanceFacts"><tbody>{entry.facts?.map((fact,index)=><tr key={index}><th>{fact.label}</th><td>{fact.value}</td></tr>)}</tbody></table>{entry.error&&<p>{entry.error}</p>}{entry.finished_at&&<small>Импорт подтверждён: {date(entry.finished_at)} МСК</small>}</article>)}</>;
  if(report.sitemaps)return <SitemapReport report={report.sitemaps} reportId={report.id} api={api} onReportChange={onReportChange}/>;
  if(report.brand_health)return <BrandHealthReport report={report.brand_health} api={api}/>;
  if(report.article_images)return <ArticleImageReport report={report.article_images}/>;
@@ -143,7 +144,7 @@ export function MaintenanceReport({api,id}:{api:Api;id:string}) {
   ++request.current;setLoading(false);
   setReport(previous=>previous&&Date.parse(previous.updated_at)>Date.parse(next.updated_at)?previous:next);
  }
- const ready=report?.presentation!=="work_list"&&!["sitemap_repair","brand_health_audit","structured_data","toc_repair","showcase_audit","showcase_inventory","showcase_standardization","article_image_localization","site_maintenance"].includes(report?.task_type||"")&&maintenanceCanRepeat(report);
+ const ready=report?.presentation!=="work_list"&&!["sitemap_repair","brand_health_audit","structured_data","toc_repair","showcase_audit","showcase_inventory","showcase_standardization","article_image_localization","site_maintenance","ahrefs_batch_audit"].includes(report?.task_type||"")&&maintenanceCanRepeat(report);
  async function repeatGroup(){
   if(!ready||repeating||createdUrl)return;
   setRepeating(true);setRepeatError("");
@@ -154,7 +155,7 @@ export function MaintenanceReport({api,id}:{api:Api;id:string}) {
  return <section className="dataPanel pilotPanel maintenanceReport">
   <header className="pilotTools"><a className="button secondary compact" href="/auto-reglue/pilot/report"><ArrowLeft size={16}/>Планы и отчёты</a><h2><ScrollText size={20}/><span>{report?.report_id!==undefined&&<a className="maintenanceReportId" href={maintenanceReportLink(id)}>{!report.planning_only?"Отчёт по плану":"План"} №{report.report_id}</a>}{report?.name||"Отчёт по задаче"}</span></h2><button type="button" className="button secondary compact" disabled={loading} onClick={()=>void load()}><RefreshCw size={16}/>{loading?"Обновляем…":"Обновить"}</button></header>
   {error&&<p role="alert">{error}</p>}{!report&&!error&&<p role="status">Загружаем отчёт…</p>}
-  {report&&!report.planning_only&&report.presentation!=="work_list"&&!["sitemap_repair","brand_health_audit","structured_data","toc_repair","showcase_audit","showcase_inventory","showcase_standardization","article_image_localization","site_maintenance"].includes(report.task_type||"")&&<MaintenanceRepeatControls ready={ready} pending={repeating} uncertain={uncertain} allowReserve={allowReserve} createdUrl={createdUrl} onReserve={setAllowReserve} onRepeat={()=>void repeatGroup()}/>}
+  {report&&!report.planning_only&&report.presentation!=="work_list"&&!["sitemap_repair","brand_health_audit","structured_data","toc_repair","showcase_audit","showcase_inventory","showcase_standardization","article_image_localization","site_maintenance","ahrefs_batch_audit"].includes(report.task_type||"")&&<MaintenanceRepeatControls ready={ready} pending={repeating} uncertain={uncertain} allowReserve={allowReserve} createdUrl={createdUrl} onReserve={setAllowReserve} onRepeat={()=>void repeatGroup()}/>}
   {repeatError&&<p role="alert">{repeatError}</p>}
   {report&&<MaintenanceReportBody report={report} api={api} onReportChange={acceptReport} onExclude={siteId=>void excludeProject(siteId)} excluding={excluding}/>}
  </section>;

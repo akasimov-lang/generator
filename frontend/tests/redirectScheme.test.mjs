@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {cleanAddress,completeDrops,schemeProblems,unlinkedDomains,sourceChoices,orderRedirectChanges,graphDomainNames} from '../src/redirectScheme.ts';
+import {cleanAddress,completeDrops,schemeProblems,unlinkedDomains,sourceChoices,orderRedirectChanges,graphDomainNames,redirectDomainScope} from '../src/redirectScheme.ts';
 const domains=['old.test','second.test','new.test','main.test'];
 const types={'old.test':'drop','second.test':'drop','new.test':'newreg','main.test':'newreg'};
 test('pasted whitespace and protocol are removed while path case survives',()=>assert.equal(cleanAddress(' https:// new.test /Play/ '),'new.test/Play/'));
@@ -21,3 +21,9 @@ test('remove obsolete routes before new redirects',()=>assert.deepEqual(orderRed
 test('canvas initially includes only Main and redirect participants',()=>{const result=graphDomainNames(domains,[{url:'old.test',value:'main.test'}],'main.test',[]);assert.deepEqual(result.nodes,['main.test','old.test']);assert.deepEqual(result.unused,['second.test','new.test']);});
 test('adding an unconnected domain to canvas does not create any redirects',()=>{const rows=[];const result=graphDomainNames(domains,rows,'main.test',['second.test']);assert.deepEqual(result.nodes,['main.test','second.test']);assert.deepEqual(result.unused,['old.test','new.test']);assert.deepEqual(rows,[]);});
 test('Main aliases render once and removed participant returns to the list',()=>{const result=graphDomainNames(['main.test','old.test'],[],'www.main.test',[]);assert.deepEqual(result.nodes,['www.main.test']);assert.deepEqual(result.unused,['old.test']);});
+
+test('AMP domains are excluded from source choices even when selected',()=>assert.deepEqual(sourceChoices(['amp.test','old.test'],{'amp.test':'amp','old.test':'drop'},[],'','amp.test'),['old.test']));
+test('AMP membership removes sources, destinations and visible graph candidates',()=>{const result=redirectDomainScope(['old.test','new.test','amp.test'],[{url:'old.test',value:'amp.test'},{url:'amp.test',value:'new.test'},{url:'old.test',value:'new.test'}],{},['amp.test']);assert.deepEqual(result.domains,['old.test','new.test']);assert.deepEqual(result.redirects,[{url:'old.test',value:'new.test'}]);});
+test('an amp-looking newreg remains eligible without an AMP role',()=>assert.deepEqual(redirectDomainScope(['brand-amp.test'],[],{'brand-amp.test':'newreg'}).domains,['brand-amp.test']));
+test('children of AMP domains cannot reappear through redirects or custom destinations',()=>{const result=redirectDomainScope(['child.amp.test','safe.test'],[{url:'safe.test',value:'child.amp.test'}],{},['amp.test']);assert.deepEqual(result.domains,['safe.test']);assert.deepEqual(result.redirects,[]);assert.equal(result.isAmp('https://another.amp.test/path/'),true);});
+test('empty AMP settings do not hide newly added blank rows',()=>{const result=redirectDomainScope([],[],{},['','']);assert.equal(result.isAmp(''),false);assert.equal(result.ampKeys.has(''),false);});

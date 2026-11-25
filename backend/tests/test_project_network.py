@@ -842,3 +842,26 @@ def test_old_fake_redirect_switch_confirmed_without_changing_paths(env, enabled)
     assert result['operations'][0]['status'] == 'confirmed'
     assert remote.data['settings']['alternate'] == {**before, 'redirectFakeMainsToCurrent': enabled}
     assert result['fake_main_settings']['redirectFakeMainsToCurrent'] is enabled
+
+
+def test_ahrefs_snapshots_survive_native_network_refresh_and_do_not_change_revision(env):
+    from app.ahrefs_metrics import key
+    db, site, remote = env
+    before = network.read_network(db, site)
+    metric = {'domain': 'main.test', 'dr': 33, 'backlinks_all': 0, 'referring_domains_all': None,
+              'exported_at': '2026-11-25T12:30:08+03:00', 'target_mode': 'subdomains', 'protocol': 'both'}
+    db.add(models.AutoReglueConfig(key=key('main.test'), value=metric)); db.commit()
+    cached = network.result(db, site, site.network_state)
+    assert cached['domain_metrics']['main.test'] == metric
+    after = network.read_network(db, site)
+    assert after['domain_metrics']['main.test'] == metric
+    assert before['revision'] == after['revision']
+
+
+def test_domain_redirect_cannot_target_amp_domain_even_when_entered_manually(env):
+    db, site, remote = env
+    remote.data['settings']['amp'] = 'next.test'
+    state = network.read_network(db, site)
+    with pytest.raises(ValueError, match='AMP'):
+        change(env, 'domain_redirect', state['revision'], redirect_source='old.test', redirect_target='https://next.test/')
+    assert not remote.calls
