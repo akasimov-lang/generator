@@ -8,12 +8,12 @@ from app.domain_classification import registrable_root, SHARED_NEWREG_ZONES
 from app.network_state import domain_name
 
 
-def corrected_types(site):
+def corrected_types(site, *, zones=SHARED_NEWREG_ZONES):
     types=dict(site.domain_types or {})
     names=[*(site.cache_domains or []),*types,site.name,site.cache_canon,
            *(site.main_domain_history or []),*(site.alternate_domain_history or []),*(site.x_default_history or [])]
     roots={registrable_root(domain_name(name).removeprefix('www.')) for name in names if name}
-    roots={root for root in roots if root and any(root.endswith('.' + zone) for zone in SHARED_NEWREG_ZONES)}
+    roots={root for root in roots if root and any(root.endswith('.' + zone) for zone in zones)}
     changes=[]
     for root in sorted(roots):
         aliases=[root,'www.'+root]
@@ -30,13 +30,14 @@ def corrected_types(site):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--apply',action='store_true')
+    parser.add_argument('--zone',action='append',choices=SHARED_NEWREG_ZONES,help='Update only the requested shared zone; repeat to select several.')
     args=parser.parse_args()
     report=[]
     with SessionLocal() as db:
         query=select(Site).order_by(Site.id)
         if args.apply:query=query.with_for_update()
         for site in db.scalars(query):
-            types,changes=corrected_types(site)
+            types,changes=corrected_types(site,zones=tuple(args.zone) if args.zone else SHARED_NEWREG_ZONES)
             if changes:
                 report.append({'site_id':site.id,'project':site.name,'changes':changes})
                 if args.apply:site.domain_types=types

@@ -2,7 +2,7 @@
 from app.network_state import domain_name
 import tldextract
 
-SHARED_NEWREG_ZONES = ("gu.cc", "com.tc", "eu.com", "mex.com")
+SHARED_NEWREG_ZONES = ("gu.cc", "com.tc", "eu.com", "mex.com", "cn.com")
 
 # Use the packaged snapshot only: no DNS/HTTP requests or writable cache.
 _extract = tldextract.TLDExtract(suffix_list_urls=(), cache_dir=None, extra_suffixes=("test", "in.com", "it.com", "co.com", "jp.net", *SHARED_NEWREG_ZONES))
