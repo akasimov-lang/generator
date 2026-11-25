@@ -16,13 +16,16 @@ export function RedirectGraph({domains,rows,types,scope,canon,onConnect,disabled
   const [notice,setNotice]=React.useState('');
   const canvas=React.useRef<HTMLDivElement>(null);
   const scroll=React.useRef<HTMLDivElement>(null);
+  const [viewportSize,setViewportSize]=React.useState({width:1080,height:600});
+  React.useLayoutEffect(()=>{const element=scroll.current;if(!element)return;const measure=()=>setViewportSize(old=>old.width===element.clientWidth&&old.height===element.clientHeight?old:{width:element.clientWidth,height:element.clientHeight});measure();const observer=new ResizeObserver(measure);observer.observe(element);return()=>observer.disconnect();},[]);
   const lastPointer=React.useRef<Point|null>(null);
   const drag=React.useRef<{domain:string;x:number;y:number;left:number;top:number;moved:boolean}|null>(null);
   const suppressed=React.useRef('');
   const main=(domain:string)=>host(domain)===host(canon);
-  const point=(domain:string):Point=>positions[host(domain)]||(main(domain)?{x:850,y:100}:{x:types[domain]==='drop'?30:430,y:30+nodes.filter(n=>!main(n)&&(types[n]==='drop')===(types[domain]==='drop')).indexOf(domain)*104});
+  const positionKey=(domain:string)=>main(domain)?`main:${host(domain)}`:host(domain);
+  const point=(domain:string):Point=>positions[positionKey(domain)]||(main(domain)?{x:Math.max(0,(viewportSize.width-164)/2),y:Math.max(0,(viewportSize.height-164)/2)}:{x:types[domain]==='drop'?30:430,y:30+nodes.filter(n=>!main(n)&&(types[n]==='drop')===(types[domain]==='drop')).indexOf(domain)*104});
   const box=(domain:string)=>({...point(domain),width:main(domain)?164:280,height:main(domain)?164:76,circle:main(domain)});
-  function move(domain:string,next:Point){const value={...positionsRef.current,[host(domain)]:next};positionsRef.current=value;setPositions(value);}
+  function move(domain:string,next:Point){const value={...positionsRef.current,[positionKey(domain)]:next};positionsRef.current=value;setPositions(value);}
   function persist(){try{localStorage.setItem(`redirect-layout:${scope}`,JSON.stringify(positionsRef.current));}catch{}}
   function cancel(){setSource('');setPointer(null);}
   React.useEffect(()=>{if(disabled)cancel();},[disabled]);

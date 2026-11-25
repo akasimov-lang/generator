@@ -90,9 +90,9 @@
 .redirectNode.newreg { background:linear-gradient(150deg,#fafffe,#d7f1e9); border-color:#64a58f; box-shadow:0 4px 0 #5d9784,0 9px 18px #20594729,inset 0 1px 1px #fff; }
 .redirectNodeHandle { font-size:13px; line-height:17px; max-height:34px; overflow:hidden; padding-right:10px; }
 .redirectNode small { font-size:11px; color:#687891; pointer-events:none; }
-.redirectNode.mainNode { width:164px; height:164px; border-radius:50%; padding:22px 15px; text-align:center; align-items:center; border:2px solid #8394ec; background:radial-gradient(circle at 35% 20%,#fff 0,#eef1ff 35%,#bbc9ff 100%); box-shadow:0 7px 0 #7e8dc9,0 15px 28px #4358a344,inset 0 4px 10px #fff; }
+.redirectNode.mainNode { width:164px; height:164px; border-radius:50%; padding:22px 15px; text-align:center; align-items:center; border:2px solid #c95454; background:radial-gradient(ellipse at 32% 16%,#fff4f0 0,#ffc7bc 17%,#f7786c 47%,#d84a49 76%,#b93037 100%); box-shadow:0 7px 0 #982c35,0 13px 14px #8b2b3d38,0 22px 35px #c4474340,inset 0 4px 7px #fff9,inset -6px -9px 16px #8f21374a; color:#67202c; }
 .redirectNode.mainNode .redirectNodeHandle { max-height:68px; padding:0; }
-.redirectNode.mainNode small { color:#425abe; font-size:12px; font-weight:700; }
+.redirectNode.mainNode small { color:#8c2734; font-size:12px; font-weight:700; }
 .redirectNode:hover { filter:brightness(1.02); }
 .redirectNode.selectedSource { outline:3px solid #5c70df; outline-offset:4px; }
 .redirectNode.targetCandidate:hover { outline:2px solid #5c70df; outline-offset:4px; }
@@ -119,7 +119,7 @@
 .redirectNodePlus svg, .redirectUnplace svg { position:static; }
 .redirectNode.drop .redirectNodePlus { color:#3578d5; border-color:#8fb5ee; background:linear-gradient(#fff,#dbeaff); }
 .redirectNode.newreg .redirectNodePlus { color:#2a8c65; border-color:#83bea4; background:linear-gradient(#fff,#d9f2e5); }
-.redirectNode.mainNode .redirectNodePlus { color:#536acc; align-self:center; }
+.redirectNode.mainNode .redirectNodePlus { color:#ac293b; border-color:#b64754; background:linear-gradient(#fff2ee,#f9b8b1); align-self:center; box-shadow:0 2px 4px #84263930,inset 0 1px #fff8; }
 .redirectNodePlus:hover { box-shadow:0 0 0 3px #799ae329; }
 .redirectNodePlus:focus-visible { outline:2px solid currentColor; outline-offset:2px; }
 .redirectNodePlus:disabled { opacity:.5; cursor:default; }
