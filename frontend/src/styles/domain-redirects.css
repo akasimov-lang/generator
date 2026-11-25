@@ -67,3 +67,18 @@
 .redirectSchemaWorkspace .redirectSupportingDetails { flex:none; margin:4px 0 0; }
 .redirectSchemaWorkspace .redirectSupportingBody { max-height:35dvh; overflow:auto; }
 @media(max-width:600px) { .redirectFullscreen { padding:8px; } .redirectSchemaWorkspace .button { font-size:11px; padding:5px 8px; } }
+
+.redirectTables { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin:10px 0; }
+.redirectTableField { min-width:0; border:0; padding:0; margin:0; }
+.redirectEditTable { width:100%; table-layout:fixed; border-collapse:collapse; }
+.redirectEditTable th { text-align:left; font-size:12px; color:#64748b; background:var(--surface-muted,#f1f4f9); padding:7px 5px; }
+.redirectEditTable th:last-child { width:32px; }
+.redirectEditTable td { padding:3px 4px; border-bottom:1px solid #e2e7ef; }
+.redirectEditTable tr.removed td { opacity:.5; }
+.redirectEditTable .tg-combobox > label, .redirectVisuallyHidden { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+.redirectEditTable .tg-combobox-control input { height:30px; min-height:30px; font-size:12px; padding:4px 28px 4px 7px; border-radius:5px; box-shadow:none; }
+.redirectTrashButton { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; padding:0; border:1px solid #edb3b3; border-radius:6px; color:#cb3434; background:transparent; cursor:pointer; }
+.redirectTrashButton:hover { background:#fff0f0; border-color:#cb3434; }
+.redirectTrashButton:focus-visible { outline:2px solid #cb3434; outline-offset:2px; }
+.redirectTrashButton:disabled { opacity:.45; cursor:default; }
+@media(max-width:1100px) { .redirectTables { grid-template-columns:1fr; gap:10px; } }
