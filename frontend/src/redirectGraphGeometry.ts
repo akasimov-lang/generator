@@ -9,3 +9,8 @@ export function boundary(box:NodeBox,towards:Point):Point {
 }
 export function edgePoints(from:NodeBox,to:NodeBox){return {start:boundary(from,center(to)),end:boundary(to,center(from))};}
 export function movedPointer(start:Point,next:Point){return Math.hypot(next.x-start.x,next.y-start.y)>5;}
+export function shelfWidthLimits(total:number) {
+  const min=Math.min(180,Math.max(100,total/2));
+  return {min,max:Math.max(min,Math.min(640,total-240))};
+}
+export function clampShelfWidth(value:number,total:number){const {min,max}=shelfWidthLimits(total);return Math.round(Math.max(min,Math.min(max,Number.isFinite(value)?value:300)));}

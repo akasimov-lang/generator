@@ -160,3 +160,10 @@
 .redirectNode.mainNode .redirectNodeGrabZone { top:6px; bottom:auto; left:calc(50% - 24px); width:48px; height:36px; border:0; border-radius:22px; background:transparent; }
 .redirectNode.mainNode .redirectNodePlus { position:absolute; bottom:9px; left:calc(50% - 23px); width:46px; height:40px; border:0; background:transparent; box-shadow:none; }
 .redirectUnplace { z-index:2; }
+.redirectBoardLayout { gap:0; }
+.redirectShelfResizer { display:flex; align-items:center; justify-content:center; cursor:col-resize; touch-action:none; user-select:none; border-radius:6px; }
+.redirectShelfResizer > span { width:4px; height:56px; border-radius:4px; background:linear-gradient(#aab9d9,#8197c0); box-shadow:0 1px 2px #fff; }
+.redirectShelfResizer:hover, .redirectShelfResizer:focus-visible, .redirectBoardLayout.isResizing .redirectShelfResizer { background:#dce6f8; outline:none; }
+.redirectShelfResizer:hover > span, .redirectShelfResizer:focus-visible > span { background:#5f7ec2; }
+.redirectBoardLayout.isResizing { cursor:col-resize; user-select:none; }
+@media(max-width:650px) { .redirectBoardLayout { gap:0; } }
