@@ -133,6 +133,12 @@ def execute_step(db, job_id):
             receipt = db.get(models.NetworkOperation, job.id)
             if not receipt:
                 request = Request.model_validate(job.payload['request'])
+                if request.action == 'reserve':
+                    from app.network_state import domain_name
+                    target = domain_name(request.domain)
+                    if target and target == state.get('reserve') and set(state.get('reserved_domains', [target])) == {target}:
+                        network.require_domain(state, request.domain)
+                        return finish(db, job, 'completed', 'Резерв уже сохранён. Подтверждено чтением Webdev.')
                 if fingerprint(state, request) != request.expected:
                     return finish(db, job, 'failed', 'Редактируемое значение изменилось. Проверьте данные перед повторным сохранением.')
                 change = network.NetworkChange.model_validate({**request.model_dump(exclude={'expected'}), 'revision': state['revision']})

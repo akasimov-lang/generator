@@ -181,3 +181,49 @@ def test_retry_old_enqueue_without_new_optional_delete_flag_is_idempotent(env):
     job.payload={**payload,'request':request}; db.commit()
     queue.enqueue(db,site,queue.Request.model_validate(request),'test')
     assert len(queue.active(db,site.id))==1
+
+
+def test_duplicate_reserve_save_confirms_fresh_remote_value_without_another_write(env):
+    db,site,remote=env;prepare(env)
+    first=add(env,'reserve',domain='next.test')
+    second=add(env,'reserve',domain='next.test')
+    assert queue.execute_step(db,first)['status']=='completed'
+    assert queue.execute_step(db,second)['status']=='completed'
+    assert len(remote.calls)==1
+    assert db.get(models.NetworkOperation,second) is None
+    job=db.get(models.BackgroundJob,second)
+    assert job.error is None and 'уже сохранён' in job.result['message']
+
+
+def test_reserve_already_saved_externally_is_acknowledged_without_overwrite(env):
+    db,site,remote=env;prepare(env)
+    ident=add(env,'reserve',domain='next.test')
+    remote.data['settings'].update(reserve='next.test',reserveOption='next.test')
+    assert queue.execute_step(db,ident)['status']=='completed'
+    assert not remote.calls
+    assert db.get(models.NetworkOperation,ident) is None
+
+
+def test_conflicting_reserve_still_fails_if_a_different_target_is_selected(env):
+    db,site,remote=env;prepare(env)
+    ident=add(env,'reserve',domain='next.test')
+    remote.data['settings'].update(reserve='old.test',reserveOption='old.test')
+    assert queue.execute_step(db,ident)['status']=='failed'
+    assert not remote.calls
+    assert remote.data['settings']['reserveOption']=='old.test'
+
+
+def test_a_domain_that_became_main_is_not_acknowledged_as_a_valid_reserve(env):
+    db,site,remote=env;prepare(env)
+    ident=add(env,'reserve',domain='next.test')
+    remote.data['settings'].update(canon='next.test',reserve='next.test',reserveOption='next.test')
+    assert queue.execute_step(db,ident)['status']=='failed'
+    assert not remote.calls
+
+
+def test_conflicting_reglue_is_not_treated_as_an_idempotent_reserve_save(env):
+    db,site,remote=env;prepare(env)
+    ident=add(env,'reglue',domain='reserve.test')
+    remote.data['settings'].update(canon='next.test')
+    assert queue.execute_step(db,ident)['status']=='failed'
+    assert not remote.calls
