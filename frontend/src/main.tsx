@@ -986,7 +986,7 @@ function App() {
   const [workspaceContentOpenRequest, setWorkspaceContentOpenRequest] = React.useState(0);
   const isAdmin = Boolean(currentUser);
   const listParams = new URLSearchParams(window.location.search);
-  const projectListFilters = activeView === "sites" ? { geo: siteGeoFilterCode(listParams.get("geo")) || "PL", brand: (listParams.get("brand") || "").trim() } : undefined;
+  const projectListFilters = activeView === "sites" ? { geo: siteGeoFilterCode(listParams.get("geo")) || "ALL", brand: (listParams.get("brand") || "").trim() } : undefined;
   const projectListBackPath = projectListReturnPath(listParams.get("from"));
   const globalSitesQuery=normalizeDomainQuery(sitesSearchQuery);
   const globalMassQuery=normalizeDomainQuery(massSearchQuery);
@@ -1442,7 +1442,7 @@ function App() {
 
   return (
     <div className={`appShell${sidebarCollapsed ? " sidebarCollapsed" : ""}`}>
-      <button type="button" className="sidebarBookmark" aria-label={sidebarCollapsed?"Раскрыть левое меню":"Скрыть левое меню"} aria-expanded={!sidebarCollapsed} aria-controls="desktop-sidebar" title={sidebarCollapsed?"Раскрыть меню":"Скрыть меню"} onClick={toggleSidebar}><Menu size={18} aria-hidden="true"/><span>Меню</span></button>
+      <button type="button" className="sidebarBookmark" aria-label={sidebarCollapsed?"Раскрыть левое меню":"Скрыть левое меню"} aria-expanded={!sidebarCollapsed} aria-controls="desktop-sidebar" title={sidebarCollapsed?"Раскрыть меню":"Скрыть меню"} onClick={toggleSidebar}><Menu size={20} aria-hidden="true"/></button>
       <aside id="desktop-sidebar" className={`sidebar ${mobileMenuOpen ? "mobileMenuOpen" : ""}`}>
         <div className="sidebarDigitalRain" aria-hidden="true">
           {Array.from({ length: 12 }, (_, index) => (
