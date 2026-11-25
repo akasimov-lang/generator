@@ -167,3 +167,14 @@
 .redirectShelfResizer:hover > span, .redirectShelfResizer:focus-visible > span { background:#5f7ec2; }
 .redirectBoardLayout.isResizing { cursor:col-resize; user-select:none; }
 @media(max-width:650px) { .redirectBoardLayout { gap:0; } }
+
+.redirectSchemaWorkspace .redirectSupportingDetails { margin:0 0 6px; border:1px solid #d9dfed; border-radius:8px; background:#ffffff75; }
+.redirectSchemaWorkspace .redirectSupportingDetails > summary { padding:7px 10px; font-size:12px; }
+.redirectSchemaWorkspace .redirectSupportingBody { max-height:26dvh; padding:0 8px 6px; }
+.redirectValidationCount { margin-left:12px; font-weight:400; color:#a36a23; font-size:11px; }
+.redirectRowIssue { display:block; font-size:10px; color:#a36a23; line-height:14px; }
+.redirectSchemaWorkspace > .redirectWorkspaceBody { overflow:hidden; }
+.redirectSchemaWorkspace .redirectGraphGuide { flex-wrap:nowrap; height:26px; min-width:0; }
+.redirectSchemaWorkspace .redirectGraphGuide > [role=status] { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.redirectSchemaWorkspace .redirectGraphHelp[open] { position:relative; z-index:5; }
+.redirectSchemaWorkspace .redirectGraphHelp[open] > p { position:absolute; top:100%; left:0; width:min(420px,70vw); background:#fff; box-shadow:0 5px 20px #1e335e30; padding:12px; border:1px solid #d9dfed; border-radius:8px; }
