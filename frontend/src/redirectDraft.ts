@@ -21,3 +21,15 @@ export function removeDraftConnection(rows:RedirectDraftRow[],source:string,targ
   if(index<0)return rows;
   return rows.flatMap((row,i)=>i!==index?[row]:row.original?[{...row,removed:true}]:[]);
 }
+
+/** Remove completed deletions and unchanged baseline rows deleted elsewhere. */
+export function pruneConfirmedRedirectDeletes(rows:RedirectDraftRow[],live:DraftRedirect[]):RedirectDraftRow[] {
+  const key=(value:string)=>{try{const raw=value.trim().replace(/^\/+/, '').replace(/^https?:\/\//i,'').replace(/^\/+/, '');if(/[\\\s]/.test(raw))return null;const url=new URL('https://'+raw);if(url.username||url.password||url.port||!['','/'].includes(url.pathname)||url.search||url.hash)return null;return url.hostname.toLowerCase().replace(/\.$/,'')||null;}catch{return null;}};
+  const sources=new Set(live.map(r=>key(r.url)).filter(Boolean));
+  const next=rows.filter(row=>{const original=key(row.original),unchanged=row.url===row.original&&row.expected.rows.length===1&&key(row.expected.rows[0].url)===original&&row.value===row.expected.rows[0].value;return !(original&&!sources.has(original)&&(row.removed||unchanged));});
+  return next.length===rows.length?rows:next;
+}
+
+export function settledRedirectDeleteFailures<T extends {status:string;request:{action:string;redirect_delete?:unknown;redirect_original_source?:unknown;redirect_source?:unknown}}>(items:T[],live:DraftRedirect[]):T[] {
+  return items.filter(item=>{if(item.status!=='failed'||item.request.action!=='domain_redirect'||item.request.redirect_delete!==true)return false;const source=String(item.request.redirect_original_source||item.request.redirect_source||'');return pruneConfirmedRedirectDeletes([{id:'receipt',url:source,value:'',original:source,removed:true,expected:{rows:[]}}],live).length===0;});
+}

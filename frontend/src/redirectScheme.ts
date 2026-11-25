@@ -88,3 +88,10 @@ export function prepareRedirectDomainOptions(domains:string[],types:Record<strin
     targets:(source:string)=>{const from=resolve(source);return ordered.filter(o=>o.name!==from.name&&(from.kind!=='drop'||['drop','newreg'].includes(o.kind)||o.name===main));}
   };
 }
+
+/** Use the network's classified parent type for subdomains without an explicit type. */
+export function redirectDomainTypes(types:Record<string,string>,classification:Record<string,{parent_type?:string|null}>) {
+  const result={...types};
+  for(const [domain,role] of Object.entries(classification))if(!result[domain]&&role.parent_type)result[domain]=role.parent_type;
+  return result;
+}

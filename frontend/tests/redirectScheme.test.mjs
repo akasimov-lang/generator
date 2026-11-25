@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {cleanAddress,completeDrops,schemeProblems,unlinkedDomains,sourceChoices,orderRedirectChanges,graphDomainNames,redirectDomainScope,prepareRedirectDomainOptions} from '../src/redirectScheme.ts';
+import {cleanAddress,completeDrops,schemeProblems,unlinkedDomains,sourceChoices,orderRedirectChanges,graphDomainNames,redirectDomainScope,prepareRedirectDomainOptions,redirectDomainTypes} from '../src/redirectScheme.ts';
 const domains=['old.test','second.test','new.test','main.test'];
 const types={'old.test':'drop','second.test':'drop','new.test':'newreg','main.test':'newreg'};
 test('pasted whitespace and protocol are removed while path case survives',()=>assert.equal(cleanAddress(' https:// new.test /Play/ '),'new.test/Play/'));
@@ -44,3 +44,6 @@ test('the Main drop is available in the destination picker',()=>{const choices=p
 test('drop-to-drop cycles remain invalid',()=>assert.match(schemeProblems([{url:'old.test',value:'second.test'},{url:'second.test',value:'old.test'}],domains,types,'main.test').join(),/Цикл/));
 test('automatic preparation preserves hand-built drop-to-drop chains without newregs',()=>{const rows=[{url:'old.test',value:'second.test'},{url:'second.test',value:'main.test'}];assert.deepEqual(completeDrops(rows,['old.test','second.test','main.test'],{'old.test':'drop','second.test':'drop','main.test':'drop'},'main.test'),rows);});
 test('automatic preparation fills free drops without replacing valid drop-to-drop links',()=>{const rows=[{url:'old.test',value:'main.test'}];const result=completeDrops(rows,domains,{...types,'main.test':'drop'},'main.test');assert.deepEqual(result.find(r=>r.url==='old.test'),rows[0]);assert.equal(result.find(r=>r.url==='second.test').value,'new.test');});
+
+test('a subdomain inherits its classified drop parent in validation and choices',()=>{const types=redirectDomainTypes({'old.test':'drop','uk.com':'drop'},{'az-pin-up-casino.uk.com':{parent_type:'drop'}});assert.deepEqual(schemeProblems([{url:'old.test',value:'az-pin-up-casino.uk.com'}],['old.test','az-pin-up-casino.uk.com'],types,'main.test'),[]);assert.equal(prepareRedirectDomainOptions(['old.test','az-pin-up-casino.uk.com'],types,'main.test').tone('az-pin-up-casino.uk.com'),'blue');});
+test('explicit domain types take priority over inherited classification',()=>assert.equal(redirectDomainTypes({'child.test':'amp'},{'child.test':{parent_type:'drop'}})['child.test'],'amp'));

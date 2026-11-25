@@ -84,3 +84,73 @@ def test_older_scheme_documents_default_to_unextended_board(env):
     db,site,user,client=env
     payload=doc();payload["board"].pop("min_height")
     assert client.post(path(site),json=payload).json()["board"]["min_height"]==0
+
+
+def test_draft_save_discards_completed_deletion_without_changing_live_routes(env):
+    db,site,user,client=env
+    site.network_state={'has_domain_redirects':True,'domain_redirects':[]}
+    db.commit()
+    payload=doc('draft');payload['rows'][0]['removed']=True
+    saved=client.post(path(site),json=payload).json()
+    assert saved['rows']==[]
+    assert saved['board']==payload['board']
+    db.refresh(site);assert site.network_state['domain_redirects']==[]
+    assert not db.scalars(select(models.NetworkOperation)).all()
+
+
+def test_read_old_draft_prunes_completed_deletion_but_keeps_other_edits(env):
+    db,site,user,client=env
+    payload=doc('draft');payload['rows'][0]['removed']=True
+    edit={'id':'two','url':'edit.test','original':'edit.test','value':'desired.test','expected':{'rows':[{'url':'edit.test','value':'before.test'}]}}
+    payload['rows'].append(edit)
+    client.post(path(site),json=payload)
+    site.network_state={'has_domain_redirects':True,'domain_redirects':[{'url':'edit.test','value':'before.test'}]}
+    db.commit()
+    assert client.get(path(site)).json()['draft']['rows']==[{**edit,'removed':False}]
+    assert client.get(path(site)+'/draft').json()['rows']==[{**edit,'removed':False}]
+
+
+def test_unknown_redirect_snapshot_does_not_discard_pending_deletion(env):
+    db,site,user,client=env
+    site.network_state={'has_domain_redirects':False,'domain_redirects':[]}
+    db.commit()
+    payload=doc('draft');payload['rows'][0]['removed']=True
+    assert client.post(path(site),json=payload).json()['rows'][0]['removed'] is True
+
+
+def test_still_existing_redirect_keeps_its_deletion_marker(env):
+    db,site,user,client=env
+    site.network_state={**site.network_state,'has_domain_redirects':True}
+    db.commit()
+    payload=doc('draft');payload['rows'][0]['removed']=True
+    assert client.post(path(site),json=payload).json()['rows'][0]['removed'] is True
+
+
+def test_named_and_backup_snapshots_keep_historical_deletions(env):
+    db,site,user,client=env
+    site.network_state={'has_domain_redirects':True,'domain_redirects':[]}
+    db.commit()
+    named=doc('scheme');named['rows'][0]['removed']=True
+    backup=doc('backup');backup['rows'][0]['removed']=True
+    saved_named=client.post(path(site),json=named).json()
+    saved_backup=client.post(path(site),json=backup).json()
+    assert saved_named['rows'][0]['removed'] is True
+    assert saved_backup['rows'][0]['removed'] is True
+    assert client.get(path(site)+'/'+saved_named['id']).json()['rows'][0]['removed'] is True
+    assert client.get(path(site)+'/'+saved_backup['id']).json()['rows'][0]['removed'] is True
+
+
+def test_deleted_unchanged_baseline_does_not_reappear_as_a_new_draft_route(env):
+    db,site,user,client=env
+    site.network_state={'has_domain_redirects':True,'domain_redirects':[]}
+    db.commit()
+    payload=doc('draft');payload['rows'][0]['value']='new.test'
+    assert client.post(path(site),json=payload).json()['rows']==[]
+
+
+def test_user_edited_route_is_preserved_if_the_original_was_deleted_elsewhere(env):
+    db,site,user,client=env
+    site.network_state={'has_domain_redirects':True,'domain_redirects':[]}
+    db.commit()
+    payload=doc('draft');payload['rows'][0]['value']='edited.test'
+    assert client.post(path(site),json=payload).json()['rows'][0]['value']=='edited.test'

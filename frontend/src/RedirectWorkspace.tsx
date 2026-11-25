@@ -1,7 +1,7 @@
 import {redirectSaveProgress,shouldRestoreServerDraft,type RedirectSaveBatch} from './redirectSaveProgress';
 import {RedirectSaveProgress} from './RedirectSaveStatus';
 import {RedirectSchemeLibrary,type SchemeApi,type SchemeDocument,type BoardSnapshot,readBoard} from "./RedirectSchemeLibrary";
-import {readRedirectDraft,recoveryDraft,redirectDraftKey,removeDraftConnection,type RedirectDraftRow} from "./redirectDraft";
+import {readRedirectDraft,recoveryDraft,redirectDraftKey,removeDraftConnection,pruneConfirmedRedirectDeletes,settledRedirectDeleteFailures,type RedirectDraftRow} from "./redirectDraft";
 import type {DomainMetricsMap} from "./domainMetrics";
 import React from 'react';
 import { Trash2 } from 'lucide-react';
@@ -47,9 +47,14 @@ export function RedirectWorkspace({redirects:allRedirects,revision,available,dis
   const lock=React.useRef(false);
   const savedRows=React.useMemo<Draft[]>(()=>redirects.map(r=>({...r,id:crypto.randomUUID(),original:r.url,expected:{rows:[{...r}]}})),[redirects]);
   const snapshot=()=>savedRows.map(r=>({...r}));
-  const rows=React.useMemo(()=>(draft||savedRows).filter(row=>!redirectScope.isAmp(row.url)&&!redirectScope.isAmp(row.value)),[draft,savedRows,redirectScope]);
-  const planned=React.useMemo(()=>rows.filter(r=>!r.removed),[rows]);
   const pending=(queue?.items||[]).some(i=>['domain_redirect','domain_redirects_main'].includes(i.request.action)&&editActive(i));
+  const reconciledDraft=React.useMemo(()=>draft&&available&&!saving&&!pending?pruneConfirmedRedirectDeletes(draft,redirects):draft,[draft,redirects,available,saving,pending]);
+  React.useEffect(()=>{if(reconciledDraft!==draft)setDraftState(reconciledDraft);},[reconciledDraft,draft]);
+  const rows=React.useMemo(()=>(reconciledDraft||savedRows).filter(row=>!redirectScope.isAmp(row.url)&&!redirectScope.isAmp(row.value)),[reconciledDraft,savedRows,redirectScope]);
+  const planned=React.useMemo(()=>rows.filter(r=>!r.removed),[rows]);
+  const settledFailures=settledRedirectDeleteFailures(queue?.items||[],redirects),settledFailureKey=JSON.stringify(settledFailures.map(i=>i.id));
+  const dismissedFailures=React.useRef(new Set<string>());
+  React.useEffect(()=>{if(!available||saving||pending||!queue)return;for(const item of settledFailures){if(dismissedFailures.current.has(item.id))continue;dismissedFailures.current.add(item.id);void queue.dismiss(item.id).catch(()=>{});}},[available,saving,pending,queue,settledFailureKey]);
   const blocked=!available||saving||disabled||pending||!!libraryPhase;
   const saveProgress=redirectSaveProgress(queue?.items||[],saveBatch,saving,libraryPhase);
   const problems=draft?schemeProblems(planned,domains,types,canon):[];
@@ -74,9 +79,9 @@ export function RedirectWorkspace({redirects:allRedirects,revision,available,dis
     </tr>)}</tbody></table></fieldset>)}</div>
     </div></TableSection>
     <div className="networkActions"><button className="button secondary compact" disabled={blocked} onClick={()=>{setTableOpen(true);setDraft([...rows,{id:crypto.randomUUID(),url:'',value:'',original:'',expected:{rows:[]}}]);}}>Добавить строку</button><button className="button secondary compact" disabled={blocked} onClick={()=>{try{const next=completeDrops(planned,domains,types,canon);setDraft([...rows.filter(r=>r.removed),...next.map(r=>{const old=rows.find(d=>host(d.url)===host(r.url));return old?{...old,...r}:{...r,id:crypto.randomUUID(),original:'',expected:{rows:[]}};})]);setError('');}catch(e){setError(String(e));}}}>{schema?"Подклеить дропы":"Подготовить подклей всех дропов"}</button>
-      <button className="button compact" disabled={blocked||!changed.length||!!problems.length} onClick={()=>void submit()}>{saving?'Отправляем…':`Отправить изменения${changed.length?` (${changed.length})`:''}`}</button><RedirectSchemeLibrary autoSave={!saving&&!pending&&(draft!==null||boardVersion>0)} boardVersion={boardVersion} getBoard={getBoard} onServerDraft={acceptServerDraft} onDraftSaved={serverDraftSaved} onActivity={setLibraryPhase} scope={scope} api={api} rows={rows} busy={saving} onDates={setRedirectDates} onLoad={loadScheme} onLocalSave={()=>{touchedDraft.current=true;saveDraft(rows);}}/>{draft&&<button className="button secondary compact" disabled={saving||!!libraryPhase} onClick={()=>{setDraft(null);setBoardVersion(v=>v+1);setError('');}}>Отменить изменения</button>}{draftStatus&&<small className={`redirectDraftStatus${draftPersisted?"":" error"}`} role="status">{draftStatus}</small>}</div>
+      <button className="button compact" disabled={blocked||!changed.length||!!problems.length} onClick={()=>void submit()}>{saving?'Отправляем…':`Отправить изменения${changed.length?` (${changed.length})`:''}`}</button><RedirectSchemeLibrary autoSave={!saving&&!pending&&(draft!==null||boardVersion>0)} boardVersion={boardVersion} getBoard={getBoard} onServerDraft={acceptServerDraft} onDraftSaved={serverDraftSaved} onActivity={setLibraryPhase} scope={scope} api={api} rows={rows} busy={saving} onDates={setRedirectDates} onLoad={loadScheme} onLocalSave={()=>{touchedDraft.current=true;saveDraft(rows);}}/>{changed.length>0&&<button className="button secondary compact" disabled={saving||!!libraryPhase} onClick={()=>{setDraft(null);setBoardVersion(v=>v+1);setError('');}}>Отменить изменения</button>}{draftStatus&&<small className={`redirectDraftStatus${draftPersisted?"":" error"}`} role="status">{draftStatus}</small>}</div>
     {saveProgress&&(!schema||!saveProgress.busy)&&<RedirectSaveProgress state={saveProgress}/>}
-    <p className="muted redirectSaveHint">{draft?'План: изменения ещё не отправлены.':'Подтверждённые настройки Webdev.'} После отправки результат подтверждается отдельно для каждой строки.</p>
+    <p className="muted redirectSaveHint">{changed.length?'План: изменения ещё не отправлены.':'Подтверждённые настройки Webdev.'} После отправки результат подтверждается отдельно для каждой строки.</p>
     {pending&&<p role="status">Дождитесь завершения очереди перед следующим изменением схемы.</p>}
     {error&&<p role="alert">{error}</p>}{!schema&&problems.length>0&&<ul role="alert">{problems.map(p=><li key={p}>{p}</li>)}</ul>}
     {schema&&<fieldset className="redirectGraphField" disabled={blocked} aria-busy={saveProgress?.busy||undefined} style={{border:0,padding:0,minWidth:0,margin:0}}><div className="redirectBoardContent" inert={!!saveProgress?.busy}><RedirectGraph initialBoard={loadedBoard} onBoardChange={onBoardChange} key={graphVersion} confirmedRows={redirects} redirectDates={redirectDates} metrics={metrics} canon={redirectScope.ampKeys.has(host(canon))?"":canon} disabled={blocked} domains={domains} types={types} rows={planned} scope={scope} onConnect={connect} onDisconnect={disconnect}/></div>{saveProgress?.busy&&<div className="redirectBusyOverlay"><RedirectSaveProgress state={saveProgress}/></div>}</fieldset>}

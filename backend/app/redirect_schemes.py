@@ -86,19 +86,41 @@ def redirect_dates(db, site):
     return dates
 
 
+def reconcile_draft(value, site):
+    """Discard completed deletions and unchanged baseline rows deleted in Webdev."""
+    state = site.network_state or {}
+    if value['kind'] != 'draft' or not state.get('redirects_verified', state.get('has_domain_redirects')):
+        return value
+    live = state.get('domain_redirects')
+    if not isinstance(live, list) or any(not isinstance(r, dict) or not isinstance(r.get('url'), str) or not isinstance(r.get('value'), str) for r in live):
+        return value
+    def source(value):
+        try:
+            return redirect_address(value, source=True)
+        except ValueError:
+            return None
+    sources = {source(row['url']) for row in live}
+    def settled(row):
+        original = source(row.get('original', ''))
+        expected = row.get('expected', {}).get('rows', [])
+        unchanged = row['url'] == row.get('original') and len(expected) == 1 and source(expected[0]['url']) == original and row['value'] == expected[0]['value']
+        return original and original not in sources and (row.get('removed') or unchanged)
+    return {**value, 'rows': [row for row in value['rows'] if not settled(row)]}
+
+
 @router.get('')
 def listing(site_id: str, user: AuthUser, response: Response, db: Session = Depends(get_db)):
     site = project(db, site_id, user)
     response.headers['Cache-Control'] = 'no-store'
     rows = db.scalars(select(models.AutoReglueConfig).where(models.AutoReglueConfig.key.startswith(prefix(site_id, user['username'])))).all()
-    documents = [r.value for r in rows]
+    documents = [reconcile_draft(r.value, site) for r in rows]
     return {'items': sorted([metadata(v) for v in documents if v['kind'] != 'draft'], key=lambda v: v['saved_at'], reverse=True),
             'draft': next((v for v in documents if v['kind'] == 'draft'), None), 'redirect_dates': redirect_dates(db, site)}
 
 
 @router.post('')
 def save(site_id: str, payload: Save, user: AuthUser, db: Session = Depends(get_db)):
-    project(db, site_id, user)
+    site = project(db, site_id, user)
     name = payload.name.strip()
     if payload.kind == 'scheme' and not name:
         raise HTTPException(422, 'Укажите название схемы.')
@@ -107,6 +129,7 @@ def save(site_id: str, payload: Save, user: AuthUser, db: Session = Depends(get_
     now = datetime.now(timezone.utc).isoformat()
     value = {**payload.model_dump(), 'id': identity, 'saved_at': now, 'site_id': site_id,
              'name': name or ('Резервная копия' if payload.kind == 'backup' else 'Черновик')}
+    value = reconcile_draft(value, site)
     row = db.get(models.AutoReglueConfig, key)
     if row is None:
         row = models.AutoReglueConfig(key=key)
@@ -118,9 +141,9 @@ def save(site_id: str, payload: Save, user: AuthUser, db: Session = Depends(get_
 
 @router.get('/{identity}')
 def read(site_id: str, identity: str, user: AuthUser, response: Response, db: Session = Depends(get_db)):
-    project(db, site_id, user)
+    site = project(db, site_id, user)
     response.headers['Cache-Control'] = 'no-store'
     row = db.get(models.AutoReglueConfig, prefix(site_id, user['username']) + identity)
     if row is None:
         raise HTTPException(404, 'Схема не найдена.')
-    return row.value
+    return reconcile_draft(row.value, site)
