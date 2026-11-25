@@ -33,9 +33,14 @@ class Point(BaseModel):
     x: float = Field(ge=0, le=100000, allow_inf_nan=False)
     y: float = Field(ge=0, le=100000, allow_inf_nan=False)
 
+class CardSize(BaseModel):
+    width: float = Field(ge=240, le=900, allow_inf_nan=False)
+    height: float = Field(ge=100, le=600, allow_inf_nan=False)
+
 class Board(BaseModel):
     min_height: float = Field(default=0, ge=0, le=100000, allow_inf_nan=False)
     positions: dict[str, Point] = Field(default_factory=dict, max_length=2000)
+    sizes: dict[str, CardSize] = Field(default_factory=dict, max_length=2000)
     placed: list[str] = Field(default_factory=list, max_length=2000)
     zoom: float = Field(default=1, ge=.4, le=2, allow_inf_nan=False)
 

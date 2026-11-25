@@ -2,11 +2,11 @@ import React from 'react';
 import {schemeRequest,serialDraftWriter} from './redirectSaveProgress';
 import {TemplateCombobox} from './TemplateCombobox';
 import {readRedirectDraft,type RedirectDraftRow} from './redirectDraft';
-export type BoardSnapshot={positions:Record<string,{x:number;y:number}>;placed:string[];zoom:number;min_height?:number};
+export type BoardSnapshot={positions:Record<string,{x:number;y:number}>;placed:string[];zoom:number;min_height?:number;sizes?:Record<string,{width:number;height:number}>};
 export type SchemeDocument={id:string;name:string;kind:'draft'|'scheme'|'backup';saved_at:string;rows:RedirectDraftRow[];board:BoardSnapshot};
 export type SchemeApi=<T>(path:string,options?:RequestInit)=>Promise<T>;
 type Payload=Pick<SchemeDocument,'kind'|'name'|'rows'|'board'>;
-export function readBoard(scope:string):BoardSnapshot {try{return {positions:JSON.parse(localStorage.getItem(`redirect-layout:${scope}`)||'{}'),placed:JSON.parse(localStorage.getItem(`redirect-placed:${scope}`)||'[]'),zoom:Number(localStorage.getItem(`redirect-zoom:${scope}`))||1,min_height:Number(localStorage.getItem(`redirect-board-height:${scope}`))||0};}catch{return {positions:{},placed:[],zoom:1};}}
+export function readBoard(scope:string):BoardSnapshot {try{return {positions:JSON.parse(localStorage.getItem(`redirect-layout:${scope}`)||'{}'),sizes:JSON.parse(localStorage.getItem(`redirect-sizes:${scope}`)||'{}'),placed:JSON.parse(localStorage.getItem(`redirect-placed:${scope}`)||'[]'),zoom:Number(localStorage.getItem(`redirect-zoom:${scope}`))||1,min_height:Number(localStorage.getItem(`redirect-board-height:${scope}`))||0};}catch{return {positions:{},placed:[],zoom:1};}}
 export function RedirectSchemeLibrary({scope,api,rows,onLoad,onLocalSave,onDates,busy,onActivity,autoSave=false,boardVersion=0,getBoard,onServerDraft,onDraftSaved}:{scope:string;api?:SchemeApi;rows:RedirectDraftRow[];onLoad:(doc:SchemeDocument)=>void;onLocalSave:()=>void;onDates:(dates:Record<string,string>)=>void;busy:boolean;onActivity?:(message:string|null)=>void;autoSave?:boolean;boardVersion?:number;getBoard?:()=>BoardSnapshot;onServerDraft?:(doc:SchemeDocument)=>void;onDraftSaved?:(doc:SchemeDocument)=>void}) {
   const [items,setItems]=React.useState<SchemeDocument[]>([]),[selected,setSelected]=React.useState(''),[name,setName]=React.useState(''),[working,setWorking]=React.useState(false),[status,setStatus]=React.useState(''),[serverChecked,setServerChecked]=React.useState(false);
   const workingRef=React.useRef(false),apiRef=React.useRef(api);apiRef.current=api;

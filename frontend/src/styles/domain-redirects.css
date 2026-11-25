@@ -54,7 +54,16 @@
 .redirectEditorRow .tg-combobox > label { font-size:11px; margin-bottom:2px; }
 .redirectEditorRow .tg-combobox-control input { min-height:32px; height:32px; font-size:13px; padding:5px 30px 5px 8px; }
 .redirectFullscreen { position:fixed; inset:0; z-index:1000; display:flex; flex-direction:column; padding:10px 14px; gap:8px; background:var(--bg,#f5f7fb); color:var(--text,#24314b); overflow:hidden; box-sizing:border-box; height:100dvh; }
-.redirectFullscreenHeader { flex:none; display:flex; align-items:center; }
+.redirectFullscreenHeader { flex:none; display:flex; align-items:center; gap:12px; min-width:0; margin-bottom:8px; }
+.redirectFullscreenHeader > .button { flex:none; }
+.redirectSchemaSummary { display:flex; align-items:center; gap:12px; min-width:0; margin:0; padding:2px 0; overflow-x:auto; white-space:nowrap; font-size:12px; }
+.redirectSchemaSummary > div { display:flex; align-items:baseline; gap:6px; flex:none; padding-left:12px; border-left:1px solid #d9dfed; }
+.redirectSchemaSummary > div:first-child { padding-left:0; border-left:0; }
+.redirectSchemaSummary dt { color:#687891; }
+.redirectSchemaSummary dd { margin:0; font-weight:650; }
+.redirectSchemaMain dd { color:#ab3843; }
+.redirectSchemaNewregs dd { color:#357c5d; }
+.redirectSchemaDrops dd { color:#396fc1; }
 .redirectFullscreen > .networkSection { border:0; padding:0; margin:0; min-height:0; flex:1; }
 .redirectSchemaWorkspace, .redirectSchemaWorkspace > .redirectWorkspaceBody { display:flex; flex-direction:column; min-height:0; }
 .redirectSchemaWorkspace > .networkRedirectsHeading { display:none; }
@@ -278,3 +287,18 @@
 .redirectSaveProgress > small { font-size:11px; color:#6c7e98; }
 .redirectSaveProgress.hasErrors { border-color:#dfa5ac; }
 .redirectSaveProgress.hasErrors > progress { accent-color:#c94757; }
+
+/* Keep card dimensions unchanged while giving labels more usable space. */
+.redirectNode:not(.mainNode), .redirectNode.mainNode { padding:3px 42px; }
+.redirectNode .redirectNodeGrabZone, .redirectNode.mainNode .redirectNodeGrabZone { width:40px; }
+.redirectNode:not(.mainNode) .redirectNodePlus, .redirectNode.mainNode .redirectNodePlus { width:40px; }
+.redirectNodeGrabZone .redirectGrabWaves { width:34px; height:34px; left:3px; top:calc(50% - 17px); }
+.redirectNode .domainMetrics { font-size:12px; line-height:17px; font-weight:600; color:#345572; gap:6px; text-shadow:0 1px 0 #fff; }
+.redirectNode .domainMetrics b { font-size:13px; font-weight:800; color:#173b60; }
+.redirectNode.mainNode .domainMetrics { font-size:12px; color:#70232d; text-shadow:0 1px 0 #ffffff70; }
+.redirectNode.mainNode .domainMetrics b { color:#57151f; }
+.redirectNodeResize { position:absolute; z-index:4; right:1px; top:1px; display:grid; place-items:center; width:18px; height:18px; padding:0; border:0; border-radius:0 10px 0 5px; color:var(--redirect-accent,#5277b9); background:#ffffff70; cursor:nesw-resize; touch-action:none; }
+.redirectNodeResize > span { width:9px; height:9px; border-top:2px solid currentColor; border-right:2px solid currentColor; opacity:.7; }
+.redirectNodeResize:hover, .redirectNodeResize:focus-visible { background:#fff; outline:1px solid currentColor; outline-offset:-1px; }
+.redirectNodeResize:disabled { cursor:default; opacity:.4; }
+.redirectNode .redirectUnplace { right:23px; }

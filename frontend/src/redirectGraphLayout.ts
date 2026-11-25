@@ -42,7 +42,7 @@ export function extendedBoardHeight(current:number,viewport:number,zoom:number) 
 }
 type Block={width:number;height:number;positions:Record<string,Point>};
 /** Pack redirect trees by destination. Each subtree occupies its own rectangle. */
-export function arrangeRedirectGraph(domains:string[],rows:RedirectRow[],canon:string,viewportWidth:number) {
+export function arrangeRedirectGraph(domains:string[],rows:RedirectRow[],canon:string,viewportWidth:number,sizes:Record<string,{width:number;height:number}>={}) {
   const main=host(canon),names=[...new Set(domains.map(host).filter(Boolean))].sort();
   const included=new Set(names),parent=new Map<string,string>();
   for(const r of rows){const from=host(r.url),to=host(r.value);if(from!==main&&from!==to&&included.has(from)&&included.has(to))parent.set(from,to);}
@@ -62,7 +62,7 @@ export function arrangeRedirectGraph(domains:string[],rows:RedirectRow[],canon:s
     return {positions,width,height:y+rowHeight};
   }
   function tree(domain:string):Block {
-    visited.add(domain);const isMain=domain===main,w=isMain?360:280,h=isMain?100:112;
+    visited.add(domain);const isMain=domain===main,w=sizes[domain]?.width??(isMain?360:280),h=sizes[domain]?.height??(isMain?100:112);
     const blocks:Block[]=[];
     for(const child of children.get(domain)||[])if(!visited.has(child))blocks.push(tree(child));
     const packed=pack(blocks,isMain?boardWidth:branchWidth),width=Math.max(w,packed.width);

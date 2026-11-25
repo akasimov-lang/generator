@@ -25,7 +25,7 @@ def env():
         yield db,site,user,TestClient(app)
 
 def doc(kind='scheme',name='Test'):
-    return {'kind':kind,'name':name,'rows':[{'id':'one','original':'drop.test','url':'drop.test','value':'','expected':{'rows':[{'url':'drop.test','value':'new.test'}]}}], 'board':{'positions':{'main:main.test':{'x':44,'y':55}},'placed':['drop.test'],'zoom':.7,'min_height':2400}}
+    return {'kind':kind,'name':name,'rows':[{'id':'one','original':'drop.test','url':'drop.test','value':'','expected':{'rows':[{'url':'drop.test','value':'new.test'}]}}], 'board':{'sizes':{},'positions':{'main:main.test':{'x':44,'y':55}},'placed':['drop.test'],'zoom':.7,'min_height':2400}}
 
 def path(site):return f'/sites/{site.id}/network/schemes'
 
@@ -84,6 +84,30 @@ def test_older_scheme_documents_default_to_unextended_board(env):
     db,site,user,client=env
     payload=doc();payload["board"].pop("min_height")
     assert client.post(path(site),json=payload).json()["board"]["min_height"]==0
+
+
+def test_resized_cards_round_trip_through_saved_scheme_and_draft(env):
+    db,site,user,client=env
+    payload=doc('draft')
+    payload['board']['sizes']={'drop.test':{'width':420,'height':160},'main.test':{'width':500,'height':180}}
+    saved=client.post(path(site),json=payload)
+    assert saved.status_code==200
+    assert client.get(path(site)).json()['draft']['board']['sizes']==payload['board']['sizes']
+    payload['kind']='scheme'
+    named=client.post(path(site),json=payload).json()
+    assert client.get(path(site)+'/'+named['id']).json()['board']['sizes']==payload['board']['sizes']
+
+
+def test_old_saved_boards_without_card_sizes_remain_compatible(env):
+    db,site,user,client=env
+    payload=doc();payload['board'].pop('sizes')
+    assert client.post(path(site),json=payload).json()['board']['sizes']=={}
+
+
+def test_saved_card_dimensions_are_bounded(env):
+    db,site,user,client=env
+    payload=doc();payload['board']['sizes']={'drop.test':{'width':20,'height':100}}
+    assert client.post(path(site),json=payload).status_code==422
 
 
 def test_draft_save_discards_completed_deletion_without_changing_live_routes(env):
