@@ -31,7 +31,10 @@
 .redirectNode.newreg { border-color:#5a9d8c; background:#f1fcf8; }
 .redirectNodeHandle { cursor:grab; touch-action:none; overflow-wrap:anywhere; font-weight:600; }
 .redirectNode small { margin-right:12px; }
-.fakeRedirectControls { margin:16px 0; }
+.fakeRedirectControls { margin:0; }
+.fakeRedirectHeading { display:flex; align-items:center; flex-wrap:wrap; gap:12px 24px; margin-bottom:12px; }
+.fakeRedirectSwitchRow { display:inline-flex; align-items:center; gap:10px; font-size:13px; font-weight:600; color:#536379; }
+.fakeRedirectSwitchRow > .networkMarkupSwitch { flex-shrink:0; }
 @media(max-width:1100px) { .redirectEditorColumns { grid-template-columns:1fr; } }
 @media(max-width:600px) { .redirectEditorRow { flex-direction:column; align-items:stretch; } }
 .redirectPageRow { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:14px; border:1px solid #d9dfed; border-radius:12px; min-width:0; margin:0; }

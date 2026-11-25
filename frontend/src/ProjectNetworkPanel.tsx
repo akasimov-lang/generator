@@ -720,13 +720,12 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
           {!data.has_head && <p>Настройки head не получены. Редактирование недоступно.</p>}
           {conflict && <button type="button" className="button secondary" disabled={Boolean(busy)} onClick={() => { setDraft({ markup: data.alternateMarkup, enabled: data.enableAlternates, originalMarkup: data.alternateMarkup, originalEnabled: data.enableAlternates }); setCanonicalDraft({ standard: data.canonicalDefaultMarkup ?? "", fake: data.canonicalFakeMainMarkup ?? "", originalStandard: data.canonicalDefaultMarkup ?? "", originalFake: data.canonicalFakeMainMarkup ?? "" }); }}>Загрузить актуальную разметку</button>}
         </div>}
-        {(mode !== "network" || networkView === "main") && <div className="networkSection"><div className="networkMarkupHeading"><h3>Фейковые внутренние страницы</h3>
+        {(mode !== "network" || networkView === "main") && <div className="networkSection"><FakeRedirectControls heading={<div className="networkMarkupHeading"><h3>Фейковые внутренние страницы</h3>
             <button type="button" role="switch" className="networkMarkupSwitch" aria-label="Динамические страницы" aria-checked={!!data.fake_main_enabled}
               title={data.fake_main_enabled ? "Выключить динамические страницы" : "Включить динамические страницы"} disabled={disabled}
               onClick={() => void mutate("select_fake_main", undefined, draft, { enable_dynamic_routes: !data.fake_main_enabled })}><span aria-hidden="true" /></button>
             {markupStatus("dynamic")}
-          </div>
-          <FakeRedirectControls paths={data.fake_main_paths||[]} current={data.fake_main_current||""} canon={data.canon} enabled={!!data.fake_main_settings?.redirectFakeMainsToCurrent} disabled={disabled} available={!!data.has_page_redirects} groups={data.page_redirects||[]} onToggle={enabled=>mutate("select_fake_main",undefined,draft,{redirect_fake_mains:enabled})} onSave={async edit=>enqueueEdit("page_redirect",edit)}/>
+          </div>} paths={data.fake_main_paths||[]} current={data.fake_main_current||""} canon={data.canon} enabled={!!data.fake_main_settings?.redirectFakeMainsToCurrent} disabled={disabled} available={!!data.has_page_redirects} groups={data.page_redirects||[]} onToggle={enabled=>mutate("select_fake_main",undefined,draft,{redirect_fake_mains:enabled})} onSave={async edit=>enqueueEdit("page_redirect",edit)}/>
           <div className="networkFakeForms"><div>
             <label className="networkFakePath">Путь фейковой главной<input aria-label="Путь фейковой главной" aria-describedby="fake-main-save-hint" value={fakeMainInput} onChange={e => setFakeMainInput(e.target.value)} onKeyDown={saveFakeMainOnEnter} onBlur={event => saveFakeMain(event.currentTarget.value)} placeholder="/events, /events/ или /index.php" /></label>
             <small id="fake-main-save-hint" className="muted">Клик вне поля или Enter — создать и назначить.</small>
