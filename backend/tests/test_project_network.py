@@ -829,3 +829,16 @@ def test_delete_fake_main_waits_for_remote_confirmation(env):
     result = change(env, 'select_fake_main', state['revision'], fake_main_path='/old/', delete_fake_main=True)
     assert result['operations'][0]['status'] != 'confirmed'
     assert '/old/' in result['fake_main_paths']
+
+
+@pytest.mark.parametrize('enabled', [True, False])
+def test_old_fake_redirect_switch_confirmed_without_changing_paths(env, enabled):
+    db, site, remote = env
+    alternate = remote.data['settings']['alternate']
+    alternate.update(fakeMain=['/old/', '/now'], currentFakeMain='/now', redirectFakeMainsToCurrent=not enabled)
+    before = dict(alternate)
+    state = network.read_network(db, site)
+    result = change(env, 'select_fake_main', state['revision'], redirect_fake_mains=enabled)
+    assert result['operations'][0]['status'] == 'confirmed'
+    assert remote.data['settings']['alternate'] == {**before, 'redirectFakeMainsToCurrent': enabled}
+    assert result['fake_main_settings']['redirectFakeMainsToCurrent'] is enabled

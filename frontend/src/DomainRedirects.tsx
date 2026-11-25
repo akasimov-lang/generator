@@ -1,11 +1,4 @@
-import { domainRedirectSource, normalizeRedirectAddress } from "./redirectAddress";
-import { QueueSaveIndicator } from "./SaveIndicator";
-import { NetworkEditStatus } from "./NetworkEditStatus";
-import { editActive, type NetworkEditQueueView } from "./networkEditQueue";
-import React from "react";
-import { ArrowRight, ExternalLink, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import "./styles/domain-redirects.css";
-
 export type DomainRedirect = {url:string;value:string};
 export type RedirectEdit = {redirect_delete?:boolean;expected?:{rows:DomainRedirect[]};redirect_source:string;redirect_target:string;redirect_original_source:string};
 
@@ -30,77 +23,4 @@ export function domainRedirectTarget(domain:string,targets:Map<string,string>):s
   return targets.get(redirectHost(domain));
 }
 
-export function DomainRedirects({redirects,revision,available,disabled,onSave,canon,onRetargetMain,queue}:{queue?:NetworkEditQueueView;canon:string;onRetargetMain:(revision:string)=>Promise<boolean>;redirects:DomainRedirect[];revision:string;available:boolean;disabled:boolean;onSave:(edit:RedirectEdit,revision:string)=>Promise<boolean>}) {
-  const blocked = queue ? false : disabled;
-  const [edit,setEdit]=React.useState<RedirectEdit|null>(null);
-  const [saving,setSaving]=React.useState(false);
-  const editRevision=React.useRef(revision);
-  const submitting=React.useRef(false);
-  const [localError,setLocalError]=React.useState<{source:string;message:string}|null>(null);
-  function startEdit(next:RedirectEdit){setLocalError(null);editRevision.current=revision;setEdit({...next,expected:{rows:structuredClone(redirects.filter(row=>row.url===(next.redirect_original_source||next.redirect_source)))}});}
-  const sourceInput=React.useRef<HTMLInputElement>(null);
-  const targetInput=React.useRef<HTMLInputElement>(null);
-  React.useEffect(()=>{if(edit){const input=edit.redirect_original_source?targetInput.current:sourceInput.current;input?.focus();input?.select();}},[edit?.redirect_original_source,edit===null]);
-  async function submit(next:RedirectEdit, atRevision:string) {
-    if(submitting.current||blocked)return;
-    submitting.current=true;setSaving(true);setLocalError(null);
-    try {
-      const source=domainRedirectSource(next.redirect_source);
-      const normalized={...next,redirect_source:source,redirect_target:normalizeRedirectAddress(next.redirect_target)};
-      if(!next.redirect_delete && redirects.some(row=>redirectHost(row.url)===source && row.url!==next.redirect_original_source)) {
-        throw new Error("Редирект с этого домена уже существует. Закройте форму и нажмите «Изменить» у существующей строки.");
-      }
-      const queued=queue?.latest(`domain:${next.redirect_original_source||source}`);
-      if(queued&&editActive(queued))throw new Error(queued.status==="unconfirmed"
-        ? "Предыдущая отправка ещё не подтверждена. Нажмите «Проверить отправку» в строке редиректа."
-        : "Этот редирект уже в очереди. Его текущий статус показан в таблице; повторно сохранять не нужно.");
-      if(await onSave(normalized,atRevision))setEdit(null);
-      else setLocalError({source:next.redirect_original_source||next.redirect_source,message:"Изменение не добавлено в очередь. Проверьте статус и повторите сохранение."});
-    }catch(error){setLocalError({source:next.redirect_original_source||next.redirect_source,message:error instanceof Error?error.message:"Не удалось отправить изменение. Повторите сохранение."});}
-    finally{submitting.current=false;setSaving(false);}
-  }
-  function save(event?:React.SyntheticEvent){event?.preventDefault();if(edit)void submit(edit,editRevision.current);}
-  function remove(row:DomainRedirect){
-    if(!redirects.some(saved=>saved.url===row.url)){
-      const failed=queue?.latest(`domain:${row.url}`);
-      if(!failed||failed.status!=="failed"||submitting.current)return;
-      submitting.current=true;setSaving(true);setLocalError(null);
-      void (async()=>{
-        try{
-          if(!await queue?.dismiss(failed.id))setLocalError({source:row.url,message:"Статус строки изменился. Обновите данные перед удалением."});
-        }catch(error){setLocalError({source:row.url,message:error instanceof Error?error.message:"Не удалось удалить ошибочную строку. Повторите удаление."});}
-        finally{submitting.current=false;setSaving(false);}
-      })();
-      return;
-    }
-    void submit({redirect_source:row.url,redirect_original_source:row.url,redirect_target:"",redirect_delete:true,
-      expected:{rows:structuredClone(redirects.filter(saved=>saved.url===row.url))}},revision);
-  }
-  const valid=redirects.filter(row=>row&&typeof row.url==="string"&&typeof row.value==="string");
-  for (const item of queue?.items || []) {
-    if (item.request.action !== "domain_redirect" || item.status === "completed" || item.request.redirect_delete) continue;
-    if (queue?.latest(`domain:${item.request.redirect_original_source || item.request.redirect_source}`)?.id !== item.id) continue;
-    const source = String(item.request.redirect_original_source || item.request.redirect_source);
-    if (!valid.some(row => row.url === source)) valid.push({url: source, value: String(item.request.redirect_target)});
-  }
-  const link=(domain:string)=>/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9-]+$/i.test(domain)?<a href={`https://${domain}/`} target="_blank" rel="noopener noreferrer">{domain}<ExternalLink size={13} aria-hidden="true"/></a>:<span>{domain}</span>;
-  return <section className="networkSection networkRedirects" aria-label="Доменные редиректы">
-    <div className="networkRedirectsHeading"><h3 className="networkRedirectTitle">Доменные редиректы<span className="networkRedirectCount" aria-label={`Доменных редиректов: ${valid.length}`}>{valid.length}</span><QueueSaveIndicator items={(queue?.items || []).filter(item=>item.request.action === "domain_redirect" || item.request.action === "domain_redirects_main")} label="Доменные редиректы" /></h3><button type="button" className="button secondary compact" disabled={blocked||!!queue?.busy("domain_redirects_main")||saving||!!edit||!available||!canon||!valid.some(row=>row.value!==canon||row.url.replace(/^www\./,"")===canon.replace(/^www\./,""))} title={`Заменить назначения всех доменных редиректов на ${canon}`} onClick={()=>void (async()=>{setSaving(true);try{await onRetargetMain(revision);}finally{setSaving(false);}})()}><ArrowRight size={14}/>{saving&&!edit?"Сохраняем…":"301->main"}</button><NetworkEditStatus item={queue?.latest("domain_redirects_main")} retry={id=>queue?.retry(id)}/></div>
-    {!available?<p className="muted">Редиректы ещё не получены из Webdev. Нажмите «Обновить данные».</p>:valid.length?<div className="networkTableWrap"><table className="domainRedirectsTable" aria-label="Откуда и куда перенаправляются домены"><thead><tr><th>Откуда</th><th aria-label="Направление"/><th>Куда</th><th>Действия</th></tr></thead><tbody>{valid.map((row,index)=>{
-      const active=edit?.redirect_original_source===row.url;
-      const queued=queue?.latest(`domain:${row.url}`);
-      const removable=redirects.some(saved=>saved.url===row.url)||queued?.status==="failed";
-      const pending=!!queued&&editActive(queued);
-      const shownTarget=queued&&queued.status!=="completed"&&!queued.request.redirect_delete ? String(queued.request.redirect_target) : row.value;
-      return <tr key={`${row.url}:${index}`}><td>{link(row.url)}</td><td><ArrowRight size={14} aria-hidden="true"/></td><td>{active&&edit?<span className="domainRedirectInlineField"><span aria-hidden="true">{row.value}<ExternalLink size={13}/></span><input ref={targetInput} aria-label="Редирект: куда" value={edit.redirect_target} maxLength={4096} autoComplete="off" spellCheck={false} required disabled={saving} onChange={e=>setEdit({...edit,redirect_target:e.target.value})} onKeyDown={e=>{if(e.key==="Enter"){save(e);}if(e.key==="Escape"&&!saving){e.preventDefault();setEdit(null);}}}/></span>:<span className={pending?"networkEditPending":""}>{link(shownTarget)}</span>}</td><td><div className="domainRedirectActionSlot">{pending?null:active?<div className="domainRedirectInlineActions" role="group" aria-label="Редактирование редиректа"><button type="button" onClick={save} className="button secondary compact" disabled={blocked||saving||!edit?.redirect_target.trim()}><Save size={13}/>{saving?"Сохраняем…":"Сохранить"}</button><button type="button" className="button secondary compact" disabled={saving} onClick={()=>setEdit(null)}><X size={13}/>Отменить</button></div>:<div className="domainRedirectInlineActions"><button type="button" className="button secondary compact" aria-label={`Редактировать редирект ${row.url}`} disabled={saving||!!edit} onClick={()=>startEdit({redirect_source:row.url,redirect_target:shownTarget,redirect_original_source:redirects.some(saved=>saved.url===row.url)?row.url:""})}><Pencil size={13}/>Изменить</button>{removable&&<button type="button" className="button secondary compact domainRedirectDelete" aria-label={`Удалить редирект ${row.url}`} title="Удалить редирект" disabled={saving||!!edit} onClick={()=>remove(row)}><Trash2 size={14}/></button>}</div>}{localError?.source===row.url&&(!edit||!!edit.redirect_original_source)?<small className="networkEditStatus error" role="alert" title={localError.message}>{localError.message}</small>:<NetworkEditStatus item={queued} retry={id=>queue?.retry(id)}/>}</div></td></tr>;
-    })}</tbody></table></div>:<p className="muted">Доменных редиректов нет.</p>}
-    <div className="networkActions"><button type="button" className="button secondary compact" disabled={!available||saving||!!edit} onClick={()=>startEdit({redirect_source:"",redirect_target:"",redirect_original_source:""})}><Plus size={14}/>Добавить редирект</button></div>
-    {edit&&!edit.redirect_original_source&&<form className="networkRedirectForm" aria-label="Новый редирект" onSubmit={event=>void save(event)}>
-      <label>Откуда<input ref={sourceInput} aria-label="Редирект: откуда" value={edit.redirect_source} maxLength={253} autoComplete="off" spellCheck={false} disabled={saving} placeholder="old-domain.pl" required onChange={e=>setEdit({...edit,redirect_source:e.target.value})}/></label>
-      <label>Куда<input aria-label="Редирект: куда" value={edit.redirect_target} maxLength={4096} autoComplete="off" spellCheck={false} disabled={saving} placeholder="main-domain.pl" required onChange={e=>setEdit({...edit,redirect_target:e.target.value})}/></label>
-      <div className="networkActions"><button type="submit" className="button compact" disabled={blocked||saving||!edit.redirect_source.trim()||!edit.redirect_target.trim()}>{saving?"Сохраняем…":"Сохранить редирект"}</button><button type="button" className="button secondary compact" disabled={saving} onClick={()=>setEdit(null)}>Отмена</button></div>
-      {localError&&<small className="domainRedirectFormError" role="alert" title={localError.message}>{localError.message}</small>}
-      <small className="muted">В поле «Куда» можно указать домен с путём. Протокол и начальные слеши убираются автоматически.</small>
-    </form>}
-  </section>;
-}
+export { RedirectWorkspace as DomainRedirects } from "./RedirectWorkspace";

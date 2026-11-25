@@ -927,6 +927,8 @@ function App() {
   const [massRefreshToken,setMassRefreshToken]=React.useState(0);
   const { designVersion, setDesignVersion } = useDesign();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = React.useState(()=>{try{return localStorage.getItem("pagepilot-sidebar-collapsed")==="true";}catch{return false;}});
+  function toggleSidebar(){setSidebarCollapsed(current=>{const next=!current;try{localStorage.setItem("pagepilot-sidebar-collapsed",String(next));}catch{}return next;});}
   const [compactNavigation, setCompactNavigation] = React.useState(() => window.matchMedia("(max-width: 900px)").matches);
   const mobileMenuButton = React.useRef<HTMLButtonElement>(null);
   const initialRoute = React.useMemo(() => routeFromPath(window.location.pathname), []);
@@ -1433,8 +1435,9 @@ function App() {
   );
 
   return (
-    <div className="appShell">
-      <aside className={`sidebar ${mobileMenuOpen ? "mobileMenuOpen" : ""}`}>
+    <div className={`appShell${sidebarCollapsed ? " sidebarCollapsed" : ""}`}>
+      <button type="button" className="sidebarBookmark" aria-label={sidebarCollapsed?"Раскрыть левое меню":"Скрыть левое меню"} aria-expanded={!sidebarCollapsed} aria-controls="desktop-sidebar" title={sidebarCollapsed?"Раскрыть меню":"Скрыть меню"} onClick={toggleSidebar}><Menu size={18} aria-hidden="true"/><span>Меню</span></button>
+      <aside id="desktop-sidebar" className={`sidebar ${mobileMenuOpen ? "mobileMenuOpen" : ""}`}>
         <div className="sidebarDigitalRain" aria-hidden="true">
           {Array.from({ length: 12 }, (_, index) => (
             <span key={index} style={{ "--rain-column": index, "--rain-delay": `${-(index * 0.73) % 7}s` } as React.CSSProperties}>

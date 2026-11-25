@@ -10674,3 +10674,11 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .networkSortButton:focus-visible { outline:2px solid var(--primary); outline-offset:3px; }
 .networkDomainHeading { display:flex; align-items:center; gap:8px; }
 .networkSubdomainType { display:inline-block; font-size:12px; }
+
+/* A persistent edge bookmark keeps navigation reachable on wide workspaces. */
+.sidebarBookmark { position:fixed; z-index:45; top:112px; left:var(--sidebar); display:flex; flex-direction:column; align-items:center; gap:10px; width:30px; padding:15px 5px; border:1px solid #9fb2ff80; border-left:0; border-radius:0 13px 13px 0; color:#fff; background:linear-gradient(155deg,#718eed,#435dc0); box-shadow:4px 3px 14px #263f8f26; cursor:pointer; transition:background .18s,box-shadow .18s; }
+.sidebarBookmark span { writing-mode:vertical-rl; font-size:11px; font-weight:600; letter-spacing:.08em; }
+.sidebarBookmark:hover { background:linear-gradient(155deg,#8ca4ff,#546dd1); box-shadow:5px 4px 18px #263f8f40; }
+.sidebarBookmark:focus-visible { outline:3px solid #91b7ff; outline-offset:3px; }
+@media(min-width:901px) { .appShell.sidebarCollapsed { grid-template-columns:0 minmax(0,1fr); } .sidebarCollapsed>.sidebar { display:none; } .sidebarCollapsed>.sidebarBookmark { left:0; } }
+@media(max-width:900px) { .sidebarBookmark { display:none; } }

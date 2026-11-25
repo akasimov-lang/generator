@@ -20,6 +20,7 @@ import { Trash2, X, Search, Check, ExternalLink, ArrowUpDown, ArrowUp, ArrowDown
 import { buildBaseAlternates } from "./standardAlternates";
 import { DomainRedirects, domainRedirectTargets, domainRedirectTarget, type DomainRedirect, type RedirectEdit } from "./DomainRedirects";
 import { PageRedirects, type PageRedirectGroup, type PageRedirectEdit } from "./PageRedirects";
+import { FakeRedirectControls } from "./FakeRedirectControls";
 import { ProjectStructuredData } from "./ProjectStructuredData";
 import { NetworkTableViewport } from "./NetworkTableViewport";
 import { NetworkSidebar } from "./NetworkSidebar";
@@ -47,7 +48,7 @@ type Network = {
   domain_removed_at?: Record<string, string>;
   domain_membership_history?: { domain: string; added_at: string | null; removed_at: string | null }[];
   history_overrides?: Record<string, Record<string, boolean>>;
-  fake_main_paths?: string[]; fake_main_current?: string; fake_main_enabled?: boolean;
+  fake_main_settings?: {redirectFakeMainsToCurrent?: boolean}; fake_main_paths?: string[]; fake_main_current?: string; fake_main_enabled?: boolean;
   amp?: string; prev_amp?: string; amp_domains?: string[];
   domain_classification?: Record<string, DomainClassification>;
   domain_types?: Record<string, "drop" | "newreg" | "amp">;
@@ -325,7 +326,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
     if (data?.domains.includes(domain)) return [domain + ": уже есть в сетке"];
     return [];
   });
-  async function mutate(action: Exclude<NetworkOperation["action"], "indexing" | "reglue_redirects" | "structured_data" | "gsc" | "title">, targetDomain?: string, markupDraft = draft, settings?: { fake_main_path?: string; delete_fake_main?: boolean; enable_canonical?: boolean; enable_dynamic_routes?: boolean } & Partial<RedirectEdit & PageRedirectEdit>, revision?: string): Promise<boolean> {
+  async function mutate(action: Exclude<NetworkOperation["action"], "indexing" | "reglue_redirects" | "structured_data" | "gsc" | "title">, targetDomain?: string, markupDraft = draft, settings?: { fake_main_path?: string; delete_fake_main?: boolean; enable_canonical?: boolean; enable_dynamic_routes?: boolean; redirect_fake_mains?: boolean } & Partial<RedirectEdit & PageRedirectEdit>, revision?: string): Promise<boolean> {
     if (!data || !markupDraft || busyRef.current) return false;
     if(action === "alternates") {
       let problem="";
@@ -602,6 +603,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
         </div>}
         {mode !== "network" && <MassReglueParticipationControl enabled={participationEnabled} {...participationStatus} onChange={enabled => void updateParticipation(enabled)} />}
         </div>);
+  if (new URLSearchParams(window.location.search).get("redirect-schema") === "1") return <section className="dataPanel projectNetworkPanel"><div className="panelHeader"><h2>Схема редиректов · {site.name}</h2><a href={location.pathname}>Вернуться к сетке</a><button className="button secondary" disabled={!!busy} onClick={()=>void load(true,true)}>Обновить данные</button></div>{error&&<p role="alert">{error}</p>}{data?<DomainRedirects schema scope={site.id} domains={data.domains} types={data.domain_types} canon={data.canon} redirects={data.domain_redirects||[]} revision={data.revision} available={!!data.has_domain_redirects} disabled={disabled} queue={editQueue} onSave={async edit=>enqueueEdit("domain_redirect",edit)} onRetargetMain={async()=>false}/>:<p>Загрузка сетки…</p>}</section>;
   return <section className="dataPanel projectNetworkPanel">
     <div className="panelHeader"><div className="networkPanelHeading"><h2>{mode === "network" ? "Сетка проекта" : "Переклей"}</h2>        {data && mode === "network" && <div className="networkViewSwitch" role="group" aria-label="Вид сетки">
           <button type="button" aria-pressed={networkView === "main"} onClick={() => setNetworkView("main")}>Основная сетка</button>
@@ -639,7 +641,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
             </tr>)}</tbody>
           </table></NetworkTableViewport></div>
           {!visibleDomains.length && <p>{domainQuery.trim() ? "Домены не найдены." : networkView === "amp" ? "В кеше проекта AMP-домены не указаны." : "В основной сетке нет доменов."}</p>}
-          {networkView === "main" && <><DomainRedirects key={site.id} canon={data.canon} onRetargetMain={async () => enqueueEdit("domain_redirects_main")} queue={editQueue} redirects={data.domain_redirects || []} revision={data.revision} available={!!data.has_domain_redirects} disabled={disabled} onSave={async edit => enqueueEdit("domain_redirect", edit)} /><PageRedirects key={`pages:${site.id}`} groups={data.page_redirects||[]} domains={data.domains} canon={data.canon} revision={data.revision} available={!!data.has_page_redirects} disabled={disabled} queue={editQueue} onSave={async edit => enqueueEdit("page_redirect", edit)}/></>}
+          {networkView === "main" && <><DomainRedirects domains={data.domains} types={data.domain_types} scope={site.id} key={site.id} canon={data.canon} onRetargetMain={async () => enqueueEdit("domain_redirects_main")} queue={editQueue} redirects={data.domain_redirects || []} revision={data.revision} available={!!data.has_domain_redirects} disabled={disabled} onSave={async edit => enqueueEdit("domain_redirect", edit)} /><PageRedirects key={`pages:${site.id}`} groups={data.page_redirects||[]} domains={data.domains} canon={data.canon} revision={data.revision} available={!!data.has_page_redirects} disabled={disabled} queue={editQueue} onSave={async edit => enqueueEdit("page_redirect", edit)}/></>}
           </div><NetworkSidebar><LastReglueSummary last={data?.last_reglue} recent={data?.recent_network_changes} observedAt={data?.last_reglue_at} />{mode === "network" && !!networks.length && <nav className="networkBrandNavigation" aria-label="Навигация по сеткам бренда">
             <div className="networkBrandNavigationHeading"><strong>Сетки бренда</strong><small>{brand} · {networks.length}</small></div>
             <ul>{networks.map(peer => { const current = peer.id === site.id; return <li key={peer.id}><a href={`/project-network/${encodeURIComponent(peer.name)}/`} aria-current={current ? "page" : undefined} aria-label={`Открыть сетку ${peer.name}`} onClick={event => { if (!onSelectNetwork || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onSelectNetwork(peer.name); }}>
@@ -718,6 +720,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
               onClick={() => void mutate("select_fake_main", undefined, draft, { enable_dynamic_routes: !data.fake_main_enabled })}><span aria-hidden="true" /></button>
             {markupStatus("dynamic")}
           </div>
+          <FakeRedirectControls paths={data.fake_main_paths||[]} current={data.fake_main_current||""} canon={data.canon} enabled={!!data.fake_main_settings?.redirectFakeMainsToCurrent} disabled={disabled} available={!!data.has_page_redirects} groups={data.page_redirects||[]} onToggle={enabled=>mutate("select_fake_main",undefined,draft,{redirect_fake_mains:enabled})} onSave={async edit=>enqueueEdit("page_redirect",edit)}/>
           <div className="networkFakeForms"><div>
             <label className="networkFakePath">Путь фейковой главной<input aria-label="Путь фейковой главной" aria-describedby="fake-main-save-hint" value={fakeMainInput} onChange={e => setFakeMainInput(e.target.value)} onKeyDown={saveFakeMainOnEnter} onBlur={event => saveFakeMain(event.currentTarget.value)} placeholder="/events, /events/ или /index.php" /></label>
             <small id="fake-main-save-hint" className="muted">Клик вне поля или Enter — создать и назначить.</small>

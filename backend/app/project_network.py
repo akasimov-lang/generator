@@ -55,6 +55,7 @@ class NetworkChange(BaseModel):
     enable_alternates: bool = True
     enable_canonical: bool | None = Field(default=None, strict=True)
     enable_dynamic_routes: bool | None = Field(default=None, strict=True)
+    redirect_fake_mains: bool | None = Field(default=None, strict=True)
     canonical_default_markup: str | None = Field(default=None, max_length=100000)
     canonical_fake_main_markup: str | None = Field(default=None, max_length=100000)
     fake_main_path: str = Field(default="", max_length=250)
@@ -619,11 +620,16 @@ def change_network(db, site, payload, username, *, auto_run_id=None):
                 if payload.action != "select_fake_main" or payload.enable_dynamic_routes is not None:
                     raise ValueError("Удаление страницы нельзя совмещать с созданием или переключением динамических страниц.")
                 request["alternate"] = delete_fake_settings(project, payload.fake_main_path)
-            elif payload.action == "select_fake_main" and payload.enable_dynamic_routes is not None:
+            elif payload.action == "select_fake_main" and (payload.enable_dynamic_routes is not None or payload.redirect_fake_mains is not None):
                 alternate = (project.get("settings") or {}).get("alternate") or {}
                 if not isinstance(alternate, dict):
                     raise ValueError("Не удалось прочитать настройки динамических страниц. Обновите данные проекта.")
-                request["alternate"] = {**alternate, "enableDynamicRoutes": payload.enable_dynamic_routes}
+                request["alternate"] = dict(alternate)
+                if payload.enable_dynamic_routes is not None:
+                    request["alternate"]["enableDynamicRoutes"] = payload.enable_dynamic_routes
+                if payload.redirect_fake_mains is not None:
+                    from app.fake_redirect_controls import configure_old_redirects
+                    request["alternate"] = configure_old_redirects(project, payload.redirect_fake_mains) | ({"enableDynamicRoutes": payload.enable_dynamic_routes} if payload.enable_dynamic_routes is not None else {})
             else:
                 request["alternate"] = (create_fake_settings(project, payload.fake_main_path, activate=payload.activate_fake_main)
                                         if payload.action == "create_fake_main" else select_fake_settings(project, payload.fake_main_path))
