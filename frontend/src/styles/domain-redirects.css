@@ -308,7 +308,9 @@
 .redirectSubmitButton.hasChanges:not(:disabled):hover { background:linear-gradient(135deg,#218d55,#116c3c); border-color:#116c3c; }
 
 /* Fill each column downward, then continue horizontally after fifteen rows. */
-.redirectTables { grid-template-columns:none; grid-auto-flow:column; grid-auto-columns:minmax(480px,calc((100% - 16px)/2)); overflow-x:auto; align-items:start; padding-bottom:6px; }
+.networkRedirects { grid-template-columns:minmax(0,1fr); }
+.redirectWorkspaceBody, .redirectTableSection, .redirectSupportingDetails, .redirectSupportingBody { min-width:0; max-width:100%; box-sizing:border-box; }
+.redirectTables { position:relative; width:100%; min-width:0; max-width:100%; box-sizing:border-box; grid-template-columns:none; grid-auto-flow:column; grid-auto-columns:minmax(480px,calc((100% - 16px)/2)); overflow-x:auto; overscroll-behavior-x:contain; align-items:start; padding-bottom:6px; }
 .redirectPageTables { grid-auto-columns:minmax(680px,calc((100% - 16px)/2)); }
 .redirectSectionSaveStatus { display:inline-flex; align-items:center; gap:5px; flex:none; font-size:11px; font-weight:500; color:var(--muted,#64748b); }
 .redirectSectionSaveStatus.saved { color:#16814e; }
