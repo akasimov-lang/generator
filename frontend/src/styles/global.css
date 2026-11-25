@@ -10682,3 +10682,6 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 .sidebarBookmark:focus-visible { outline:3px solid #91b7ff; outline-offset:3px; }
 @media(min-width:901px) { .appShell.sidebarCollapsed { grid-template-columns:0 minmax(0,1fr); } .sidebarCollapsed>.sidebar { display:none; } .sidebarCollapsed>.sidebarBookmark { left:0; } }
 @media(max-width:900px) { .sidebarBookmark { display:none; } }
+
+/* Keep the domain scrollbar at the table edge; the remaining space scrolls the page. */
+.networkDomainTable > .networkTableWrap { width:fit-content; max-width:100%; scrollbar-gutter:stable; }
