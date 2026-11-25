@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {redirectChain,redirectBranch,arrangeRedirectGraph,extendedBoardHeight,routeKey} from '../src/redirectGraphLayout.ts';
+import {redirectChain,redirectBranch,unattachedGraphDomains,arrangeRedirectGraph,extendedBoardHeight,routeKey} from '../src/redirectGraphLayout.ts';
 const row=(url,value)=>({url,value});
 
 test('chain follows redirects to Main and leaves siblings out',()=>{
@@ -36,3 +36,7 @@ test('an invalid outgoing Main redirect never merges unrelated branches into the
  const result=redirectBranch('new.test',[row('new.test','main.test'),row('main.test','new.test'),row('other.test','main.test')],'main.test');
  assert.equal(result.nodes.has('other.test'),false);assert.equal(result.links.has('main.test>new.test'),false);
 });
+
+test('red warning includes only visible domains without a complete path to Main',()=>{const result=unattachedGraphDomains(['main.test','direct.test','indirect.test','alone.test','cycle-a.test','cycle-b.test'],[row('direct.test','main.test'),row('indirect.test','direct.test'),row('cycle-a.test','cycle-b.test'),row('cycle-b.test','cycle-a.test')],'main.test');assert.deepEqual([...result].sort(),['alone.test','cycle-a.test','cycle-b.test']);});
+test('removing the middle edge marks its entire incoming subtree as disconnected',()=>{const names=['main.test','new.test','drop.test','tiny.test'];const rows=[row('new.test','main.test'),row('drop.test','new.test'),row('tiny.test','drop.test')];assert.equal(unattachedGraphDomains(names,rows,'main.test').size,0);assert.deepEqual([...unattachedGraphDomains(names,rows.slice(1),'main.test')].sort(),['drop.test','new.test','tiny.test']);});
+test('restoring a path clears red warnings, including www aliases',()=>{assert.equal(unattachedGraphDomains(['www.drop.test','main.test'],[row('drop.test','https://www.main.test/')],'main.test').size,0);});

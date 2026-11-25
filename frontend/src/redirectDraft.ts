@@ -15,3 +15,9 @@ export function recoveryDraft(raw:string|null,path:string,base:DraftRedirect[],i
     return {version:1,rows,saved_at:typeof value.saved_at==='string'?value.saved_at:new Date().toISOString()};
   }catch{return null;}
 }
+/** Remove only the selected edge; confirmed rows keep their concurrency snapshot. */
+export function removeDraftConnection(rows:RedirectDraftRow[],source:string,target:string):RedirectDraftRow[] {
+  const index=rows.findIndex(row=>!row.removed&&row.url===source&&row.value===target);
+  if(index<0)return rows;
+  return rows.flatMap((row,i)=>i!==index?[row]:row.original?[{...row,removed:true}]:[]);
+}

@@ -29,6 +29,14 @@ export function redirectBranch(domain:string,rows:RedirectRow[],canon:string) {
   }
   return result;
 }
+/** Reverse reachability keeps cyclic, incomplete and isolated paths disconnected. */
+export function unattachedGraphDomains(domains:string[],rows:RedirectRow[],canon:string) {
+  const main=host(canon),incoming=new Map<string,string[]>();
+  for(const row of rows){const from=host(row.url),to=host(row.value);if(from&&to)incoming.set(to,[...(incoming.get(to)||[]),from]);}
+  const reached=new Set<string>(),pending=main?[main]:[];
+  while(pending.length){const current=pending.pop()!;if(reached.has(current))continue;reached.add(current);pending.push(...(incoming.get(current)||[]));}
+  return new Set(domains.map(host).filter(name=>name&&!reached.has(name)));
+}
 export function extendedBoardHeight(current:number,viewport:number,zoom:number) {
   return Math.min(100000,Math.ceil(current+Math.max(1,viewport)/zoom));
 }

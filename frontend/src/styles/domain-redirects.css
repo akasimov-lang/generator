@@ -255,3 +255,14 @@
 .redirectNode .redirectNodeGrabZone:hover { background:linear-gradient(130deg,#fff,#ffffff60); }
 .redirectNode .redirectNodeGrabZone:active { cursor:grabbing; }
 .redirectNode .redirectNodeGrabZone:focus-visible { outline:2px solid var(--redirect-accent); outline-offset:-4px; }
+
+.redirectEdgeHit { stroke:transparent; stroke-width:18px; pointer-events:stroke; cursor:pointer; }
+.redirectEdgeClickableLabel { pointer-events:all; cursor:pointer; }
+.redirectGraph svg g[role="button"]:focus-visible .redirectEdgeHit { stroke:#df485b45; }
+.redirectSelectedEdge > line:not(.redirectEdgeHit) { stroke:#d84054; }
+.redirectSelectedEdge > text { fill:#b6283b; }
+.redirectGraph .redirectEdgeDelete { position:absolute; z-index:25; width:36px; height:36px; background:#fff4f5; border:2px solid #d84054; box-shadow:0 3px 12px #b6283b35; }
+.redirectGraph .redirectEdgeDelete svg { position:static; }
+.redirectGraph .redirectNode.unattachedNode, .redirectGraph.hasChainHighlight .redirectNode.unattachedNode { z-index:5; opacity:1; outline:2px solid #d9434c; outline-offset:3px; }
+.redirectGraph.chainRaised .redirectNode.unattachedNode.inHighlightedChain { z-index:7; outline-color:#d9434c; }
+.redirectGraph .redirectNode.unattachedNode.activeCard, .redirectGraph.hasChainHighlight .redirectNode.unattachedNode.activeCard, .redirectGraph.chainRaised .redirectNode.unattachedNode.activeCard { z-index:20; }

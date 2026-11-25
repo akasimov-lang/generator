@@ -1,5 +1,5 @@
 import {RedirectSchemeLibrary,type SchemeApi,type SchemeDocument} from "./RedirectSchemeLibrary";
-import {readRedirectDraft,recoveryDraft,redirectDraftKey,type RedirectDraftRow} from "./redirectDraft";
+import {readRedirectDraft,recoveryDraft,redirectDraftKey,removeDraftConnection,type RedirectDraftRow} from "./redirectDraft";
 import type {DomainMetricsMap} from "./domainMetrics";
 import React from 'react';
 import { Trash2 } from 'lucide-react';
@@ -46,6 +46,7 @@ export function RedirectWorkspace({redirects:allRedirects,revision,available,dis
   const assigned=new Set([...redirects.map(r=>host(r.url)),...planned.map(r=>host(r.url)),...(queue?.items||[]).filter(i=>i.request.action==='domain_redirect'&&editActive(i)&&!i.request.redirect_delete).map(i=>host(String(i.request.redirect_source)))]);
   function update(id:string,patch:Partial<Draft>){if((patch.value&&redirectScope.isAmp(patch.value))||(patch.url&&redirectScope.isAmp(patch.url))){setError("AMP-домены не участвуют в доменных редиректах.");return;}setDraft(rows.map(r=>r.id===id?{...r,...patch}:r));setError('');}
   function connect(from:string,to:string){const next=draft||snapshot(),row=next.find(r=>host(r.url)===host(from));if(row){row.value=to;row.removed=false;}else next.push({id:crypto.randomUUID(),url:from,value:to,original:'',expected:{rows:[]}});setDraft([...next]);}
+  function disconnect(from:string,to:string){if(blocked)return false;const next=removeDraftConnection(rows,from,to);if(next===rows){setError('Связь уже изменилась. Выберите её заново.');return false;}setDraft(next);setError('');return true;}
   async function submit(){if(lock.current||blocked||problems.length)return;lock.current=true;setSaving(true);setError('');let rest=[...rows];try{for(const row of orderRedirectChanges(changed)){const ok=await onSave({redirect_source:cleanAddress(row.url),redirect_target:cleanAddress(row.value),redirect_original_source:row.original,redirect_delete:!!row.removed,expected:row.expected},revision);if(!ok)throw new Error('Не удалось добавить строку в очередь. Неотправленные изменения сохранены в редакторе.');rest=row.removed?rest.filter(r=>r.id!==row.id):rest.map(r=>r.id===row.id?{...r,original:r.url,expected:{rows:[{url:r.url,value:r.value}]}}:r);setDraft(rest);}setDraft(null);}catch(e){setError(e instanceof Error?e.message:String(e));}finally{lock.current=false;setSaving(false);}}
   React.useEffect(()=>{if(!draft||draftPersisted)return;const warn=(event:BeforeUnloadEvent)=>event.preventDefault();window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[draft,draftPersisted]);
   return <section className={`networkSection networkRedirects${schema?" redirectSchemaWorkspace":" redirectCompactSection"}`} aria-label="Доменные редиректы"><div className="networkRedirectsHeading"><h3>{schema?'Схема редиректов':'Доменные редиректы'} · {planned.length}</h3><QueueSaveIndicator items={(queue?.items||[]).filter(i=>['domain_redirect','domain_redirects_main'].includes(i.request.action))} label="Доменные редиректы"/>
@@ -65,7 +66,7 @@ export function RedirectWorkspace({redirects:allRedirects,revision,available,dis
     <p className="muted redirectSaveHint">{draft?'План: изменения ещё не отправлены.':'Подтверждённые настройки Webdev.'} После отправки результат подтверждается отдельно для каждой строки.</p>
     {pending&&<p role="status">Дождитесь завершения очереди перед следующим изменением схемы.</p>}
     {error&&<p role="alert">{error}</p>}{!schema&&problems.length>0&&<ul role="alert">{problems.map(p=><li key={p}>{p}</li>)}</ul>}
-    {schema&&<fieldset className="redirectGraphField" disabled={blocked} style={{border:0,padding:0,minWidth:0,margin:0}}><RedirectGraph key={graphVersion} confirmedRows={redirects} redirectDates={redirectDates} metrics={metrics} canon={redirectScope.ampKeys.has(host(canon))?"":canon} disabled={blocked} domains={domains} types={types} rows={planned} scope={scope} onConnect={connect}/></fieldset>}
+    {schema&&<fieldset className="redirectGraphField" disabled={blocked} style={{border:0,padding:0,minWidth:0,margin:0}}><RedirectGraph key={graphVersion} confirmedRows={redirects} redirectDates={redirectDates} metrics={metrics} canon={redirectScope.ampKeys.has(host(canon))?"":canon} disabled={blocked} domains={domains} types={types} rows={planned} scope={scope} onConnect={connect} onDisconnect={disconnect}/></fieldset>}
 
     </>}
     </div>
