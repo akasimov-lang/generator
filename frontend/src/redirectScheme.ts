@@ -12,7 +12,7 @@ export function schemeProblems(rows:RedirectRow[], domains:string[], types:Recor
     if(from===to) errors.push(`Редирект на себя: ${row.url}`);
     if(from===host(canon)) errors.push(`Main должен отдавать страницу: ${row.url}`);
     const source=members.get(from), target=members.get(to);
-    if(source && types[source]==='drop' && (!target || types[target]!=='newreg')) errors.push(`Дроп ${source}: выберите новорег этой сетки.`);
+    if(source && types[source]==='drop' && to!==host(canon) && (!target || !['drop','newreg'].includes(types[target]))) errors.push(`Дроп ${source}: выберите дроп или новорег этой сетки.`);
   }
   for(const start of edges.keys()) {
     const visited=new Set<string>(); let node:string|undefined=start;
@@ -26,12 +26,15 @@ export function unlinkedDomains(domains:string[], rows:RedirectRow[]) {
 }
 export function completeDrops(rows:RedirectRow[], domains:string[], types:Record<string,string>, canon:string) {
   const next=rows.map(r=>({...r}));
+  const allowed=new Set(domains.filter(d=>['drop','newreg'].includes(types[d])).map(host));
+  if(canon)allowed.add(host(canon));
+  const pending=domains.filter(d=>types[d]==='drop'&&host(d)!==host(canon)&&!next.some(r=>host(r.url)===host(d)&&host(r.url)!==host(r.value)&&allowed.has(host(r.value))));
+  if(!pending.length)return next;
   const targets=domains.filter(d=>types[d]==='newreg' && !rows.some(r=>host(r.url)===host(d) && types[domains.find(n=>host(n)===host(r.value))||'']==='drop'));
   if(!targets.length) throw new Error('В сетке нет доступных новорегов. Укажите типы доменов.');
   let index=0;
-  for(const domain of domains.filter(d=>types[d]==='drop' && host(d)!==host(canon))) {
+  for(const domain of pending) {
     const row=next.find(r=>host(r.url)===host(domain));
-    if(row && targets.some(t=>host(t)===host(row.value))) continue;
     const target=targets[index++ % targets.length];
     if(row) row.value=target; else next.push({url:domain,value:target});
   }
@@ -82,6 +85,6 @@ export function prepareRedirectDomainOptions(domains:string[],types:Record<strin
   return {
     tone:(value:string)=>resolve(value).tone,
     sources:(current:string,assigned:ReadonlySet<string>)=>{const selected=resolve(current),pool=current&&!byValue.has(current)?[...ordered,selected].sort((a,b)=>rank(a.kind)-rank(b.kind)||a.value.localeCompare(b.value)):ordered;return pool.filter(o=>o.kind!=='amp'&&(o.name===selected.name||(!assigned.has(o.name)&&o.name!==main)));},
-    targets:(source:string)=>{const from=resolve(source);return ordered.filter(o=>o.name!==from.name&&(from.kind!=='drop'||o.kind==='newreg'));}
+    targets:(source:string)=>{const from=resolve(source);return ordered.filter(o=>o.name!==from.name&&(from.kind!=='drop'||['drop','newreg'].includes(o.kind)||o.name===main));}
   };
 }

@@ -167,3 +167,22 @@ def test_edit_normalizes_existing_pasted_source_without_duplicating_it():
  result=update_redirects({'settings':{'redirects':[{'url':'https://OLD.test/','value':'main.test','custom':'keep'}]}},
                          'https://OLD.test/','https://new.test/Offer/','https://OLD.test/')
  assert result==[{'url':'old.test','value':'new.test/Offer/','custom':'keep'}]
+
+
+def test_drop_can_redirect_directly_to_drop_main(env):
+ db,site,remote=env
+ site.domain_types={'new.test':'drop','main.test':'drop'}
+ first=setup(env)
+ result=change(env,'domain_redirect',first['revision'],redirect_source='new.test',redirect_target='main.test')
+ assert result['domain_redirects'][-1]=={'url':'new.test','value':'main.test'}
+ assert result['operations'][0]['status']=='confirmed'
+
+
+def test_drop_can_redirect_to_an_intermediate_drop(env):
+ db,site,remote=env
+ site.domain_types={'new.test':'drop','old.test':'drop','main.test':'drop'}
+ first=setup(env)
+ result=change(env,'domain_redirect',first['revision'],redirect_source='new.test',redirect_target='old.test')
+ assert result['domain_redirects'][-1]=={'url':'new.test','value':'old.test'}
+ assert result['domain_redirects'][0]['value']=='main.test'
+ assert result['operations'][0]['status']=='confirmed'
