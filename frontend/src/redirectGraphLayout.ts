@@ -18,6 +18,17 @@ export function redirectChain(domain:string,rows:RedirectRow[],canon:string) {
   }
   return {nodes,links,cycle,reachesMain:!!main&&nodes.has(main)};
 }
+/** Incoming subtree of the active domain, plus its outgoing path to Main. */
+export function redirectBranch(domain:string,rows:RedirectRow[],canon:string) {
+  const result=redirectChain(domain,rows,canon),start=host(domain),main=host(canon);
+  const incoming=new Map<string,RedirectRow[]>();
+  for(const row of rows){const from=host(row.url),to=host(row.value);if(!from||!to||from===main)continue;incoming.set(to,[...(incoming.get(to)||[]),row]);}
+  const pending=start?[start]:[],visited=new Set<string>();
+  while(pending.length){const current=pending.pop()!;if(visited.has(current))continue;visited.add(current);
+    for(const row of incoming.get(current)||[]){const from=host(row.url);result.nodes.add(from);result.links.add(routeKey(row.url,row.value));pending.push(from);}
+  }
+  return result;
+}
 export function extendedBoardHeight(current:number,viewport:number,zoom:number) {
   return Math.min(100000,Math.ceil(current+Math.max(1,viewport)/zoom));
 }

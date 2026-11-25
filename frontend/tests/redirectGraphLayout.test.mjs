@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {redirectChain,arrangeRedirectGraph,extendedBoardHeight,routeKey} from '../src/redirectGraphLayout.ts';
+import {redirectChain,redirectBranch,arrangeRedirectGraph,extendedBoardHeight,routeKey} from '../src/redirectGraphLayout.ts';
 const row=(url,value)=>({url,value});
 
 test('chain follows redirects to Main and leaves siblings out',()=>{
@@ -16,3 +16,23 @@ test('sorting places each source below its destination and keeps chains together
 test('large branching networks pack without overlap and do not mutate real redirects',()=>{const names=['main.test'],rows=[];for(let n=0;n<20;n++){names.push(`new${n}.test`);rows.push(row(`new${n}.test`,'main.test'));for(let d=0;d<3;d++){names.push(`drop${n}-${d}.test`);rows.push(row(`drop${n}-${d}.test`,`new${n}.test`));}}const before=JSON.stringify(rows);const result=arrangeRedirectGraph(names,rows,'main.test',1500);assert.equal(Object.keys(result.positions).length,81);assert.equal(JSON.stringify(rows),before);assertNoOverlaps(result,'main.test');assert.ok(result.width<1600);});
 test('sorting keeps disconnected domains and malformed cycles visible exactly once',()=>{const names=['a.test','b.test','main.test','alone.test'];const result=arrangeRedirectGraph(names,[row('a.test','b.test'),row('b.test','a.test')],'main.test',900);assert.equal(Object.keys(result.positions).length,4);assertNoOverlaps(result,'main.test');});
 test('sorting is stable regardless of previous card order and aliases',()=>{const names=['www.drop.test','main.test','new.test'];const rows=[row('drop.test','https://new.test/path/'),row('new.test','main.test')];assert.deepEqual(arrangeRedirectGraph(names,rows,'www.main.test',1400),arrangeRedirectGraph([...names].reverse(),rows,'main.test',1400));assert.equal(routeKey('www.drop.test','https://new.test/'),'drop.test>new.test');});
+
+
+test('moving a middle domain highlights every incoming subchain and its path to Main',()=>{
+ const rows=[row('tiny.test','drop.test'),row('drop.test','new.test'),row('other-drop.test','new.test'),row('new.test','middle.test'),row('middle.test','main.test'),row('sibling.test','middle.test'),row('other.test','main.test')];
+ const result=redirectBranch('www.new.test',rows,'main.test');
+ assert.deepEqual([...result.nodes].sort(),['drop.test','main.test','middle.test','new.test','other-drop.test','tiny.test']);
+ assert.equal(result.links.size,5);assert.equal(result.links.has('tiny.test>drop.test'),true);assert.equal(result.links.has('other-drop.test>new.test'),true);assert.equal(result.nodes.has('sibling.test'),false);assert.equal(result.nodes.has('other.test'),false);assert.equal(result.reachesMain,true);
+});
+test('moving Main highlights all its redirect branches but excludes disconnected domains',()=>{
+ const result=redirectBranch('main.test',[row('drop.test','new.test'),row('new.test','main.test'),row('other.test','main.test'),row('alone.test','outside.test')],'main.test');
+ assert.deepEqual([...result.nodes].sort(),['drop.test','main.test','new.test','other.test']);assert.equal(result.links.size,3);
+});
+test('incoming cycles terminate without losing their visible links',()=>{
+ const result=redirectBranch('a.test',[row('a.test','b.test'),row('b.test','a.test'),row('drop.test','b.test')],'main.test');
+ assert.equal(result.cycle,true);assert.equal(result.nodes.size,3);assert.equal(result.links.size,3);
+});
+test('an invalid outgoing Main redirect never merges unrelated branches into the active subtree',()=>{
+ const result=redirectBranch('new.test',[row('new.test','main.test'),row('main.test','new.test'),row('other.test','main.test')],'main.test');
+ assert.equal(result.nodes.has('other.test'),false);assert.equal(result.links.has('main.test>new.test'),false);
+});
