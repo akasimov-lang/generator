@@ -242,3 +242,11 @@
 .redirectGraph.chainRaised .redirectNode.inHighlightedChain { z-index:7; outline-width:3px; filter:drop-shadow(0 0 12px #ffbd4699); }
 .redirectGraph .redirectNode.activeCard, .redirectGraph.hasChainHighlight .redirectNode.activeCard, .redirectGraph.chainRaised .redirectNode.activeCard { z-index:20; opacity:1; }
 .redirectGraph .redirectNode.selectedSource { z-index:12; }
+
+/* Redirect domain types are conveyed by colour without text suffixes. */
+.redirectEditTable .tg-combobox[data-tone="blue"] .tg-combobox-control input { color:#245ca4; border-color:#95b7e4; background:#f0f6ff; box-shadow:inset 3px 0 #6394d4; }
+.redirectEditTable .tg-combobox[data-tone="green"] .tg-combobox-control input { color:#23734f; border-color:#92c3ac; background:#eef9f3; box-shadow:inset 3px 0 #58a27f; }
+.redirectEditTable .tg-combobox-list > [data-tone="blue"] { color:#245ca4; border-left:3px solid #6394d4; background:#f0f6ff; }
+.redirectEditTable .tg-combobox-list > [data-tone="green"] { color:#23734f; border-left:3px solid #58a27f; background:#eef9f3; }
+.redirectEditTable .tg-combobox-list > [data-tone="blue"].active { background:#dae9ff; outline:1px solid #6394d4; outline-offset:-1px; }
+.redirectEditTable .tg-combobox-list > [data-tone="green"].active { background:#d7efdf; outline:1px solid #58a27f; outline-offset:-1px; }

@@ -1,10 +1,11 @@
 import React from "react";
 import { ChevronDown, Check } from "lucide-react";
 
-type Option = { value: string; label: string; keywords?: string };
+type Tone = "blue" | "green";
+type Option = { value: string; label: string; keywords?: string; tone?: Tone };
 
-export function TemplateCombobox({ label, value, options, onChange, allowCustom = false, placeholder = "Введите название или код" }: {
-  label: string; value: string; options: Option[]; onChange: (value: string) => void; allowCustom?: boolean; placeholder?: string;
+export function TemplateCombobox({ label, value, options, onChange, allowCustom = false, placeholder = "Введите название или код", tone }: {
+  label: string; value: string; options: Option[]; onChange: (value: string) => void; allowCustom?: boolean; placeholder?: string; tone?: Tone;
 }) {
   const id = React.useId();
   const beforeEdit = React.useRef(value);
@@ -16,7 +17,7 @@ export function TemplateCombobox({ label, value, options, onChange, allowCustom 
   const selected = options.find(o => o.value === value);
   const normalized = (query || "").trim().toLocaleLowerCase();
   const matches = options.filter(o => `${o.label} ${o.value} ${o.keywords || ""}`.toLocaleLowerCase().includes(normalized));
-  const filtered = allowCustom && normalized && !options.some(o => o.value.toLocaleLowerCase() === normalized) ? [...matches, { value: (query || "").trim(), label: `Использовать «${(query || "").trim()}»` }] : matches;
+  const filtered: Option[] = allowCustom && normalized && !options.some(o => o.value.toLocaleLowerCase() === normalized) ? [...matches, { value: (query || "").trim(), label: `Использовать «${(query || "").trim()}»` }] : matches;
 
   function show() { beforeEdit.current = value; setOpen(true); setQuery(null); setActive(Math.max(0, options.findIndex(o => o.value === value))); }
   function close() { setOpen(false); setQuery(null); }
@@ -25,7 +26,7 @@ export function TemplateCombobox({ label, value, options, onChange, allowCustom 
     if (open) list.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" });
   }, [open, active]);
 
-  return <div className="tg-combobox" onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) close(); }}>
+  return <div className="tg-combobox" data-tone={selected?.tone || tone} onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) close(); }}>
     <label htmlFor={id}>{label}</label>
     <div className="tg-combobox-control">
       <input id={id} ref={input} role="combobox" aria-autocomplete="list" aria-expanded={open}
@@ -49,7 +50,7 @@ export function TemplateCombobox({ label, value, options, onChange, allowCustom 
     </div>
     {open && <div ref={list} id={`${id}-list`} role="listbox" aria-label={label} className="tg-combobox-list">
       {filtered.map((option, index) => <div role="option" id={`${id}-option-${index}`} key={option.value}
-        aria-selected={option.value === value} data-index={index} className={index === active ? "active" : ""}
+        aria-selected={option.value === value} data-tone={option.tone} data-index={index} className={index === active ? "active" : ""}
         onMouseDown={e => e.preventDefault()} onClick={() => choose(option)}>
         <span>{option.label}</span>{option.value === value && <Check size={16} />}
       </div>)}
