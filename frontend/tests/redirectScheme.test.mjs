@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {cleanAddress,completeDrops,schemeProblems,unlinkedDomains,sourceChoices,orderRedirectChanges,graphDomainNames,redirectDomainScope} from '../src/redirectScheme.ts';
+import {cleanAddress,completeDrops,schemeProblems,unlinkedDomains,sourceChoices,orderRedirectChanges,graphDomainNames,redirectDomainScope,prepareRedirectDomainOptions} from '../src/redirectScheme.ts';
 const domains=['old.test','second.test','new.test','main.test'];
 const types={'old.test':'drop','second.test':'drop','new.test':'newreg','main.test':'newreg'};
 test('pasted whitespace and protocol are removed while path case survives',()=>assert.equal(cleanAddress(' https:// new.test /Play/ '),'new.test/Play/'));
@@ -30,3 +30,9 @@ test('empty AMP settings do not hide newly added blank rows',()=>{const result=r
 
 
 test('redirect chains may continue through multiple newregs before Main',()=>{assert.deepEqual(schemeProblems([{url:'drop.test',value:'new.test'},{url:'new.test',value:'next.test'},{url:'next.test',value:'main.test'}],['drop.test','new.test','next.test','main.test'],{'drop.test':'drop','new.test':'newreg','next.test':'newreg','main.test':'drop'},'main.test'),[]);});
+
+
+test('prepared source choices retain selected aliases and exclude assigned domains and Main',()=>{const model=prepareRedirectDomainOptions(domains,types,'main.test');assert.deepEqual(model.sources('www.old.test',new Set(['old.test','second.test'])).map(o=>o.value),['old.test','www.old.test','new.test']);assert.equal(model.tone('www.old.test'),'blue');});
+test('prepared destinations filter drop targets but allow continued newreg chains',()=>{const model=prepareRedirectDomainOptions(domains,types,'main.test');assert.deepEqual(model.targets('old.test').map(o=>o.value),['main.test','new.test']);assert.ok(model.targets('new.test').some(o=>o.value==='main.test'));assert.ok(!model.targets('new.test').some(o=>o.value==='new.test'));assert.equal(model.tone('https://www.new.test/path/'),'green');});
+test('prepared lists exclude AMP even if it is the selected source',()=>{const model=prepareRedirectDomainOptions(['amp.test','new.test'],{'amp.test':'amp','new.test':'newreg'},'');assert.deepEqual(model.sources('amp.test',new Set()).map(o=>o.value),['new.test']);assert.deepEqual(model.targets('').map(o=>o.value),['new.test']);});
+test('preparing a 110-domain table does not repeatedly parse domains per option',()=>{const names=Array.from({length:110},(_,i)=>`domain-${i}.test`),kinds=Object.fromEntries(names.map(d=>[d,'newreg']));const NativeURL=globalThis.URL;let parses=0;globalThis.URL=class extends NativeURL{constructor(...args){parses++;super(...args);}};try{const model=prepareRedirectDomainOptions(names,kinds,names.at(-1));for(const domain of names){model.tone(domain);model.sources(domain,new Set(names));model.targets(domain);}assert.ok(parses<500,`URL parses: ${parses}`);}finally{globalThis.URL=NativeURL;}});

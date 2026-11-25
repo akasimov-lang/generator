@@ -266,3 +266,12 @@
 .redirectGraph .redirectNode.unattachedNode, .redirectGraph.hasChainHighlight .redirectNode.unattachedNode { z-index:5; opacity:1; outline:2px solid #d9434c; outline-offset:3px; }
 .redirectGraph.chainRaised .redirectNode.unattachedNode.inHighlightedChain { z-index:7; outline-color:#d9434c; }
 .redirectGraph .redirectNode.unattachedNode.activeCard, .redirectGraph.hasChainHighlight .redirectNode.unattachedNode.activeCard, .redirectGraph.chainRaised .redirectNode.unattachedNode.activeCard { z-index:20; }
+
+.redirectGraphField { position:relative; isolation:isolate; }
+.redirectBoardContent { display:flex; flex-direction:column; flex:1; min-height:0; min-width:0; }
+.redirectBusyOverlay { position:absolute; inset:0; z-index:100; display:flex; align-items:flex-start; justify-content:center; padding:18px; box-sizing:border-box; background:#ffffff55; cursor:progress; }
+.redirectSaveProgress { flex:none; width:min(360px,calc(100% - 24px)); box-sizing:border-box; display:grid; gap:6px; padding:10px 13px; border:1px solid #ced9ed; border-radius:10px; background:#fffffff5; box-shadow:0 4px 16px #243b6420; font-size:12px; }
+.redirectSaveProgress > progress { width:100%; height:7px; accent-color:#6477cb; }
+.redirectSaveProgress > small { font-size:11px; color:#6c7e98; }
+.redirectSaveProgress.hasErrors { border-color:#dfa5ac; }
+.redirectSaveProgress.hasErrors > progress { accent-color:#c94757; }

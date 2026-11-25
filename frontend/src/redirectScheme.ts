@@ -54,10 +54,12 @@ export function orderRedirectChanges<T extends RedirectRow & {removed?:boolean}>
 }
 /** Layout positions alone never add an unlinked domain to the working scheme. */
 export function graphDomainNames(domains:string[], rows:RedirectRow[], canon:string, placed:string[]) {
-  const all=[...new Set([canon,...domains,...rows.flatMap(r=>[r.url,host(r.value)])])].filter(Boolean).filter((d,i,a)=>a.findIndex(v=>host(v)===host(d))===i);
-  const linked=new Set(rows.flatMap(r=>[host(r.url),host(r.value)]));
-  const nodes=all.filter(d=>host(d)===host(canon)||linked.has(host(d))||placed.includes(host(d)));
-  const unused=domains.filter(d=>!nodes.some(n=>host(n)===host(d)));
+  const all:string[]=[],seen=new Set<string>();
+  for(const domain of [canon,...domains,...rows.flatMap(r=>[r.url,host(r.value)])]){if(!domain)continue;const name=host(domain);if(!seen.has(name)){seen.add(name);all.push(domain);}}
+  const linked=new Set(rows.flatMap(row=>[host(row.url),host(row.value)])),main=host(canon),manual=new Set(placed);
+  const nodes=all.filter(domain=>{const name=host(domain);return name===main||linked.has(name)||manual.has(name);});
+  const visible=new Set(nodes.map(host));
+  const unused=domains.filter(domain=>!visible.has(host(domain)));
   return {nodes,unused,linked};
 }
 export function redirectDomainScope(domains:string[],rows:RedirectRow[],types:Record<string,string>,excluded:string[]=[]) {
@@ -65,4 +67,21 @@ export function redirectDomainScope(domains:string[],rows:RedirectRow[],types:Re
   const isAmp=(value:string)=>{const name=host(value);if(!name)return false;return [...ampKeys].some(root=>name===root||name.endsWith('.'+root));};
   for(const domain of [...domains,...rows.flatMap(r=>[r.url,r.value])])if(isAmp(domain))ampKeys.add(host(domain));
   return {ampKeys,isAmp,domains:domains.filter(d=>!isAmp(d)),redirects:rows.filter(r=>!isAmp(r.url)&&!isAmp(r.value))};
+}
+
+/** Resolve domain identities/types once instead of scanning every domain per option. */
+export function prepareRedirectDomainOptions(domains:string[],types:Record<string,string>,canon:string) {
+  type Choice={value:string;label:string;keywords:string;tone:'blue'|'green'|undefined;name:string;kind:string};
+  const byValue=new Map<string,Choice>(),byHost=new Map<string,Choice>();
+  const make=(value:string,name:string,kind:string):Choice=>({value,label:value,name,kind,tone:kind==='drop'?'blue':kind==='newreg'?'green':undefined,keywords:kind==='drop'?'дроп drop':kind==='newreg'?'новорег newreg':''});
+  for(const value of domains){const name=host(value),option=make(value,name,types[value]||'');byValue.set(value,option);if(!byHost.has(name))byHost.set(name,option);}
+  const rank=(kind:string)=>kind==='drop'?0:kind==='newreg'?1:2;
+  const ordered=[...byValue.values()].filter(o=>o.kind!=='amp').sort((a,b)=>rank(a.kind)-rank(b.kind)||a.value.localeCompare(b.value));
+  const main=host(canon);
+  function resolve(value:string){const exact=byValue.get(value);if(exact)return exact;const name=host(value);return make(value,name,byHost.get(name)?.kind||types[value]||'');}
+  return {
+    tone:(value:string)=>resolve(value).tone,
+    sources:(current:string,assigned:ReadonlySet<string>)=>{const selected=resolve(current),pool=current&&!byValue.has(current)?[...ordered,selected].sort((a,b)=>rank(a.kind)-rank(b.kind)||a.value.localeCompare(b.value)):ordered;return pool.filter(o=>o.kind!=='amp'&&(o.name===selected.name||(!assigned.has(o.name)&&o.name!==main)));},
+    targets:(source:string)=>{const from=resolve(source);return ordered.filter(o=>o.name!==from.name&&(from.kind!=='drop'||o.kind==='newreg'));}
+  };
 }
