@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { ReglueRedirectPolicy } from "./ReglueRedirectPolicy";
 import { SaveIndicator, QueueSaveIndicator } from "./SaveIndicator";
 import { fakeSaveFeedback } from "./fakeSaveFeedback";
@@ -603,7 +604,7 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
         </div>}
         {mode !== "network" && <MassReglueParticipationControl enabled={participationEnabled} {...participationStatus} onChange={enabled => void updateParticipation(enabled)} />}
         </div>);
-  if (new URLSearchParams(window.location.search).get("redirect-schema") === "1") return <section className="dataPanel projectNetworkPanel"><div className="panelHeader"><h2>Схема редиректов · {site.name}</h2><a href={location.pathname}>Вернуться к сетке</a><button className="button secondary" disabled={!!busy} onClick={()=>void load(true,true)}>Обновить данные</button></div>{error&&<p role="alert">{error}</p>}{data?<DomainRedirects schema scope={site.id} domains={data.domains} types={data.domain_types} canon={data.canon} redirects={data.domain_redirects||[]} revision={data.revision} available={!!data.has_domain_redirects} disabled={disabled} queue={editQueue} onSave={async edit=>enqueueEdit("domain_redirect",edit)} onRetargetMain={async()=>false}/>:<p>Загрузка сетки…</p>}</section>;
+  if (new URLSearchParams(window.location.search).get("redirect-schema") === "1") return createPortal(<section className="redirectFullscreen" aria-label={`Схема редиректов · ${site.name}`}><header className="redirectFullscreenHeader"><a className="button secondary compact" href={location.pathname}>Назад</a></header>{error&&<p role="alert">{error}</p>}{data?<DomainRedirects schema scope={site.id} domains={data.domains} types={data.domain_types} canon={data.canon} redirects={data.domain_redirects||[]} revision={data.revision} available={!!data.has_domain_redirects} disabled={disabled} queue={editQueue} onSave={async edit=>enqueueEdit("domain_redirect",edit)} onRetargetMain={async()=>false}/>:<p>Загрузка сетки…</p>}</section>, document.body);
   return <section className="dataPanel projectNetworkPanel">
     <div className="panelHeader"><div className="networkPanelHeading"><h2>{mode === "network" ? "Сетка проекта" : "Переклей"}</h2>        {data && mode === "network" && <div className="networkViewSwitch" role="group" aria-label="Вид сетки">
           <button type="button" aria-pressed={networkView === "main"} onClick={() => setNetworkView("main")}>Основная сетка</button>

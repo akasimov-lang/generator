@@ -38,3 +38,32 @@
 .redirectPageRow label { min-width:0; }
 .redirectPageRow input { width:100%; box-sizing:border-box; }
 .redirectPageRow.removed { opacity:.5; border-style:dashed; }
+
+/* Keep network settings compact; give the scheme the whole viewport. */
+.redirectCompactSection .networkRedirectsHeading { margin-bottom:0; gap:10px; flex-wrap:wrap; }
+.redirectCompactSection .networkRedirectsHeading h3 { margin:0; }
+.redirectWorkspaceBody[hidden] { display:none; }
+.redirectSupportingDetails { border-top:1px solid #d9dfed; margin-top:12px; }
+.redirectSupportingDetails > summary { cursor:pointer; padding:10px 4px; font-size:13px; font-weight:600; }
+.redirectSupportingBody { padding:0 4px 10px; }
+.redirectEditorRow { padding:8px; gap:8px; border-radius:8px; }
+.redirectEditorColumns { gap:8px; margin:10px 0; }
+.redirectEditorRow .tg-combobox > label { font-size:11px; margin-bottom:2px; }
+.redirectEditorRow .tg-combobox-control input { min-height:32px; height:32px; font-size:13px; padding:5px 30px 5px 8px; }
+.redirectFullscreen { position:fixed; inset:0; z-index:1000; display:flex; flex-direction:column; padding:10px 14px; gap:8px; background:var(--bg,#f5f7fb); color:var(--text,#24314b); overflow:hidden; box-sizing:border-box; height:100dvh; }
+.redirectFullscreenHeader { flex:none; display:flex; align-items:center; }
+.redirectFullscreen > .networkSection { border:0; padding:0; margin:0; min-height:0; flex:1; }
+.redirectSchemaWorkspace, .redirectSchemaWorkspace > .redirectWorkspaceBody { display:flex; flex-direction:column; min-height:0; }
+.redirectSchemaWorkspace > .networkRedirectsHeading { display:none; }
+.redirectSchemaWorkspace > .redirectWorkspaceBody { flex:1; }
+.redirectSchemaWorkspace .redirectWorkspaceBody > .networkActions { flex:none; margin:0 0 6px; gap:6px; }
+.redirectSchemaWorkspace .redirectSaveHint { display:none; }
+.redirectSchemaWorkspace .redirectGraphField { display:flex; flex-direction:column; flex:1; min-height:0; }
+.redirectSchemaWorkspace .redirectGraphScroll { flex:1; min-height:0; max-height:none; margin:6px 0 0; border-radius:10px; background:#fff; }
+.redirectSchemaWorkspace .redirectGraph { min-width:100%; min-height:100%; }
+.redirectGraphHelp { flex:none; font-size:12px; }
+.redirectGraphHelp summary { cursor:pointer; }
+.redirectGraphHelp p { margin:4px 0; }
+.redirectSchemaWorkspace .redirectSupportingDetails { flex:none; margin:4px 0 0; }
+.redirectSchemaWorkspace .redirectSupportingBody { max-height:35dvh; overflow:auto; }
+@media(max-width:600px) { .redirectFullscreen { padding:8px; } .redirectSchemaWorkspace .button { font-size:11px; padding:5px 8px; } }
