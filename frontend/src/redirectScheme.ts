@@ -52,3 +52,11 @@ export function orderRedirectChanges<T extends RedirectRow & {removed?:boolean}>
   active.forEach(visit);
   return result;
 }
+/** Layout positions alone never add an unlinked domain to the working scheme. */
+export function graphDomainNames(domains:string[], rows:RedirectRow[], canon:string, placed:string[]) {
+  const all=[...new Set([canon,...domains,...rows.flatMap(r=>[r.url,host(r.value)])])].filter(Boolean).filter((d,i,a)=>a.findIndex(v=>host(v)===host(d))===i);
+  const linked=new Set(rows.flatMap(r=>[host(r.url),host(r.value)]));
+  const nodes=all.filter(d=>host(d)===host(canon)||linked.has(host(d))||placed.includes(host(d)));
+  const unused=domains.filter(d=>!nodes.some(n=>host(n)===host(d)));
+  return {nodes,unused,linked};
+}

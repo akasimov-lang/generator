@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {cleanAddress,completeDrops,schemeProblems,unlinkedDomains,sourceChoices,orderRedirectChanges} from '../src/redirectScheme.ts';
+import {cleanAddress,completeDrops,schemeProblems,unlinkedDomains,sourceChoices,orderRedirectChanges,graphDomainNames} from '../src/redirectScheme.ts';
 const domains=['old.test','second.test','new.test','main.test'];
 const types={'old.test':'drop','second.test':'drop','new.test':'newreg','main.test':'newreg'};
 test('pasted whitespace and protocol are removed while path case survives',()=>assert.equal(cleanAddress(' https:// new.test /Play/ '),'new.test/Play/'));
@@ -17,3 +17,7 @@ test('source picker keeps selected value available without moving newregs above 
 
 test('send final destinations first to avoid a temporary cycle during reversal',()=>assert.deepEqual(orderRedirectChanges([{url:'b.test',value:'a.test'},{url:'a.test',value:'c.test'}]).map(r=>r.url),['a.test','b.test']));
 test('remove obsolete routes before new redirects',()=>assert.deepEqual(orderRedirectChanges([{url:'a.test',value:'b.test'},{url:'b.test',value:'a.test',removed:true}]).map(r=>r.url),['b.test','a.test']));
+
+test('canvas initially includes only Main and redirect participants',()=>{const result=graphDomainNames(domains,[{url:'old.test',value:'main.test'}],'main.test',[]);assert.deepEqual(result.nodes,['main.test','old.test']);assert.deepEqual(result.unused,['second.test','new.test']);});
+test('adding an unconnected domain to canvas does not create any redirects',()=>{const rows=[];const result=graphDomainNames(domains,rows,'main.test',['second.test']);assert.deepEqual(result.nodes,['main.test','second.test']);assert.deepEqual(result.unused,['old.test','new.test']);assert.deepEqual(rows,[]);});
+test('Main aliases render once and removed participant returns to the list',()=>{const result=graphDomainNames(['main.test','old.test'],[],'www.main.test',[]);assert.deepEqual(result.nodes,['www.main.test']);assert.deepEqual(result.unused,['old.test']);});

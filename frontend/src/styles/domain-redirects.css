@@ -82,3 +82,61 @@
 .redirectTrashButton:focus-visible { outline:2px solid #cb3434; outline-offset:2px; }
 .redirectTrashButton:disabled { opacity:.45; cursor:default; }
 @media(max-width:1100px) { .redirectTables { grid-template-columns:1fr; gap:10px; } }
+
+.redirectGraphGuide { display:flex; align-items:center; flex-wrap:wrap; gap:6px 14px; flex:none; min-height:22px; font-size:11px; color:#64748b; }
+.redirectGraphGuide [role=status] { overflow-wrap:anywhere; }
+.redirectNode { box-sizing:border-box; width:280px; height:76px; display:flex; flex-direction:column; justify-content:center; gap:5px; padding:12px 16px; background:linear-gradient(150deg,#fff,#f1f4fb); border:1px solid #aebbd2; border-radius:13px; box-shadow:0 4px 0 #aab7cd,0 9px 18px #243b6428,inset 0 1px 1px #fff; cursor:pointer; transition:box-shadow .15s,border-color .15s; }
+.redirectNode.drop { background:linear-gradient(150deg,#fff,#e7f0ff); border-color:#6798df; box-shadow:0 4px 0 #5282c8,0 9px 18px #285b9e29,inset 0 1px 1px #fff; }
+.redirectNode.newreg { background:linear-gradient(150deg,#fafffe,#d7f1e9); border-color:#64a58f; box-shadow:0 4px 0 #5d9784,0 9px 18px #20594729,inset 0 1px 1px #fff; }
+.redirectNodeHandle { font-size:13px; line-height:17px; max-height:34px; overflow:hidden; padding-right:10px; }
+.redirectNode small { font-size:11px; color:#687891; pointer-events:none; }
+.redirectNode.mainNode { width:164px; height:164px; border-radius:50%; padding:22px 15px; text-align:center; align-items:center; border:2px solid #8394ec; background:radial-gradient(circle at 35% 20%,#fff 0,#eef1ff 35%,#bbc9ff 100%); box-shadow:0 7px 0 #7e8dc9,0 15px 28px #4358a344,inset 0 4px 10px #fff; }
+.redirectNode.mainNode .redirectNodeHandle { max-height:68px; padding:0; }
+.redirectNode.mainNode small { color:#425abe; font-size:12px; font-weight:700; }
+.redirectNode:hover { filter:brightness(1.02); }
+.redirectNode.selectedSource { outline:3px solid #5c70df; outline-offset:4px; }
+.redirectNode.targetCandidate:hover { outline:2px solid #5c70df; outline-offset:4px; }
+.redirectGraph.isConnecting { cursor:crosshair; }
+.redirectGraph.isConnecting .redirectNodeHandle { cursor:crosshair; }
+.redirectPendingEdge { stroke:#5c70df; stroke-width:2.5; stroke-dasharray:7 4; }
+.redirectEdgeLabel { font:600 11px system-ui; fill:#5364b6; paint-order:stroke; stroke:#fff; stroke-width:4px; }
+.redirectUnplace { position:absolute; right:5px; top:5px; border:0; border-radius:50%; color:#9c4747; background:#fff9; padding:2px; cursor:pointer; }
+.redirectDomainShelf { flex:none; max-height:24dvh; overflow:auto; margin-top:10px; border:1px solid #d7dfed; border-radius:10px; background:#f5f7fc; box-shadow:inset 0 1px 3px #2738560d; padding:8px 10px; }
+.redirectShelfGroups { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.redirectShelfGroups h4 { margin:0 0 6px; color:#5b6c86; font-size:11px; }
+.redirectShelfColumns { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px 8px; }
+.redirectShelfDomain { display:block; width:100%; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; font-size:11px; padding:4px 7px; border:1px solid #d5ddeb; border-radius:5px; color:#344662; background:linear-gradient(#fff,#f0f3fa); cursor:grab; }
+.redirectShelfDomain.drop { border-left:3px solid #6798df; }
+.redirectShelfDomain.newreg { border-left:3px solid #64a58f; }
+.redirectShelfDomain:hover { border-color:#899bd5; background:#fff; }
+.redirectShelfDomain:focus-visible, .redirectNodeHandle:focus-visible { outline:2px solid #5c70df; outline-offset:2px; }
+.redirectShelfDomain:disabled { opacity:.5; cursor:default; }
+.redirectOtherDomains { margin-top:6px; font-size:11px; color:#687891; }
+.redirectShelfOther { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:4px 8px; margin-top:5px; }
+@media(max-width:650px) { .redirectShelfGroups { gap:8px; } .redirectShelfColumns { grid-template-columns:1fr; } .redirectShelfOther { grid-template-columns:repeat(2,minmax(0,1fr)); } .redirectDomainShelf { max-height:20dvh; } }
+
+.redirectNodePlus { align-self:flex-end; width:26px; height:26px; display:inline-flex; justify-content:center; align-items:center; border:1px solid #aabbd8; border-radius:50%; color:#6b7c98; background:linear-gradient(#fff,#edf2fa); box-shadow:0 2px 4px #29416a1a; cursor:pointer; padding:0; }
+.redirectNodePlus svg, .redirectUnplace svg { position:static; }
+.redirectNode.drop .redirectNodePlus { color:#3578d5; border-color:#8fb5ee; background:linear-gradient(#fff,#dbeaff); }
+.redirectNode.newreg .redirectNodePlus { color:#2a8c65; border-color:#83bea4; background:linear-gradient(#fff,#d9f2e5); }
+.redirectNode.mainNode .redirectNodePlus { color:#536acc; align-self:center; }
+.redirectNodePlus:hover { box-shadow:0 0 0 3px #799ae329; }
+.redirectNodePlus:focus-visible { outline:2px solid currentColor; outline-offset:2px; }
+.redirectNodePlus:disabled { opacity:.5; cursor:default; }
+.redirectNode:not(.mainNode) { display:grid; grid-template-columns:minmax(0,1fr) 28px; align-items:center; gap:8px; }
+.redirectNode:not(.mainNode) .redirectNodePlus { align-self:center; }
+
+.redirectBoardLayout { flex:1; display:grid; grid-template-columns:minmax(0,1fr) clamp(240px,22vw,340px); gap:12px; min-height:0; margin-top:6px; }
+.redirectSchemaWorkspace .redirectBoardLayout > .redirectGraphScroll { margin:0; min-height:0; }
+.redirectBoardLayout > .redirectDomainShelf { min-height:0; max-height:none; overflow:auto; margin:0; padding:10px; background:linear-gradient(155deg,#f9fbff,#edf2fa); box-shadow:0 3px 12px #23385e12,inset 0 1px 1px #fff; }
+.redirectShelfHeading { font-size:12px; font-weight:650; color:#344662; padding-bottom:10px; }
+.redirectShelfHeading > span { color:#7c8daa; font-weight:400; margin-left:5px; }
+.redirectShelfHeading > small { display:block; font-size:10px; color:#7c8daa; font-weight:400; margin-top:4px; }
+.redirectDomainShelf .redirectShelfGroups, .redirectDomainShelf .redirectShelfColumns, .redirectDomainShelf .redirectShelfOther { grid-template-columns:minmax(0,1fr); }
+.redirectDomainShelf .redirectShelfGroups { gap:16px; }
+.redirectDomainShelf .redirectShelfDomain { padding:6px 8px; }
+@media(max-width:650px) { .redirectBoardLayout { grid-template-columns:minmax(0,1fr) 170px; gap:6px; } .redirectBoardLayout > .redirectDomainShelf { padding:7px; } }
+
+.redirectShelfOrder { display:flex; gap:3px; margin-top:8px; padding:3px; background:#e7ecf6; border-radius:7px; }
+.redirectShelfOrder button { flex:1; border:0; border-radius:5px; padding:5px 3px; color:#6a7a94; font-size:10px; cursor:pointer; background:transparent; }
+.redirectShelfOrder button[aria-pressed=true] { background:#fff; color:#35567e; box-shadow:0 1px 4px #23385e1f; }
