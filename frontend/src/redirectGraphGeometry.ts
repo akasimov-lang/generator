@@ -14,3 +14,5 @@ export function shelfWidthLimits(total:number) {
   return {min,max:Math.max(min,Math.min(640,total-240))};
 }
 export function clampShelfWidth(value:number,total:number){const {min,max}=shelfWidthLimits(total);return Math.round(Math.max(min,Math.min(max,Number.isFinite(value)?value:300)));}
+export function clampBoardZoom(value:number){return Math.round(Math.max(.4,Math.min(2,Number.isFinite(value)?value:1))*100)/100;}
+export function boardPoint(client:Point,origin:Point,zoom:number):Point{return {x:(client.x-origin.x)/zoom,y:(client.y-origin.y)/zoom};}
