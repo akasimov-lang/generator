@@ -52,9 +52,8 @@ with sync_playwright() as p:
 
     context, page, state = session(503, width=375)
     expect(page.get_by_role('heading',name='Не удалось проверить сессию',exact=True)).to_be_visible()
-    expect(page.get_by_role('alert')).to_have_text('Сервис авторизации временно недоступен.')
+    expect(page.get_by_role('alert')).to_contain_text('Повторяем проверку автоматически')
     assert page.locator('.loginLoadingBar').count() == 0
-    page.wait_for_timeout(1500)
     assert state['calls'].count('/api/auth/me') == 1, state['calls']
     assert not any('/sites' in path for path in state['calls']), state['calls']
     assert page.evaluate('localStorage.getItem("admin_token")') == 'test-token'
@@ -62,11 +61,10 @@ with sync_playwright() as p:
         box = button.bounding_box()
         assert box['x'] >= 0 and box['x'] + box['width'] <= 375, box
     state['status'] = 200
-    page.get_by_role('button',name='Повторить проверку',exact=True).click()
     expect(page.get_by_label('Бренд own.test',exact=True)).to_be_visible()
     assert state['calls'].count('/api/auth/me') == 2, state['calls']
     context.close()
-    print('PASS: 503 is visible promptly, no retry storm or premature access; mobile retry recovers.', flush=True)
+    print('PASS: 503 preserves token and access checks; mobile session recovers automatically.', flush=True)
 
     context, page, state = session(503)
     expect(page.get_by_role('button',name='Войти заново',exact=True)).to_be_visible()
@@ -95,7 +93,7 @@ with sync_playwright() as p:
       };
     ''')
     page.wait_for_function('window.__authStarted === true')
-    expect(page.get_by_role('alert')).to_contain_text('не ответил вовремя', timeout=30000)
+    expect(page.get_by_role('alert')).to_contain_text('Повторяем проверку автоматически', timeout=30000)
     assert page.locator('.loginLoadingBar').count() == 0
     page.evaluate('window.__stallAuth = false')
     page.get_by_role('button',name='Повторить проверку',exact=True).click()

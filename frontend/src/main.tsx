@@ -29,7 +29,7 @@ import { PageEditor, ProjectPages, type PageRow } from "./ProjectPages";
 import { TemplateGenerator } from "./TemplateGenerator";
 import { previewNodes, previewDepth, editPreviewItem, movePreviewItem, type GeneratedMenuStructureItem } from "./generatedMenuPreview";
 import { readProjectSnapshot, writeProjectSnapshot, removeLegacyProjectSnapshot } from "./projectSnapshot";
-import { withAuthDeadline } from "./authSession";
+import { recoverAuthSession, withAuthDeadline } from "./authSession";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { createPortal } from "react-dom";
@@ -1242,7 +1242,13 @@ function App() {
     setCatalogLoaded(false);setCatalogError("");
     setMassSearchQuery("");setGlobalSearchQuery("");setSitesSearchQuery("");setDomainQuery("");
     void (async () => {
-      const user = await api<User>("/auth/me", { signal: controller.signal });
+      const user = await recoverAuthSession(
+        signal => api<User>("/auth/me", { signal }),
+        controller.signal,
+        () => { if (!cancelled) setSessionError("Сервер временно недоступен. Повторяем проверку автоматически; сохранённая сессия остаётся в браузере."); },
+      );
+      if (cancelled) return;
+      setSessionError("");
       void removeLegacyProjectSnapshot().catch(() => {});
       const saved = await readProjectSnapshot<Site>(`webdev-projects-v2:${user.id}`).catch(() => ({ projects: [], updatedAt: null }));
       if (!user.is_admin) saved.projects = saved.projects.filter(site => user.allowed_site_ids?.includes(site.id));
