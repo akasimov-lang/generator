@@ -1,11 +1,12 @@
 import React from "react";
+import {createPortal} from 'react-dom';
 import { ChevronDown, Check } from "lucide-react";
 
 type Tone = "blue" | "green";
 type Option = { value: string; label: string; keywords?: string; tone?: Tone };
 
-export function TemplateCombobox({ label, value, options, onChange, allowCustom = false, placeholder = "Введите название или код", tone }: {
-  label: string; value: string; options: Option[]; onChange: (value: string) => void; allowCustom?: boolean; placeholder?: string; tone?: Tone;
+export function TemplateCombobox({ label, value, options, onChange, allowCustom = false, placeholder = "Введите название или код", tone, portal=false }: {
+  label: string; value: string; options: Option[]; onChange: (value: string) => void; allowCustom?: boolean; placeholder?: string; tone?: Tone; portal?: boolean;
 }) {
   const id = React.useId();
   const beforeEdit = React.useRef(value);
@@ -14,6 +15,7 @@ export function TemplateCombobox({ label, value, options, onChange, allowCustom 
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState<string | null>(null);
   const [active, setActive] = React.useState(0);
+  const [listStyle,setListStyle]=React.useState<React.CSSProperties>({});
   const selected = options.find(o => o.value === value);
   const normalized = (query || "").trim().toLocaleLowerCase();
   const matches = open ? options.filter(o => `${o.label} ${o.value} ${o.keywords || ""}`.toLocaleLowerCase().includes(normalized)) : [];
@@ -21,11 +23,29 @@ export function TemplateCombobox({ label, value, options, onChange, allowCustom 
 
   function show() { beforeEdit.current = value; setOpen(true); setQuery(null); setActive(Math.max(0, options.findIndex(o => o.value === value))); }
   function close() { setOpen(false); setQuery(null); }
-  function choose(option: Option) { onChange(option.value); close(); input.current?.focus(); }
+  function choose(option: Option) { if(input.current?.matches(':disabled')){close();return;}onChange(option.value); close(); input.current?.focus(); }
+  React.useLayoutEffect(()=>{
+    if(!portal||!open)return;
+    function position(){
+      if(!input.current)return;
+      const rect=input.current.getBoundingClientRect(),below=window.innerHeight-rect.bottom-12,above=rect.top-12,up=below<160&&above>below;
+      setListStyle({position:'fixed',left:Math.max(8,Math.min(rect.left,window.innerWidth-rect.width-8)),right:'auto',top:up?undefined:rect.bottom+4,bottom:up?window.innerHeight-rect.top+4:undefined,width:Math.min(rect.width,window.innerWidth-16),maxHeight:Math.max(60,Math.min(260,up?above:below)),boxSizing:'border-box',marginTop:0,zIndex:1200});
+    }
+    position();window.addEventListener('resize',position);window.addEventListener('scroll',position,true);
+    return()=>{window.removeEventListener('resize',position);window.removeEventListener('scroll',position,true);};
+  },[portal,open]);
   React.useEffect(() => {
     if (open) list.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" });
   }, [open, active]);
 
+  const menu=open&&<div ref={list} id={`${id}-list`} role="listbox" aria-label={label} className={`tg-combobox-list${portal?' redirectComboboxMenu':''}`} style={portal?listStyle:undefined}>
+      {filtered.map((option, index) => <div role="option" id={`${id}-option-${index}`} key={option.value}
+        aria-selected={option.value === value} data-tone={option.tone} data-index={index} className={index === active ? "active" : ""}
+        onMouseDown={e => e.preventDefault()} onClick={() => choose(option)}>
+        <span>{option.label}</span>{option.value === value && <Check size={16} />}
+      </div>)}
+      {!filtered.length && <p role="status">Ничего не найдено. Попробуйте название или код.</p>}
+    </div>;
   return <div className="tg-combobox" data-tone={selected?.tone || tone} onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) close(); }}>
     <label htmlFor={id}>{label}</label>
     <div className="tg-combobox-control">
@@ -48,13 +68,6 @@ export function TemplateCombobox({ label, value, options, onChange, allowCustom 
       <button type="button" tabIndex={-1} aria-label={`Открыть список: ${label}`}
         onMouseDown={e => e.preventDefault()} onClick={() => { if (open) close(); else { input.current?.focus(); show(); } }}><ChevronDown size={18} /></button>
     </div>
-    {open && <div ref={list} id={`${id}-list`} role="listbox" aria-label={label} className="tg-combobox-list">
-      {filtered.map((option, index) => <div role="option" id={`${id}-option-${index}`} key={option.value}
-        aria-selected={option.value === value} data-tone={option.tone} data-index={index} className={index === active ? "active" : ""}
-        onMouseDown={e => e.preventDefault()} onClick={() => choose(option)}>
-        <span>{option.label}</span>{option.value === value && <Check size={16} />}
-      </div>)}
-      {!filtered.length && <p role="status">Ничего не найдено. Попробуйте название или код.</p>}
-    </div>}
+    {portal&&menu?createPortal(menu,document.body):menu}
   </div>;
 }

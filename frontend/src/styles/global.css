@@ -10684,3 +10684,15 @@ button.projectMetricCard:focus-visible { outline: 2px solid var(--primary); outl
 
 /* Keep the domain scrollbar at the table edge; the remaining space scrolls the page. */
 .networkDomainTable > .networkTableWrap { width:fit-content; max-width:100%; scrollbar-gutter:stable; }
+
+/* Keep row numbers out of domain selection and clipboard content. */
+.networkTable .networkRowNumber { width:34px; min-width:34px; padding:6px; text-align:center; color:var(--muted); font-size:11px; user-select:none; -webkit-user-select:none; }
+.networkTableNumbered th:nth-child(3), .networkTableNumbered td:nth-child(3) { text-align:left; }
+.networkDomainCopyCell { position:relative; display:inline-block; }
+.networkDomainCopy { display:inline; margin:0; padding:0; border:0; border-radius:2px; background:none; color:inherit; font:inherit; text-align:left; cursor:copy; user-select:text; -webkit-user-select:text; }
+.networkDomainCopy.emphasized { font-weight:700; }
+.networkDomainCopy:hover { text-decoration:underline; text-underline-offset:3px; }
+.networkDomainCopy:focus-visible { outline:2px solid #6289c9; outline-offset:3px; }
+.networkDomainCopyStatus { position:absolute; left:0; bottom:100%; z-index:5; padding:2px 6px; border-radius:4px; background:var(--surface,#fff); font-size:11px; color:#16814e; box-shadow:0 1px 5px #15254220; pointer-events:none; user-select:none; -webkit-user-select:none; }
+.networkDomainCopyStatus.idle { display:none; }
+.networkDomainCopyStatus.error { color:#b42318; }
