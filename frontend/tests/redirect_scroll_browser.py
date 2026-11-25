@@ -27,6 +27,10 @@ with sync_playwright() as playwright:
             assert sections.count() == 2
             for index in range(sections.count()):
                 section = sections.nth(index)
+                panel = page.locator('.dataPanelBody').bounding_box()
+                bounds = section.bounding_box()
+                assert abs(bounds['x'] - panel['x']) <= 1 and abs(bounds['width'] - panel['width']) <= 1, 'Redirect section does not span the full panel width'
+                assert section.locator('xpath=ancestor::*[contains(concat(" ",normalize-space(@class)," ")," networkMembership ")]').count() == 0
                 tables = section.locator('.redirectTables')
                 header = section.locator('.networkRedirectsHeading')
                 actions = section.locator('.networkActions')

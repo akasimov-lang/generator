@@ -18,6 +18,6 @@ try{
   const common=(await Promise.all(['src/styles/global.css','src/styles/template-generator.css','src/styles/save-indicator.css'].map(p=>readFile(p,'utf8')))).join('\n');
   const original=execFileSync('git',['show','4734ce5:frontend/src/styles/domain-redirects.css'],{encoding:'utf8'});
   const patched=await readFile('src/styles/domain-redirects.css','utf8');
-  const html=css=>`<!doctype html><html><head><meta charset="utf-8"><style>${common}\n${css}</style></head><body><main style="padding:20px;min-width:0"><div class="dataPanel projectNetworkPanel"><div class="dataPanelBody"><div class="networkWithNavigation networkWorkspace"><div class="networkMembership">${domain}${pages}</div><aside>Сетки бренда</aside></div></div></div></main></body></html>`;
-  await writeFile(process.argv[2]||'/tmp/pagepilot-scroll-fixture.json',JSON.stringify({before:html(original),after:html(patched)}));
+  const html=(css,wide=false)=>`<!doctype html><html><head><meta charset="utf-8"><style>${common}\n${css}</style></head><body><main style="padding:20px;min-width:0"><div class="dataPanel projectNetworkPanel"><div class="dataPanelBody"><div class="networkWithNavigation networkWorkspace"><div class="networkMembership">${wide?"Таблица доменов":domain+pages}</div><aside>Сетки бренда</aside></div>${wide?domain+pages:""}</div></div></main></body></html>`;
+  await writeFile(process.argv[2]||'/tmp/pagepilot-scroll-fixture.json',JSON.stringify({before:html(original),after:html(patched,true)}));
 }finally{await server.close();}
