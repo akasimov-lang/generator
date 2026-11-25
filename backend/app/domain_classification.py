@@ -2,8 +2,10 @@
 from app.network_state import domain_name
 import tldextract
 
+SHARED_NEWREG_ZONES = ("gu.cc", "com.tc", "eu.com", "mex.com")
+
 # Use the packaged snapshot only: no DNS/HTTP requests or writable cache.
-_extract = tldextract.TLDExtract(suffix_list_urls=(), cache_dir=None, extra_suffixes=("test", "in.com", "it.com", "co.com", "jp.net"))
+_extract = tldextract.TLDExtract(suffix_list_urls=(), cache_dir=None, extra_suffixes=("test", "in.com", "it.com", "co.com", "jp.net", *SHARED_NEWREG_ZONES))
 
 def registrable_root(domain):
     parsed = _extract(domain)
@@ -32,7 +34,7 @@ def classify_domains(domains, domain_types, main_history=(), canon=""):
     return result
 
 
-NEWREG_ZONES = ("site", "fm", "top", "fun", "app", "ink", "in.com", "it.com", "co.uk", "co.com", "jp.net", "xyz")
+NEWREG_ZONES = ("site", "fm", "top", "fun", "app", "ink", "in.com", "it.com", "co.uk", "co.com", "jp.net", "xyz", *SHARED_NEWREG_ZONES)
 
 
 def default_domain_type(domain):
