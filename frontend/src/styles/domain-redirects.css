@@ -303,7 +303,7 @@
 .redirectNodeResize:disabled { cursor:default; opacity:.4; }
 .redirectNode .redirectUnplace { right:23px; }
 
-.redirectWorkspaceBody > .networkActions > .button.redirectSubmitButton { margin-left:auto; flex:none; white-space:nowrap; font-size:13px; font-weight:800; padding:6px 12px; }
+.redirectWorkspaceBody > .networkActions > .button.redirectSubmitButton { margin-left:0; flex:none; white-space:nowrap; font-size:13px; font-weight:800; padding:6px 12px; }
 .redirectSubmitButton.hasChanges { color:#fff; background:linear-gradient(135deg,#269d60,#167b47); border-color:#17804b; box-shadow:0 0 0 2px #269d601a,0 2px 6px #177c4726; }
 .redirectSubmitButton.hasChanges:not(:disabled):hover { background:linear-gradient(135deg,#218d55,#116c3c); border-color:#116c3c; }
 
