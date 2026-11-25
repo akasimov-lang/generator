@@ -77,3 +77,10 @@ export function arrangeRedirectGraph(domains:string[],rows:RedirectRow[],canon:s
   const packed=pack(trees,boardWidth);
   return {positions:Object.fromEntries(Object.entries(packed.positions).map(([name,p])=>[name===main?`main:${name}`:name,{x:p.x+margin,y:p.y+margin}])),width:packed.width+2*margin,height:packed.height+2*margin};
 }
+
+/** An incoming redirect does not prevent a domain from starting its next hop. */
+export function graphCardAction(domain:string,rows:RedirectRow[],canon:string,intent:{connecting?:boolean;plus?:boolean;branch?:boolean}={}) {
+  if(intent.branch)return 'branch';
+  if(intent.connecting||intent.plus)return 'connect';
+  return host(domain)===host(canon)||rows.some(r=>host(r.url)===host(domain))?'inspect':'connect';
+}

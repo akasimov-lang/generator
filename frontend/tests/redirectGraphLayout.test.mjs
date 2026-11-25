@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {redirectChain,redirectBranch,unattachedGraphDomains,arrangeRedirectGraph,extendedBoardHeight,routeKey} from '../src/redirectGraphLayout.ts';
+import {graphCardAction,redirectChain,redirectBranch,unattachedGraphDomains,arrangeRedirectGraph,extendedBoardHeight,routeKey} from '../src/redirectGraphLayout.ts';
 const row=(url,value)=>({url,value});
 
 test('chain follows redirects to Main and leaves siblings out',()=>{
@@ -40,3 +40,10 @@ test('an invalid outgoing Main redirect never merges unrelated branches into the
 test('red warning includes only visible domains without a complete path to Main',()=>{const result=unattachedGraphDomains(['main.test','direct.test','indirect.test','alone.test','cycle-a.test','cycle-b.test'],[row('direct.test','main.test'),row('indirect.test','direct.test'),row('cycle-a.test','cycle-b.test'),row('cycle-b.test','cycle-a.test')],'main.test');assert.deepEqual([...result].sort(),['alone.test','cycle-a.test','cycle-b.test']);});
 test('removing the middle edge marks its entire incoming subtree as disconnected',()=>{const names=['main.test','new.test','drop.test','tiny.test'];const rows=[row('new.test','main.test'),row('drop.test','new.test'),row('tiny.test','drop.test')];assert.equal(unattachedGraphDomains(names,rows,'main.test').size,0);assert.deepEqual([...unattachedGraphDomains(names,rows.slice(1),'main.test')].sort(),['drop.test','new.test','tiny.test']);});
 test('restoring a path clears red warnings, including www aliases',()=>{assert.equal(unattachedGraphDomains(['www.drop.test','main.test'],[row('drop.test','https://www.main.test/')],'main.test').size,0);});
+
+
+test('a newreg receiving an incoming redirect can immediately start its next hop',()=>{assert.equal(graphCardAction('new.test',[row('drop.test','new.test')],'main.test'),'connect');});
+test('a domain already forwarding traffic inspects by body click but connects by plus',()=>{const rows=[row('new.test','next.test')];assert.equal(graphCardAction('new.test',rows,'main.test'),'inspect');assert.equal(graphCardAction('new.test',rows,'main.test',{plus:true}),'connect');});
+test('an in-progress connection can choose a newreg that already has an outgoing redirect',()=>{assert.equal(graphCardAction('next.test',[row('next.test','main.test')],'main.test',{connecting:true}),'connect');});
+test('hand zone always inspects the branch and never accidentally connects',()=>{assert.equal(graphCardAction('new.test',[],'main.test',{branch:true,connecting:true}),'branch');});
+test('Main remains inspectable while a free chain endpoint starts a connection',()=>{assert.equal(graphCardAction('main.test',[],'main.test'),'inspect');assert.equal(graphCardAction('www.new.test',[row('drop.test','new.test')],'main.test'),'connect');});

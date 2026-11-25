@@ -27,3 +27,6 @@ test('AMP membership removes sources, destinations and visible graph candidates'
 test('an amp-looking newreg remains eligible without an AMP role',()=>assert.deepEqual(redirectDomainScope(['brand-amp.test'],[],{'brand-amp.test':'newreg'}).domains,['brand-amp.test']));
 test('children of AMP domains cannot reappear through redirects or custom destinations',()=>{const result=redirectDomainScope(['child.amp.test','safe.test'],[{url:'safe.test',value:'child.amp.test'}],{},['amp.test']);assert.deepEqual(result.domains,['safe.test']);assert.deepEqual(result.redirects,[]);assert.equal(result.isAmp('https://another.amp.test/path/'),true);});
 test('empty AMP settings do not hide newly added blank rows',()=>{const result=redirectDomainScope([],[],{},['','']);assert.equal(result.isAmp(''),false);assert.equal(result.ampKeys.has(''),false);});
+
+
+test('redirect chains may continue through multiple newregs before Main',()=>{assert.deepEqual(schemeProblems([{url:'drop.test',value:'new.test'},{url:'new.test',value:'next.test'},{url:'next.test',value:'main.test'}],['drop.test','new.test','next.test','main.test'],{'drop.test':'drop','new.test':'newreg','next.test':'newreg','main.test':'drop'},'main.test'),[]);});
