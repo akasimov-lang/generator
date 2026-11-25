@@ -34,6 +34,7 @@ class Point(BaseModel):
     y: float = Field(ge=0, le=100000, allow_inf_nan=False)
 
 class Board(BaseModel):
+    min_height: float = Field(default=0, ge=0, le=100000, allow_inf_nan=False)
     positions: dict[str, Point] = Field(default_factory=dict, max_length=2000)
     placed: list[str] = Field(default_factory=list, max_length=2000)
     zoom: float = Field(default=1, ge=.4, le=2, allow_inf_nan=False)

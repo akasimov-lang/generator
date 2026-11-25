@@ -1,0 +1,18 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {redirectChain,arrangeRedirectGraph,extendedBoardHeight,routeKey} from '../src/redirectGraphLayout.ts';
+const row=(url,value)=>({url,value});
+
+test('chain follows redirects to Main and leaves siblings out',()=>{
+ const result=redirectChain('https://www.drop.test/',[row('drop.test','new.test'),row('new.test','main.test'),row('other.test','main.test')],'main.test');
+ assert.deepEqual([...result.nodes],['drop.test','new.test','main.test']);assert.deepEqual([...result.links],['drop.test>new.test','new.test>main.test']);assert.equal(result.reachesMain,true);assert.equal(result.cycle,false);
+});
+test('incomplete paths do not claim to reach Main',()=>{const r=redirectChain('drop.test',[row('drop.test','end.test')],'main.test');assert.equal(r.reachesMain,false);assert.deepEqual([...r.nodes],['drop.test','end.test']);});
+test('cycle tracing terminates and records the complete visible loop',()=>{const r=redirectChain('a.test',[row('a.test','b.test'),row('b.test','a.test')],'main.test');assert.equal(r.cycle,true);assert.equal(r.nodes.size,2);assert.equal(r.links.size,2);assert.equal(r.reachesMain,false);});
+test('Main ends tracing even if malformed data contains its outgoing redirect',()=>{assert.equal(redirectChain('main.test',[row('main.test','bad.test')],'main.test').links.size,0);});
+test('expansion adds one visible viewport using board coordinates at every zoom',()=>{assert.equal(extendedBoardHeight(1200,600,.5),2400);assert.equal(extendedBoardHeight(1200,600,2),1500);assert.equal(extendedBoardHeight(99999,600,1),100000);});
+function assertNoOverlaps(layout,main){const boxes=Object.entries(layout.positions).map(([key,p])=>({...p,key,w:key==='main:'+main?360:280,h:key==='main:'+main?100:112}));for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){const a=boxes[i],b=boxes[j];assert.ok(a.x+a.w<=b.x||b.x+b.w<=a.x||a.y+a.h<=b.y||b.y+b.h<=a.y,`Overlap: ${a.key} / ${b.key}`);}}
+test('sorting places each source below its destination and keeps chains together',()=>{const r=arrangeRedirectGraph(['main.test','new.test','drop.test'],[row('drop.test','new.test'),row('new.test','main.test')],'main.test',1400);assert.ok(r.positions['drop.test'].y>r.positions['new.test'].y);assert.ok(r.positions['new.test'].y>r.positions['main:main.test'].y);assertNoOverlaps(r,'main.test');});
+test('large branching networks pack without overlap and do not mutate real redirects',()=>{const names=['main.test'],rows=[];for(let n=0;n<20;n++){names.push(`new${n}.test`);rows.push(row(`new${n}.test`,'main.test'));for(let d=0;d<3;d++){names.push(`drop${n}-${d}.test`);rows.push(row(`drop${n}-${d}.test`,`new${n}.test`));}}const before=JSON.stringify(rows);const result=arrangeRedirectGraph(names,rows,'main.test',1500);assert.equal(Object.keys(result.positions).length,81);assert.equal(JSON.stringify(rows),before);assertNoOverlaps(result,'main.test');assert.ok(result.width<1600);});
+test('sorting keeps disconnected domains and malformed cycles visible exactly once',()=>{const names=['a.test','b.test','main.test','alone.test'];const result=arrangeRedirectGraph(names,[row('a.test','b.test'),row('b.test','a.test')],'main.test',900);assert.equal(Object.keys(result.positions).length,4);assertNoOverlaps(result,'main.test');});
+test('sorting is stable regardless of previous card order and aliases',()=>{const names=['www.drop.test','main.test','new.test'];const rows=[row('drop.test','https://new.test/path/'),row('new.test','main.test')];assert.deepEqual(arrangeRedirectGraph(names,rows,'www.main.test',1400),arrangeRedirectGraph([...names].reverse(),rows,'main.test',1400));assert.equal(routeKey('www.drop.test','https://new.test/'),'drop.test>new.test');});

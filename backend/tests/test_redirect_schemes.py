@@ -25,7 +25,7 @@ def env():
         yield db,site,user,TestClient(app)
 
 def doc(kind='scheme',name='Test'):
-    return {'kind':kind,'name':name,'rows':[{'id':'one','original':'drop.test','url':'drop.test','value':'','expected':{'rows':[{'url':'drop.test','value':'new.test'}]}}], 'board':{'positions':{'main:main.test':{'x':44,'y':55}},'placed':['drop.test'],'zoom':.7}}
+    return {'kind':kind,'name':name,'rows':[{'id':'one','original':'drop.test','url':'drop.test','value':'','expected':{'rows':[{'url':'drop.test','value':'new.test'}]}}], 'board':{'positions':{'main:main.test':{'x':44,'y':55}},'placed':['drop.test'],'zoom':.7,'min_height':2400}}
 
 def path(site):return f'/sites/{site.id}/network/schemes'
 
@@ -34,6 +34,7 @@ def test_incomplete_draft_and_layout_persist_without_changing_live_routes(env):
     result=client.post(path(site),json=doc('draft')).json()
     assert result['id']=='draft' and result['rows'][0]['value']==''
     assert client.get(path(site)).json()['draft']['board']['zoom']==.7
+    assert client.get(path(site)).json()['draft']['board']['min_height']==2400
     db.refresh(site);assert site.network_state==before
     assert not db.scalars(select(models.NetworkOperation)).all()
 
@@ -77,3 +78,9 @@ def test_imported_live_route_has_no_invented_date(env):
 
 def test_snapshot_keys_fit_production_database_limit():
     assert len(prefix(str(uuid4()), "anton") + uuid4().hex) <= 80
+
+
+def test_older_scheme_documents_default_to_unextended_board(env):
+    db,site,user,client=env
+    payload=doc();payload["board"].pop("min_height")
+    assert client.post(path(site),json=payload).json()["board"]["min_height"]==0

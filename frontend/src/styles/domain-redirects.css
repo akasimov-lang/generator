@@ -224,3 +224,21 @@
 .redirectLibraryPanel label { display:grid; gap:4px; font-size:11px; }
 .redirectLibraryPanel input { min-width:0; padding:6px 8px; }
 .redirectLibraryPanel small { color:#718199; font-size:10px; }
+
+.redirectBoardTools { display:flex; flex:none; gap:5px; }
+.redirectBoardTools > .button { display:inline-flex; align-items:center; gap:5px; font-size:11px; padding:5px 8px; white-space:nowrap; }
+.redirectGraph > .redirectBaseEdges, .redirectGraph > .redirectFocusedEdges, .redirectGraph > .redirectRubberEdges { top:0; left:0; overflow:visible; }
+.redirectGraph > .redirectBaseEdges { z-index:0; }
+.redirectGraph > .redirectFocusedEdges { z-index:3; }
+.redirectGraph > .redirectRubberEdges { z-index:9; }
+.redirectGraph .redirectNode { z-index:1; }
+.redirectGraph.hasChainHighlight > .redirectBaseEdges { opacity:.24; }
+.redirectGraph.hasChainHighlight .redirectNode:not(.inHighlightedChain) { opacity:.4; }
+.redirectGraph .redirectNode.inHighlightedChain { z-index:4; outline:2px solid #efb63d; outline-offset:3px; filter:drop-shadow(0 0 7px #ffc65d99); }
+.redirectGraph .redirectNode.inHighlightedChain:hover { filter:brightness(1.02) drop-shadow(0 0 7px #ffc65d99); }
+.redirectChainEdge { filter:drop-shadow(0 0 4px #ffd04c) drop-shadow(0 0 7px #ffcd595c); }
+.redirectChainEdge .redirectEdgeLabel { fill:#a9740a; }
+.redirectGraph.chainRaised > .redirectFocusedEdges { z-index:6; }
+.redirectGraph.chainRaised .redirectNode.inHighlightedChain { z-index:7; outline-width:3px; filter:drop-shadow(0 0 12px #ffbd4699); }
+.redirectGraph .redirectNode.activeCard, .redirectGraph.hasChainHighlight .redirectNode.activeCard, .redirectGraph.chainRaised .redirectNode.activeCard { z-index:20; opacity:1; }
+.redirectGraph .redirectNode.selectedSource { z-index:12; }

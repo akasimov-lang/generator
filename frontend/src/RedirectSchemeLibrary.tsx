@@ -1,10 +1,10 @@
 import React from 'react';
 import {TemplateCombobox} from './TemplateCombobox';
 import {readRedirectDraft,type RedirectDraftRow} from './redirectDraft';
-export type BoardSnapshot={positions:Record<string,{x:number;y:number}>;placed:string[];zoom:number};
+export type BoardSnapshot={positions:Record<string,{x:number;y:number}>;placed:string[];zoom:number;min_height?:number};
 export type SchemeDocument={id:string;name:string;kind:'draft'|'scheme'|'backup';saved_at:string;rows:RedirectDraftRow[];board:BoardSnapshot};
 export type SchemeApi=<T>(path:string,options?:RequestInit)=>Promise<T>;
-export function readBoard(scope:string):BoardSnapshot {try{return {positions:JSON.parse(localStorage.getItem(`redirect-layout:${scope}`)||'{}'),placed:JSON.parse(localStorage.getItem(`redirect-placed:${scope}`)||'[]'),zoom:Number(localStorage.getItem(`redirect-zoom:${scope}`))||1};}catch{return {positions:{},placed:[],zoom:1};}}
+export function readBoard(scope:string):BoardSnapshot {try{return {positions:JSON.parse(localStorage.getItem(`redirect-layout:${scope}`)||'{}'),placed:JSON.parse(localStorage.getItem(`redirect-placed:${scope}`)||'[]'),zoom:Number(localStorage.getItem(`redirect-zoom:${scope}`))||1,min_height:Number(localStorage.getItem(`redirect-board-height:${scope}`))||0};}catch{return {positions:{},placed:[],zoom:1};}}
 export function RedirectSchemeLibrary({scope,api,rows,onLoad,onLocalSave,onDates,busy}:{scope:string;api?:SchemeApi;rows:RedirectDraftRow[];onLoad:(doc:SchemeDocument)=>void;onLocalSave:()=>void;onDates:(dates:Record<string,string>)=>void;busy:boolean}) {
   const [items,setItems]=React.useState<SchemeDocument[]>([]),[selected,setSelected]=React.useState(''),[name,setName]=React.useState(''),[working,setWorking]=React.useState(false),[status,setStatus]=React.useState('');
   const loadList=React.useCallback(async()=>{if(!api)return;try{const result=await api<{items:SchemeDocument[];draft:SchemeDocument|null;redirect_dates:Record<string,string>}>(`/sites/${scope}/network/schemes`,{cache:'no-store'});setItems([...(result.draft?[result.draft]:[]),...result.items]);onDates(result.redirect_dates);}catch{setStatus('Список схем недоступен. Локальный черновик сохраняется.');}},[api,scope,onDates]);
