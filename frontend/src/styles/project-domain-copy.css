@@ -1,0 +1,9 @@
+.projectPicker { position:relative; }
+.projectPicker .searchableSelectControlValue { padding-right:28px; }
+.projectPicker .projectDomainCopyIcon { position:absolute; right:36px; top:50%; transform:translateY(-50%); display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; min-height:0; margin:0; padding:5px; border:0; border-radius:4px; background:transparent; box-shadow:none; color:var(--muted,#617080); cursor:pointer; }
+.projectDomainCopyIcon svg { filter:drop-shadow(0 1px 2px #18294338); }
+.projectPicker .projectDomainCopyIcon:hover { color:var(--primary,#166534); background:transparent; }
+.projectPicker .projectDomainCopyIcon.copied { color:#16814e; }
+.projectPicker .projectDomainCopyIcon.error { color:var(--danger,#b42318); }
+.projectPicker .projectDomainCopyIcon:focus-visible { outline:2px solid var(--primary,#166534); outline-offset:2px; }
+.projectDomainCopyAnnouncement { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; }

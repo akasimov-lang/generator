@@ -1,3 +1,4 @@
+import { ProjectDomainCopyIcon } from "./ProjectDomainCopyIcon";
 import { ProjectStickyNote } from "./ProjectStickyNote";
 import { useProjectNoteIndex } from "./projectNoteIndex";
 import { notesFirst } from "./projectNoteOrder";
@@ -2689,6 +2690,7 @@ function ProjectWorkspaceView({
                 );
               }}
             />
+            {selectedSite&&<ProjectDomainCopyIcon key={selectedSite.name} domain={selectedSite.name} copy={copyTextToClipboard}/>}
           </div>
           <div className="projectMeta">
             {selectedSite ? (
