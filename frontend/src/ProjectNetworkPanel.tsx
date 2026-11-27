@@ -20,7 +20,7 @@ import { readNetworkWithRetry } from "./networkReadRetry";
 import { parseNetworkDomainInput, formatNetworkDomainInput } from "./networkDomainInput";
 import { LastReglueSummary, type LastReglue, type RecentNetworkChange } from "./LastReglueSummary";
 import { matchesProjectSearch, normalizeDomainQuery } from "./projectSearch";
-import { Trash2, X, Search, Check, ExternalLink, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Trash2, X, Search, Check, ExternalLink, ArrowUpDown, ArrowUp, ArrowDown, RotateCw } from "lucide-react";
 import { buildBaseAlternates } from "./standardAlternates";
 import { DomainRedirects, domainRedirectTargets, domainRedirectTarget, type DomainRedirect, type RedirectEdit } from "./DomainRedirects";
 import { PageRedirects, type PageRedirectGroup, type PageRedirectEdit } from "./PageRedirects";
@@ -30,6 +30,7 @@ import { NetworkTableViewport } from "./NetworkTableViewport";
 import { NetworkSidebar } from "./NetworkSidebar";
 import { NetworkTableSaveLog } from "./networkTableSaveLog";
 import { projectNotice, projectChanged } from "./projectNotificationEvents";
+import "./styles/network-refresh-button.css";
 
 import {ProjectFieldChange, type FieldChange} from "./ProjectFieldChange";
 import {subscribeProjectHistory} from "./projectHistoryEvents";
@@ -613,16 +614,19 @@ export function ProjectNetworkPanel({ site, mode, username, api, onChanged, refr
         </div>);
   if (new URLSearchParams(window.location.search).get("redirect-schema") === "1") return createPortal(<section className="redirectFullscreen" aria-label={`Схема редиректов · ${site.name}`}>{!data&&<header className="redirectFullscreenHeader"><a className="button secondary compact" href={location.pathname}>Назад</a></header>}{error&&<p role="alert">{error}</p>}{data?<DomainRedirects fiberyName={data.fibery_name??site.fibery_name} api={api} draftOwner={username} metrics={data.domain_metrics} excludedDomains={[...ampDomains,data.amp||"",data.prev_amp||""]} schema scope={site.id} domains={data.domains} types={redirectTypes} canon={data.canon} redirects={data.domain_redirects||[]} revision={data.revision} available={!!data.has_domain_redirects} disabled={disabled} queue={editQueue} onSave={async edit=>enqueueEdit("domain_redirect",edit)} onRetargetMain={async()=>false}/>:<p>Загрузка сетки…</p>}</section>, document.body);
   return <section className="dataPanel projectNetworkPanel">
-    <div className="panelHeader"><div className="networkPanelHeading"><h2>{mode === "network" ? "Сетка проекта" : "Переклей"}</h2>        {data && mode === "network" && <div className="networkViewSwitch" role="group" aria-label="Вид сетки">
+    <div className="panelHeader networkPanelHeader"><div className="networkPanelHeading"><h2>{mode === "network" ? "Сетка проекта" : "Переклей"}</h2>        {data && mode === "network" && <div className="networkViewSwitch" role="group" aria-label="Вид сетки">
           <button type="button" aria-pressed={networkView === "main"} onClick={() => setNetworkView("main")}>Основная сетка</button>
           <button type="button" aria-pressed={networkView === "amp"} onClick={() => setNetworkView("amp")}>Ампы</button>
         </div>}
         {data && mode === "network" && <MassReglueParticipationControl enabled={participationEnabled} {...participationStatus} onChange={enabled => void updateParticipation(enabled)} />}
         {data && <ReglueRedirectPolicy key={site.id} siteId={site.id} api={api} onBusyChange={setRedirectPolicyBusy} />}
       </div>
-      <div className="networkRefreshStatus"><button type="button" className="button secondary compact" disabled={Boolean(busy)} onClick={() => void load(true, true)}>{busy === "refresh" ? "Обновляем…" : "Обновить данные"}</button>{message && message !== "Ручной переклей: подтверждено." && <small role="status">{message}</small>}
+      <div className="networkRefreshStatus">{message && message !== "Ручной переклей: подтверждено." && <small role="status">{message}</small>}
         {mode !== "network" && <LastReglueSummary last={data?.last_reglue} recent={data?.recent_network_changes} observedAt={data?.last_reglue_at} />}
       </div>
+      <button type="button" className="iconButton networkRefreshButton" aria-label="Обновить данные" title={busy === "refresh" ? "Обновляем данные…" : "Обновить данные"} aria-busy={busy === "refresh"} disabled={Boolean(busy)} onClick={() => void load(true, true)}>
+        <RotateCw size={18} aria-hidden="true" />
+      </button>
     </div>
     <div className="dataPanelBody">
       {error && <p role="alert" className="error">{error}</p>}

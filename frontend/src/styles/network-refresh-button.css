@@ -1,0 +1,67 @@
+.projectNetworkPanel > .networkPanelHeader {
+  position: relative;
+  align-items: flex-start;
+  min-height: 32px;
+  padding-inline-end: 44px;
+}
+
+.networkPanelHeader > .networkPanelHeading {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.networkPanelHeader > .networkRefreshStatus {
+  min-width: 0;
+  min-height: 32px;
+}
+
+.networkPanelHeader > .networkRefreshStatus > .lastReglueSummary {
+  right: -44px;
+}
+
+.networkPanelHeader > .networkRefreshStatus:empty {
+  display: none;
+}
+
+.projectNetworkPanel .networkRefreshButton {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: 8px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.networkRefreshButton:hover:not(:disabled) {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.networkRefreshButton:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+
+.networkRefreshButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.networkRefreshButton[aria-busy="true"] > svg {
+  animation: networkRefreshSpin 0.9s linear infinite;
+}
+
+@keyframes networkRefreshSpin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .networkRefreshButton[aria-busy="true"] > svg {
+    animation: none;
+  }
+}
